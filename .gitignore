@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+tmp*/
+my_settings.json
+.venv/
+voice_samples/
