@@ -201,6 +201,8 @@ Compile-check Python files:
 python -m py_compile app.py strokegpt/*.py test_*.py
 ```
 
+GitHub Actions runs these checks on Python 3.11 for pushes to `master` or `main` and for pull requests. The CI job installs the lightweight dependencies needed by the current regression tests (`Flask`, `requests`, and `elevenlabs`) and intentionally does not install `chatterbox-tts`; local Chatterbox checks stay opt-in because that stack is large and hardware-sensitive.
+
 ## Project Layout
 
 ```text
