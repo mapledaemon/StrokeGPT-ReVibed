@@ -163,13 +163,28 @@ Motion settings are in **Open Settings -> Motion**.
 
 You can adjust:
 
-- Stroke range
-- Range test
+- Speed limits
 - Auto mode timing
 - Edging mode timing
 - Milking mode timing
 
 Start conservatively. The Handy can be intense even at low speed values.
+
+## Device Settings
+
+Device settings are in **Open Settings -> Device**.
+
+You can adjust:
+
+- Handy connection key
+- Stroke range
+- Range test
+
+## Reset Settings
+
+Reset is in **Open Settings -> Advanced**.
+
+**Reset All Settings** clears the saved local settings file, stops active motion, and sends the app back through setup.
 
 ## Model Settings
 

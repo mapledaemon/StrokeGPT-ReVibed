@@ -126,12 +126,12 @@
         .modal-header h3 { margin: 0; color: var(--cyan); font-size: 1.1rem; }
         .modal-close { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #37404c; background: var(--background-lighter); color: var(--foreground); cursor: pointer; font-size: 1.2rem; }
         .modal-close:hover { background: #37404c; }
-        .settings-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--background-lighter); margin-bottom: 14px; }
+        .settings-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--background-lighter); margin-bottom: 14px; }
         .settings-tab { width: auto; padding: 9px 14px; border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--comment); border-radius: 6px 6px 0 0; cursor: pointer; font-weight: 600; }
         .settings-tab.active { background: var(--background-lighter); color: var(--foreground); border-color: #2d333d; }
         .settings-panel { display: none; flex-direction: column; gap: 12px; }
         .settings-panel.active { display: flex; }
-        .voice-panel, .motion-panel { display: flex; flex-direction: column; gap: 12px; }
+        .voice-panel, .motion-panel, .device-panel { display: flex; flex-direction: column; gap: 12px; }
         .voice-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .motion-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .browse-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
@@ -212,7 +212,9 @@
                 <button class="settings-tab" data-settings-tab="persona">Persona</button>
                 <button class="settings-tab" data-settings-tab="model">Model</button>
                 <button class="settings-tab active" data-settings-tab="voice">Voice</button>
+                <button class="settings-tab" data-settings-tab="device">Device</button>
                 <button class="settings-tab" data-settings-tab="motion">Motion</button>
+                <button class="settings-tab" data-settings-tab="advanced">Advanced</button>
             </div>
             <div id="settings-tab-persona" class="settings-panel">
                 <label for="pfp-upload" style="cursor: pointer; display: block;">
@@ -221,8 +223,12 @@
                 <input type="file" id="pfp-upload" accept="image/*" style="display: none;">
                 <input type="text" id="ai-name-input" class="input-text" placeholder="AI's Name...">
                 <button id="set-ai-name-btn" class="my-button">Set Name</button>
+                <select id="persona-prompt-select" class="select-box"></select>
                 <input type="text" id="persona-input" class="input-text" placeholder="Describe the AI's persona...">
-                <button id="set-persona-btn" class="my-button">Set Persona</button>
+                <div class="voice-actions">
+                    <button id="set-persona-btn" class="my-button">Use Prompt</button>
+                    <button id="save-persona-prompt-btn" class="my-button">Save Prompt</button>
+                </div>
             </div>
             <div id="settings-tab-model" class="settings-panel">
                 <div class="settings-subsection">
@@ -273,13 +279,10 @@
             </div>
             <div id="settings-tab-motion" class="settings-panel">
                 <div class="settings-subsection motion-panel">
-                    <h4>Stroke Range</h4>
-                    <div class="slider-container"><label for="motion-depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="5" id="motion-depth-min-slider"><span id="motion-depth-min-val">5%</span></div>
-                    <div class="slider-container"><label for="motion-depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="100" id="motion-depth-max-slider"><span id="motion-depth-max-val">100%</span></div>
-                    <div class="motion-actions">
-                        <button id="test-motion-depth-range" class="my-button">Test Range</button>
-                        <button id="save-motion-depth-range" class="my-button">Save Range</button>
-                    </div>
+                    <h4>Speed Limits</h4>
+                    <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider"><span id="motion-speed-min-val">10%</span></div>
+                    <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider"><span id="motion-speed-max-val">80%</span></div>
+                    <button id="save-motion-speed-limits" class="my-button">Save Speed Limits</button>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Mode Timings (Seconds)</h4>
@@ -289,6 +292,30 @@
                     <button id="save-timings-btn" class="my-button">Save Timings</button>
                 </div>
             </div>
+            <div id="settings-tab-device" class="settings-panel">
+                <div class="settings-subsection device-panel">
+                    <h4>Handy Connection</h4>
+                    <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key">
+                    <button id="save-handy-key-btn" class="my-button">Save Connection Key</button>
+                    <div id="handy-key-status" style="font-size: 0.85em; color: var(--comment);">Connection key is saved locally.</div>
+                </div>
+                <div class="settings-subsection device-panel">
+                    <h4>Stroke Range</h4>
+                    <div class="slider-container"><label for="motion-depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="5" id="motion-depth-min-slider"><span id="motion-depth-min-val">5%</span></div>
+                    <div class="slider-container"><label for="motion-depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="100" id="motion-depth-max-slider"><span id="motion-depth-max-val">100%</span></div>
+                    <div class="motion-actions">
+                        <button id="test-motion-depth-range" class="my-button">Test Range</button>
+                        <button id="save-motion-depth-range" class="my-button">Save Range</button>
+                    </div>
+                </div>
+            </div>
+            <div id="settings-tab-advanced" class="settings-panel">
+                <div class="settings-subsection">
+                    <h4>Settings Data</h4>
+                    <button id="reset-settings-btn" class="my-button stop">Reset All Settings</button>
+                    <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>
+                </div>
+            </div>
         </div>
     </div>
     <div id="easter-egg-overlay"></div>
@@ -296,7 +323,9 @@
         const D = document;
         const userChatInput = D.getElementById('user-chat-input');
         const personaInput = D.getElementById('persona-input');
+        const personaPromptSelect = D.getElementById('persona-prompt-select');
         const setPersonaBtn = D.getElementById('set-persona-btn');
+        const savePersonaPromptBtn = D.getElementById('save-persona-prompt-btn');
         const aiNameInput = D.getElementById('ai-name-input');
         const setAiNameBtn = D.getElementById('set-ai-name-btn');
         const openSettingsBtn = D.getElementById('open-settings-btn');
@@ -331,10 +360,17 @@
         const localTtsRepetition = D.getElementById('local-tts-repetition');
         const localTtsRepetitionVal = D.getElementById('local-tts-repetition-val');
         const localTtsStatus = D.getElementById('local-tts-status');
+        const handyKeyInput = D.getElementById('handy-key-input');
+        const saveHandyKeyBtn = D.getElementById('save-handy-key-btn');
+        const handyKeyStatus = D.getElementById('handy-key-status');
         const motionDepthMinSlider = D.getElementById('motion-depth-min-slider');
         const motionDepthMaxSlider = D.getElementById('motion-depth-max-slider');
         const motionDepthMinVal = D.getElementById('motion-depth-min-val');
         const motionDepthMaxVal = D.getElementById('motion-depth-max-val');
+        const motionSpeedMinSlider = D.getElementById('motion-speed-min-slider');
+        const motionSpeedMaxSlider = D.getElementById('motion-speed-max-slider');
+        const motionSpeedMinVal = D.getElementById('motion-speed-min-val');
+        const motionSpeedMaxVal = D.getElementById('motion-speed-max-val');
         const autoMinTimeInput = D.getElementById('auto-min-time');
         const autoMaxTimeInput = D.getElementById('auto-max-time');
         const edgingMinTimeInput = D.getElementById('edging-min-time');
@@ -344,6 +380,8 @@
         const setupOverlay = D.getElementById('setup-overlay');
         const setupBox = D.getElementById('setup-box');
         const statusText = D.getElementById('status-text');
+        const resetSettingsBtn = D.getElementById('reset-settings-btn');
+        const resetSettingsStatus = D.getElementById('reset-settings-status');
         const moodDisplay = D.getElementById('mood-display');
         const rhythmCanvas = D.getElementById('rhythm-canvas');
         const typingIndicator = D.getElementById('typing-indicator');
@@ -359,9 +397,11 @@
         const easterEggOverlay = D.getElementById('easter-egg-overlay');
         const ctx = rhythmCanvas.getContext('2d');
         let myHandyKey = '', myPersonaDescription = '', aiName = 'BOT', edgingTimerInterval = null;
+        let personaPrompts = [];
         let localTtsStylePresets = {};
         let audioFetchInProgress = false;
         let motionMinDepth = 5, motionMaxDepth = 100;
+        let motionMinSpeed = 10, motionMaxSpeed = 80;
         
         async function apiCall(endpoint, options = {}) {
             try {
@@ -395,6 +435,46 @@
 
         function normalizeModelName(model) {
             return (model || '').trim().replace(/\s*\/\s*/g, '/').replace(/\s*:\s*/g, ':');
+        }
+
+        function normalizePersonaPrompt(prompt) {
+            return (prompt || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function fillPersonaPromptSelect(selectEl, prompts = [], currentPrompt = '') {
+            const ordered = [];
+            [currentPrompt, ...prompts].forEach(prompt => {
+                const normalized = normalizePersonaPrompt(prompt);
+                if (normalized && !ordered.includes(normalized)) ordered.push(normalized);
+            });
+            selectEl.innerHTML = '';
+            ordered.forEach(prompt => {
+                const option = D.createElement('option');
+                option.value = prompt;
+                option.textContent = prompt;
+                selectEl.appendChild(option);
+            });
+            if (currentPrompt) selectEl.value = normalizePersonaPrompt(currentPrompt);
+            return ordered;
+        }
+
+        function populatePersonaPromptOptions(prompts = [], currentPrompt = '') {
+            personaPrompts = fillPersonaPromptSelect(personaPromptSelect, prompts, currentPrompt);
+            personaInput.value = normalizePersonaPrompt(currentPrompt || personaPrompts[0] || '');
+        }
+
+        async function setPersonaPrompt(prompt, savePrompt = true) {
+            const normalized = normalizePersonaPrompt(prompt);
+            if (!normalized) {
+                statusText.textContent = 'Enter a persona prompt first.';
+                return null;
+            }
+            const data = await apiCall('/set_persona_prompt', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({persona_desc: normalized, save_prompt: savePrompt})});
+            if (data && data.status === 'success') {
+                myPersonaDescription = data.persona;
+                populatePersonaPromptOptions(data.persona_prompts, data.persona);
+            }
+            return data;
         }
 
         function populateModelOptions(models = [], currentModel = '') {
@@ -450,17 +530,33 @@
             motionDepthMaxVal.textContent = `${motionMaxDepth}%`;
         }
 
-        function populateMotionSettings(data = {}) {
-            const timings = data.timings || {};
+        function normalizeMotionSpeedLimits() {
+            const a = parseInt(motionSpeedMinSlider.value, 10);
+            const b = parseInt(motionSpeedMaxSlider.value, 10);
+            motionMinSpeed = Math.min(a, b);
+            motionMaxSpeed = Math.max(a, b);
+            motionSpeedMinVal.textContent = `${motionMinSpeed}%`;
+            motionSpeedMaxVal.textContent = `${motionMaxSpeed}%`;
+        }
+
+        function populateDeviceSettings(data = {}) {
+            handyKeyInput.value = data.handy_key || myHandyKey || '';
             setSliderValue(motionDepthMinSlider, motionDepthMinVal, data.min_depth ?? 5);
             setSliderValue(motionDepthMaxSlider, motionDepthMaxVal, data.max_depth ?? 100);
             normalizeMotionDepthRange();
-            autoMinTimeInput.value = timings.auto_min ?? 4;
-            autoMaxTimeInput.value = timings.auto_max ?? 7;
-            edgingMinTimeInput.value = timings.edging_min ?? 5;
-            edgingMaxTimeInput.value = timings.edging_max ?? 8;
-            milkingMinTimeInput.value = timings.milking_min ?? 2.5;
-            milkingMaxTimeInput.value = timings.milking_max ?? 4.5;
+        }
+
+        function populateMotionSettings(data = {}) {
+            const timings = data.timings || {};
+            setSliderValue(motionSpeedMinSlider, motionSpeedMinVal, data.min_speed ?? motionMinSpeed);
+            setSliderValue(motionSpeedMaxSlider, motionSpeedMaxVal, data.max_speed ?? motionMaxSpeed);
+            normalizeMotionSpeedLimits();
+            autoMinTimeInput.value = timings.auto_min ?? autoMinTimeInput.value ?? 4;
+            autoMaxTimeInput.value = timings.auto_max ?? autoMaxTimeInput.value ?? 7;
+            edgingMinTimeInput.value = timings.edging_min ?? edgingMinTimeInput.value ?? 5;
+            edgingMaxTimeInput.value = timings.edging_max ?? edgingMaxTimeInput.value ?? 8;
+            milkingMinTimeInput.value = timings.milking_min ?? milkingMinTimeInput.value ?? 2.5;
+            milkingMaxTimeInput.value = timings.milking_max ?? milkingMaxTimeInput.value ?? 4.5;
         }
 
         async function testMotionDepthRange() {
@@ -473,6 +569,45 @@
             normalizeMotionDepthRange();
             const res = await apiCall('/set_depth_limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({min_depth:motionMinDepth, max_depth:motionMaxDepth})});
             if (res && res.status === 'success') statusText.textContent = `Stroke range saved: ${motionMinDepth}-${motionMaxDepth}%.`;
+        }
+
+        async function saveHandyConnectionKey() {
+            const key = handyKeyInput.value.trim();
+            if (!key) {
+                handyKeyStatus.textContent = 'Enter a Handy connection key first.';
+                handyKeyStatus.style.color = 'var(--yellow)';
+                return;
+            }
+            const res = await apiCall('/set_handy_key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+            if (res && res.status === 'success') {
+                myHandyKey = key;
+                handyKeyStatus.textContent = 'Connection key saved.';
+                handyKeyStatus.style.color = 'var(--cyan)';
+                statusText.textContent = 'Handy connection key saved.';
+            }
+        }
+
+        async function saveMotionSpeedLimits() {
+            normalizeMotionSpeedLimits();
+            const res = await apiCall('/set_speed_limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({min_speed:motionMinSpeed, max_speed:motionMaxSpeed})});
+            if (res && res.status === 'success') {
+                populateMotionSettings({min_speed: res.min_speed, max_speed: res.max_speed});
+                statusText.textContent = `Speed limits saved: ${motionMinSpeed}-${motionMaxSpeed}%.`;
+            }
+        }
+
+        async function resetAllSettings() {
+            const ok = window.confirm('Reset all saved settings and restart setup?');
+            if (!ok) return;
+            resetSettingsStatus.textContent = 'Resetting settings...';
+            resetSettingsStatus.style.color = 'var(--comment)';
+            const data = await apiCall('/reset_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({confirm:'RESET'})});
+            if (data && data.status === 'success') {
+                localStorage.removeItem('sidebar_collapsed');
+                resetSettingsStatus.textContent = 'Settings reset.';
+                resetSettingsStatus.style.color = 'var(--cyan)';
+                window.location.reload();
+            }
         }
 
         function readTimingPair(minInput, maxInput) {
@@ -496,7 +631,7 @@
                 milking_max: milkingMax
             })});
             if (data && data.status === 'success') {
-                populateMotionSettings({timings: data.timings, min_depth: motionMinDepth, max_depth: motionMaxDepth});
+                populateMotionSettings({timings: data.timings});
                 statusText.textContent = 'Mode timings saved.';
             }
         }
@@ -682,14 +817,39 @@
                         if (!key) return;
                         myHandyKey = key;
                         await apiCall('/set_handy_key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: myHandyKey }) });
+                        handyKeyInput.value = myHandyKey;
+                        handyKeyStatus.textContent = 'Connection key saved.';
+                        handyKeyStatus.style.color = 'var(--cyan)';
                         step = 2; displayStep();
                     };
                 } else if (step === 2) {
-                    setupBox.innerHTML = `<h2>Step 2: Persona</h2><p>Describe your AI partner for this session.</p><input type="text" id="setup-persona" class="input-text" value="${data.persona || 'An energetic and passionate girlfriend'}" placeholder="Describe persona"><br><button id="setup-next" class="my-button">Next</button>`;
-                    D.getElementById('setup-next').onclick = () => {
-                        personaInput.value = D.getElementById('setup-persona').value.trim();
-                        if (isReturningUser) { setupOverlay.style.display = 'none'; sendUserMessage(''); }
-                        else { step = 3; displayStep(); }
+                    setupBox.innerHTML = `<h2>Step 2: Persona</h2><p>Choose or edit the AI prompt for this session.</p><select id="setup-persona-select" class="select-box"></select><input type="text" id="setup-persona" class="input-text" placeholder="Describe persona"><div class="voice-actions"><button id="setup-save-persona" class="my-button">Save Prompt</button><button id="setup-next" class="my-button">Continue</button></div>`;
+                    const setupPersonaSelect = D.getElementById('setup-persona-select');
+                    const setupPersonaInput = D.getElementById('setup-persona');
+                    const currentPrompt = data.persona || personaInput.value || personaPrompts[0] || 'An energetic and passionate girlfriend';
+                    fillPersonaPromptSelect(setupPersonaSelect, personaPrompts, currentPrompt);
+                    setupPersonaInput.value = normalizePersonaPrompt(currentPrompt);
+                    setupPersonaSelect.onchange = () => {
+                        setupPersonaInput.value = setupPersonaSelect.value;
+                    };
+                    D.getElementById('setup-save-persona').onclick = async () => {
+                        const saved = await setPersonaPrompt(setupPersonaInput.value, true);
+                        if (!saved) return;
+                        fillPersonaPromptSelect(setupPersonaSelect, saved.persona_prompts, saved.persona);
+                        setupPersonaInput.value = saved.persona;
+                        statusText.textContent = 'Persona prompt saved.';
+                    };
+                    D.getElementById('setup-next').onclick = async () => {
+                        const saved = await setPersonaPrompt(setupPersonaInput.value, true);
+                        if (!saved) return;
+                        personaInput.value = saved.persona;
+                        if (isReturningUser) {
+                            setupOverlay.style.display = 'none';
+                            statusText.textContent = 'Ready to chat.';
+                        } else {
+                            step = 3;
+                            displayStep();
+                        }
                     };
                 } else if (step === 3) {
                     const defaultMinDepth = data.min_depth ?? 5;
@@ -720,6 +880,7 @@
                     D.getElementById('set-depth-range').onclick = async () => {
                         normalizeDepthRange();
                         await apiCall('/set_depth_limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({min_depth:D.minDepth, max_depth:D.maxDepth})});
+                        populateDeviceSettings({handy_key: myHandyKey, min_depth: D.minDepth, max_depth: D.maxDepth});
                         step = 4; displayStep();
                     };
                     normalizeDepthRange();
@@ -731,7 +892,13 @@
                     slider.oninput = () => D.getElementById('speed-val').textContent = `${slider.value}%`;
                     D.getElementById('set-speed').onclick = async () => {
                         if (step === 4) { D.minSpeed = slider.value; step = 5; displayStep(); }
-                        else { D.maxSpeed = slider.value; await apiCall('/set_speed_limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({min_speed:D.minSpeed, max_speed:D.maxSpeed})}); setupOverlay.style.display = 'none'; statusText.textContent = `Setup complete. Ready to chat.`; }
+                        else {
+                            D.maxSpeed = slider.value;
+                            await apiCall('/set_speed_limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({min_speed:D.minSpeed, max_speed:D.maxSpeed})});
+                            populateMotionSettings({min_speed: D.minSpeed, max_speed: D.maxSpeed});
+                            setupOverlay.style.display = 'none';
+                            statusText.textContent = `Setup complete. Ready to chat.`;
+                        }
                     };
                 }
             }
@@ -743,7 +910,8 @@
             if (data && data.configured) {
                 statusText.textContent = 'Welcome back! Settings loaded.';
                 myHandyKey = data.handy_key;
-                personaInput.value = data.persona;
+                myPersonaDescription = data.persona || '';
+                populatePersonaPromptOptions(data.persona_prompts, data.persona);
                 if(data.ai_name) {
                     aiName = data.ai_name;
                     aiNameInput.value = aiName;
@@ -754,6 +922,7 @@
                     typingIndicatorPfp.src = data.pfp;
                 }
                 populateModelOptions(data.ollama_models, data.ollama_model);
+                populateDeviceSettings(data);
                 populateMotionSettings(data);
                 audioProviderSelect.value = data.audio_provider || 'elevenlabs';
                 enableAudioCheckbox.checked = Boolean(data.audio_enabled);
@@ -785,7 +954,9 @@
                 D.getElementById('splash-screen').style.display = 'none';
                 renderSetup(true, data);
             } else {
+                populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
                 populateModelOptions(data && data.ollama_models, data && data.ollama_model);
+                populateDeviceSettings(data || {});
                 populateMotionSettings(data || {});
                 populateLocalStyleOptions(data && (data.local_tts_style_presets || (data.local_tts_status && data.local_tts_status.style_presets)));
                 updateLocalTtsStatus(data && data.local_tts_status);
@@ -798,7 +969,17 @@
         // Event Listeners
         D.getElementById('send-chat-btn').addEventListener('click', () => sendUserMessage(userChatInput.value));
         userChatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendUserMessage(userChatInput.value); });
-        setPersonaBtn.addEventListener('click', () => { sendUserMessage(''); statusText.textContent = 'Persona updated!'; });
+        personaPromptSelect.addEventListener('change', () => {
+            personaInput.value = personaPromptSelect.value;
+        });
+        setPersonaBtn.addEventListener('click', async () => {
+            const data = await setPersonaPrompt(personaInput.value, false);
+            if (data) statusText.textContent = 'Persona prompt selected.';
+        });
+        savePersonaPromptBtn.addEventListener('click', async () => {
+            const data = await setPersonaPrompt(personaInput.value, true);
+            if (data) statusText.textContent = 'Persona prompt saved.';
+        });
         setAiNameBtn.addEventListener('click', async () => {
             const newName = aiNameInput.value.trim();
             if (!newName) return;
@@ -909,13 +1090,18 @@
         localTtsTopP.addEventListener('input', () => localTtsTopPVal.textContent = localTtsTopP.value);
         localTtsMinP.addEventListener('input', () => localTtsMinPVal.textContent = localTtsMinP.value);
         localTtsRepetition.addEventListener('input', () => localTtsRepetitionVal.textContent = localTtsRepetition.value);
+        saveHandyKeyBtn.addEventListener('click', saveHandyConnectionKey);
         motionDepthMinSlider.addEventListener('input', normalizeMotionDepthRange);
         motionDepthMaxSlider.addEventListener('input', normalizeMotionDepthRange);
         motionDepthMinSlider.addEventListener('change', testMotionDepthRange);
         motionDepthMaxSlider.addEventListener('change', testMotionDepthRange);
         D.getElementById('test-motion-depth-range').addEventListener('click', testMotionDepthRange);
         D.getElementById('save-motion-depth-range').addEventListener('click', saveMotionDepthRange);
+        motionSpeedMinSlider.addEventListener('input', normalizeMotionSpeedLimits);
+        motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
+        D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
         D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
+        resetSettingsBtn.addEventListener('click', resetAllSettings);
         D.getElementById('set-local-tts-button').addEventListener('click', saveLocalTtsSettings);
         D.getElementById('test-local-tts-button').addEventListener('click', async () => {
             await saveLocalTtsSettings();

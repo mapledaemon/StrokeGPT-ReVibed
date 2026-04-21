@@ -82,6 +82,99 @@ def get_ollama_models_for_ui():
         models.insert(0, llm.model)
     return models
 
+def get_persona_prompts_for_ui():
+    return settings.persona_prompt_options()
+
+def settings_payload():
+    return {
+        "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
+        "persona": settings.persona_desc,
+        "persona_prompts": get_persona_prompts_for_ui(),
+        "handy_key": settings.handy_key,
+        "ai_name": settings.ai_name,
+        "elevenlabs_key": settings.elevenlabs_api_key,
+        "ollama_model": llm.model,
+        "ollama_models": get_ollama_models_for_ui(),
+        "audio_provider": settings.audio_provider,
+        "audio_enabled": settings.audio_enabled,
+        "elevenlabs_voice_id": settings.elevenlabs_voice_id,
+        "local_tts_status": audio.local_status(),
+        "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
+        "local_tts_style": settings.local_tts_style,
+        "local_tts_prompt_path": settings.local_tts_prompt_path,
+        "local_tts_exaggeration": settings.local_tts_exaggeration,
+        "local_tts_cfg_weight": settings.local_tts_cfg_weight,
+        "local_tts_temperature": settings.local_tts_temperature,
+        "local_tts_top_p": settings.local_tts_top_p,
+        "local_tts_min_p": settings.local_tts_min_p,
+        "local_tts_repetition_penalty": settings.local_tts_repetition_penalty,
+        "min_depth": settings.min_depth,
+        "max_depth": settings.max_depth,
+        "min_speed": settings.min_speed,
+        "max_speed": settings.max_speed,
+        "pfp": settings.profile_picture_b64,
+        "timings": {
+            "auto_min": settings.auto_min_time,
+            "auto_max": settings.auto_max_time,
+            "milking_min": settings.milking_min_time,
+            "milking_max": settings.milking_max_time,
+            "edging_min": settings.edging_min_time,
+            "edging_max": settings.edging_max_time,
+        },
+    }
+
+def apply_settings_to_services():
+    handy.set_api_key(settings.handy_key)
+    handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+    llm.set_model(settings.ollama_model)
+
+    audio.set_provider(settings.audio_provider, settings.audio_enabled)
+    audio.api_key = ""
+    audio.voice_id = ""
+    audio.client = None
+    audio.available_voices = {}
+    audio.audio_output_queue.clear()
+    audio.last_error = ""
+    if settings.elevenlabs_api_key:
+        if audio.set_api_key(settings.elevenlabs_api_key):
+            audio.fetch_available_voices()
+            if settings.audio_provider == "elevenlabs":
+                audio.configure_voice(settings.elevenlabs_voice_id, settings.audio_enabled)
+    if settings.audio_provider == "local":
+        audio.configure_local_voice(
+            settings.audio_enabled,
+            settings.local_tts_prompt_path,
+            settings.local_tts_exaggeration,
+            settings.local_tts_cfg_weight,
+            settings.local_tts_style,
+            settings.local_tts_temperature,
+            settings.local_tts_top_p,
+            settings.local_tts_min_p,
+            settings.local_tts_repetition_penalty,
+        )
+
+def reset_runtime_state():
+    global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
+    global special_persona_mode, special_persona_interactions_left
+
+    if auto_mode_active_task:
+        auto_mode_active_task.stop()
+        auto_mode_active_task.join(timeout=5)
+        auto_mode_active_task = None
+
+    motion.stop()
+    settings.reset_to_defaults(save=True)
+    apply_settings_to_services()
+    chat_history.clear()
+    messages_for_ui.clear()
+    mode_message_queue.clear()
+    user_signal_event.clear()
+    current_mood = "Curious"
+    calibration_pos_mm = 0.0
+    edging_start_time = None
+    special_persona_mode = None
+    special_persona_interactions_left = 0
+
 SNAKE_ASCII = """
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠟⠛⠛⠋⠉⠛⠟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⡏⠉⠹⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -215,7 +308,7 @@ def handle_user_message():
     user_input = data.get('message', '').strip()
 
     if (p := data.get('persona_desc')) and p != settings.persona_desc:
-        settings.persona_desc = p; settings.save()
+        settings.set_persona_prompt(p); settings.save()
     if (k := data.get('key')) and k != settings.handy_key:
         handy.set_api_key(k); settings.handy_key = k; settings.save()
     
@@ -247,35 +340,30 @@ def handle_user_message():
 
 @app.route('/check_settings')
 def check_settings_route():
-    if settings.handy_key and settings.min_depth < settings.max_depth:
-        return jsonify({
-            "configured": True, "persona": settings.persona_desc, "handy_key": settings.handy_key,
-            "ai_name": settings.ai_name, "elevenlabs_key": settings.elevenlabs_api_key,
-            "ollama_model": llm.model,
-            "ollama_models": get_ollama_models_for_ui(),
-            "audio_provider": settings.audio_provider, "audio_enabled": settings.audio_enabled,
-            "elevenlabs_voice_id": settings.elevenlabs_voice_id,
-            "local_tts_status": audio.local_status(),
-            "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
-            "local_tts_style": settings.local_tts_style,
-            "local_tts_prompt_path": settings.local_tts_prompt_path,
-            "local_tts_exaggeration": settings.local_tts_exaggeration,
-            "local_tts_cfg_weight": settings.local_tts_cfg_weight,
-            "local_tts_temperature": settings.local_tts_temperature,
-            "local_tts_top_p": settings.local_tts_top_p,
-            "local_tts_min_p": settings.local_tts_min_p,
-            "local_tts_repetition_penalty": settings.local_tts_repetition_penalty,
-            "min_depth": settings.min_depth, "max_depth": settings.max_depth,
-            "min_speed": settings.min_speed, "max_speed": settings.max_speed,
-            "pfp": settings.profile_picture_b64,
-            "timings": { "auto_min": settings.auto_min_time, "auto_max": settings.auto_max_time, "milking_min": settings.milking_min_time, "milking_max": settings.milking_max_time, "edging_min": settings.edging_min_time, "edging_max": settings.edging_max_time }
-        })
+    return jsonify(settings_payload())
+
+@app.route('/reset_settings', methods=['POST'])
+def reset_settings_route():
+    data = request.json or {}
+    if data.get("confirm") != "RESET":
+        return jsonify({"status": "error", "message": "Reset confirmation is required."}), 400
+    reset_runtime_state()
+    payload = settings_payload()
+    payload["status"] = "success"
+    return jsonify(payload)
+
+@app.route('/set_persona_prompt', methods=['POST'])
+def set_persona_prompt_route():
+    data = request.json or {}
+    prompt = data.get('persona_desc', '')
+    save_prompt = data.get('save_prompt', True)
+    if not settings.set_persona_prompt(prompt, save_prompt=save_prompt):
+        return jsonify({"status": "error", "message": "Persona prompt is required."}), 400
+    settings.save()
     return jsonify({
-        "configured": False,
-        "ollama_model": llm.model,
-        "ollama_models": get_ollama_models_for_ui(),
-        "local_tts_status": audio.local_status(),
-        "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
+        "status": "success",
+        "persona": settings.persona_desc,
+        "persona_prompts": get_persona_prompts_for_ui(),
     })
 
 @app.route('/set_ollama_model', methods=['POST'])
@@ -526,10 +614,16 @@ def set_depth_limits_route():
 
 @app.route('/set_speed_limits', methods=['POST'])
 def set_speed_limits_route():
-    settings.min_speed = int(request.json.get('min_speed', 10)); settings.max_speed = int(request.json.get('max_speed', 80))
+    speed1 = int(request.json.get('min_speed', 10)); speed2 = int(request.json.get('max_speed', 80))
+    settings.min_speed = max(0, min(100, min(speed1, speed2)))
+    settings.max_speed = max(0, min(100, max(speed1, speed2)))
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     settings.save()
-    return jsonify({"status": "success"})
+    return jsonify({
+        "status": "success",
+        "min_speed": settings.min_speed,
+        "max_speed": settings.max_speed,
+    })
 
 def _timing_pair(data, min_key, max_key, default_min, default_max):
     try:
