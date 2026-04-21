@@ -3,6 +3,7 @@ import re
 import warnings
 import wave
 from collections import deque
+from contextlib import contextmanager
 
 from elevenlabs.client import ElevenLabs
 from elevenlabs import VoiceSettings
@@ -303,8 +304,14 @@ class AudioService:
             wav_file.writeframes(pcm)
         return output.getvalue()
 
+    @contextmanager
     def _suppress_perth_pkg_resources_warning(self):
-        return warnings.catch_warnings(action="ignore", message=r"pkg_resources is deprecated as an API.*")
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"pkg_resources is deprecated as an API.*",
+            )
+            yield
 
     def _clean_text(self, text):
         if not text:

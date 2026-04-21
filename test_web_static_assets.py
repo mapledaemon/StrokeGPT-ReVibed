@@ -70,6 +70,99 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             audio_response.close()
 
+    def test_settings_dialog_contains_device_and_speed_controls(self):
+        response = self.client.get("/")
+        try:
+            page = response.get_data(as_text=True)
+
+            self.assertIn('id="persona-prompt-select"', page)
+            self.assertIn('id="save-persona-prompt-btn"', page)
+            self.assertIn('data-settings-tab="device"', page)
+            self.assertIn('id="settings-tab-device"', page)
+            self.assertIn('id="handy-key-input"', page)
+            self.assertIn('id="motion-depth-min-slider"', page)
+            self.assertIn('id="motion-depth-max-slider"', page)
+            self.assertIn('id="motion-speed-min-slider"', page)
+            self.assertIn('id="motion-speed-max-slider"', page)
+            self.assertIn('id="save-motion-speed-limits"', page)
+            self.assertIn('data-settings-tab="advanced"', page)
+            self.assertIn('id="settings-tab-advanced"', page)
+            self.assertIn('id="reset-settings-btn"', page)
+        finally:
+            response.close()
+
+    def test_persona_prompt_can_be_selected_and_saved(self):
+        from strokegpt.web import settings
+
+        original_persona = settings.persona_desc
+        original_prompts = list(settings.persona_prompts)
+        try:
+            response = self.client.post("/set_persona_prompt", json={
+                "persona_desc": "  An energetic and passionate teammate  ",
+                "save_prompt": True,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["persona"], "An energetic and passionate teammate")
+            self.assertIn("An energetic and passionate teammate", data["persona_prompts"])
+            self.assertEqual(settings.persona_desc, "An energetic and passionate teammate")
+            self.assertIn("An energetic and passionate teammate", settings.persona_prompts)
+        finally:
+            settings.persona_desc = original_persona
+            settings.persona_prompts = original_prompts
+            settings.save()
+
+    def test_reset_settings_requires_confirmation(self):
+        response = self.client.post("/reset_settings", json={})
+        try:
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.get_json()["status"], "error")
+        finally:
+            response.close()
+
+    def test_reset_settings_restores_defaults_and_runtime_services(self):
+        from strokegpt.settings import DEFAULT_OLLAMA_MODEL, DEFAULT_PERSONA_PROMPT
+        from strokegpt.web import apply_settings_to_services, audio, handy, llm, settings
+
+        original = settings.to_dict()
+        original_send_command = handy._send_command
+        sent_commands = []
+        try:
+            handy._send_command = lambda path, body=None: sent_commands.append((path, body or {})) or True
+            settings.handy_key = "test-key"
+            settings.ai_name = "Custom"
+            settings.set_persona_prompt("An energetic and passionate teammate")
+            settings.min_speed = 40
+            settings.max_speed = 50
+            settings.audio_provider = "local"
+            settings.audio_enabled = True
+            apply_settings_to_services()
+
+            response = self.client.post("/reset_settings", json={"confirm": "RESET"})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertIn(("hamp/stop", {}), sent_commands)
+            self.assertFalse(data["configured"])
+            self.assertEqual(settings.handy_key, "")
+            self.assertEqual(handy.handy_key, "")
+            self.assertEqual(settings.ai_name, "BOT")
+            self.assertEqual(settings.persona_desc, DEFAULT_PERSONA_PROMPT)
+            self.assertEqual(settings.min_speed, 10)
+            self.assertEqual(settings.max_speed, 80)
+            self.assertEqual(handy.min_user_speed, 10)
+            self.assertEqual(handy.max_user_speed, 80)
+            self.assertEqual(llm.model, DEFAULT_OLLAMA_MODEL)
+            self.assertEqual(audio.provider, "elevenlabs")
+            self.assertFalse(audio.is_on)
+        finally:
+            handy._send_command = original_send_command
+            settings.apply_dict(original)
+            settings.save()
+            apply_settings_to_services()
+
     def test_mode_timings_are_saved_sorted_and_clamped(self):
         from strokegpt.web import settings
 
@@ -107,6 +200,39 @@ class WebStaticAssetTests(unittest.TestCase):
                 settings.milking_min_time,
                 settings.milking_max_time,
             ) = original
+            settings.save()
+
+    def test_speed_limits_are_saved_sorted_and_clamped(self):
+        from strokegpt.web import handy, settings
+
+        original = (
+            settings.min_speed,
+            settings.max_speed,
+            handy.min_user_speed,
+            handy.max_user_speed,
+        )
+        try:
+            response = self.client.post("/set_speed_limits", json={
+                "min_speed": 120,
+                "max_speed": -5,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["min_speed"], 0)
+            self.assertEqual(data["max_speed"], 100)
+            self.assertEqual(settings.min_speed, 0)
+            self.assertEqual(settings.max_speed, 100)
+            self.assertEqual(handy.min_user_speed, 0)
+            self.assertEqual(handy.max_user_speed, 100)
+        finally:
+            (
+                settings.min_speed,
+                settings.max_speed,
+                handy.min_user_speed,
+                handy.max_user_speed,
+            ) = original
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
             settings.save()
 
     def test_ollama_model_can_be_selected_and_saved(self):

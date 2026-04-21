@@ -46,7 +46,9 @@ The unified settings popup has tabs:
 - Persona
 - Model
 - Voice
+- Device
 - Motion
+- Advanced
 
 Do not move detailed settings back into the sidebar unless there is a strong usability reason.
 
@@ -61,6 +63,7 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - `voice_samples/`, `.venv/`, `my_settings.json`, and bytecode/cache folders should stay ignored.
 - Flask's default static route is disabled; static files are served explicitly from the project `static/` folder.
 - Local Chatterbox WAV output is encoded with the Python `wave` module to avoid `torchaudio.save` / TorchCodec issues.
+- Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 
 ## Known Rough Edges
 
