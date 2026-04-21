@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Improve Local Voice Robustness
--------------------------------------------
+2026-04-21 - PR #11 - Improve Local Voice Robustness
+----------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/11
 Branch: codex-voice-robustness
+Head commit: 92280a8
+Merge commit: 36d3cdf
 
 - Added local Chatterbox status polling so model download/load and generation
   work report progress instead of appearing stuck.
