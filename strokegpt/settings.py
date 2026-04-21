@@ -44,6 +44,7 @@ def default_settings_dict():
         "audio_enabled": False,
         "elevenlabs_api_key": "",
         "elevenlabs_voice_id": "",
+        "local_tts_engine": "chatterbox_turbo",
         "local_tts_style": "expressive",
         "local_tts_prompt_path": "",
         "local_tts_exaggeration": 0.65,
@@ -154,6 +155,9 @@ class SettingsManager:
         self.elevenlabs_api_key = str(data.get("elevenlabs_api_key", "") or "")
         self.elevenlabs_voice_id = str(data.get("elevenlabs_voice_id", "") or "")
 
+        self.local_tts_engine = str(data.get("local_tts_engine", defaults["local_tts_engine"]) or defaults["local_tts_engine"])
+        if self.local_tts_engine not in {"chatterbox", "chatterbox_turbo"}:
+            self.local_tts_engine = defaults["local_tts_engine"]
         self.local_tts_style = str(data.get("local_tts_style", defaults["local_tts_style"]) or defaults["local_tts_style"])
         self.local_tts_prompt_path = str(data.get("local_tts_prompt_path", "") or "")
         self.local_tts_exaggeration = _clamp_float(data.get("local_tts_exaggeration"), 0.25, 2.0, defaults["local_tts_exaggeration"])
@@ -208,6 +212,7 @@ class SettingsManager:
             "audio_enabled": self.audio_enabled,
             "elevenlabs_api_key": self.elevenlabs_api_key,
             "elevenlabs_voice_id": self.elevenlabs_voice_id,
+            "local_tts_engine": self.local_tts_engine,
             "local_tts_style": self.local_tts_style,
             "local_tts_prompt_path": self.local_tts_prompt_path,
             "local_tts_exaggeration": self.local_tts_exaggeration,

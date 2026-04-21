@@ -4,24 +4,27 @@ This file is for future coding agents continuing StrokeGPT-ReVibed. Keep it free
 
 ## Project Summary
 
-StrokeGPT-ReVibed is a work-in-progress fork/refactor of StrokeGPT. It is a local Flask web app for controlling The Handy through natural language, Ollama model responses, deterministic motion safety logic, and optional voice output.
+StrokeGPT-ReVibed is a work-in-progress fork/refactor of StrokeGPT. It is a local Flask web app for controlling The Handy through natural language, Ollama model responses, deterministic motion reliability logic, and optional voice output.
 
 The current goal is not feature expansion. The current goal is stabilization, simplification, and making the app easier to safely maintain.
 
 ## Current Architecture
 
 - `app.py`: thin launcher that imports `strokegpt.web.main`.
-- `index.html`: single-page browser UI.
+- `index.html`: single-page browser UI markup.
+- `static/app.css`: browser UI styles.
+- `static/app.js`: browser UI behavior.
 - `strokegpt/web.py`: Flask routes, global app state, settings wiring, UI update polling.
 - `strokegpt/settings.py`: JSON-backed user/app settings.
 - `strokegpt/handy.py`: The Handy API wrapper.
 - `strokegpt/llm.py`: Ollama API integration and prompt construction.
 - `strokegpt/motion.py`: deterministic intent matching, safety clamping, and smooth transitions.
+- `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes.
 - `strokegpt/motion_scripts.py`: longer scripted motion plans.
 - `strokegpt/background_modes.py`: auto, edging, and milking background modes.
 - `strokegpt/audio.py`: ElevenLabs and local Chatterbox TTS providers.
 - `scripts/install_windows.ps1`: Windows install helper.
-- `test_*.py`: focused regression tests.
+- `tests/`: focused regression tests.
 
 ## Runtime Requirements
 
@@ -55,23 +58,25 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 ## Important Implementation Notes
 
 - The app intentionally uses a deterministic motion layer between LLM output and hardware commands.
-- Do not let the LLM directly control raw hardware movements without passing through `MotionController`.
-- Keep motion transitions smooth and clamped.
-- Keep natural language matching conservative. If unsure, prefer no movement over unsafe or erratic movement.
+- The motion layer is primarily for reliability: spatial language mapping, pattern expansion, configured speed limits, and consistent stop behavior.
+- The LLM may provide direct numeric moves or named zone/pattern cues, but hardware movement should still pass through `MotionController` and `HandyController`.
+- Keep motion transitions smooth and clamped to user settings.
+- Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
 - Local Chatterbox sample browsing uploads/copies the selected file into `voice_samples/`; do not rely on browser-local file paths.
 - `voice_samples/`, `.venv/`, `my_settings.json`, and bytecode/cache folders should stay ignored.
 - Flask's default static route is disabled; static files are served explicitly from the project `static/` folder.
 - Local Chatterbox WAV output is encoded with the Python `wave` module to avoid `torchaudio.save` / TorchCodec issues.
+- Local Chatterbox defaults to the Turbo engine when available, reports Torch/CUDA status in the Voice tab, preloads on app startup when enabled, and splits long replies into smaller audio chunks.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 
 ## Known Rough Edges
 
-- `index.html` is too large and should eventually be split into maintainable assets.
+- `static/app.js` is still large and should eventually be split into maintainable modules.
 - UI needs browser visual testing after layout changes.
 - Some strings and old easter egg content are legacy and could be cleaned up.
 - README is better than before but still needs release-quality polish.
-- Local Chatterbox installation and model loading need clearer failure handling.
+- Local Chatterbox still depends heavily on CUDA-enabled PyTorch for good latency; CPU-only Torch is expected to be slow even on fast CPUs.
 - There is no full browser automation test suite.
 - CI covers the lightweight unit tests and Python compile checks, but not the full local Chatterbox stack.
 - The original upstream repository did not include a local license file when this fork was prepared.
@@ -81,13 +86,13 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 Run tests:
 
 ```bash
-python -m unittest test_audio_service.py test_motion_control.py test_configuration.py test_handy_controller.py test_motion_scripts.py test_web_static_assets.py
+python -m unittest discover -s tests
 ```
 
 Compile-check Python:
 
 ```bash
-python -m py_compile app.py strokegpt/*.py test_*.py
+python -m py_compile app.py strokegpt/*.py tests/*.py
 ```
 
 Run the app:
@@ -98,7 +103,7 @@ python app.py
 
 ## Suggested Next Tasks
 
-1. Split `index.html` into separate CSS and JavaScript files without changing behavior.
+1. Split `static/app.js` into smaller behavior modules without changing behavior.
 2. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
 3. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
 4. Improve local Chatterbox setup documentation and failure messages.
@@ -116,7 +121,7 @@ Continue stabilizing StrokeGPT-ReVibed. First read Codex.md, README.md, and the 
 ```
 
 ```text
-Refactor the frontend of StrokeGPT-ReVibed. Split index.html into static CSS and JS files while preserving behavior. Verify Flask static serving still works and add/adjust tests where practical.
+Refactor the frontend of StrokeGPT-ReVibed. Split static/app.js into smaller behavior modules while preserving behavior. Verify Flask static serving still works and add/adjust tests where practical.
 ```
 
 ```text

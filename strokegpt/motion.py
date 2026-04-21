@@ -53,9 +53,179 @@ class ParsedIntent:
 
 @dataclass(frozen=True)
 class TransitionLimits:
-    max_speed_delta: float = 12.0
-    max_depth_delta: float = 10.0
-    max_range_delta: float = 14.0
+    max_speed_delta: float = 25.0
+    max_depth_delta: float = 25.0
+    max_range_delta: float = 30.0
+
+
+@dataclass(frozen=True)
+class MotionCues:
+    zone: Optional[str] = None
+    length: Optional[str] = None
+    pattern: Optional[str] = None
+    speed_hint: Optional[str] = None
+
+    def labels(self) -> list[str]:
+        return [part for part in (self.zone, self.length, self.pattern, self.speed_hint) if part]
+
+
+ZONE_DEFAULTS = {
+    "tip": {"depth": 10.0, "range": 20.0, "speed": 30.0},
+    "upper": {"depth": 25.0, "range": 32.0, "speed": 34.0},
+    "middle": {"depth": 50.0, "range": 44.0, "speed": 38.0},
+    "base": {"depth": 88.0, "range": 24.0, "speed": 42.0},
+    "full": {"depth": 50.0, "range": 95.0, "speed": 46.0},
+}
+
+LENGTH_DEFAULTS = {
+    "tiny": 12.0,
+    "short": 24.0,
+    "half": 50.0,
+    "long": 75.0,
+    "full": 95.0,
+}
+
+SPEED_DEFAULTS = {
+    "crawl": 16.0,
+    "slow": 24.0,
+    "medium": 42.0,
+    "fast": 64.0,
+    "max": 86.0,
+}
+
+ZONE_PATTERNS = (
+    ("full", (r"\bbase\s+to\s+tip\b", r"\btip\s+to\s+base\b", r"\bwhole\s+(?:thing|length)\b", r"\bentire\s+length\b")),
+    ("base", (r"\bbase\b", r"\broot\b", r"\bbottom\b", r"\bdeepthroat\b", r"\bgag\b", r"\bdeep\s+(?:only|strokes?|position)\b")),
+    ("tip", (r"\btip\b", r"\bhead\b", r"\bshallow\b", r"\btop\b")),
+    ("upper", (r"\bupper\b", r"\bnear\s+the\s+tip\b", r"\bfront\b")),
+    ("middle", (r"\bmiddle\b", r"\bmid(?:dle)?\s+shaft\b", r"\bcenter\b", r"\bcentre\b")),
+)
+
+LENGTH_PATTERNS = (
+    ("full", (r"\bfull\s+(?:stroke|range|length|sweep|travel|strokes)\b", r"\ball\s+the\s+way\b", r"\bwhole\s+(?:thing|length)\b")),
+    ("half", (r"\bhalf\b(?:\s+(?:stroke|range|length|way))?", r"\bhalfway\b")),
+    ("tiny", (r"\btiny\b", r"\bmicro\b", r"\btwitch(?:y|ing)?\b")),
+    ("short", (r"\bshort\s+(?:stroke|range|strokes)?\b", r"\bsmall\s+(?:stroke|range|strokes)?\b", r"\btight\s+(?:stroke|range|strokes)?\b")),
+    ("long", (r"\blong\s+(?:stroke|range|strokes)?\b", r"\bbig\s+(?:stroke|range|strokes)?\b", r"\bwide\s+(?:stroke|range|strokes)?\b")),
+)
+
+PATTERN_PATTERNS = (
+    ("flick", (r"\bflicks?\b", r"\bflutter\b", r"\bsnap\b")),
+    ("pulse", (r"\bpuls(?:e|ing)\b", r"\bpump(?:ing)?\b")),
+    ("hold", (r"\bhold\b", r"\bpress\b", r"\bgrind\b")),
+    ("wave", (r"\bwave\b", r"\brolling\b", r"\boscillat(?:e|ing)\b")),
+    ("ramp", (r"\bramp\b", r"\bclimb\b", r"\bbuild\b")),
+    ("tease", (r"\btease\b", r"\bedge\b")),
+    ("stroke", (r"\bstroke\b", r"\bstroking\b")),
+)
+
+SPEED_PATTERNS = (
+    ("max", (r"\bmaximum\b", r"\bmax\b", r"\bvery\s+fast\b")),
+    ("fast", (r"\bfast\b", r"\bquick\b", r"\brapid\b")),
+    ("crawl", (r"\bcrawl\b", r"\bvery\s+slow\b")),
+    ("slow", (r"\bslow\b", r"\bgentle\b", r"\bsoft\b")),
+    ("medium", (r"\bmedium\b", r"\bsteady\b", r"\bconsistent\b")),
+)
+
+
+def _normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value).lower()).strip()
+
+
+def _matches_any(text: str, patterns: Iterable[str]) -> bool:
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _detect_from_patterns(text: str, pattern_groups: Iterable[tuple[str, Iterable[str]]]) -> Optional[str]:
+    clean_text = _normalize_text(text)
+    if not clean_text:
+        return None
+    for name, patterns in pattern_groups:
+        if name == clean_text or _matches_any(clean_text, patterns):
+            return name
+    return None
+
+
+def _detect_motion_cues(text: str) -> MotionCues:
+    return MotionCues(
+        zone=_detect_from_patterns(text, ZONE_PATTERNS),
+        length=_detect_from_patterns(text, LENGTH_PATTERNS),
+        pattern=_detect_from_patterns(text, PATTERN_PATTERNS),
+        speed_hint=_detect_from_patterns(text, SPEED_PATTERNS),
+    )
+
+
+def _depth_for_zone_and_length(zone: str, length: Optional[str]) -> float:
+    if zone == "full" or length == "full":
+        return 50.0
+    if length == "half":
+        if zone == "tip":
+            return 25.0
+        if zone == "base":
+            return 75.0
+    return ZONE_DEFAULTS[zone]["depth"]
+
+
+def _target_from_cues(
+    current: MotionTarget,
+    cues: MotionCues,
+    *,
+    speed: Optional[float] = None,
+    depth: Optional[float] = None,
+    stroke_range: Optional[float] = None,
+    label_prefix: Optional[str] = None,
+) -> MotionTarget:
+    next_speed = current.speed
+    next_depth = current.depth
+    next_range = current.stroke_range
+
+    if cues.zone:
+        zone_defaults = ZONE_DEFAULTS[cues.zone]
+        next_speed = max(next_speed, zone_defaults["speed"])
+        next_depth = _depth_for_zone_and_length(cues.zone, cues.length)
+        next_range = zone_defaults["range"]
+
+    if cues.length:
+        next_range = LENGTH_DEFAULTS[cues.length]
+        if cues.length == "full":
+            next_depth = 50.0
+        elif cues.zone:
+            next_depth = _depth_for_zone_and_length(cues.zone, cues.length)
+
+    if cues.speed_hint:
+        next_speed = SPEED_DEFAULTS[cues.speed_hint]
+
+    if cues.pattern == "flick":
+        next_speed = max(next_speed, 55.0)
+        next_range = min(next_range, 18.0)
+    elif cues.pattern == "pulse":
+        next_speed = max(next_speed, 44.0)
+        next_range = min(next_range, 24.0)
+    elif cues.pattern == "hold":
+        next_speed = min(max(next_speed, 16.0), 30.0)
+        next_range = min(next_range, 12.0)
+    elif cues.pattern == "wave":
+        next_range = max(next_range, 55.0)
+    elif cues.pattern == "ramp":
+        next_speed = max(next_speed, 38.0)
+        next_range = max(next_range, 50.0)
+    elif cues.pattern == "tease":
+        next_speed = min(max(next_speed, 22.0), 38.0)
+        next_range = min(next_range, 28.0)
+
+    if speed is not None:
+        next_speed = speed
+    if depth is not None:
+        next_depth = depth
+    if stroke_range is not None:
+        next_range = stroke_range
+
+    labels = cues.labels()
+    if label_prefix:
+        labels.insert(0, label_prefix)
+    return MotionTarget(next_speed, next_depth, next_range, "+".join(labels) or "custom").clamped()
 
 
 class IntentMatcher:
@@ -66,7 +236,7 @@ class IntentMatcher:
         r"\bpause\b",
         r"\bhalt\b",
         r"\bfreeze\b",
-        r"\bhold\b",
+        r"\bhold\s+(?:on|still|up)\b",
         r"\bwait\b",
     )
     STOP_NEGATIONS = (
@@ -104,45 +274,36 @@ class IntentMatcher:
         depth = current.depth
         stroke_range = current.stroke_range
         labels = []
+        cues = _detect_motion_cues(text)
 
         if self._matches_any(text, (r"\bfaster\b", r"\bspeed\s+up\b", r"\bmore\s+speed\b")):
-            speed += 18
+            speed += 22
             labels.append("faster")
         if self._matches_any(text, (r"\bslower\b", r"\bslow\s+down\b", r"\bease\s+up\b")):
-            speed -= 18
+            speed -= 22
             labels.append("slower")
         if self._matches_any(text, (r"\bharder\b", r"\bstronger\b", r"\bmore\s+intense\b")):
-            speed += 15
-            stroke_range += 10
+            speed += 20
+            stroke_range += 12
             labels.append("harder")
         if self._matches_any(text, (r"\bgentle\b", r"\bsofter\b", r"\blighter\b")):
-            speed -= 12
-            stroke_range -= 8
+            speed -= 15
+            stroke_range -= 10
             labels.append("gentle")
         if self._matches_any(text, (r"\bdeeper\b", r"\bgo\s+deep\b", r"\bmore\s+depth\b")):
-            depth += 18
+            depth += 20
             labels.append("deeper")
         if self._matches_any(text, (r"\bshallower\b", r"\bnot\s+so\s+deep\b")):
-            depth -= 18
+            depth -= 20
             labels.append("shallower")
-        if self._matches_any(text, (r"\btip\b", r"\bshallow\b")):
-            depth = min(depth, 15)
-            stroke_range = min(stroke_range, 25)
-            speed = min(max(speed, 22), 45)
-            labels.append("tip")
-        if self._matches_any(text, (r"\bfull\s+stroke", r"\bfull\s+range\b", r"\bwhole\b", r"\ball\s+the\s+way\b")):
-            depth = 50
-            stroke_range = 95
-            speed = max(speed, 38)
-            labels.append("full")
-        if self._matches_any(text, (r"\bshort\s+stroke", r"\bsmall\s+stroke", r"\btight\s+stroke")):
-            stroke_range = min(stroke_range, 28)
-            labels.append("short")
-        if self._matches_any(text, (r"\blong\s+stroke", r"\bbig\s+stroke")):
-            stroke_range = max(stroke_range, 75)
-            labels.append("long")
-        if self._matches_any(text, (r"\bsteady\b", r"\bconsistent\b", r"\bconstant\b")):
-            labels.append("steady")
+
+        if cues.labels():
+            cue_target = _target_from_cues(
+                MotionTarget(speed, depth, stroke_range),
+                cues,
+                label_prefix="+".join(labels) if labels else None,
+            )
+            return cue_target
 
         if not labels:
             return None
@@ -156,7 +317,7 @@ class IntentMatcher:
 
 
 class MotionSanitizer:
-    """Turns untrusted LLM move JSON into a bounded target."""
+    """Normalizes LLM move JSON into a reliable Handy target."""
 
     def __init__(self, limits: Optional[TransitionLimits] = None):
         self.limits = limits or TransitionLimits()
@@ -165,19 +326,45 @@ class MotionSanitizer:
         if not isinstance(move, dict):
             return None
 
-        speed = self._read_field(move, ("sp", "speed"))
-        depth = self._read_field(move, ("dp", "depth"))
-        stroke_range = self._read_field(move, ("rng", "range", "stroke_range"))
-        if speed is None and depth is None and stroke_range is None:
+        speed = self._read_field(move, ("sp", "speed", "tempo", "pace", "intensity"))
+        depth = self._read_field(move, ("dp", "depth", "position", "center", "centre", "anchor"))
+        stroke_range = self._read_field(move, ("rng", "range", "stroke_range", "length", "amplitude", "span"))
+
+        cue_text = " ".join(
+            str(move.get(key))
+            for key in (
+                "zone",
+                "area",
+                "anchor",
+                "position",
+                "pattern",
+                "shape",
+                "style",
+                "motion",
+                "length",
+                "range",
+                "stroke_range",
+                "rng",
+                "speed",
+                "tempo",
+                "pace",
+                "sp",
+            )
+            if move.get(key) is not None and _as_number(move.get(key)) is None
+        )
+        cues = _detect_motion_cues(cue_text)
+
+        if speed is None and depth is None and stroke_range is None and not cues.labels():
             return None
 
-        target = MotionTarget(
-            current.speed if speed is None else speed,
-            current.depth if depth is None else depth,
-            current.stroke_range if stroke_range is None else stroke_range,
-            label="llm",
-        ).clamped()
-        return target
+        return _target_from_cues(
+            current,
+            cues,
+            speed=speed,
+            depth=depth,
+            stroke_range=stroke_range,
+            label_prefix="llm",
+        )
 
     def transition_path(self, current: MotionTarget, target: MotionTarget) -> list[MotionTarget]:
         target = target.clamped()

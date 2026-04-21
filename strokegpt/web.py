@@ -3,6 +3,7 @@ import sys
 import io
 import re
 import atexit
+import socket
 import threading
 import time
 from collections import deque
@@ -21,11 +22,47 @@ from .motion import IntentMatcher, MotionController, MotionTarget
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 5000
 
 
 def resource_path(*parts):
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else PROJECT_ROOT
     return base_path.joinpath(*parts)
+
+
+def _env_int(name, default):
+    try:
+        value = int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+    if not 1 <= value <= 65535:
+        return default
+    return value
+
+
+def _port_candidates(start_port, fallback_count=10):
+    return [port for port in range(start_port, min(65535, start_port + fallback_count) + 1)]
+
+
+def _can_bind(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
+def _select_bind_port(host, start_port, fallback_count=10, can_bind=_can_bind):
+    for port in _port_candidates(start_port, fallback_count):
+        if can_bind(host, port):
+            return port
+    raise OSError(f"No available local port found from {start_port} to {start_port + fallback_count}.")
+
+
+def _display_host(host):
+    return "127.0.0.1" if host in {"0.0.0.0", "::"} else host
 
 # ─── INITIALIZATION ───────────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=None)
@@ -58,6 +95,7 @@ if settings.audio_provider == "local":
         settings.local_tts_top_p,
         settings.local_tts_min_p,
         settings.local_tts_repetition_penalty,
+        settings.local_tts_engine,
     )
 
 # In-Memory State
@@ -86,6 +124,7 @@ def get_persona_prompts_for_ui():
     return settings.persona_prompt_options()
 
 def settings_payload():
+    local_tts_status = audio.local_status()
     return {
         "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
         "persona": settings.persona_desc,
@@ -98,7 +137,9 @@ def settings_payload():
         "audio_provider": settings.audio_provider,
         "audio_enabled": settings.audio_enabled,
         "elevenlabs_voice_id": settings.elevenlabs_voice_id,
-        "local_tts_status": audio.local_status(),
+        "local_tts_status": local_tts_status,
+        "local_tts_engine": audio.local_engine,
+        "local_tts_engines": local_tts_status.get("engines", []),
         "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
         "local_tts_style": settings.local_tts_style,
         "local_tts_prompt_path": settings.local_tts_prompt_path,
@@ -151,6 +192,7 @@ def apply_settings_to_services():
             settings.local_tts_top_p,
             settings.local_tts_min_p,
             settings.local_tts_repetition_penalty,
+            settings.local_tts_engine,
         )
 
 def reset_runtime_state():
@@ -479,6 +521,8 @@ def set_audio_provider_route():
         settings.audio_provider = provider
         settings.audio_enabled = bool(enabled)
         settings.save()
+        if provider == "local" and audio.is_on:
+            audio.preload_local_model_async()
     return jsonify({"status": "ok" if ok else "error", "message": message, "local_tts_status": audio.local_status()})
 
 @app.route('/local_tts_status')
@@ -491,6 +535,7 @@ def set_local_tts_voice_route():
     enabled = data.get('enabled', False)
     prompt_path = data.get('prompt_path', '')
     style = data.get('style', settings.local_tts_style)
+    engine = data.get('engine', settings.local_tts_engine)
     exaggeration = data.get('exaggeration', 0.65)
     cfg_weight = data.get('cfg_weight', 0.35)
     temperature = data.get('temperature', settings.local_tts_temperature)
@@ -507,14 +552,18 @@ def set_local_tts_voice_route():
         top_p,
         min_p,
         repetition_penalty,
+        engine,
     )
     if ok:
         persist_local_voice_settings()
+        if audio.is_on:
+            audio.preload_local_model_async()
     return jsonify({"status": "ok" if ok else "error", "message": message, "local_tts_status": audio.local_status()})
 
 def persist_local_voice_settings():
     settings.audio_provider = "local"
     settings.audio_enabled = bool(audio.is_on)
+    settings.local_tts_engine = audio.local_engine
     settings.local_tts_style = audio.local_style
     settings.local_tts_prompt_path = audio.local_prompt_path
     settings.local_tts_exaggeration = audio.local_exaggeration
@@ -560,8 +609,11 @@ def upload_local_tts_sample_route():
         audio.local_top_p,
         audio.local_min_p,
         audio.local_repetition_penalty,
+        audio.local_engine,
     )
     persist_local_voice_settings()
+    if audio.is_on:
+        audio.preload_local_model_async()
     return jsonify({
         "status": "success",
         "prompt_path": str(target),
@@ -687,8 +739,20 @@ def on_exit():
 
 def main():
     atexit.register(on_exit)
+    if audio.provider == "local" and audio.is_on:
+        audio.preload_local_model_async()
+    host = os.getenv("STROKEGPT_HOST", DEFAULT_HOST).strip() or DEFAULT_HOST
+    requested_port = _env_int("STROKEGPT_PORT", DEFAULT_PORT)
+    try:
+        port = _select_bind_port(host, requested_port)
+    except OSError as exc:
+        print(f"[ERROR] {exc}")
+        raise SystemExit(1)
+    if port != requested_port:
+        print(f"[WARN] Port {requested_port} is unavailable; using {port} instead.")
     print(f"[INFO] Starting Handy AI app at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print(f"[INFO] Open http://{_display_host(host)}:{port}")
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == '__main__':

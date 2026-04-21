@@ -30,10 +30,25 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertNotIn("static", endpoints)
 
-    def test_root_static_images_are_served(self):
+    def test_startup_port_selection_falls_back(self):
+        from strokegpt.web import _port_candidates, _select_bind_port
+
+        self.assertEqual(_port_candidates(5000, fallback_count=3), [5000, 5001, 5002, 5003])
+        selected = _select_bind_port(
+            "127.0.0.1",
+            5000,
+            fallback_count=3,
+            can_bind=lambda host, port: port != 5000,
+        )
+
+        self.assertEqual(selected, 5001)
+
+    def test_root_static_assets_are_served(self):
         expected = {
             "/static/splash.jpg": "image/jpeg",
             "/static/default-pfp.png": "image/png",
+            "/static/app.css": "text/css",
+            "/static/app.js": "text/javascript",
         }
 
         for path, mimetype in expected.items():
@@ -45,6 +60,18 @@ class WebStaticAssetTests(unittest.TestCase):
                     self.assertGreater(len(response.data), 0)
                 finally:
                     response.close()
+
+    def test_root_links_frontend_assets(self):
+        response = self.client.get("/")
+        try:
+            page = response.get_data(as_text=True)
+
+            self.assertIn('href="/static/app.css"', page)
+            self.assertIn('src="/static/app.js"', page)
+            self.assertNotIn("<style>", page)
+            self.assertNotIn("<script>", page)
+        finally:
+            response.close()
 
     def test_updates_and_audio_are_separate_browser_endpoints(self):
         from strokegpt.web import audio, messages_for_ui
@@ -88,6 +115,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('data-settings-tab="advanced"', page)
             self.assertIn('id="settings-tab-advanced"', page)
             self.assertIn('id="reset-settings-btn"', page)
+            self.assertIn('id="local-tts-engine-select"', page)
+            self.assertIn('value="chatterbox_turbo"', page)
         finally:
             response.close()
 
@@ -254,6 +283,37 @@ class WebStaticAssetTests(unittest.TestCase):
             settings.ollama_model = original_model
             settings.ollama_models = original_models
             llm.model = original_llm_model
+            settings.save()
+
+    def test_local_tts_engine_can_be_selected_and_saved(self):
+        from strokegpt.web import audio, settings
+
+        original = settings.to_dict()
+        try:
+            response = self.client.post("/set_local_tts_voice", json={
+                "enabled": False,
+                "engine": "chatterbox",
+                "style": "expressive",
+            })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["status"], "ok")
+            self.assertEqual(audio.local_engine, "chatterbox")
+            self.assertEqual(settings.local_tts_engine, "chatterbox")
+        finally:
+            settings.apply_dict(original)
+            audio.configure_local_voice(
+                settings.audio_enabled,
+                settings.local_tts_prompt_path,
+                settings.local_tts_exaggeration,
+                settings.local_tts_cfg_weight,
+                settings.local_tts_style,
+                settings.local_tts_temperature,
+                settings.local_tts_top_p,
+                settings.local_tts_min_p,
+                settings.local_tts_repetition_penalty,
+                settings.local_tts_engine,
+            )
             settings.save()
 
     def test_local_tts_sample_upload_saves_prompt_path(self):

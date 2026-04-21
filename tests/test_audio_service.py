@@ -26,6 +26,22 @@ class AudioServiceTests(unittest.TestCase):
 
         self.assertEqual(set(AudioService.CHATTERBOX_STYLE_PRESETS), expected)
 
+    def test_local_engine_defaults_to_turbo(self):
+        service = AudioService()
+
+        self.assertEqual(service.local_engine, AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
+
+    def test_local_engine_change_unloads_cached_model(self):
+        service = AudioService()
+        service.local_engine = AudioService.LOCAL_ENGINE_CHATTERBOX
+        service._local_model = object()
+        service._local_model_engine = AudioService.LOCAL_ENGINE_CHATTERBOX
+
+        service.configure_local_voice(False, engine=AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
+
+        self.assertEqual(service.local_engine, AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
+        self.assertIsNone(service._local_model)
+
     def test_local_style_preset_sets_generation_controls(self):
         service = AudioService()
         service.configure_local_voice(True, style="dramatic")
@@ -59,6 +75,37 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service.local_top_p, 0.8)
         self.assertEqual(service.local_min_p, 0.1)
         self.assertEqual(service.local_repetition_penalty, 1.4)
+
+    def test_local_status_warns_when_torch_is_cpu_only(self):
+        service = AudioService()
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": False,
+            "cuda_version": "",
+            "device_count": 0,
+            "device_name": "",
+            "device": "cpu",
+            "device_override": "auto",
+        }
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+
+        status = service.local_status()
+
+        self.assertEqual(status["status"], "cpu_only")
+        self.assertIn("CPU-only", status["message"])
+        self.assertFalse(status["cuda_available"])
+
+    def test_local_tts_text_is_split_for_lower_first_audio_latency(self):
+        service = AudioService()
+        text = "First sentence is short. " + ("This sentence has enough words to make the local text to speech splitter create more than one chunk. " * 5)
+
+        chunks = service._split_text_for_local_tts(text)
+
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(chunk) <= service.LOCAL_TTS_CHUNK_CHARS for chunk in chunks))
 
     @unittest.skipIf(importlib.util.find_spec("torch") is None, "torch not installed")
     def test_local_wav_encoder_uses_stdlib_wav(self):

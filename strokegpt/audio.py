@@ -1,9 +1,14 @@
 import io
+import importlib.util
+import os
 import re
+import threading
+import time
 import warnings
 import wave
 from collections import deque
 from contextlib import contextmanager
+from pathlib import Path
 
 from elevenlabs.client import ElevenLabs
 from elevenlabs import VoiceSettings
@@ -11,6 +16,13 @@ from elevenlabs import VoiceSettings
 
 class AudioService:
     LOCAL_ENGINE_CHATTERBOX = "chatterbox"
+    LOCAL_ENGINE_CHATTERBOX_TURBO = "chatterbox_turbo"
+    LOCAL_ENGINE_DEFAULT = LOCAL_ENGINE_CHATTERBOX_TURBO
+    LOCAL_TTS_CHUNK_CHARS = 220
+    LOCAL_ENGINE_LABELS = {
+        LOCAL_ENGINE_CHATTERBOX_TURBO: "Chatterbox Turbo",
+        LOCAL_ENGINE_CHATTERBOX: "Chatterbox Standard",
+    }
     CHATTERBOX_STYLE_PRESETS = {
         "default": {
             "label": "Default",
@@ -77,7 +89,7 @@ class AudioService:
         self.client = None
         self.available_voices = {}
 
-        self.local_engine = self.LOCAL_ENGINE_CHATTERBOX
+        self.local_engine = self.LOCAL_ENGINE_DEFAULT
         self.local_style = "expressive"
         self.local_prompt_path = ""
         self.local_exaggeration = 0.65
@@ -87,6 +99,15 @@ class AudioService:
         self.local_min_p = 0.05
         self.local_repetition_penalty = 1.2
         self._local_model = None
+        self._local_model_engine = None
+        self._local_model_device = ""
+        self._local_model_lock = threading.Lock()
+        self._local_generation_lock = threading.Lock()
+        self._local_preload_thread = None
+        self._local_preload_status = "idle"
+        self._local_preload_error = ""
+        self._local_warmup_done = False
+        self.last_generation_seconds = None
         self.last_error = ""
 
         self.audio_output_queue = deque()
@@ -148,7 +169,17 @@ class AudioService:
         top_p=None,
         min_p=None,
         repetition_penalty=None,
+        engine=None,
     ):
+        next_engine = self._normalize_local_engine(engine)
+        if next_engine != self.local_engine:
+            with self._local_model_lock:
+                self._local_model = None
+                self._local_model_engine = None
+                self._local_model_device = ""
+                self._local_warmup_done = False
+            self.local_engine = next_engine
+
         if style not in self.CHATTERBOX_STYLE_PRESETS:
             style = "expressive"
         preset = self.CHATTERBOX_STYLE_PRESETS[style]
@@ -167,24 +198,52 @@ class AudioService:
         return True, "Local voice settings updated."
 
     def local_status(self):
-        try:
-            with self._suppress_perth_pkg_resources_warning():
-                import chatterbox.tts  # noqa: F401
-            return {
-                "status": "success",
-                "engine": self.local_engine,
-                "available": True,
-                "message": "Chatterbox is available.",
-                "style_presets": self.CHATTERBOX_STYLE_PRESETS,
-            }
-        except Exception as e:
-            return {
-                "status": "missing_dependency",
-                "engine": self.local_engine,
-                "available": False,
-                "message": f"Install local voice dependencies first: {e}",
-                "style_presets": self.CHATTERBOX_STYLE_PRESETS,
-            }
+        runtime = self._local_runtime_info()
+        engines = self._local_engine_options()
+        selected = next((engine for engine in engines if engine["id"] == self.local_engine), None)
+        engine_available = bool(selected and selected["available"])
+        torch_available = bool(runtime["torch_available"])
+        available = engine_available and torch_available and not runtime.get("error")
+
+        if not engine_available:
+            message = f"{self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} is not installed."
+            status = "missing_dependency"
+        elif not torch_available:
+            message = "Install PyTorch before using local Chatterbox voice."
+            status = "missing_dependency"
+        elif runtime.get("error"):
+            message = f"Local voice device problem: {runtime['error']}"
+            status = "device_error"
+        elif runtime["cuda_available"]:
+            message = f"{selected['label']} is available on {runtime['device']} ({runtime['device_name']})."
+            status = "success"
+        else:
+            message = f"{selected['label']} is available, but Torch is CPU-only. Local voice will be slow until CUDA PyTorch is installed."
+            status = "cpu_only"
+
+        if self._local_model is not None:
+            message += f" Model loaded on {self._local_model_device or runtime['device']}."
+        elif self._local_preload_status == "loading":
+            message += " Model preload is running."
+        elif self._local_preload_status == "error" and self._local_preload_error:
+            message += f" Preload failed: {self._local_preload_error}"
+
+        return {
+            "status": status,
+            "engine": self.local_engine,
+            "engine_label": self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine),
+            "engines": engines,
+            "available": available,
+            "message": message,
+            "style_presets": self.CHATTERBOX_STYLE_PRESETS,
+            "torch": runtime,
+            "device": runtime["device"],
+            "cuda_available": runtime["cuda_available"],
+            "model_loaded": self._local_model is not None,
+            "preload_status": self._local_preload_status,
+            "preload_error": self._local_preload_error,
+            "last_generation_seconds": self.last_generation_seconds,
+        }
 
     def generate_audio_for_text(self, text_to_speak, force=False):
         if not self.is_on and not force:
@@ -235,44 +294,110 @@ class AudioService:
 
     def _generate_local_audio(self, text_to_speak):
         try:
-            model = self._get_chatterbox_model()
-            kwargs = {
-                "exaggeration": self.local_exaggeration,
-                "cfg_weight": self.local_cfg_weight,
-                "temperature": self.local_temperature,
-                "top_p": self.local_top_p,
-                "min_p": self.local_min_p,
-                "repetition_penalty": self.local_repetition_penalty,
-            }
-            if self.local_prompt_path:
-                kwargs["audio_prompt_path"] = self.local_prompt_path
+            chunks = self._split_text_for_local_tts(text_to_speak)
+            if not chunks:
+                return
 
-            print(f"[INFO] Generating local Chatterbox audio: '{text_to_speak[:50]}...'")
-            generated_audio = model.generate(text_to_speak, **kwargs)
-
-            self.audio_output_queue.append({
-                "bytes": self._encode_wav_bytes(generated_audio, model.sr),
-                "mimetype": "audio/wav",
-            })
+            print(f"[INFO] Generating local Chatterbox audio ({len(chunks)} chunk(s)): '{text_to_speak[:50]}...'")
+            for chunk in chunks:
+                started_at = time.perf_counter()
+                with self._local_generation_lock:
+                    model = self._get_chatterbox_model()
+                    generated_audio = self._generate_local_waveform(model, chunk)
+                    self.audio_output_queue.append({
+                        "bytes": self._encode_wav_bytes(generated_audio, model.sr),
+                        "mimetype": "audio/wav",
+                    })
+                self.last_generation_seconds = round(time.perf_counter() - started_at, 3)
+                print(f"[OK] Local audio chunk ready in {self.last_generation_seconds}s.")
             self.last_error = ""
-            print("[OK] Local audio ready.")
         except Exception as e:
             self.last_error = f"Local Chatterbox problem: {e}"
             print(f"[ERROR] {self.last_error}")
 
     def _get_chatterbox_model(self):
-        if self._local_model is None:
+        with self._local_model_lock:
+            if self._local_model is not None and self._local_model_engine == self.local_engine:
+                return self._local_model
             try:
-                import torch
-                with self._suppress_perth_pkg_resources_warning():
-                    from chatterbox.tts import ChatterboxTTS
-
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                self._local_model = ChatterboxTTS.from_pretrained(device=device)
-                print(f"[OK] Chatterbox loaded on {device}.")
+                runtime = self._local_runtime_info()
+                if not runtime["torch_available"]:
+                    raise RuntimeError("PyTorch is not installed.")
+                if runtime.get("error"):
+                    raise RuntimeError(runtime["error"])
+                model_class = self._chatterbox_model_class(self.local_engine)
+                device = runtime["device"]
+                self._local_model = model_class.from_pretrained(device=device)
+                self._local_model_engine = self.local_engine
+                self._local_model_device = device
+                print(f"[OK] {self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} loaded on {device}.")
             except Exception as e:
                 raise RuntimeError(f"Could not load Chatterbox. Install with requirements.txt. Details: {e}")
         return self._local_model
+
+    def preload_local_model_async(self):
+        if self.provider != "local" or not self.is_on:
+            return False
+        if self._local_model is not None and self._local_model_engine == self.local_engine:
+            return True
+        if self._local_preload_thread and self._local_preload_thread.is_alive():
+            return True
+
+        def preload():
+            self._local_preload_status = "loading"
+            self._local_preload_error = ""
+            try:
+                model = self._get_chatterbox_model()
+                self._warmup_local_model(model)
+                self._local_preload_status = "ready"
+            except Exception as e:
+                self._local_preload_status = "error"
+                self._local_preload_error = str(e)
+                self.last_error = f"Local Chatterbox preload problem: {e}"
+                print(f"[ERROR] {self.last_error}")
+
+        self._local_preload_thread = threading.Thread(target=preload, daemon=True)
+        self._local_preload_thread.start()
+        return True
+
+    def _warmup_local_model(self, model):
+        if self._local_warmup_done or os.getenv("STROKEGPT_TTS_WARMUP", "1") == "0":
+            return
+        with self._local_generation_lock:
+            started_at = time.perf_counter()
+            self._generate_local_waveform(model, "Ready.")
+            self._local_warmup_done = True
+            print(f"[OK] Local Chatterbox warmup completed in {time.perf_counter() - started_at:.3f}s.")
+
+    def _generate_local_waveform(self, model, text):
+        kwargs = self._local_generation_kwargs()
+        if self.local_prompt_path:
+            kwargs["audio_prompt_path"] = self.local_prompt_path
+        with self._torch_inference_mode():
+            return model.generate(text, **kwargs)
+
+    def _local_generation_kwargs(self):
+        kwargs = {
+            "exaggeration": self.local_exaggeration,
+            "cfg_weight": self.local_cfg_weight,
+            "temperature": self.local_temperature,
+            "top_p": self.local_top_p,
+            "min_p": self.local_min_p,
+            "repetition_penalty": self.local_repetition_penalty,
+        }
+        if self.local_engine == self.LOCAL_ENGINE_CHATTERBOX_TURBO:
+            kwargs["min_p"] = min(kwargs["min_p"], 0.05)
+        return kwargs
+
+    def _chatterbox_model_class(self, engine):
+        with self._suppress_perth_pkg_resources_warning():
+            if engine == self.LOCAL_ENGINE_CHATTERBOX_TURBO:
+                from chatterbox.tts_turbo import ChatterboxTurboTTS
+
+                return ChatterboxTurboTTS
+            from chatterbox.tts import ChatterboxTTS
+
+            return ChatterboxTTS
 
     def _encode_wav_bytes(self, waveform, sample_rate):
         if not hasattr(waveform, "detach"):
@@ -303,6 +428,127 @@ class AudioService:
             wav_file.setframerate(int(sample_rate))
             wav_file.writeframes(pcm)
         return output.getvalue()
+
+    def _normalize_local_engine(self, engine):
+        engine = (engine or self.local_engine or self.LOCAL_ENGINE_DEFAULT).strip()
+        if engine not in self.LOCAL_ENGINE_LABELS:
+            return self.LOCAL_ENGINE_DEFAULT
+        return engine
+
+    def _local_engine_options(self):
+        return [
+            {
+                "id": engine_id,
+                "label": label,
+                "available": self._chatterbox_module_file_available(
+                    "tts_turbo" if engine_id == self.LOCAL_ENGINE_CHATTERBOX_TURBO else "tts"
+                ),
+            }
+            for engine_id, label in self.LOCAL_ENGINE_LABELS.items()
+        ]
+
+    def _chatterbox_module_file_available(self, module_name):
+        spec = importlib.util.find_spec("chatterbox")
+        if not spec or not spec.submodule_search_locations:
+            return False
+        for location in spec.submodule_search_locations:
+            package_path = Path(location)
+            if (package_path / f"{module_name}.py").exists():
+                return True
+            if (package_path / module_name / "__init__.py").exists():
+                return True
+        return False
+
+    def _local_runtime_info(self):
+        runtime = {
+            "torch_available": False,
+            "torch_version": "",
+            "cuda_available": False,
+            "cuda_version": "",
+            "device_count": 0,
+            "device_name": "",
+            "device": "cpu",
+            "device_override": os.getenv("STROKEGPT_TTS_DEVICE", "auto").strip().lower() or "auto",
+        }
+        if importlib.util.find_spec("torch") is None:
+            return runtime
+
+        try:
+            import torch
+
+            runtime["torch_available"] = True
+            runtime["torch_version"] = getattr(torch, "__version__", "")
+            runtime["cuda_available"] = bool(torch.cuda.is_available())
+            runtime["cuda_version"] = getattr(torch.version, "cuda", "") or ""
+            runtime["device_count"] = int(torch.cuda.device_count()) if runtime["cuda_available"] else 0
+            runtime["device_name"] = torch.cuda.get_device_name(0) if runtime["cuda_available"] else ""
+            runtime["device"] = self._select_tts_device(torch, runtime["device_override"])
+        except Exception as e:
+            runtime["error"] = str(e)
+        return runtime
+
+    def _select_tts_device(self, torch_module, requested):
+        if requested == "cpu":
+            return "cpu"
+        if requested == "cuda":
+            if not torch_module.cuda.is_available():
+                raise RuntimeError("STROKEGPT_TTS_DEVICE=cuda was requested, but CUDA is not available.")
+            return "cuda"
+        if torch_module.cuda.is_available():
+            return "cuda"
+        return "cpu"
+
+    def _split_text_for_local_tts(self, text):
+        text = " ".join(str(text or "").split())
+        if not text:
+            return []
+        if len(text) <= self.LOCAL_TTS_CHUNK_CHARS:
+            return [text]
+
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+        chunks = []
+        current = ""
+        for sentence in sentences:
+            if len(sentence) > self.LOCAL_TTS_CHUNK_CHARS:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                chunks.extend(self._hard_split_text(sentence, self.LOCAL_TTS_CHUNK_CHARS))
+                continue
+            candidate = f"{current} {sentence}".strip()
+            if current and len(candidate) > self.LOCAL_TTS_CHUNK_CHARS:
+                chunks.append(current)
+                current = sentence
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+        return chunks
+
+    def _hard_split_text(self, text, max_chars):
+        words = text.split()
+        chunks = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if current and len(candidate) > max_chars:
+                chunks.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+        return chunks
+
+    @contextmanager
+    def _torch_inference_mode(self):
+        try:
+            import torch
+        except Exception:
+            yield
+            return
+        with torch.inference_mode():
+            yield
 
     @contextmanager
     def _suppress_perth_pkg_resources_warning(self):
