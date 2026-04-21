@@ -1,68 +1,99 @@
-====================
-    CHANGELOG
-====================
+===========================
+StrokeGPT-ReVibed Changelog
+===========================
 
-=== v1.5 - The Refactor & Interactivity Update ===
-
-- Major Architectural Overhaul: The entire application was refactored from a single mahoosive file into a multi-module structure. This makes it more stable and easier to update in the future. (I wept a little.)
-- New Feature: Advanced Interactive Edging Mode! The old, predictable loop is gone. Edging is now a proper game:
-    - A new "I'm Close" button lets you signal the AI when you're near the edge.
-    - The AI is now unpredictable and will react to your signal by choosing to pull back, hold you on the edge, or even push you a little further.
-    - Chat messages sent during any mode (Auto, Milking, Edging) will now influence the AI's behavior in real-time.
-- New Feature: AI-Aware Edging Timer - A timer now appears during edging, and the AI is aware of it, allowing it to comment on your performance.
-- New Feature: Custom AI Name & Profile Picture - You can now set a custom name and upload a profile picture for the AI in the sidebar. The name replaces "BOT" in the chat.
-- UI Overhaul: The entire interface has been polished with a more modern design, better fonts, softer elements, and smoother animations.
-- Collapsible Sidebar: The sidebar can now be hidden to focus on the chat.
-- Added an AI typing indicator and animated messages to make the chat feel more alive.
-- The title has been updated to the much sleeker "StrokeGPT".
-- Added a few secret chat commands and naming conventions for users with particular tastes in classic gaming.
-- CRITICAL SAFETY FIX: The "Stop" command is now top priority and will correctly interrupt all modes, including the new interactive edging mode.
-- Fixed a persistent bug that caused the onboarding wizard to appear on every startup.
-- Fixed numerous issues where the AI would stop moving if it received an incomplete command from a user's request.
-- Massively improved the AI's long-term memory. It should no longer get confused about who is who or forget details from the chat (still not perfect).
-- The "Like" button now actually works and saves patterns correctly.
-- Jeez, that was a lot...
-
-=== v1.4.1 ===
-
-- The AI can now focus on working the entire shaft.
-- Noted the app/index files so hard their future generations will walk with a limp.
-
-=== v1.4 ===
-
-- New Feature: Edging Mode has been added.
-- New Feature: Added user-configurable timers in the UI to control the interval between moves in all special modes (Auto, Edging, Milking).
-- AI now invents every move on the fly. Clicking the Like button saves the move to memory for future use.
-- The more likes a move gets, the more often it will be used.
-- The memory system has been overhauled to use a detailed user profile, which saves important info, personal details, and key memories from your sessions.
-- The AI's persona can now be changed at any time from the sidebar during a chat.
-- All special modes (Auto, Milking, Edging) now function as intended, inventing moves dynamically and respecting user settings.
-- The Stop command is now more reliable.
-- Chatting during special modes is now safe and will not interrupt the active mode.
-- Added min/max speed settings to the onboarding guide.
-- System prompt has been optimized, which may improve response speed on some hardware.
-
-=== v1.3 – The update that borked the app :/ ===
-
-- New Feature: Onboarding Setup – The app now starts with a simple guide to set your Handy key, choose a persona, and define your min/max depth.
-- Smarter AI Depth Mapping: The calibration system ensures the AI understands your physical range, so it no longer confuses the tip with the base.
-- Persona Consistency: The AI now strictly adheres to the persona you choose.
-- Voice Update: ElevenLabs voice output is more stable and expressive.
-- Improved Depth Semantics: Commands like just the tip or go deeper are now understood more reliably.
-- Emergency Stop Fix: The STOP EVERYTHING button now correctly halts all motion.
-- Memory Saving Fix: Memory snapshots now save correctly without overwriting each other.
-
-=== v1.2.5 - Depth Adherence & Stability Hotfix ===
+This changelog tracks the merged pull requests made in the StrokeGPT-ReVibed
+fork. It starts from the fork baseline and records the project work that has
+landed through PRs in this repository.
 
 
-=== v1.2 - The Ergonomics & Audio Update ===
+2026-04-21 - PR #4 - Organize Portable Settings
+------------------------------------------------
 
-- New Feature: ElevenLabs Integration: Added full voice support, with settings for API key and voice selection.
-- New Feature: Advanced In-Session Memory: Added a smarter way for the AI to remember what's happening during your chat.
-- UI Overhaul: Redesigned the app with a two-column layout, moving settings to the sidebar for a larger chat window.
-- Model Recommendation Update: The recommended AI model is now llama3:8b-instruct-q4_K_M for better speed and comprehension.
-- Fixed AI Depth Understanding: Made it so tip, mid, and deep strokes are accurate regardless of your Max Depth setting.
-- Fixed AI Speed Perception: Improved the AI's understanding of slow, medium, and fast speeds for better control.
-- Introduced Max Depth Limiter: Added a Max Depth slider and a hard safety limit in the code to ensure the device never goes past your set depth.
-- Resolved UI Interactivity Issues: Fixed code so all buttons and sliders work correctly.
-- Fixed Preference Saving Errors: Corrected issues that prevented settings from saving properly when closing the app.
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/4
+Branch: codex-settings-portability-reset
+Head commit: 445bbe7
+Merge commit: 4ae1c9c
+
+- Reorganized the settings dialog into Persona, Model, Voice, Device, Motion,
+  and Advanced tabs.
+- Moved the Handy connection key and stroke range controls into the Device tab.
+- Added speed limit controls to the Motion tab so limits from initial setup can
+  be adjusted later.
+- Added saved persona prompt presets, including girlfriend, boyfriend, and
+  partner defaults.
+- Centralized settings defaults, serialization, migration, and reset behavior
+  around a portable settings schema.
+- Added a confirmed Reset All Settings action that stops active motion, resets
+  runtime state, clears saved settings, and returns the app to setup.
+- Fixed local Chatterbox warning suppression so loading no longer fails with
+  unsupported `catch_warnings` arguments.
+- Updated README and Codex handoff notes for the new settings layout.
+- Added regression coverage for the new settings UI and backend routes.
+
+
+2026-04-21 - PR #3 - Add CI Test Workflow
+-----------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/3
+Branch: codex/add-ci-test-workflow
+Head commit: cbf2d1f
+Merge commit: 92df7f2
+
+- Added a lightweight GitHub Actions workflow for pushes and pull requests.
+- Made CI run the unit test suite and Python compile checks on Python 3.11.
+- Documented the CI dependency boundary, including why `chatterbox-tts` is not
+  installed in the default workflow.
+- Updated Codex handoff guidance to allow larger refactors when they improve
+  editability or safety.
+- Fixed test stubs so dependency detection does not hide web route coverage
+  when tests run together.
+
+
+2026-04-21 - PR #2 - Rewrite Docs and Add Codex Handoff
+-------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/2
+Branch: revibed-cleanup
+Head commit: 5e9b1de
+Merge commit: 72c1f42
+
+- Rewrote README content for the ReVibed fork and its current Windows-first
+  local app workflow.
+- Added Codex handoff guidance for future coding agents.
+- Documented runtime requirements, local run commands, project layout, voice
+  setup, model settings, motion settings, and test commands.
+- Preserved attribution to the original StrokeGPT repository and called out
+  rough edges that remain unfinished.
+
+
+2026-04-21 - PR #1 - Refactor StrokeGPT Into ReVibed Prototype
+--------------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/1
+Branch: revibed-cleanup
+Head commit: 7def7eb
+Merge commit: b4b40bb
+
+- Reorganized the app from a single-file shape into the `strokegpt` Python
+  package.
+- Added deterministic motion parsing, safety clamping, smoothing, and scripted
+  motion planning.
+- Added dynamic background mode script planning.
+- Added local Chatterbox TTS alongside ElevenLabs voice output.
+- Added a unified settings popup with Persona, Model, Voice, and Motion tabs.
+- Added an Ollama model selector and defaulted the app to
+  `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`.
+- Added stroke range slider and test controls outside initial setup.
+- Fixed static image serving after the package refactor.
+- Split browser polling into separate JSON update and audio fetch endpoints.
+- Added regression tests for motion control, model configuration, Handy
+  behavior, audio behavior, static assets, and web endpoints.
+
+
+Fork Baseline
+-------------
+
+StrokeGPT-ReVibed is derived from the original StrokeGPT repository. Earlier
+application version notes from before this fork are not treated as ReVibed PR
+history.
