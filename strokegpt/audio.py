@@ -105,7 +105,12 @@ class AudioService:
         self._local_generation_lock = threading.Lock()
         self._local_preload_thread = None
         self._local_preload_status = "idle"
+        self._local_preload_phase = "idle"
         self._local_preload_error = ""
+        self._local_preload_started_at = None
+        self._local_generation_status = "idle"
+        self._local_generation_error = ""
+        self._local_generation_started_at = None
         self._local_warmup_done = False
         self.last_generation_seconds = None
         self.last_error = ""
@@ -180,7 +185,9 @@ class AudioService:
                 self._local_warmup_done = False
             self.local_engine = next_engine
             self._local_preload_status = "idle"
+            self._local_preload_phase = "idle"
             self._local_preload_error = ""
+            self._local_preload_started_at = None
 
         if style not in self.CHATTERBOX_STYLE_PRESETS:
             style = "expressive"
@@ -205,7 +212,8 @@ class AudioService:
         selected = next((engine for engine in engines if engine["id"] == self.local_engine), None)
         engine_available = bool(selected and selected["available"])
         torch_available = bool(runtime["torch_available"])
-        available = engine_available and torch_available and not runtime.get("error")
+        prompt_problem = self._local_prompt_path_problem()
+        available = engine_available and torch_available and not runtime.get("error") and not prompt_problem
 
         if not engine_available:
             message = f"{self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} is not installed."
@@ -216,6 +224,9 @@ class AudioService:
         elif runtime.get("error"):
             message = f"Local voice device problem: {runtime['error']}"
             status = "device_error"
+        elif prompt_problem:
+            message = prompt_problem
+            status = "sample_missing"
         elif runtime["cuda_available"]:
             message = f"{selected['label']} is available on {runtime['device']} ({runtime['device_name']})."
             status = "success"
@@ -227,11 +238,16 @@ class AudioService:
         if model_loaded:
             message += f" Model loaded on {self._local_model_device or runtime['device']}."
         elif self._local_preload_status == "loading":
-            message += " Model download/load is running."
+            message += f" Model download/load is running ({self._local_preload_phase.replace('_', ' ')})."
         elif self._local_preload_status == "error" and self._local_preload_error:
             message += f" Download/load failed: {self._local_preload_error}"
         elif available:
             message += " Model is not loaded yet. Click Download / Load Local Voice Model before testing; first use may download several GB."
+
+        if self._local_generation_status == "generating":
+            message += " Local voice generation is running."
+        elif self._local_generation_status == "error" and self._local_generation_error:
+            message += f" Last generation failed: {self._local_generation_error}"
 
         return {
             "status": status,
@@ -246,8 +262,14 @@ class AudioService:
             "cuda_available": runtime["cuda_available"],
             "model_loaded": model_loaded,
             "preload_status": self._local_preload_status,
+            "preload_phase": self._local_preload_phase,
             "preload_error": self._local_preload_error,
+            "preload_elapsed_seconds": self._elapsed_seconds(self._local_preload_started_at),
+            "generation_status": self._local_generation_status,
+            "generation_error": self._local_generation_error,
+            "generation_elapsed_seconds": self._elapsed_seconds(self._local_generation_started_at),
             "last_generation_seconds": self.last_generation_seconds,
+            "prompt_path": self.local_prompt_path,
         }
 
     def local_model_loaded(self):
@@ -309,6 +331,9 @@ class AudioService:
                 return
 
             print(f"[INFO] Generating local Chatterbox audio ({len(chunks)} chunk(s)): '{text_to_speak[:50]}...'")
+            self._local_generation_status = "generating"
+            self._local_generation_error = ""
+            self._local_generation_started_at = time.perf_counter()
             for chunk in chunks:
                 started_at = time.perf_counter()
                 with self._local_generation_lock:
@@ -320,9 +345,19 @@ class AudioService:
                     })
                 self.last_generation_seconds = round(time.perf_counter() - started_at, 3)
                 print(f"[OK] Local audio chunk ready in {self.last_generation_seconds}s.")
+            self._local_generation_status = "idle"
+            self._local_generation_started_at = None
             self.last_error = ""
         except Exception as e:
-            self.last_error = f"Local Chatterbox problem: {e}"
+            error = str(e)
+            self._local_generation_status = "error"
+            self._local_generation_error = error
+            self._local_generation_started_at = None
+            self._local_preload_status = "error"
+            self._local_preload_phase = "error"
+            self._local_preload_error = error
+            self._reset_local_model_after_failure()
+            self.last_error = f"Local Chatterbox problem: {error}"
             print(f"[ERROR] {self.last_error}")
 
     def _get_chatterbox_model(self):
@@ -354,22 +389,33 @@ class AudioService:
             return False
         if self.local_model_loaded():
             self._local_preload_status = "ready"
+            self._local_preload_phase = "ready"
             self._local_preload_error = ""
+            self._local_preload_started_at = None
             return True
         if self._local_preload_thread and self._local_preload_thread.is_alive():
             return True
 
         def preload():
             self._local_preload_status = "loading"
+            self._local_preload_phase = "loading_model"
             self._local_preload_error = ""
+            self._local_preload_started_at = time.perf_counter()
             try:
                 model = self._get_chatterbox_model()
+                self._local_preload_phase = "warming_up"
                 self._warmup_local_model(model)
                 self._local_preload_status = "ready"
+                self._local_preload_phase = "ready"
+                self._local_preload_started_at = None
             except Exception as e:
+                error = str(e)
                 self._local_preload_status = "error"
-                self._local_preload_error = str(e)
-                self.last_error = f"Local Chatterbox preload problem: {e}"
+                self._local_preload_phase = "error"
+                self._local_preload_error = error
+                self._local_preload_started_at = None
+                self._reset_local_model_after_failure()
+                self.last_error = f"Local Chatterbox preload problem: {error}"
                 print(f"[ERROR] {self.last_error}")
 
         self._local_preload_thread = threading.Thread(target=preload, daemon=True)
@@ -384,6 +430,23 @@ class AudioService:
             self._generate_local_waveform(model, "Ready.")
             self._local_warmup_done = True
             print(f"[OK] Local Chatterbox warmup completed in {time.perf_counter() - started_at:.3f}s.")
+
+    def _reset_local_model_after_failure(self):
+        with self._local_model_lock:
+            self._local_model = None
+            self._local_model_engine = None
+            self._local_model_device = ""
+            self._local_warmup_done = False
+        self._empty_cuda_cache()
+
+    def _empty_cuda_cache(self):
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     def _generate_local_waveform(self, model, text):
         kwargs = self._local_generation_kwargs()
@@ -502,6 +565,18 @@ class AudioService:
         except Exception as e:
             runtime["error"] = str(e)
         return runtime
+
+    def _local_prompt_path_problem(self):
+        if not self.local_prompt_path:
+            return ""
+        if not Path(self.local_prompt_path).exists():
+            return f"Reference voice sample not found: {self.local_prompt_path}"
+        return ""
+
+    def _elapsed_seconds(self, started_at):
+        if not started_at:
+            return None
+        return max(0, round(time.perf_counter() - started_at, 1))
 
     def _select_tts_device(self, torch_module, requested):
         if requested == "cpu":

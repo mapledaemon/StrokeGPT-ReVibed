@@ -857,7 +857,11 @@ def test_local_tts_voice_route():
         kwargs={"force": True},
         daemon=True,
     ).start()
-    return jsonify({"status": "queued", "message": "Local voice test queued."})
+    return jsonify({
+        "status": "queued",
+        "message": "Local voice test queued.",
+        "local_tts_status": audio.local_status(),
+    })
 
 @app.route('/get_updates')
 def get_ui_updates_route():

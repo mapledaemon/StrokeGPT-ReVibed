@@ -231,7 +231,7 @@ Local Chatterbox is heavier than the rest of the app. Python 3.11 is recommended
 
 For local Chatterbox voice cloning/style reference, use **Browse** in the Voice tab to choose a sample audio file.
 
-For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. See **Install PyTorch For Local Voice** above. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. Longer replies are split into smaller audio chunks so playback can start sooner.
+For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. See **Install PyTorch For Local Voice** above. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. The Voice tab reports download/load phase, elapsed time, generation status, missing sample files, and the last local voice error. Longer replies are split into smaller audio chunks so playback can start sooner.
 
 ## Motion Settings
 

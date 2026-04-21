@@ -1,6 +1,7 @@
 import importlib.util
 import importlib.machinery
 import io
+from pathlib import Path
 import sys
 import types
 import unittest
@@ -44,6 +45,7 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service.local_engine, AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
         self.assertIsNone(service._local_model)
         self.assertEqual(service._local_preload_status, "idle")
+        self.assertEqual(service._local_preload_phase, "idle")
         self.assertEqual(service._local_preload_error, "")
 
     def test_local_status_ignores_cached_model_for_previous_engine(self):
@@ -84,6 +86,7 @@ class AudioServiceTests(unittest.TestCase):
 
         self.assertTrue(started)
         self.assertEqual(service._local_preload_status, "ready")
+        self.assertEqual(service._local_preload_phase, "ready")
         self.assertEqual(service._local_preload_error, "")
 
     def test_elevenlabs_generation_errors_are_reported(self):
@@ -156,6 +159,68 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(status["status"], "cpu_only")
         self.assertIn("CPU-only", status["message"])
         self.assertFalse(status["cuda_available"])
+
+    def test_local_status_reports_missing_reference_sample(self):
+        service = AudioService()
+        service.local_prompt_path = str(Path(__file__).with_name("missing-reference-sample.wav"))
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": True,
+            "cuda_version": "test",
+            "device_count": 1,
+            "device_name": "test gpu",
+            "device": "cuda",
+            "device_override": "auto",
+        }
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+
+        status = service.local_status()
+
+        self.assertEqual(status["status"], "sample_missing")
+        self.assertFalse(status["available"])
+        self.assertEqual(status["prompt_path"], service.local_prompt_path)
+        self.assertIn("Reference voice sample not found", status["message"])
+
+    def test_local_generation_failure_resets_cached_model(self):
+        class DummyModel:
+            sr = 24000
+
+        service = AudioService()
+        service.provider = "local"
+        service._local_model = DummyModel()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._generate_local_waveform = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("cuda exploded"))
+        service._empty_cuda_cache = lambda: None
+
+        service.generate_audio_for_text("hello", force=True)
+
+        self.assertIsNone(service._local_model)
+        self.assertEqual(service._local_generation_status, "error")
+        self.assertEqual(service._local_preload_status, "error")
+        self.assertIn("cuda exploded", service._local_generation_error)
+        self.assertIn("Local Chatterbox problem", service.last_error)
+
+    def test_local_preload_failure_resets_cached_model_state(self):
+        service = AudioService()
+        service._local_model = object()
+        service._local_model_engine = "previous-engine"
+        service._local_model_device = "cuda"
+        service._get_chatterbox_model = lambda: (_ for _ in ()).throw(RuntimeError("download failed"))
+        service._empty_cuda_cache = lambda: None
+
+        started = service.preload_local_model_async(force=True)
+        service._local_preload_thread.join(timeout=1)
+
+        self.assertTrue(started)
+        self.assertFalse(service._local_preload_thread.is_alive())
+        self.assertIsNone(service._local_model)
+        self.assertEqual(service._local_preload_status, "error")
+        self.assertEqual(service._local_preload_phase, "error")
+        self.assertIn("download failed", service._local_preload_error)
 
     def test_local_tts_text_is_split_for_lower_first_audio_latency(self):
         service = AudioService()

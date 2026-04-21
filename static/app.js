@@ -85,6 +85,7 @@ let audioFetchInProgress = false;
 let motionMinDepth = 5, motionMaxDepth = 100;
 let motionMinSpeed = 10, motionMaxSpeed = 80;
 let ollamaDownloadPolling = false;
+let localTtsStatusPolling = false;
 
 async function apiCall(endpoint, options = {}) {
     try {
@@ -210,6 +211,13 @@ async function refreshOllamaStatus() {
     const data = await apiCall('/ollama_status');
     if (data) updateOllamaStatus(data);
     return data;
+}
+
+function formatElapsed(seconds) {
+    if (seconds === null || seconds === undefined) return '';
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    if (total >= 60) return `${Math.floor(total / 60)}m ${total % 60}s`;
+    return `${total}s`;
 }
 
 async function setOllamaModel(model) {
@@ -415,16 +423,33 @@ async function saveAudioProvider() {
 
 function updateLocalTtsStatus(status) {
     if (!status) return;
-    localTtsStatus.textContent = status.message || 'Local voice status unavailable.';
-    localTtsStatus.style.color = status.status === 'cpu_only' ? 'var(--yellow)' : (status.available ? 'var(--cyan)' : 'var(--yellow)');
-    if (status.engines) populateLocalEngineOptions(status.engines, status.engine);
+    const loading = status.preload_status === 'loading';
+    const generating = status.generation_status === 'generating';
+    const preloadElapsed = formatElapsed(status.preload_elapsed_seconds);
+    const generationElapsed = formatElapsed(status.generation_elapsed_seconds);
+    let message = status.message || 'Local voice status unavailable.';
+    if (loading && preloadElapsed) message += ` Elapsed: ${preloadElapsed}.`;
+    if (generating && generationElapsed) message += ` Generation elapsed: ${generationElapsed}.`;
+    localTtsStatus.textContent = message;
+    localTtsStatus.style.color = loading || generating
+        ? 'var(--comment)'
+        : (status.available && status.status !== 'cpu_only' && status.preload_status !== 'error' && status.generation_status !== 'error' ? 'var(--cyan)' : 'var(--yellow)');
+    localTtsStatusPolling = loading || generating;
+    if (status.engines && D.activeElement !== localTtsEngineSelect) {
+        populateLocalEngineOptions(status.engines, status.engine);
+    }
     if (downloadLocalTtsModelBtn) {
-        const loading = status.preload_status === 'loading';
         downloadLocalTtsModelBtn.disabled = loading;
         downloadLocalTtsModelBtn.textContent = loading
-            ? 'Downloading / Loading...'
+            ? `Downloading / Loading${preloadElapsed ? ` ${preloadElapsed}` : ''}...`
             : (status.model_loaded ? 'Local Voice Model Loaded' : 'Download / Load Local Voice Model');
     }
+}
+
+async function refreshLocalTtsStatus() {
+    const data = await apiCall('/local_tts_status');
+    if (data) updateLocalTtsStatus(data);
+    return data;
 }
 
 async function saveLocalTtsSettings() {
@@ -441,16 +466,37 @@ async function saveLocalTtsSettings() {
         repetition_penalty: localTtsRepetition.value
     })});
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+    return data;
 }
 
 async function downloadLocalTtsModel() {
-    await saveLocalTtsSettings();
+    const saved = await saveLocalTtsSettings();
+    if (!saved || saved.status === 'error') {
+        localTtsStatus.textContent = saved && saved.message ? saved.message : 'Could not save local voice settings before model download.';
+        localTtsStatus.style.color = 'var(--yellow)';
+        return;
+    }
     const ok = window.confirm('Download/load the local Chatterbox voice model now? If it is not cached, this may download several GB.');
     if (!ok) return;
+    localTtsStatusPolling = true;
     localTtsStatus.textContent = 'Starting local voice model download/load...';
     localTtsStatus.style.color = 'var(--comment)';
+    downloadLocalTtsModelBtn.disabled = true;
+    downloadLocalTtsModelBtn.textContent = 'Starting...';
     const data = await apiCall('/preload_local_tts_model', {method:'POST'});
-    if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+    if (data && data.local_tts_status) {
+        updateLocalTtsStatus(data.local_tts_status);
+        if (data.status === 'started') {
+            localTtsStatusPolling = true;
+            window.setTimeout(() => refreshLocalTtsStatus(), 750);
+        }
+        return;
+    }
+    localTtsStatusPolling = false;
+    localTtsStatus.textContent = 'Local voice model download/load request failed. Check the app console for details.';
+    localTtsStatus.style.color = 'var(--yellow)';
+    downloadLocalTtsModelBtn.disabled = false;
+    downloadLocalTtsModelBtn.textContent = 'Download / Load Local Voice Model';
 }
 
 async function uploadLocalTtsSample(file) {
@@ -485,13 +531,20 @@ async function playQueuedAudio() {
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const audioUrl = URL.createObjectURL(await response.blob());
         const audio = new Audio(audioUrl);
-        audio.onended = () => URL.revokeObjectURL(audioUrl);
-        audio.onerror = () => {
-            URL.revokeObjectURL(audioUrl);
-            localTtsStatus.textContent = 'Browser could not play the generated audio.';
-            localTtsStatus.style.color = 'var(--yellow)';
-        };
-        await audio.play();
+        await new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (error = null) => {
+                if (settled) return;
+                settled = true;
+                URL.revokeObjectURL(audioUrl);
+                if (error) reject(error);
+                else resolve();
+            };
+            audio.onended = () => finish();
+            audio.onerror = () => finish(new Error('Browser could not play the generated audio.'));
+            const playback = audio.play();
+            if (playback && typeof playback.catch === 'function') playback.catch(finish);
+        });
     } catch (error) {
         console.error('Audio playback failed:', error);
         localTtsStatus.textContent = `Audio playback failed: ${error.message}`;
@@ -933,6 +986,7 @@ D.getElementById('test-local-tts-button').addEventListener('click', async () => 
         localTtsStatus.style.color = data.status === 'needs_download' ? 'var(--yellow)' : 'var(--cyan)';
     }
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+    if (data && data.status === 'queued') localTtsStatusPolling = true;
 });
 D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
 D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method:'POST'}));
@@ -965,6 +1019,7 @@ setInterval(async () => {
 }, 500);
 setInterval(async () => {
     if (ollamaDownloadPolling) await refreshOllamaStatus();
+    if (localTtsStatusPolling) await refreshLocalTtsStatus();
 }, 2500);
 
 // Startup
