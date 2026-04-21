@@ -26,12 +26,13 @@ You need two free programs to run the app.
 
 **Ollama (The AI's "Brain"):**
 * Download Ollama from the Ollama website.
-* After installing, open a terminal (Command Prompt on Windows) and run the following command **once** to download the AI model:
+* After installing, open a terminal (Command Prompt or PowerShell on Windows) and run the following command **once** to download the AI model:
     ```
-    ollama run llama3:8b-instruct-q4_K_M
+    ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
 
     ```
-* This will take a few minutes because, much like your mum, models are chonky. Once it's finished, you can close the terminal. Make sure the Ollama application is running in the background before you start StrokeGPT.
+* This can take a few minutes because the model download is large. Once it's finished, you can close the terminal. Make sure the Ollama application is running in the background before you start StrokeGPT.
+* You can add and switch between other downloaded Ollama models later in StrokeGPT under `Open Settings` -> `Model`.
 
 ### Step 2: Download & Install StrokeGPT
 
@@ -45,6 +46,7 @@ You need two free programs to run the app.
         pip install -r requirements.txt
 
         ```
+    * This also installs Chatterbox TTS for local voice output. Chatterbox is more emotive than lightweight local engines, but heavier and may need Python 3.11 for best compatibility.
 
 ### Step 3: Run the App!
 
@@ -54,7 +56,7 @@ You need two free programs to run the app.
         python app.py
 
         ```
-    * The server is working when you see a message ending in `Running on http://127.0.0.1:5000`[cite: 88]. Keep this terminal window open.
+    * The server is working when you see a message ending in `Running on http://127.0.0.1:5000`. Keep this terminal window open.
 * Open in Browser:
     * Open your web browser and go to the following address:
         http://127.0.0.1:5000

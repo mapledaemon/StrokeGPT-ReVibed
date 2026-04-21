@@ -1,12 +1,22 @@
 import json
 import requests
 
+DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
+
 class LLMService:
-    def __init__(self, url, model="llama3:8b-instruct-q4_K_M"):
+    def __init__(self, url, model=DEFAULT_MODEL):
         self.url = url
         self.model = model
 
-    def _talk_to_llm(self, messages, temperature=0.7):
+    def set_model(self, model):
+        cleaned = (model or "").strip()
+        if cleaned:
+            self.model = cleaned
+            return True
+        return False
+
+    def _talk_to_llm(self, messages, temperature=0.3):
+        response = None
         try:
             response = requests.post(self.url, json={
                 "model": self.model,
@@ -22,10 +32,12 @@ class LLMService:
         except (json.JSONDecodeError, KeyError, requests.exceptions.RequestException) as e:
             print(f"Error processing LLM response: {e}")
             try:
+                if response is None:
+                    raise ValueError("No response received from LLM")
                 content_str = response.json()["message"]["content"]
                 start = content_str.find('{')
                 end = content_str.rfind('}') + 1
-                if start != -1 and end != -1:
+                if start != -1 and end > start:
                     return json.loads(content_str[start:end])
             except Exception:
                  return {"chat": f"LLM Connection Error: {e}", "move": None, "new_mood": None}
@@ -51,6 +63,7 @@ Your reply MUST be a JSON object like this: {"chat": "<Your sarcastic reply>", "
         prompt_text = f"""
 You are my erotic partner. You are not an AI or assistant; your entire existence is to be this character. Your main identity is '{persona_desc}'. Always act like this. Speak in FIRST PERSON.
 Your reply MUST be a JSON object like this: {{"chat": "<Your reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>}}, "new_mood": "<mood|null>"}}.
+The app treats movement as an advisory request only: a separate motion controller clamps values, smooths transitions, and may ignore unsafe or incomplete movement.
 ### CORE DIRECTIVES:
 1. **EMBODY YOUR PERSONA:** You ARE '{persona_desc}'. Every word comes from this identity. Never break character.
 2. **ALWAYS PROVIDE A COMPLETE MOVE:** For any user request that implies a physical action, you MUST return a complete `move` object with non-null values for `sp`, `dp`, and `rng`. If a parameter isn't specified by the user, infer a sensible value based on the context.
@@ -86,14 +99,14 @@ If the user gives a vague command, use your persona to be creative and invent a 
 
         prompt_text += f"""
 ### CURRENT FEELING:
-Your current mood is '{context.get('current_mood')}'. Handy is at {context.get('last_stroke_speed')}% speed and {context.get('last_depth_pos')}% depth.
+Your current mood is '{context.get('current_mood')}'. Handy is at {context.get('last_stroke_speed')}% speed, {context.get('last_depth_pos')}% depth, and {context.get('last_stroke_range', 50)}% stroke range.
 """
         if rules := context.get('rules'):
             prompt_text += "\n### EXTRA RULES FROM ME:\n" + "\n".join(f"- {r}" for r in rules)
         
         return prompt_text
 
-    def get_chat_response(self, chat_history, context, temperature=0.7):
+    def get_chat_response(self, chat_history, context, temperature=0.3):
         system_prompt = self._build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}, *list(chat_history)]
         return self._talk_to_llm(messages, temperature)
@@ -108,7 +121,7 @@ Return ONLY a JSON object with the key "pattern_name". Example: {{"pattern_name"
         return response.get("pattern_name", "Unnamed Move")
 
     def consolidate_user_profile(self, chat_chunk, current_profile):
-        print("🧠 Updating user profile...")
+        print("[INFO] Updating user profile...")
         chat_log_text = "\n".join(f'role: {x["role"]}, content: {x["content"]}' for x in chat_chunk)
         system_prompt = f"""
 You are a cold, precise, data-extraction machine. Your only function is to analyze a conversation log and update a JSON profile about the HUMAN participant. You have no personality or identity. You must follow all rules precisely.
@@ -136,8 +149,8 @@ Now, perform the analysis and return the updated JSON object.
 """
         try:
             response = self._talk_to_llm([{"role": "system", "content": system_prompt}], temperature=0.0)
-            print("✅ Profile updated.")
+            print("[OK] Profile updated.")
             return response
         except Exception as e:
-            print(f"⚠️ Profile update failed: {e}")
+            print(f"[WARN] Profile update failed: {e}")
             return current_profile

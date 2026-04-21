@@ -1,4 +1,5 @@
 import sys
+import time
 import requests
 
 class HandyController:
@@ -7,12 +8,15 @@ class HandyController:
         self.base_url = base_url
         self.last_stroke_speed = 0
         self.last_depth_pos = 50
+        self.last_stroke_range = 50
         self.last_relative_speed = 50
         self.min_user_speed = 10
         self.max_user_speed = 80
         self.max_handy_depth = 100
         self.min_handy_depth = 0
         self.FULL_TRAVEL_MM = 110.0
+        self._current_mode = None
+        self._hamp_started = False
 
     def set_api_key(self, key):
         self.handy_key = key
@@ -25,12 +29,24 @@ class HandyController:
 
     def _send_command(self, path, body=None):
         if not self.handy_key:
-            return
+            return False
         headers = {"Content-Type": "application/json", "X-Connection-Key": self.handy_key}
         try:
-            requests.put(f"{self.base_url}{path}", headers=headers, json=body or {}, timeout=10)
+            response = requests.put(f"{self.base_url}{path}", headers=headers, json=body or {}, timeout=10)
+            response.raise_for_status()
+            return True
         except requests.exceptions.RequestException as e:
             print(f"[HANDY ERROR] Problem: {e}", file=sys.stderr)
+            return False
+
+    def _ensure_hamp(self):
+        if self._current_mode != 0:
+            if self._send_command("mode", {"mode": 0}):
+                self._current_mode = 0
+                self._hamp_started = False
+        if not self._hamp_started:
+            if self._send_command("hamp/start"):
+                self._hamp_started = True
 
     def _safe_percent(self, p):
         try:
@@ -52,15 +68,15 @@ class HandyController:
             self._send_command("hamp/stop")
             self.last_stroke_speed = 0
             self.last_relative_speed = 0
+            self._hamp_started = False
             return
 
         # Handle cases where the AI might still send null values
         if speed is None or depth is None or stroke_range is None:
-            print("⚠️ Incomplete move received from AI, ignoring.")
+            print("[WARN] Incomplete move received from AI, ignoring.")
             return
 
-        self._send_command("mode", {"mode": 0})
-        self._send_command("hamp/start")
+        self._ensure_hamp()
 
         # Set slide range based on depth and stroke_range
         relative_pos_pct = self._safe_percent(depth)
@@ -99,10 +115,14 @@ class HandyController:
         self.last_stroke_speed = final_physical_speed
         self.last_relative_speed = relative_speed_pct
         self.last_depth_pos = int(round(relative_pos_pct))
+        self.last_stroke_range = int(round(relative_range_pct))
 
     def stop(self):
         """Stops all movement."""
-        self.move(speed=0, depth=None, stroke_range=None)
+        self._send_command("hamp/stop")
+        self.last_stroke_speed = 0
+        self.last_relative_speed = 0
+        self._hamp_started = False
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):
         JOG_STEP_MM = 2.0
@@ -121,6 +141,24 @@ class HandyController:
             {"position": target_mm, "velocity": JOG_VELOCITY_MM_PER_SEC, "stopOnTarget": True},
         )
         return target_mm
+
+    def test_depth_range(self, min_depth_pct, max_depth_pct, velocity_mm_per_sec=55.0, pause_seconds=0.2):
+        min_depth_pct = self._safe_percent(min_depth_pct)
+        max_depth_pct = self._safe_percent(max_depth_pct)
+        low_pct, high_pct = sorted((min_depth_pct, max_depth_pct))
+        low_mm = self.FULL_TRAVEL_MM * low_pct / 100.0
+        high_mm = self.FULL_TRAVEL_MM * high_pct / 100.0
+        velocity = max(5.0, float(velocity_mm_per_sec))
+
+        for position in (low_mm, high_mm, low_mm):
+            self._send_command(
+                "hdsp/xava",
+                {"position": position, "velocity": velocity, "stopOnTarget": True},
+            )
+            travel_seconds = abs(high_mm - low_mm) / velocity if position in (high_mm, low_mm) else 0
+            time.sleep(max(pause_seconds, travel_seconds + pause_seconds))
+
+        return {"min_depth": int(round(low_pct)), "max_depth": int(round(high_pct))}
 
     def get_position_mm(self):
         if not self.handy_key:
