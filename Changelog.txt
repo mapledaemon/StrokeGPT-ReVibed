@@ -8,10 +8,27 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Fix Settings Spacing and Visualizer Layout
--------------------------------------------------------
+Unreleased - Document PyTorch Local Voice Setup
+-----------------------------------------------
 
+Branch: codex-readme-pytorch-setup
+
+- Added platform-specific PyTorch install commands for Windows, macOS, and
+  Linux so local Chatterbox users can install CPU or CUDA-enabled Torch inside
+  the app virtual environment.
+- Added a PyTorch verification command that reports Torch version, CUDA
+  availability, CUDA build, and selected device.
+- Clarified that CUDA-enabled PyTorch is optional but important for low-latency
+  local Chatterbox voice output.
+
+
+2026-04-21 - PR #9 - Fix Settings Spacing and Visualizer Layout
+---------------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/9
 Branch: codex-ui-spacing-fixes
+Head commit: d9b29c4
+Merge commit: 31e21b7
 
 - Fixed the bottom speed/depth visualizer canvas so it fills its frame without
   overflowing the padded visualizer box.
