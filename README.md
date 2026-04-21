@@ -34,6 +34,7 @@ The app currently targets Windows first, with equivalent Python setup instructio
 - A Handy connection key
 - Internet access for The Handy API
 - Optional: ElevenLabs API key for ElevenLabs voice output
+- Optional: CUDA-enabled PyTorch for faster local Chatterbox voice output
 
 Default Ollama model:
 
@@ -135,12 +136,82 @@ Open the URL printed by the app. It is usually:
 http://127.0.0.1:5000
 ```
 
+## Install PyTorch For Local Voice
+
+The app can run without manually installing PyTorch, but **Local Chatterbox**
+voice is slow with CPU-only Torch. Install PyTorch inside `.venv` after the
+normal app setup if you want local voice output, especially on an NVIDIA GPU.
+
+Use the [official PyTorch selector](https://pytorch.org/get-started/locally/)
+if these commands stop matching your driver or platform. As of the current
+PyTorch stable selector, Python 3.10 or newer is required.
+
+### Windows
+
+For an NVIDIA GPU, install the CUDA 12.8 wheel:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+For CPU-only fallback:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+### macOS
+
+macOS does not use CUDA. Install the normal PyTorch packages:
+
+```bash
+source .venv/bin/activate
+python -m pip install torch torchvision torchaudio
+```
+
+The current app selects CUDA when available and otherwise falls back to CPU, so
+macOS local voice may still be slower than an NVIDIA CUDA setup.
+
+### Linux
+
+For an NVIDIA GPU, install the CUDA 12.8 wheel:
+
+```bash
+source .venv/bin/activate
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+For CPU-only fallback:
+
+```bash
+source .venv/bin/activate
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+For AMD ROCm on Linux, use the official PyTorch selector and choose the ROCm
+build that matches your system.
+
+### Verify PyTorch
+
+Run this from the activated `.venv`:
+
+```bash
+python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA build:', torch.version.cuda); print('Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
+
+If `CUDA available` is `False`, local Chatterbox voice will run on CPU. That can
+work, but latency may be high.
+
 ## Tips And Pitfalls
 
 - The app prints the URL to open. If port `5000` is already blocked, it will try the next free local port.
 - Ollama and Chatterbox model weights can be several GB. Use **Open Settings -> Model -> Download Model** for Ollama models and **Open Settings -> Voice -> Download / Load Local Voice Model** for Chatterbox.
 - Python 3.11 is the safest choice for local Chatterbox voice. If Chatterbox fails on a newer Python, recreate `.venv` with Python 3.11.
-- Local Chatterbox voice is slow with CPU-only Torch, even on a high-end CPU. For low-latency local voice, use **Chatterbox Turbo** and install CUDA-enabled PyTorch from the [official PyTorch selector](https://pytorch.org/get-started/locally/).
+- Local Chatterbox voice is slow with CPU-only Torch, even on a high-end CPU. For low-latency local voice, use **Chatterbox Turbo** and the PyTorch install section above.
 - Ollama must be running before the app can talk to or download local models. If app-based download fails, run `ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` manually.
 - The default Ollama model is large. Make sure the drive used by Ollama has enough free space.
 - The Handy needs a connection key and internet access for the Handy API.
@@ -160,7 +231,7 @@ Local Chatterbox is heavier than the rest of the app. Python 3.11 is recommended
 
 For local Chatterbox voice cloning/style reference, use **Browse** in the Voice tab to choose a sample audio file.
 
-For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. Longer replies are split into smaller audio chunks so playback can start sooner.
+For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. See **Install PyTorch For Local Voice** above. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. Longer replies are split into smaller audio chunks so playback can start sooner.
 
 ## Motion Settings
 
