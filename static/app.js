@@ -567,9 +567,10 @@ async function sendUserMessage(message) {
 }
 
 function resizeCanvas() {
-    if (!rhythmCanvas.parentElement) return;
-    rhythmCanvas.width = rhythmCanvas.parentElement.clientWidth;
-    rhythmCanvas.height = rhythmCanvas.parentElement.clientHeight;
+    const bounds = rhythmCanvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    rhythmCanvas.width = Math.round(bounds.width);
+    rhythmCanvas.height = Math.round(bounds.height);
 }
 
 function drawHandyVisualizer(speed, depth) {
@@ -659,7 +660,7 @@ function renderSetup(isReturningUser = false, data = {}) {
         } else if (step === 3) {
             const defaultMinDepth = data.min_depth ?? 5;
             const defaultMaxDepth = data.max_depth ?? 100;
-            setupBox.innerHTML = `<h2>Step 3: Stroke Range</h2><p>Choose the safe travel range. Release either slider or press Test to run one pass.</p><div class="slider-container"><label for="depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="${defaultMinDepth}" id="depth-min-slider"><span id="depth-min-val">${defaultMinDepth}%</span></div><div class="slider-container"><label for="depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="${defaultMaxDepth}" id="depth-max-slider"><span id="depth-max-val">${defaultMaxDepth}%</span></div><button id="test-depth-range" class="my-button" style="width:auto;">Test</button><button id="set-depth-range" class="my-button">Next</button>`;
+            setupBox.innerHTML = `<h2>Step 3: Stroke Range</h2><p>Choose the safe travel range. Release either slider or press Test to run one pass.</p><div class="slider-container"><label for="depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="${defaultMinDepth}" id="depth-min-slider"><span id="depth-min-val">${defaultMinDepth}%</span></div><div class="slider-container"><label for="depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="${defaultMaxDepth}" id="depth-max-slider"><span id="depth-max-val">${defaultMaxDepth}%</span></div><div class="setup-actions"><button id="test-depth-range" class="my-button">Test</button><button id="set-depth-range" class="my-button">Next</button></div>`;
             const minSlider = D.getElementById('depth-min-slider');
             const maxSlider = D.getElementById('depth-max-slider');
             const minVal = D.getElementById('depth-min-val');
@@ -692,7 +693,7 @@ function renderSetup(isReturningUser = false, data = {}) {
         } else if (step === 4 || step === 5) {
             const title = step === 4 ? "Minimum Speed" : "Maximum Speed";
             const defaultVal = step === 4 ? (data.min_speed ?? 10) : (data.max_speed ?? 80);
-            setupBox.innerHTML = `<h2>Step ${step}: Set ${title}</h2><p>Choose your preferred ${title.toLowerCase()}.</p><div class="slider-container"><input type="range" min="0" max="100" value="${defaultVal}" id="speed-slider"><span id="speed-val">${defaultVal}%</span></div><button id="set-speed" class="my-button">Next</button>`;
+            setupBox.innerHTML = `<h2>Step ${step}: Set ${title}</h2><p>Choose your preferred ${title.toLowerCase()}.</p><div class="slider-container setup-slider"><input type="range" min="0" max="100" value="${defaultVal}" id="speed-slider"><span id="speed-val">${defaultVal}%</span></div><button id="set-speed" class="my-button">Next</button>`;
             const slider = D.getElementById('speed-slider');
             slider.oninput = () => D.getElementById('speed-val').textContent = `${slider.value}%`;
             D.getElementById('set-speed').onclick = async () => {

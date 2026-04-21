@@ -121,6 +121,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="download-ollama-model-btn"', page)
             self.assertIn('id="refresh-ollama-status-btn"', page)
             self.assertIn('id="download-local-tts-model-button"', page)
+            self.assertIn('class="model-actions"', page)
+            self.assertIn('class="model-actions model-actions-wide"', page)
         finally:
             response.close()
 
@@ -134,6 +136,10 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn("white-space: pre-wrap", css)
             self.assertIn("repeat(auto-fit, minmax(150px, 1fr))", css)
             self.assertIn(".my-button:disabled", css)
+            self.assertIn("#rhythm-canvas { display: block; width: 100%; height: 100%; }", css)
+            self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
+            self.assertIn(".model-actions", css)
+            self.assertIn(".setup-slider", css)
             self.assertIn("@media (max-width: 760px)", css)
         finally:
             response.close()
@@ -145,6 +151,8 @@ class WebStaticAssetTests(unittest.TestCase):
 
             self.assertNotIn("innerHTML +=", script)
             self.assertIn("elevenLabsVoiceSelect.replaceChildren", script)
+            self.assertIn("rhythmCanvas.getBoundingClientRect", script)
+            self.assertIn("slider-container setup-slider", script)
         finally:
             response.close()
 
