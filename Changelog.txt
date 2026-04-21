@@ -8,10 +8,27 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Codebase Speedups, UI Formatting, and Roadmap Updates
-------------------------------------------------------------------
+Unreleased - Fix Settings Spacing and Visualizer Layout
+-------------------------------------------------------
 
+Branch: codex-ui-spacing-fixes
+
+- Fixed the bottom speed/depth visualizer canvas so it fills its frame without
+  overflowing the padded visualizer box.
+- Added explicit spacing inside settings subsections so dropdowns, inputs, and
+  button rows no longer crowd each other.
+- Added dedicated model action rows so Model tab buttons wrap cleanly instead
+  of crushing or overlapping adjacent controls.
+- Tightened speed and depth slider layout for Motion, Device, and setup flows.
+
+
+2026-04-21 - PR #8 - Improve Robustness and UI Formatting
+---------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/8
 Branch: codex-codebase-speedups
+Head commit: 96f831a
+Merge commit: 38332c7
 
 - Reduced redundant Handy API calls by caching the last successful slide bounds
   and velocity while preserving the same smoothed motion targets.
