@@ -70,7 +70,7 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - README is better than before but still needs release-quality polish.
 - Local Chatterbox installation and model loading need clearer failure handling.
 - There is no full browser automation test suite.
-- There is no CI workflow yet.
+- CI covers the lightweight unit tests and Python compile checks, but not the full local Chatterbox stack.
 - The original upstream repository did not include a local license file when this fork was prepared.
 
 ## Development Commands
@@ -95,15 +95,14 @@ python app.py
 
 ## Suggested Next Tasks
 
-1. Add CI for unit tests and compile checks.
-2. Split `index.html` into separate CSS and JavaScript files without changing behavior.
-3. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
-4. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
-5. Improve local Chatterbox setup documentation and failure messages.
-6. Add an explicit stop/safety state indicator in the UI.
-7. Review the LLM prompt for reliability and reduce prompt bloat.
-8. Review and clean legacy easter egg content.
-9. Add release notes that clearly mark the app as experimental.
+1. Split `index.html` into separate CSS and JavaScript files without changing behavior.
+2. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
+3. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
+4. Improve local Chatterbox setup documentation and failure messages.
+5. Add an explicit stop/safety state indicator in the UI.
+6. Review the LLM prompt for reliability and reduce prompt bloat.
+7. Review and clean legacy easter egg content.
+8. Add release notes that clearly mark the app as experimental.
 
 ## Continuation Prompts
 
@@ -133,7 +132,7 @@ Audit the motion-control path in StrokeGPT-ReVibed. Confirm all hardware movemen
 
 - Preserve user settings and secrets. Never commit `my_settings.json`.
 - Keep changes focused and tested.
-- Prefer small safe refactors over broad rewrites.
+- Refactor aggressively when it materially improves editability or safety, but keep behavior changes intentional and tested.
 - Do not introduce new external services without a settings toggle and documentation.
 - Do not weaken hardware safety clamping for convenience.
 - Use clear error messages in the UI instead of silent failures.

@@ -1,12 +1,13 @@
 import json
+import importlib.machinery
 import sys
 import types
 import unittest
 
-sys.modules.setdefault(
-    "requests",
-    types.SimpleNamespace(exceptions=types.SimpleNamespace(RequestException=Exception)),
-)
+requests_module = types.ModuleType("requests")
+requests_module.__spec__ = importlib.machinery.ModuleSpec("requests", loader=None)
+requests_module.exceptions = types.SimpleNamespace(RequestException=Exception)
+sys.modules.setdefault("requests", requests_module)
 
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import DEFAULT_OLLAMA_MODEL, LEGACY_OLLAMA_MODEL, SettingsManager, normalize_ollama_model

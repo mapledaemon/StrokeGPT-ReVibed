@@ -1,4 +1,5 @@
 import importlib.util
+import importlib.machinery
 import io
 import sys
 import types
@@ -8,8 +9,10 @@ import wave
 
 
 elevenlabs_module = types.ModuleType("elevenlabs")
+elevenlabs_module.__spec__ = importlib.machinery.ModuleSpec("elevenlabs", loader=None)
 elevenlabs_module.VoiceSettings = lambda **kwargs: kwargs
 elevenlabs_client_module = types.ModuleType("elevenlabs.client")
+elevenlabs_client_module.__spec__ = importlib.machinery.ModuleSpec("elevenlabs.client", loader=None)
 elevenlabs_client_module.ElevenLabs = object
 sys.modules.setdefault("elevenlabs", elevenlabs_module)
 sys.modules.setdefault("elevenlabs.client", elevenlabs_client_module)
