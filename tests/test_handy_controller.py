@@ -22,6 +22,46 @@ class RecordingHandyController(HandyController):
 
 
 class HandyControllerTests(unittest.TestCase):
+    def test_move_skips_exact_duplicate_device_commands(self):
+        handy = RecordingHandyController()
+
+        handy.move(50, 50, 50)
+        handy.move(50, 50, 50)
+
+        self.assertEqual(
+            [path for path, _body in handy.commands],
+            ["mode", "hamp/start", "slide", "hamp/velocity"],
+        )
+
+    def test_move_still_sends_changed_velocity_without_resending_same_slide(self):
+        handy = RecordingHandyController()
+
+        handy.move(50, 50, 50)
+        handy.move(75, 50, 50)
+
+        self.assertEqual([path for path, _body in handy.commands].count("slide"), 1)
+        self.assertEqual([path for path, _body in handy.commands].count("hamp/velocity"), 2)
+
+    def test_stop_clears_motion_cache_so_next_move_reapplies_bounds(self):
+        handy = RecordingHandyController()
+
+        handy.move(50, 50, 50)
+        handy.stop()
+        handy.move(50, 50, 50)
+
+        self.assertEqual([path for path, _body in handy.commands].count("slide"), 2)
+        self.assertEqual([path for path, _body in handy.commands].count("hamp/velocity"), 2)
+
+    def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 80, 0, 0)
+
+        handy.move(50, 50, 50)
+
+        slide = next(body for path, body in handy.commands if path == "slide")
+        self.assertLess(slide["min"], slide["max"])
+        self.assertEqual(slide, {"min": 98, "max": 100})
+
     def test_depth_range_runs_low_high_low_once(self):
         handy = RecordingHandyController()
 

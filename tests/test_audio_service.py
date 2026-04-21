@@ -36,11 +36,70 @@ class AudioServiceTests(unittest.TestCase):
         service.local_engine = AudioService.LOCAL_ENGINE_CHATTERBOX
         service._local_model = object()
         service._local_model_engine = AudioService.LOCAL_ENGINE_CHATTERBOX
+        service._local_preload_status = "error"
+        service._local_preload_error = "old error"
 
         service.configure_local_voice(False, engine=AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
 
         self.assertEqual(service.local_engine, AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO)
         self.assertIsNone(service._local_model)
+        self.assertEqual(service._local_preload_status, "idle")
+        self.assertEqual(service._local_preload_error, "")
+
+    def test_local_status_ignores_cached_model_for_previous_engine(self):
+        service = AudioService()
+        service.local_engine = AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO
+        service._local_model = object()
+        service._local_model_engine = AudioService.LOCAL_ENGINE_CHATTERBOX
+        service._local_model_device = "cuda"
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": True,
+            "cuda_version": "test",
+            "device_count": 1,
+            "device_name": "test gpu",
+            "device": "cuda",
+            "device_override": "auto",
+        }
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+
+        status = service.local_status()
+
+        self.assertFalse(status["model_loaded"])
+        self.assertNotIn("Model loaded", status["message"])
+
+    def test_preload_reports_ready_when_selected_model_is_already_loaded(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_model = object()
+        service._local_model_engine = service.local_engine
+        service._local_preload_status = "error"
+        service._local_preload_error = "old error"
+
+        started = service.preload_local_model_async()
+
+        self.assertTrue(started)
+        self.assertEqual(service._local_preload_status, "ready")
+        self.assertEqual(service._local_preload_error, "")
+
+    def test_elevenlabs_generation_errors_are_reported(self):
+        class FailingTextToSpeech:
+            def convert(self, **_kwargs):
+                raise RuntimeError("network failed")
+
+        service = AudioService()
+        service.api_key = "test"
+        service.voice_id = "voice"
+        service.client = types.SimpleNamespace(text_to_speech=FailingTextToSpeech())
+
+        service._generate_elevenlabs_audio("hello")
+
+        self.assertIn("ElevenLabs problem", service.last_error)
+        self.assertIn("network failed", service.last_error)
 
     def test_local_style_preset_sets_generation_controls(self):
         service = AudioService()

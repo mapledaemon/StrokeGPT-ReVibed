@@ -80,8 +80,32 @@ motion-control paths.
   targets.
 - Add a pattern evaluation view that visualizes speed, depth, range, and zone
   changes before sending anything to The Handy.
+- Add Handy position visualization that shows the current reported position,
+  target range, tip/base calibration, and recent motion path. This should make
+  spatial behavior inspectable before and during sessions.
+- Add a user-facing motion style preference selector for broad movement feel
+  such as smooth, steady, teasing, pulsing, ramping, or high-variation. This
+  should influence pattern selection and LLM prompt context without bypassing
+  speed limits or stop behavior.
 - Improve LLM prompt examples around spatial requests: tip, upper, middle,
   base, full length, short stroke, half length, and smooth alternation.
+- Keep range changes continuous. A single range should not become a static
+  pattern that the app sticks to unless the user explicitly asks to edge, hold,
+  or pause.
+
+## User Preferences And Memory
+
+- Add a visible preferences/memory panel for motion behavior the app has learned
+  from user feedback.
+- Show LLM-facing preference modifications in plain language before they affect
+  future motion planning.
+- Allow users to edit, disable, or delete individual learned motion preferences.
+- Store motion style preferences separately from persona prompts so users can
+  change model personality without losing device behavior preferences.
+- Add reset controls for learned motion preferences without requiring a full
+  settings reset.
+- Include preference state in the model context only as concise, inspectable
+  instructions rather than hidden prompt drift.
 
 ## Runtime And Model Management
 
@@ -100,8 +124,11 @@ motion-control paths.
 - Split `static/app.js` into smaller modules for settings, chat, audio, device
   control, motion control, and setup.
 - Add browser-level tests for the settings modal, model download controls,
-  local voice controls, and microphone capture flow.
+  local voice controls, Handy position visualization, and microphone capture
+  flow.
 - Replace inline styles in `index.html` with CSS classes as the UI stabilizes.
+- Continue tightening responsive layout so settings and chat remain readable in
+  narrow desktop windows and mobile-sized browsers.
 
 ## Packaging And Setup
 

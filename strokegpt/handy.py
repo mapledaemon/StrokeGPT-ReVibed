@@ -17,8 +17,14 @@ class HandyController:
         self.FULL_TRAVEL_MM = 110.0
         self._current_mode = None
         self._hamp_started = False
+        self._last_slide_bounds = None
+        self._last_velocity = None
 
     def set_api_key(self, key):
+        if key != self.handy_key:
+            self._current_mode = None
+            self._hamp_started = False
+            self._reset_motion_cache()
         self.handy_key = key
 
     def update_settings(self, min_speed, max_speed, min_depth, max_depth):
@@ -26,6 +32,11 @@ class HandyController:
         self.max_user_speed = max_speed
         self.min_handy_depth = min_depth
         self.max_handy_depth = max_depth
+        self._reset_motion_cache()
+
+    def _reset_motion_cache(self):
+        self._last_slide_bounds = None
+        self._last_velocity = None
 
     def _send_command(self, path, body=None):
         if not self.handy_key:
@@ -41,12 +52,16 @@ class HandyController:
 
     def _ensure_hamp(self):
         if self._current_mode != 0:
-            if self._send_command("mode", {"mode": 0}):
-                self._current_mode = 0
-                self._hamp_started = False
+            if not self._send_command("mode", {"mode": 0}):
+                return False
+            self._current_mode = 0
+            self._hamp_started = False
+            self._reset_motion_cache()
         if not self._hamp_started:
-            if self._send_command("hamp/start"):
-                self._hamp_started = True
+            if not self._send_command("hamp/start"):
+                return False
+            self._hamp_started = True
+        return True
 
     def _safe_percent(self, p):
         try:
@@ -65,10 +80,7 @@ class HandyController:
 
         # A speed of 0 is a special command to stop all movement.
         if speed is not None and speed == 0:
-            self._send_command("hamp/stop")
-            self.last_stroke_speed = 0
-            self.last_relative_speed = 0
-            self._hamp_started = False
+            self.stop()
             return
 
         # Handle cases where the AI might still send null values
@@ -76,7 +88,8 @@ class HandyController:
             print("[WARN] Incomplete move received from AI, ignoring.")
             return
 
-        self._ensure_hamp()
+        if not self._ensure_hamp():
+            return
 
         # Set slide range based on depth and stroke_range
         relative_pos_pct = self._safe_percent(depth)
@@ -95,13 +108,10 @@ class HandyController:
         slide_min = round(100 - clamped_max_zone)
         slide_max = round(100 - clamped_min_zone)
 
-        if slide_min >= slide_max:
-            slide_max = slide_min + 2
-        
-        slide_max = min(100, slide_max)
-        slide_min = max(0, slide_min)
+        slide_min, slide_max = self._normalize_slide_bounds(slide_min, slide_max)
 
-        self._send_command("slide", {"min": slide_min, "max": slide_max})
+        if not self._send_slide_bounds(slide_min, slide_max):
+            return
         
         # Calculate and set the final velocity
         relative_speed_pct = self._safe_percent(speed)
@@ -109,7 +119,8 @@ class HandyController:
         final_physical_speed = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
         final_physical_speed = int(round(final_physical_speed))
         
-        self._send_command("hamp/velocity", {"velocity": final_physical_speed})
+        if not self._send_velocity(final_physical_speed):
+            return
 
         # Update state variables for the next command
         self.last_stroke_speed = final_physical_speed
@@ -117,12 +128,39 @@ class HandyController:
         self.last_depth_pos = int(round(relative_pos_pct))
         self.last_stroke_range = int(round(relative_range_pct))
 
+    def _normalize_slide_bounds(self, slide_min, slide_max):
+        slide_min = max(0, min(100, int(round(slide_min))))
+        slide_max = max(0, min(100, int(round(slide_max))))
+        if slide_min >= slide_max:
+            slide_max = min(100, slide_min + 2)
+            if slide_min >= slide_max:
+                slide_min = max(0, slide_max - 2)
+        return slide_min, slide_max
+
+    def _send_slide_bounds(self, slide_min, slide_max):
+        bounds = (slide_min, slide_max)
+        if bounds == self._last_slide_bounds:
+            return True
+        if self._send_command("slide", {"min": slide_min, "max": slide_max}):
+            self._last_slide_bounds = bounds
+            return True
+        return False
+
+    def _send_velocity(self, velocity):
+        if velocity == self._last_velocity:
+            return True
+        if self._send_command("hamp/velocity", {"velocity": velocity}):
+            self._last_velocity = velocity
+            return True
+        return False
+
     def stop(self):
         """Stops all movement."""
         self._send_command("hamp/stop")
         self.last_stroke_speed = 0
         self.last_relative_speed = 0
         self._hamp_started = False
+        self._reset_motion_cache()
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):
         JOG_STEP_MM = 2.0
@@ -166,9 +204,10 @@ class HandyController:
         headers = {"X-Connection-Key": self.handy_key}
         try:
             resp = requests.get(f"{self.base_url}slide/position/absolute", headers=headers, timeout=10)
+            resp.raise_for_status()
             data = resp.json()
             return float(data.get("position", 0))
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, TypeError, ValueError) as e:
             print(f"[HANDY ERROR] Problem reading position: {e}", file=sys.stderr)
             return None
 
