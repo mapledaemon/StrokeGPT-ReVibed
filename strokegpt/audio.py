@@ -179,6 +179,8 @@ class AudioService:
                 self._local_model_device = ""
                 self._local_warmup_done = False
             self.local_engine = next_engine
+            self._local_preload_status = "idle"
+            self._local_preload_error = ""
 
         if style not in self.CHATTERBOX_STYLE_PRESETS:
             style = "expressive"
@@ -221,7 +223,8 @@ class AudioService:
             message = f"{selected['label']} is available, but Torch is CPU-only. Local voice will be slow until CUDA PyTorch is installed."
             status = "cpu_only"
 
-        if self._local_model is not None:
+        model_loaded = self.local_model_loaded()
+        if model_loaded:
             message += f" Model loaded on {self._local_model_device or runtime['device']}."
         elif self._local_preload_status == "loading":
             message += " Model download/load is running."
@@ -241,7 +244,7 @@ class AudioService:
             "torch": runtime,
             "device": runtime["device"],
             "cuda_available": runtime["cuda_available"],
-            "model_loaded": self._local_model is not None,
+            "model_loaded": model_loaded,
             "preload_status": self._local_preload_status,
             "preload_error": self._local_preload_error,
             "last_generation_seconds": self.last_generation_seconds,
@@ -292,10 +295,12 @@ class AudioService:
 
             audio_bytes_data = b"".join(audio_stream)
             self.audio_output_queue.append({"bytes": audio_bytes_data, "mimetype": "audio/mpeg"})
+            self.last_error = ""
             print("[OK] ElevenLabs audio ready.")
 
         except Exception as e:
-            print(f"[ERROR] ElevenLabs problem: {e}")
+            self.last_error = f"ElevenLabs problem: {e}"
+            print(f"[ERROR] {self.last_error}")
 
     def _generate_local_audio(self, text_to_speak):
         try:
@@ -348,6 +353,8 @@ class AudioService:
         if not force and (self.provider != "local" or not self.is_on):
             return False
         if self.local_model_loaded():
+            self._local_preload_status = "ready"
+            self._local_preload_error = ""
             return True
         if self._local_preload_thread and self._local_preload_thread.is_alive():
             return True

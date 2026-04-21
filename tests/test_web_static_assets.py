@@ -124,6 +124,41 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             response.close()
 
+    def test_frontend_css_contains_responsive_layout_guards(self):
+        response = self.client.get("/static/app.css")
+        try:
+            css = response.get_data(as_text=True)
+
+            self.assertIn("#chat-messages-container { display: flex; flex-direction: column;", css)
+            self.assertIn(".message-bubble pre", css)
+            self.assertIn("white-space: pre-wrap", css)
+            self.assertIn("repeat(auto-fit, minmax(150px, 1fr))", css)
+            self.assertIn(".my-button:disabled", css)
+            self.assertIn("@media (max-width: 760px)", css)
+        finally:
+            response.close()
+
+    def test_frontend_js_avoids_incremental_inner_html_for_options(self):
+        response = self.client.get("/static/app.js")
+        try:
+            script = response.get_data(as_text=True)
+
+            self.assertNotIn("innerHTML +=", script)
+            self.assertIn("elevenLabsVoiceSelect.replaceChildren", script)
+        finally:
+            response.close()
+
+    def test_chat_messages_are_rendered_as_text_nodes(self):
+        response = self.client.get("/static/app.js")
+        try:
+            script = response.get_data(as_text=True)
+
+            self.assertIn("function appendMessageText", script)
+            self.assertIn("D.createTextNode", script)
+            self.assertNotIn('message-bubble">${text}', script)
+        finally:
+            response.close()
+
     def test_persona_prompt_can_be_selected_and_saved(self):
         from strokegpt.web import settings
 
@@ -153,6 +188,50 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertEqual(response.get_json()["status"], "error")
         finally:
             response.close()
+
+    def test_json_routes_handle_missing_or_invalid_payloads_without_500(self):
+        invalid_posts = [
+            "/set_handy_key",
+            "/set_profile_picture",
+            "/setup_elevenlabs",
+        ]
+
+        for path in invalid_posts:
+            with self.subTest(path=path):
+                response = self.client.post(path, data="not json", content_type="text/plain")
+                try:
+                    self.assertLess(response.status_code, 500)
+                finally:
+                    response.close()
+
+    def test_numeric_routes_fall_back_on_invalid_values(self):
+        from strokegpt.web import handy, settings
+
+        original = (
+            settings.min_speed,
+            settings.max_speed,
+            handy.min_user_speed,
+            handy.max_user_speed,
+        )
+        try:
+            response = self.client.post("/set_speed_limits", json={
+                "min_speed": "bad",
+                "max_speed": None,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["min_speed"], 10)
+            self.assertEqual(data["max_speed"], 80)
+        finally:
+            (
+                settings.min_speed,
+                settings.max_speed,
+                handy.min_user_speed,
+                handy.max_user_speed,
+            ) = original
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+            settings.save()
 
     def test_reset_settings_restores_defaults_and_runtime_services(self):
         from strokegpt.settings import DEFAULT_OLLAMA_MODEL, DEFAULT_PERSONA_PROMPT

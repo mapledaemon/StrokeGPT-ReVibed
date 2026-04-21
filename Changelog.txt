@@ -2,9 +2,89 @@
 StrokeGPT-ReVibed Changelog
 ===========================
 
-This changelog tracks the merged pull requests made in the StrokeGPT-ReVibed
-fork. It starts from the fork baseline and records the project work that has
-landed through PRs in this repository.
+This changelog tracks merged pull requests made in the StrokeGPT-ReVibed fork,
+plus the current unreleased branch when active work is underway. It starts from
+the fork baseline and records the project work that has landed through PRs in
+this repository.
+
+
+Unreleased - Codebase Speedups, UI Formatting, and Roadmap Updates
+------------------------------------------------------------------
+
+Branch: codex-codebase-speedups
+
+- Reduced redundant Handy API calls by caching the last successful slide bounds
+  and velocity while preserving the same smoothed motion targets.
+- Reset Handy motion command caches on stop, key changes, settings changes, and
+  mode changes so resumed movement re-applies device state.
+- Fixed stale local voice status when switching Chatterbox engines and surfaced
+  ElevenLabs generation errors through the existing UI update path.
+- Made assistant audio and the Konami pattern worker daemon threads so they do
+  not hold app shutdown open.
+- Made auto-mode startup delay interruptible while still running cleanup.
+- Centralized Flask JSON payload parsing so malformed or missing JSON on POST
+  routes does not produce server errors.
+- Improved chat and settings CSS: right/left message alignment now works,
+  preformatted chat content wraps safely, disabled buttons look disabled,
+  slider rows align consistently, long button rows wrap cleanly, collapsed
+  sidebars no longer leak padding, and narrow viewports get a safer layout.
+- Replaced incremental `innerHTML` voice option rendering with normal DOM
+  option creation.
+- Reworked chat message rendering to use DOM text nodes while preserving the
+  special preformatted message path.
+- Added ROADMAP.md with local voice-control milestones, Handy position
+  visualization, motion style preferences, and user-visible LLM
+  preference/memory controls.
+- Updated README current focus to reflect reliability, UI visibility, local
+  model management, motion visualization, and inspectable preferences.
+- Added regression tests for Handy command caching, local audio status, auto
+  mode cleanup, and frontend layout CSS.
+
+
+2026-04-21 - PR #6 - Improve Motion Control and Local Runtime Setup
+--------------------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/6
+Branch: codex-split-frontend-assets
+Head commit: d0e8780
+Merge commit: 3d3b7f8
+
+- Split the large inline browser UI into `static/app.css` and `static/app.js`
+  while keeping `index.html` as the page markup.
+- Added reusable Handy motion pattern definitions and expanded spatial motion
+  mapping so LLM output can better express tip, base, full-length, stroke
+  length, and pattern cues.
+- Improved smooth motion transitions and pattern planning while preserving user
+  speed limits and the explicit stop path.
+- Added Chatterbox Turbo defaults, local Torch/CUDA diagnostics, chunked local
+  voice generation, engine/style controls, and clearer CPU-only latency
+  warnings.
+- Made large model downloads explicit in the UI: Ollama downloads now live in
+  the Model tab, and local Chatterbox model download/load lives in the Voice
+  tab.
+- Stopped automatic local voice model download/preload during startup and
+  settings saves.
+- Added local port fallback so an occupied default Flask port no longer blocks
+  startup.
+- Moved regression tests into the `tests/` folder and updated local and CI test
+  commands.
+- Rewrote install instructions with separate Windows, macOS, and Linux flows.
+
+
+2026-04-21 - PR #5 - Track Fork PR History in Changelog
+-------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/5
+Branch: changelog-pr-history
+Head commit: 432983f
+Merge commit: f160d8f
+
+- Replaced the legacy app-version changelog with this StrokeGPT-ReVibed fork
+  changelog.
+- Added merged PR history for PRs #1 through #4, including PR links, branches,
+  head commits, merge commits, and concise change summaries.
+- Documented the fork baseline as the cutoff point for ReVibed-specific
+  history.
 
 
 2026-04-21 - PR #6 - Improve Motion Control and Local Runtime Setup

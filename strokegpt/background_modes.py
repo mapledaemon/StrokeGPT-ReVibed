@@ -1,6 +1,5 @@
 import random
 import threading
-import time
 
 from .motion import IntentMatcher
 from .motion_scripts import MotionScriptPlanner
@@ -26,9 +25,10 @@ class AutoModeThread(threading.Thread):
 
         if message_callback:
             message_callback(self._initial_message)
-        time.sleep(1)
 
         try:
+            if self._stop_event.wait(1):
+                return
             self._mode_func(self._stop_event, self._services, self._callbacks)
         except Exception as e:
             print(f"Auto mode crashed: {e}")

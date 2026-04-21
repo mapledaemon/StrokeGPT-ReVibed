@@ -2,18 +2,28 @@
 
 StrokeGPT-ReVibed is a work-in-progress refactor of StrokeGPT for controlling The Handy through a local web app, an Ollama language model, and optional voice output.
 
-The current focus is stability:
+The current focus is reliability, visibility, and local-first control:
 
-- More reliable motion interpretation and smoothing
-- A cleaner Python package layout
-- A unified settings UI
-- Ollama model selection
-- Optional ElevenLabs or local Chatterbox voice output
-- Regression tests for the new control layer
+- Keep Handy speed limits and stop behavior reliable while improving motion
+  expressiveness.
+- Make LLM-to-motion mapping more visible, especially tip/base, stroke length,
+  range, and smooth alternation.
+- Improve UI formatting so chat, settings, model downloads, and device controls
+  stay readable at common window sizes.
+- Keep model downloads explicit and user-triggered.
+- Continue local-first voice work; hosted speech-to-text is not a near-term
+  target.
+- Add user-visible preference and memory controls so LLM motion adjustments can
+  be reviewed, edited, and reset.
+
+See [ROADMAP.md](ROADMAP.md) for planned work such as local voice control,
+Handy position visualization, motion style preferences, and preference/memory
+editing.
 
 ## Status
 
-This is not a finished release. Expect rough edges in the UI, local voice setup, and documentation.
+This is not a finished release. Expect rough edges in the UI, local voice setup,
+motion preference handling, and documentation.
 
 The app currently targets Windows first, with equivalent Python setup instructions for macOS and Linux.
 
@@ -221,6 +231,7 @@ GitHub Actions runs these checks on Python 3.11 for pushes to `master` or `main`
 ```text
 app.py                  Launcher
 index.html              Web UI markup
+ROADMAP.md             Planned local voice, motion, device, and UI work
 requirements.txt        Python dependencies
 strokegpt/              Backend package
 strokegpt/motion_patterns.py

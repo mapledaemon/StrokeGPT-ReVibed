@@ -501,18 +501,54 @@ async function playQueuedAudio() {
     }
 }
 
+function appendPlainMessageText(parent, text) {
+    const parts = String(text || '').split('\n');
+    parts.forEach((part, index) => {
+        if (index > 0) parent.appendChild(D.createElement('br'));
+        if (part) parent.appendChild(D.createTextNode(part));
+    });
+}
+
+function appendMessageText(parent, text) {
+    const raw = String(text || '');
+    const prePattern = /<pre>([\s\S]*?)<\/pre>/gi;
+    let cursor = 0;
+    let match;
+    while ((match = prePattern.exec(raw)) !== null) {
+        appendPlainMessageText(parent, raw.slice(cursor, match.index));
+        const pre = D.createElement('pre');
+        pre.textContent = match[1];
+        parent.appendChild(pre);
+        cursor = prePattern.lastIndex;
+    }
+    appendPlainMessageText(parent, raw.slice(cursor));
+}
+
 function addChatMessage(sender, text) {
-    const pfpSrc = sender === 'BOT' ? pfpPreview.src : '';
-    const pfpHtml = sender === 'BOT' ? `<img class="chat-pfp" src="${pfpSrc}" alt="pfp">` : '';
     const speaker = sender === 'BOT' ? aiName : 'YOU';
-    const el = document.createElement('div');
+    const el = D.createElement('div');
     el.className = `chat-message-container ${sender === 'BOT' ? 'bot-bubble' : 'user-bubble'}`;
-    el.innerHTML = `
-        ${pfpHtml}
-        <div class="message-content">
-            <p class="speaker-name">${speaker}</p>
-            <p class="message-bubble">${text}</p>
-        </div>`;
+
+    if (sender === 'BOT') {
+        const pfp = D.createElement('img');
+        pfp.className = 'chat-pfp';
+        pfp.src = pfpPreview.src;
+        pfp.alt = 'pfp';
+        el.appendChild(pfp);
+    }
+
+    const content = D.createElement('div');
+    content.className = 'message-content';
+    const speakerName = D.createElement('p');
+    speakerName.className = 'speaker-name';
+    speakerName.textContent = speaker;
+    const bubble = D.createElement('div');
+    bubble.className = 'message-bubble';
+    appendMessageText(bubble, text);
+    content.appendChild(speakerName);
+    content.appendChild(bubble);
+    el.appendChild(content);
+
     chatMessagesContainer.insertBefore(el, typingIndicator);
     chatView.scrollTop = chatView.scrollHeight;
 }
@@ -819,8 +855,16 @@ setElevenLabsKeyButton.addEventListener('click', async () => {
     if(!apiKey) return;
     const data = await apiCall('/setup_elevenlabs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_key:apiKey})});
     if (data && data.status === 'success') {
-        elevenLabsVoiceSelect.innerHTML = '<option value="">-- Pick a Voice --</option>';
-        for (const [name, id] of Object.entries(data.voices)) { elevenLabsVoiceSelect.innerHTML += `<option value="${id}">${name}</option>`; }
+        const placeholder = D.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '-- Pick a Voice --';
+        elevenLabsVoiceSelect.replaceChildren(placeholder);
+        for (const [name, id] of Object.entries(data.voices)) {
+            const option = D.createElement('option');
+            option.value = id;
+            option.textContent = name;
+            elevenLabsVoiceSelect.appendChild(option);
+        }
         elevenLabsVoiceSelect.disabled = false;
         if (elevenLabsVoiceSelect.dataset.savedVoiceId) elevenLabsVoiceSelect.value = elevenLabsVoiceSelect.dataset.savedVoiceId;
     }

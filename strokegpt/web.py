@@ -66,6 +66,17 @@ def _select_bind_port(host, start_port, fallback_count=10, can_bind=_can_bind):
 def _display_host(host):
     return "127.0.0.1" if host in {"0.0.0.0", "::"} else host
 
+
+def _request_json():
+    return request.get_json(silent=True) or {}
+
+
+def _request_int(data, key, default):
+    try:
+        return int(data.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
 # ─── INITIALIZATION ───────────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=None)
 OLLAMA_BASE_URL = os.getenv("STROKEGPT_OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -445,7 +456,7 @@ def add_message_to_queue(text, add_to_history=True):
     if add_to_history:
         clean_text = re.sub(r'<[^>]+>', '', text).strip()
         if clean_text: chat_history.append({"role": "assistant", "content": clean_text})
-    threading.Thread(target=audio.generate_audio_for_text, args=(text,)).start()
+    threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
 def start_background_mode(mode_logic, initial_message, mode_name):
     global auto_mode_active_task, edging_start_time
@@ -496,7 +507,7 @@ def _konami_code_action():
         motion.apply_target(MotionTarget(speed=100, depth=50, stroke_range=100, label="konami"))
         time.sleep(5)
         motion.stop()
-    threading.Thread(target=pattern_thread).start()
+    threading.Thread(target=pattern_thread, daemon=True).start()
     message = f"Kept you waiting, huh?<pre>{SNAKE_ASCII}</pre>"
     add_message_to_queue(message)
 
@@ -531,7 +542,7 @@ def _handle_chat_commands(text):
 @app.route('/send_message', methods=['POST'])
 def handle_user_message():
     global special_persona_mode, special_persona_interactions_left
-    data = request.json
+    data = _request_json()
     user_input = data.get('message', '').strip()
 
     if (p := data.get('persona_desc')) and p != settings.persona_desc:
@@ -571,7 +582,7 @@ def check_settings_route():
 
 @app.route('/reset_settings', methods=['POST'])
 def reset_settings_route():
-    data = request.json or {}
+    data = _request_json()
     if data.get("confirm") != "RESET":
         return jsonify({"status": "error", "message": "Reset confirmation is required."}), 400
     reset_runtime_state()
@@ -581,7 +592,7 @@ def reset_settings_route():
 
 @app.route('/set_persona_prompt', methods=['POST'])
 def set_persona_prompt_route():
-    data = request.json or {}
+    data = _request_json()
     prompt = data.get('persona_desc', '')
     save_prompt = data.get('save_prompt', True)
     if not settings.set_persona_prompt(prompt, save_prompt=save_prompt):
@@ -595,7 +606,7 @@ def set_persona_prompt_route():
 
 @app.route('/set_ollama_model', methods=['POST'])
 def set_ollama_model_route():
-    data = request.json or {}
+    data = _request_json()
     model = normalize_ollama_model(data.get('model', ''))
     if not model:
         return jsonify({"status": "error", "message": "Model name is required."}), 400
@@ -616,7 +627,7 @@ def ollama_status_route():
 
 @app.route('/pull_ollama_model', methods=['POST'])
 def pull_ollama_model_route():
-    data = request.json or {}
+    data = _request_json()
     model = normalize_ollama_model(data.get('model') or llm.model)
     if not model:
         return jsonify({"status": "error", "message": "Model name is required."}), 400
@@ -636,7 +647,8 @@ def pull_ollama_model_route():
 @app.route('/set_ai_name', methods=['POST'])
 def set_ai_name_route():
     global special_persona_mode, special_persona_interactions_left
-    name = request.json.get('name', 'BOT').strip();
+    data = _request_json()
+    name = data.get('name', 'BOT').strip()
     if not name: name = 'BOT'
     
     if name.lower() == 'glados':
@@ -658,14 +670,14 @@ def signal_edge_route():
 
 @app.route('/set_profile_picture', methods=['POST'])
 def set_pfp_route():
-    b64_data = request.json.get('pfp_b64')
+    b64_data = _request_json().get('pfp_b64')
     if not b64_data: return jsonify({"status": "error", "message": "Missing image data"}), 400
     settings.profile_picture_b64 = b64_data; settings.save()
     return jsonify({"status": "success"})
 
 @app.route('/set_handy_key', methods=['POST'])
 def set_handy_key_route():
-    key = request.json.get('key')
+    key = _request_json().get('key')
     if not key: return jsonify({"status": "error", "message": "Key is missing"}), 400
     handy.set_api_key(key); settings.handy_key = key; settings.save()
     return jsonify({"status": "success"})
@@ -675,15 +687,15 @@ def nudge_route():
     global calibration_pos_mm
     if calibration_pos_mm == 0.0 and (pos := handy.get_position_mm()):
         calibration_pos_mm = pos
-    direction = request.json.get('direction')
+    direction = _request_json().get('direction')
     calibration_pos_mm = handy.nudge(direction, 0, 100, calibration_pos_mm)
     return jsonify({"status": "ok", "depth_percent": handy.mm_to_percent(calibration_pos_mm)})
 
 @app.route('/test_depth_range', methods=['POST'])
 def test_depth_range_route():
-    data = request.json or {}
-    depth1 = int(data.get('min_depth', 5))
-    depth2 = int(data.get('max_depth', 100))
+    data = _request_json()
+    depth1 = _request_int(data, 'min_depth', 5)
+    depth2 = _request_int(data, 'max_depth', 100)
     min_depth = max(0, min(100, min(depth1, depth2)))
     max_depth = max(0, min(100, max(depth1, depth2)))
     if not depth_test_lock.acquire(blocking=False):
@@ -704,14 +716,15 @@ def test_depth_range_route():
 
 @app.route('/setup_elevenlabs', methods=['POST'])
 def elevenlabs_setup_route():
-    api_key = request.json.get('api_key')
+    api_key = _request_json().get('api_key')
     if not api_key or not audio.set_api_key(api_key): return jsonify({"status": "error"}), 400
     settings.elevenlabs_api_key = api_key; settings.save()
     return jsonify(audio.fetch_available_voices())
 
 @app.route('/set_elevenlabs_voice', methods=['POST'])
 def set_elevenlabs_voice_route():
-    voice_id, enabled = request.json.get('voice_id'), request.json.get('enabled', False)
+    data = _request_json()
+    voice_id, enabled = data.get('voice_id'), data.get('enabled', False)
     ok, message = audio.configure_voice(voice_id, enabled)
     if ok:
         settings.audio_provider = "elevenlabs"
@@ -722,7 +735,7 @@ def set_elevenlabs_voice_route():
 
 @app.route('/set_audio_provider', methods=['POST'])
 def set_audio_provider_route():
-    data = request.json or {}
+    data = _request_json()
     provider = data.get('provider', 'elevenlabs')
     enabled = data.get('enabled', settings.audio_enabled)
     ok, message = audio.set_provider(provider, enabled)
@@ -744,7 +757,7 @@ def preload_local_tts_model_route():
 
 @app.route('/set_local_tts_voice', methods=['POST'])
 def set_local_tts_voice_route():
-    data = request.json or {}
+    data = _request_json()
     enabled = data.get('enabled', False)
     prompt_path = data.get('prompt_path', '')
     style = data.get('style', settings.local_tts_style)
@@ -873,7 +886,9 @@ def get_status_route():
 
 @app.route('/set_depth_limits', methods=['POST'])
 def set_depth_limits_route():
-    depth1 = int(request.json.get('min_depth', 5)); depth2 = int(request.json.get('max_depth', 100))
+    data = _request_json()
+    depth1 = _request_int(data, 'min_depth', 5)
+    depth2 = _request_int(data, 'max_depth', 100)
     settings.min_depth = min(depth1, depth2); settings.max_depth = max(depth1, depth2)
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     settings.save()
@@ -881,7 +896,9 @@ def set_depth_limits_route():
 
 @app.route('/set_speed_limits', methods=['POST'])
 def set_speed_limits_route():
-    speed1 = int(request.json.get('min_speed', 10)); speed2 = int(request.json.get('max_speed', 80))
+    data = _request_json()
+    speed1 = _request_int(data, 'min_speed', 10)
+    speed2 = _request_int(data, 'max_speed', 80)
     settings.min_speed = max(0, min(100, min(speed1, speed2)))
     settings.max_speed = max(0, min(100, max(speed1, speed2)))
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
@@ -904,7 +921,7 @@ def _timing_pair(data, min_key, max_key, default_min, default_max):
 
 @app.route('/set_mode_timings', methods=['POST'])
 def set_mode_timings_route():
-    data = request.json or {}
+    data = _request_json()
     settings.auto_min_time, settings.auto_max_time = _timing_pair(data, 'auto_min', 'auto_max', 4.0, 7.0)
     settings.edging_min_time, settings.edging_max_time = _timing_pair(data, 'edging_min', 'edging_max', 5.0, 8.0)
     settings.milking_min_time, settings.milking_max_time = _timing_pair(data, 'milking_min', 'milking_max', 2.5, 4.5)
