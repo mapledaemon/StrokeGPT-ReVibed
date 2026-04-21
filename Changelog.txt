@@ -7,6 +7,52 @@ fork. It starts from the fork baseline and records the project work that has
 landed through PRs in this repository.
 
 
+2026-04-21 - PR #6 - Improve Motion Control and Local Runtime Setup
+--------------------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/6
+Branch: codex-split-frontend-assets
+Head commit: d0e8780
+Merge commit: 3d3b7f8
+
+- Split the large inline browser UI into `static/app.css` and `static/app.js`
+  while keeping `index.html` as the page markup.
+- Added reusable Handy motion pattern definitions and expanded spatial motion
+  mapping so LLM output can better express tip, base, full-length, stroke
+  length, and pattern cues.
+- Improved smooth motion transitions and pattern planning while preserving user
+  speed limits and the explicit stop path.
+- Added Chatterbox Turbo defaults, local Torch/CUDA diagnostics, chunked local
+  voice generation, engine/style controls, and clearer CPU-only latency
+  warnings.
+- Made large model downloads explicit in the UI: Ollama downloads now live in
+  the Model tab, and local Chatterbox model download/load lives in the Voice
+  tab.
+- Stopped automatic local voice model download/preload during startup and
+  settings saves.
+- Added local port fallback so an occupied default Flask port no longer blocks
+  startup.
+- Moved regression tests into the `tests/` folder and updated local and CI test
+  commands.
+- Rewrote install instructions with separate Windows, macOS, and Linux flows.
+
+
+2026-04-21 - PR #5 - Track Fork PR History in Changelog
+-------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/5
+Branch: changelog-pr-history
+Head commit: 432983f
+Merge commit: f160d8f
+
+- Replaced the legacy app-version changelog with this StrokeGPT-ReVibed fork
+  changelog.
+- Added merged PR history for PRs #1 through #4, including PR links, branches,
+  head commits, merge commits, and concise change summaries.
+- Documented the fork baseline as the cutoff point for ReVibed-specific
+  history.
+
+
 2026-04-21 - PR #4 - Organize Portable Settings
 ------------------------------------------------
 
