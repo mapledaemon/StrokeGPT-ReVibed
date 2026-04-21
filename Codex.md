@@ -67,7 +67,8 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - `voice_samples/`, `.venv/`, `my_settings.json`, and bytecode/cache folders should stay ignored.
 - Flask's default static route is disabled; static files are served explicitly from the project `static/` folder.
 - Local Chatterbox WAV output is encoded with the Python `wave` module to avoid `torchaudio.save` / TorchCodec issues.
-- Local Chatterbox defaults to the Turbo engine when available, reports Torch/CUDA status in the Voice tab, preloads on app startup when enabled, and splits long replies into smaller audio chunks.
+- Local Chatterbox defaults to the Turbo engine when available, reports Torch/CUDA status in the Voice tab, and splits long replies into smaller audio chunks. Do not preload/download Chatterbox weights automatically; the Voice tab has an explicit download/load button because first use may download several GB.
+- The Model tab reports Ollama availability and has an explicit download button for selected or typed Ollama models. Do not hide large model downloads in startup code.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 
 ## Known Rough Edges

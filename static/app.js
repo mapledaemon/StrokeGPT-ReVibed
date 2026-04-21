@@ -14,6 +14,8 @@ const settingsPanels = D.querySelectorAll('.settings-panel');
 const ollamaModelSelect = D.getElementById('ollama-model-select');
 const ollamaModelInput = D.getElementById('ollama-model-input');
 const ollamaModelStatus = D.getElementById('ollama-model-status');
+const downloadOllamaModelBtn = D.getElementById('download-ollama-model-btn');
+const refreshOllamaStatusBtn = D.getElementById('refresh-ollama-status-btn');
 const audioProviderSelect = D.getElementById('audio-provider-select');
 const enableAudioCheckbox = D.getElementById('enable-audio-checkbox');
 const elevenLabsPanel = D.getElementById('elevenlabs-settings-panel');
@@ -26,6 +28,7 @@ const localTtsStyleSelect = D.getElementById('local-tts-style-select');
 const localTtsPromptPath = D.getElementById('local-tts-prompt-path');
 const localTtsSampleUpload = D.getElementById('local-tts-sample-upload');
 const browseLocalTtsSampleBtn = D.getElementById('browse-local-tts-sample-btn');
+const downloadLocalTtsModelBtn = D.getElementById('download-local-tts-model-button');
 const localTtsExaggeration = D.getElementById('local-tts-exaggeration');
 const localTtsExaggerationVal = D.getElementById('local-tts-exaggeration-val');
 const localTtsCfg = D.getElementById('local-tts-cfg');
@@ -81,6 +84,7 @@ let localTtsStylePresets = {};
 let audioFetchInProgress = false;
 let motionMinDepth = 5, motionMaxDepth = 100;
 let motionMinSpeed = 10, motionMaxSpeed = 80;
+let ollamaDownloadPolling = false;
 
 async function apiCall(endpoint, options = {}) {
     try {
@@ -174,6 +178,40 @@ function populateModelOptions(models = [], currentModel = '') {
     ollamaModelStatus.textContent = currentModel ? `Current: ${normalizeModelName(currentModel)}` : 'No model selected.';
 }
 
+function selectedOllamaModelForAction() {
+    return normalizeModelName(ollamaModelInput.value || ollamaModelSelect.value);
+}
+
+function updateOllamaStatus(status) {
+    if (!status) return;
+    const download = status.download || {};
+    const installedCount = (status.installed_model_names || []).length;
+    let message = status.message || 'Ollama model status unavailable.';
+    if (installedCount) message += ` Installed locally: ${installedCount}.`;
+    if (download.state === 'downloading') {
+        message = `Download in progress for ${download.model}: ${download.message || 'working...'}`;
+    } else if (download.state === 'error') {
+        message += ` Last download error: ${download.message}`;
+    } else if (download.state === 'ready' && download.model) {
+        message += ` ${download.message}`;
+    }
+    ollamaModelStatus.textContent = message;
+    ollamaModelStatus.style.color = status.available && status.current_model_installed && download.state !== 'downloading'
+        ? 'var(--cyan)'
+        : 'var(--yellow)';
+    ollamaDownloadPolling = download.state === 'downloading';
+    if (downloadOllamaModelBtn) {
+        downloadOllamaModelBtn.disabled = ollamaDownloadPolling;
+        downloadOllamaModelBtn.textContent = ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
+    }
+}
+
+async function refreshOllamaStatus() {
+    const data = await apiCall('/ollama_status');
+    if (data) updateOllamaStatus(data);
+    return data;
+}
+
 async function setOllamaModel(model) {
     const normalized = normalizeModelName(model);
     if (!normalized) {
@@ -184,8 +222,25 @@ async function setOllamaModel(model) {
     const data = await apiCall('/set_ollama_model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model: normalized})});
     if (data && data.status === 'success') {
         populateModelOptions(data.ollama_models, data.ollama_model);
-        ollamaModelStatus.textContent = `Current: ${data.ollama_model}`;
-        ollamaModelStatus.style.color = 'var(--cyan)';
+        updateOllamaStatus(data.ollama_status);
+    }
+}
+
+async function downloadOllamaModel() {
+    const model = selectedOllamaModelForAction();
+    if (!model) {
+        ollamaModelStatus.textContent = 'Enter or select an Ollama model first.';
+        ollamaModelStatus.style.color = 'var(--yellow)';
+        return;
+    }
+    const ok = window.confirm(`Download ${model} with Ollama now? This may download several GB.`);
+    if (!ok) return;
+    ollamaModelStatus.textContent = `Starting download for ${model}...`;
+    ollamaModelStatus.style.color = 'var(--comment)';
+    const data = await apiCall('/pull_ollama_model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model})});
+    if (data) {
+        populateModelOptions(data.ollama_models, data.ollama_model);
+        updateOllamaStatus(data.ollama_status);
     }
 }
 
@@ -363,6 +418,13 @@ function updateLocalTtsStatus(status) {
     localTtsStatus.textContent = status.message || 'Local voice status unavailable.';
     localTtsStatus.style.color = status.status === 'cpu_only' ? 'var(--yellow)' : (status.available ? 'var(--cyan)' : 'var(--yellow)');
     if (status.engines) populateLocalEngineOptions(status.engines, status.engine);
+    if (downloadLocalTtsModelBtn) {
+        const loading = status.preload_status === 'loading';
+        downloadLocalTtsModelBtn.disabled = loading;
+        downloadLocalTtsModelBtn.textContent = loading
+            ? 'Downloading / Loading...'
+            : (status.model_loaded ? 'Local Voice Model Loaded' : 'Download / Load Local Voice Model');
+    }
 }
 
 async function saveLocalTtsSettings() {
@@ -378,6 +440,16 @@ async function saveLocalTtsSettings() {
         min_p: localTtsMinP.value,
         repetition_penalty: localTtsRepetition.value
     })});
+    if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+}
+
+async function downloadLocalTtsModel() {
+    await saveLocalTtsSettings();
+    const ok = window.confirm('Download/load the local Chatterbox voice model now? If it is not cached, this may download several GB.');
+    if (!ok) return;
+    localTtsStatus.textContent = 'Starting local voice model download/load...';
+    localTtsStatus.style.color = 'var(--comment)';
+    const data = await apiCall('/preload_local_tts_model', {method:'POST'});
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
 }
 
@@ -619,6 +691,7 @@ async function startupCheck() {
             typingIndicatorPfp.src = data.pfp;
         }
         populateModelOptions(data.ollama_models, data.ollama_model);
+        updateOllamaStatus(data.ollama_status);
         populateDeviceSettings(data);
         populateMotionSettings(data);
         audioProviderSelect.value = data.audio_provider || 'elevenlabs';
@@ -654,6 +727,7 @@ async function startupCheck() {
     } else {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model);
+        updateOllamaStatus(data && data.ollama_status);
         populateDeviceSettings(data || {});
         populateMotionSettings(data || {});
         populateLocalStyleOptions(data && (data.local_tts_style_presets || (data.local_tts_status && data.local_tts_status.style_presets)));
@@ -722,8 +796,11 @@ D.getElementById('refresh-model-field-btn').addEventListener('click', () => {
     ollamaModelInput.focus();
 });
 D.getElementById('save-ollama-model-btn').addEventListener('click', () => setOllamaModel(ollamaModelInput.value));
+downloadOllamaModelBtn.addEventListener('click', downloadOllamaModel);
+refreshOllamaStatusBtn.addEventListener('click', refreshOllamaStatus);
 ollamaModelSelect.addEventListener('change', () => {
     ollamaModelInput.value = ollamaModelSelect.value;
+    refreshOllamaStatus();
 });
 pfpUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
@@ -802,13 +879,15 @@ D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotio
 D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
 resetSettingsBtn.addEventListener('click', resetAllSettings);
 D.getElementById('set-local-tts-button').addEventListener('click', saveLocalTtsSettings);
+downloadLocalTtsModelBtn.addEventListener('click', downloadLocalTtsModel);
 D.getElementById('test-local-tts-button').addEventListener('click', async () => {
     await saveLocalTtsSettings();
     const data = await apiCall('/test_local_tts_voice', {method:'POST'});
     if (data && data.message) {
         localTtsStatus.textContent = data.message;
-        localTtsStatus.style.color = 'var(--cyan)';
+        localTtsStatus.style.color = data.status === 'needs_download' ? 'var(--yellow)' : 'var(--cyan)';
     }
+    if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
 });
 D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
 D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method:'POST'}));
@@ -839,6 +918,9 @@ setInterval(async () => {
         drawHandyVisualizer(data.speed || 0, data.depth || 0);
     }
 }, 500);
+setInterval(async () => {
+    if (ollamaDownloadPolling) await refreshOllamaStatus();
+}, 2500);
 
 // Startup
 window.addEventListener('resize', resizeCanvas);

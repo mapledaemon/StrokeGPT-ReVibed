@@ -31,7 +31,7 @@ Default Ollama model:
 nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
 ```
 
-You can add or switch models later in the app under **Open Settings -> Model**.
+You can add, switch, and download models later in the app under **Open Settings -> Model**.
 
 ## Install On Windows
 
@@ -46,7 +46,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\install_windows.ps1
 ```
 
-This creates `.venv`, installs `requirements.txt`, and pulls the default Ollama model when `ollama` is available.
+This creates `.venv` and installs `requirements.txt`. Model downloads are started from the app so the UI can show what is being downloaded.
 
 3. Start the app.
 
@@ -74,7 +74,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
 ```
 
 3. Start the app.
@@ -111,7 +110,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
 ```
 
 3. Start the app.
@@ -130,9 +128,10 @@ http://127.0.0.1:5000
 ## Tips And Pitfalls
 
 - The app prints the URL to open. If port `5000` is already blocked, it will try the next free local port.
+- Ollama and Chatterbox model weights can be several GB. Use **Open Settings -> Model -> Download Model** for Ollama models and **Open Settings -> Voice -> Download / Load Local Voice Model** for Chatterbox.
 - Python 3.11 is the safest choice for local Chatterbox voice. If Chatterbox fails on a newer Python, recreate `.venv` with Python 3.11.
 - Local Chatterbox voice is slow with CPU-only Torch, even on a high-end CPU. For low-latency local voice, use **Chatterbox Turbo** and install CUDA-enabled PyTorch from the [official PyTorch selector](https://pytorch.org/get-started/locally/).
-- Ollama must be running before the app can talk to local models. If model setup fails, run `ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` manually.
+- Ollama must be running before the app can talk to or download local models. If app-based download fails, run `ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` manually.
 - The default Ollama model is large. Make sure the drive used by Ollama has enough free space.
 - The Handy needs a connection key and internet access for the Handy API.
 - Windows PowerShell may block scripts. The install command above only relaxes script policy for the current PowerShell process.
@@ -151,7 +150,7 @@ Local Chatterbox is heavier than the rest of the app. Python 3.11 is recommended
 
 For local Chatterbox voice cloning/style reference, use **Browse** in the Voice tab to choose a sample audio file.
 
-For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. The app preloads the local model when local voice is enabled and splits longer replies into smaller audio chunks so playback can start sooner.
+For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. Longer replies are split into smaller audio chunks so playback can start sooner.
 
 ## Motion Settings
 
@@ -193,8 +192,9 @@ You can:
 - Select a saved Ollama model
 - Add a new model name
 - Switch the model used by the app
+- Download the selected or typed model through Ollama
 
-The model must already be available in Ollama. Pull new models with:
+The app reports whether the current model is installed. **Download Model** uses Ollama and can download several GB. If needed, pull models manually with:
 
 ```bash
 ollama pull model-name:tag

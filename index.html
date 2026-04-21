@@ -97,7 +97,11 @@
                         <button id="refresh-model-field-btn" class="my-button">Edit Selected</button>
                     </div>
                     <input type="text" id="ollama-model-input" class="input-text" placeholder="namespace/model:tag">
-                    <button id="save-ollama-model-btn" class="my-button">Add and Use Model</button>
+                    <div class="voice-actions">
+                        <button id="save-ollama-model-btn" class="my-button">Add and Use Model</button>
+                        <button id="download-ollama-model-btn" class="my-button">Download Model</button>
+                        <button id="refresh-ollama-status-btn" class="my-button">Refresh</button>
+                    </div>
                     <div id="ollama-model-status" style="font-size: 0.85em; color: var(--comment);">Current model not loaded yet.</div>
                 </div>
             </div>
@@ -132,6 +136,7 @@
                     <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
                     <div class="voice-actions">
                         <button id="set-local-tts-button" class="my-button">Save Local Voice</button>
+                        <button id="download-local-tts-model-button" class="my-button">Download / Load Local Voice Model</button>
                         <button id="test-local-tts-button" class="my-button">Test Voice</button>
                     </div>
                 </div>

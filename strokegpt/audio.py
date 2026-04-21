@@ -224,9 +224,11 @@ class AudioService:
         if self._local_model is not None:
             message += f" Model loaded on {self._local_model_device or runtime['device']}."
         elif self._local_preload_status == "loading":
-            message += " Model preload is running."
+            message += " Model download/load is running."
         elif self._local_preload_status == "error" and self._local_preload_error:
-            message += f" Preload failed: {self._local_preload_error}"
+            message += f" Download/load failed: {self._local_preload_error}"
+        elif available:
+            message += " Model is not loaded yet. Click Download / Load Local Voice Model before testing; first use may download several GB."
 
         return {
             "status": status,
@@ -244,6 +246,9 @@ class AudioService:
             "preload_error": self._local_preload_error,
             "last_generation_seconds": self.last_generation_seconds,
         }
+
+    def local_model_loaded(self):
+        return self._local_model is not None and self._local_model_engine == self.local_engine
 
     def generate_audio_for_text(self, text_to_speak, force=False):
         if not self.is_on and not force:
@@ -327,6 +332,10 @@ class AudioService:
                     raise RuntimeError(runtime["error"])
                 model_class = self._chatterbox_model_class(self.local_engine)
                 device = runtime["device"]
+                print(
+                    "[INFO] Loading local Chatterbox model. "
+                    "If the model weights are not cached, this may download several GB."
+                )
                 self._local_model = model_class.from_pretrained(device=device)
                 self._local_model_engine = self.local_engine
                 self._local_model_device = device
@@ -335,10 +344,10 @@ class AudioService:
                 raise RuntimeError(f"Could not load Chatterbox. Install with requirements.txt. Details: {e}")
         return self._local_model
 
-    def preload_local_model_async(self):
-        if self.provider != "local" or not self.is_on:
+    def preload_local_model_async(self, force=False):
+        if not force and (self.provider != "local" or not self.is_on):
             return False
-        if self._local_model is not None and self._local_model_engine == self.local_engine:
+        if self.local_model_loaded():
             return True
         if self._local_preload_thread and self._local_preload_thread.is_alive():
             return True
