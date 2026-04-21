@@ -156,6 +156,20 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             response.close()
 
+    def test_frontend_js_polls_local_voice_status_and_serializes_playback(self):
+        response = self.client.get("/static/app.js")
+        try:
+            script = response.get_data(as_text=True)
+
+            self.assertIn("let localTtsStatusPolling = false", script)
+            self.assertIn("async function refreshLocalTtsStatus", script)
+            self.assertIn("preload_elapsed_seconds", script)
+            self.assertIn("generation_elapsed_seconds", script)
+            self.assertIn("audio.onended", script)
+            self.assertIn("new Promise", script)
+        finally:
+            response.close()
+
     def test_chat_messages_are_rendered_as_text_nodes(self):
         response = self.client.get("/static/app.js")
         try:
@@ -468,7 +482,11 @@ class WebStaticAssetTests(unittest.TestCase):
             response = self.client.post("/preload_local_tts_model")
 
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.get_json()["status"], "started")
+            data = response.get_json()
+            self.assertEqual(data["status"], "started")
+            self.assertIn("local_tts_status", data)
+            self.assertIn("preload_elapsed_seconds", data["local_tts_status"])
+            self.assertIn("generation_status", data["local_tts_status"])
             self.assertEqual(calls, [((), {"force": True})])
         finally:
             audio.preload_local_model_async = original_preload

@@ -8,10 +8,35 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Document PyTorch Local Voice Setup
------------------------------------------------
+Unreleased - Improve Local Voice Robustness
+-------------------------------------------
+
+Branch: codex-voice-robustness
+
+- Added local Chatterbox status polling so model download/load and generation
+  work report progress instead of appearing stuck.
+- Added elapsed-time and phase fields for local model preload, plus generation
+  status/error reporting for the Voice tab.
+- Reset cached local voice model state after preload or generation failures so
+  a broken CUDA/model state is not treated as ready on the next attempt.
+- Surface missing local voice reference sample paths as an explicit Voice tab
+  status.
+- Fixed browser playback sequencing so queued local voice chunks wait for the
+  current audio clip to finish before the next fetch/playback cycle.
+- Simplified ROADMAP.md into grouped workflow sections and added story mode as
+  a future model/script-driven voice and motion sequence feature.
+- Reframed roadmap non-goals as guardrails with rationale for voice, motion,
+  downloads, privacy, and optional model runtimes.
+
+
+2026-04-21 - PR #10 - Document PyTorch Local Voice Setup
+--------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/10
 
 Branch: codex-readme-pytorch-setup
+Head commit: c74c613
+Merge commit: 2400687
 
 - Added platform-specific PyTorch install commands for Windows, macOS, and
   Linux so local Chatterbox users can install CPU or CUDA-enabled Torch inside
