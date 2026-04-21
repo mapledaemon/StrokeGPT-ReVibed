@@ -28,14 +28,7 @@ jobs:
           python -m pip install Flask requests elevenlabs
 
       - name: Run unit tests
-        run: |
-          python -m unittest \
-            test_audio_service.py \
-            test_motion_control.py \
-            test_configuration.py \
-            test_handy_controller.py \
-            test_motion_scripts.py \
-            test_web_static_assets.py
+        run: python -m unittest discover -s tests
 
       - name: Compile-check Python
-        run: python -m py_compile app.py strokegpt/*.py test_*.py
+        run: python -m py_compile app.py strokegpt/*.py tests/*.py

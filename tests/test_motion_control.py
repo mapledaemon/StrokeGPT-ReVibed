@@ -47,6 +47,28 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.target.depth, 50)
         self.assertEqual(intent.target.stroke_range, 95)
 
+    def test_tip_only_maps_to_shallow_short_motion(self):
+        intent = self.matcher.parse("stay on the tip with short flicks", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertLessEqual(intent.target.depth, 12)
+        self.assertLessEqual(intent.target.stroke_range, 18)
+        self.assertGreaterEqual(intent.target.speed, 55)
+
+    def test_base_half_maps_to_deep_half_length(self):
+        intent = self.matcher.parse("use the base half", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertEqual(intent.target.depth, 75)
+        self.assertEqual(intent.target.stroke_range, 50)
+
+    def test_hold_at_tip_is_motion_pattern_not_stop(self):
+        intent = self.matcher.parse("hold at the tip", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("tip", intent.matched)
+        self.assertLessEqual(intent.target.stroke_range, 12)
+
 
 class MotionSanitizerTests(unittest.TestCase):
     def test_llm_move_is_clamped_and_filled(self):
@@ -56,6 +78,24 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.speed, 100)
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 55)
+
+    def test_llm_move_accepts_zone_and_length_aliases(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move({"zone": "base", "length": "half", "tempo": "fast"}, current)
+
+        self.assertEqual(target.speed, 64)
+        self.assertEqual(target.depth, 75)
+        self.assertEqual(target.stroke_range, 50)
+
+    def test_llm_move_named_pattern_fills_missing_numeric_values(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move({"position": "tip", "pattern": "flick"}, current)
+
+        self.assertGreaterEqual(target.speed, 55)
+        self.assertEqual(target.depth, 10)
+        self.assertEqual(target.stroke_range, 18)
 
     def test_transition_path_respects_step_limits(self):
         sanitizer = MotionSanitizer()

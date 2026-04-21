@@ -1,4 +1,5 @@
 param(
+    [switch]$PullModel,
     [switch]$SkipModelPull
 )
 
@@ -59,13 +60,16 @@ Write-Host "Installing Python dependencies..."
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r requirements.txt
 
-if (-not $SkipModelPull) {
+if ($PullModel -and -not $SkipModelPull) {
     if (Get-Command ollama -ErrorAction SilentlyContinue) {
         Write-Host "Pulling default Ollama model: $DefaultModel"
+        Write-Host "This can download several GB."
         & ollama pull $DefaultModel
     } else {
         Write-Warning "Ollama was not found on PATH. Install Ollama, then run: ollama pull $DefaultModel"
     }
+} else {
+    Write-Host "Skipping Ollama model download. Use Settings > Model > Download Model after starting the app."
 }
 
 Write-Host ""

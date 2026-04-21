@@ -1,12 +1,15 @@
 import os
 import sys
 import io
+import json
 import re
 import atexit
+import socket
 import threading
 import time
 from collections import deque
 from pathlib import Path
+import requests
 from flask import Flask, request, jsonify, render_template_string, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -21,15 +24,52 @@ from .motion import IntentMatcher, MotionController, MotionTarget
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 5000
 
 
 def resource_path(*parts):
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else PROJECT_ROOT
     return base_path.joinpath(*parts)
 
+
+def _env_int(name, default):
+    try:
+        value = int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+    if not 1 <= value <= 65535:
+        return default
+    return value
+
+
+def _port_candidates(start_port, fallback_count=10):
+    return [port for port in range(start_port, min(65535, start_port + fallback_count) + 1)]
+
+
+def _can_bind(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
+def _select_bind_port(host, start_port, fallback_count=10, can_bind=_can_bind):
+    for port in _port_candidates(start_port, fallback_count):
+        if can_bind(host, port):
+            return port
+    raise OSError(f"No available local port found from {start_port} to {start_port + fallback_count}.")
+
+
+def _display_host(host):
+    return "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+
 # ─── INITIALIZATION ───────────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=None)
-LLM_URL = "http://127.0.0.1:11434/api/chat"
+OLLAMA_BASE_URL = os.getenv("STROKEGPT_OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+LLM_URL = f"{OLLAMA_BASE_URL}/api/chat"
 settings = SettingsManager(settings_file_path="my_settings.json")
 settings.load()
 
@@ -58,6 +98,7 @@ if settings.audio_provider == "local":
         settings.local_tts_top_p,
         settings.local_tts_min_p,
         settings.local_tts_repetition_penalty,
+        settings.local_tts_engine,
     )
 
 # In-Memory State
@@ -71,6 +112,16 @@ user_signal_event = threading.Event()
 mode_message_queue = deque(maxlen=5)
 edging_start_time = None
 depth_test_lock = threading.Lock()
+ollama_pull_lock = threading.Lock()
+ollama_pull_thread = None
+ollama_pull_state = {
+    "state": "idle",
+    "model": "",
+    "message": "No model download running.",
+    "completed": 0,
+    "total": 0,
+    "percent": None,
+}
 
 # Easter Egg State
 special_persona_mode = None
@@ -82,10 +133,182 @@ def get_ollama_models_for_ui():
         models.insert(0, llm.model)
     return models
 
+def _format_bytes(value):
+    try:
+        value = int(value or 0)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        return ""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(value)
+    unit = units[0]
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            break
+        size /= 1024
+    if unit == "B":
+        return f"{int(size)} {unit}"
+    return f"{size:.1f} {unit}"
+
+def _set_ollama_pull_state(**updates):
+    with ollama_pull_lock:
+        ollama_pull_state.update(updates)
+
+def _ollama_pull_snapshot():
+    with ollama_pull_lock:
+        return dict(ollama_pull_state)
+
+def _ollama_installed_models():
+    response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=0.5)
+    response.raise_for_status()
+    data = response.json()
+    models = []
+    for item in data.get("models", []):
+        name = normalize_ollama_model(item.get("model") or item.get("name") or "")
+        if not name:
+            continue
+        models.append({
+            "name": name,
+            "size": int(item.get("size") or 0),
+            "size_label": _format_bytes(item.get("size")),
+        })
+    models.sort(key=lambda item: item["name"].lower())
+    return models
+
+def _ollama_status_payload():
+    current_model = normalize_ollama_model(llm.model)
+    payload = {
+        "available": False,
+        "base_url": OLLAMA_BASE_URL,
+        "current_model": current_model,
+        "current_model_installed": False,
+        "installed_models": [],
+        "installed_model_names": [],
+        "download": _ollama_pull_snapshot(),
+        "message": "Ollama is not reachable. Start Ollama before downloading or using local models.",
+    }
+    try:
+        installed_models = _ollama_installed_models()
+    except requests.exceptions.RequestException as exc:
+        payload["error"] = str(exc)
+        return payload
+    except Exception as exc:
+        payload["error"] = str(exc)
+        return payload
+
+    names = [item["name"] for item in installed_models]
+    payload.update({
+        "available": True,
+        "installed_models": installed_models,
+        "installed_model_names": names,
+        "current_model_installed": current_model in names,
+        "message": (
+            f"Current model is installed: {current_model}"
+            if current_model in names
+            else f"Current model is not installed: {current_model}. Click Download Model before chatting."
+        ),
+    })
+    return payload
+
+def _run_ollama_pull(model):
+    _set_ollama_pull_state(
+        state="downloading",
+        model=model,
+        message=f"Downloading {model} with Ollama. This can be several GB.",
+        completed=0,
+        total=0,
+        percent=None,
+    )
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/pull",
+            json={"name": model, "stream": True},
+            stream=True,
+            timeout=(3, None),
+        )
+        response.raise_for_status()
+        last_status = "Downloading"
+        for line in response.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            event = json.loads(line)
+            if event.get("error"):
+                raise RuntimeError(event["error"])
+            last_status = event.get("status") or last_status
+            completed = int(event.get("completed") or 0)
+            total = int(event.get("total") or 0)
+            percent = round((completed / total) * 100, 1) if total else None
+            detail = ""
+            if completed and total:
+                detail = f" ({_format_bytes(completed)} / {_format_bytes(total)}, {percent}%)"
+            _set_ollama_pull_state(
+                state="downloading",
+                model=model,
+                message=f"{last_status}{detail}",
+                completed=completed,
+                total=total,
+                percent=percent,
+            )
+        _set_ollama_pull_state(
+            state="ready",
+            model=model,
+            message=f"{model} is downloaded and ready.",
+            completed=0,
+            total=0,
+            percent=100,
+        )
+    except Exception as exc:
+        _set_ollama_pull_state(
+            state="error",
+            model=model,
+            message=f"Download failed for {model}: {exc}",
+            completed=0,
+            total=0,
+            percent=None,
+        )
+
+def _start_ollama_pull(model):
+    global ollama_pull_thread
+
+    model = normalize_ollama_model(model)
+    if not model:
+        return False, "Model name is required."
+
+    status = _ollama_status_payload()
+    if model in status.get("installed_model_names", []):
+        _set_ollama_pull_state(
+            state="ready",
+            model=model,
+            message=f"{model} is already installed.",
+            completed=0,
+            total=0,
+            percent=100,
+        )
+        return True, "Model is already installed."
+    if not status.get("available"):
+        return False, status.get("message", "Ollama is not reachable.")
+
+    with ollama_pull_lock:
+        if ollama_pull_thread and ollama_pull_thread.is_alive():
+            return False, f"Already downloading {ollama_pull_state.get('model') or 'a model'}."
+        ollama_pull_state.update({
+            "state": "downloading",
+            "model": model,
+            "message": f"Queued download for {model}.",
+            "completed": 0,
+            "total": 0,
+            "percent": None,
+        })
+        ollama_pull_thread = threading.Thread(target=_run_ollama_pull, args=(model,), daemon=True)
+        ollama_pull_thread.start()
+    return True, f"Started downloading {model}."
+
 def get_persona_prompts_for_ui():
     return settings.persona_prompt_options()
 
 def settings_payload():
+    local_tts_status = audio.local_status()
     return {
         "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
         "persona": settings.persona_desc,
@@ -95,10 +318,13 @@ def settings_payload():
         "elevenlabs_key": settings.elevenlabs_api_key,
         "ollama_model": llm.model,
         "ollama_models": get_ollama_models_for_ui(),
+        "ollama_status": _ollama_status_payload(),
         "audio_provider": settings.audio_provider,
         "audio_enabled": settings.audio_enabled,
         "elevenlabs_voice_id": settings.elevenlabs_voice_id,
-        "local_tts_status": audio.local_status(),
+        "local_tts_status": local_tts_status,
+        "local_tts_engine": audio.local_engine,
+        "local_tts_engines": local_tts_status.get("engines", []),
         "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
         "local_tts_style": settings.local_tts_style,
         "local_tts_prompt_path": settings.local_tts_prompt_path,
@@ -151,6 +377,7 @@ def apply_settings_to_services():
             settings.local_tts_top_p,
             settings.local_tts_min_p,
             settings.local_tts_repetition_penalty,
+            settings.local_tts_engine,
         )
 
 def reset_runtime_state():
@@ -380,6 +607,30 @@ def set_ollama_model_route():
         "status": "success",
         "ollama_model": llm.model,
         "ollama_models": get_ollama_models_for_ui(),
+        "ollama_status": _ollama_status_payload(),
+    })
+
+@app.route('/ollama_status')
+def ollama_status_route():
+    return jsonify(_ollama_status_payload())
+
+@app.route('/pull_ollama_model', methods=['POST'])
+def pull_ollama_model_route():
+    data = request.json or {}
+    model = normalize_ollama_model(data.get('model') or llm.model)
+    if not model:
+        return jsonify({"status": "error", "message": "Model name is required."}), 400
+
+    settings.set_ollama_model(model)
+    llm.set_model(model)
+    settings.save()
+    ok, message = _start_ollama_pull(model)
+    return jsonify({
+        "status": "started" if ok else "error",
+        "message": message,
+        "ollama_model": llm.model,
+        "ollama_models": get_ollama_models_for_ui(),
+        "ollama_status": _ollama_status_payload(),
     })
 
 @app.route('/set_ai_name', methods=['POST'])
@@ -485,12 +736,19 @@ def set_audio_provider_route():
 def local_tts_status_route():
     return jsonify(audio.local_status())
 
+@app.route('/preload_local_tts_model', methods=['POST'])
+def preload_local_tts_model_route():
+    started = audio.preload_local_model_async(force=True)
+    message = "Local voice model download/load started." if started else "Local voice model could not be started."
+    return jsonify({"status": "started" if started else "error", "message": message, "local_tts_status": audio.local_status()})
+
 @app.route('/set_local_tts_voice', methods=['POST'])
 def set_local_tts_voice_route():
     data = request.json or {}
     enabled = data.get('enabled', False)
     prompt_path = data.get('prompt_path', '')
     style = data.get('style', settings.local_tts_style)
+    engine = data.get('engine', settings.local_tts_engine)
     exaggeration = data.get('exaggeration', 0.65)
     cfg_weight = data.get('cfg_weight', 0.35)
     temperature = data.get('temperature', settings.local_tts_temperature)
@@ -507,6 +765,7 @@ def set_local_tts_voice_route():
         top_p,
         min_p,
         repetition_penalty,
+        engine,
     )
     if ok:
         persist_local_voice_settings()
@@ -515,6 +774,7 @@ def set_local_tts_voice_route():
 def persist_local_voice_settings():
     settings.audio_provider = "local"
     settings.audio_enabled = bool(audio.is_on)
+    settings.local_tts_engine = audio.local_engine
     settings.local_tts_style = audio.local_style
     settings.local_tts_prompt_path = audio.local_prompt_path
     settings.local_tts_exaggeration = audio.local_exaggeration
@@ -560,6 +820,7 @@ def upload_local_tts_sample_route():
         audio.local_top_p,
         audio.local_min_p,
         audio.local_repetition_penalty,
+        audio.local_engine,
     )
     persist_local_voice_settings()
     return jsonify({
@@ -571,6 +832,12 @@ def upload_local_tts_sample_route():
 
 @app.route('/test_local_tts_voice', methods=['POST'])
 def test_local_tts_voice_route():
+    if not audio.local_model_loaded():
+        return jsonify({
+            "status": "needs_download",
+            "message": "Download / load the local Chatterbox model before testing voice. First use may download several GB.",
+            "local_tts_status": audio.local_status(),
+        })
     threading.Thread(
         target=audio.generate_audio_for_text,
         args=("Local voice test.",),
@@ -687,8 +954,18 @@ def on_exit():
 
 def main():
     atexit.register(on_exit)
+    host = os.getenv("STROKEGPT_HOST", DEFAULT_HOST).strip() or DEFAULT_HOST
+    requested_port = _env_int("STROKEGPT_PORT", DEFAULT_PORT)
+    try:
+        port = _select_bind_port(host, requested_port)
+    except OSError as exc:
+        print(f"[ERROR] {exc}")
+        raise SystemExit(1)
+    if port != requested_port:
+        print(f"[WARN] Port {requested_port} is unavailable; using {port} instead.")
     print(f"[INFO] Starting Handy AI app at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print(f"[INFO] Open http://{_display_host(host)}:{port}")
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == '__main__':

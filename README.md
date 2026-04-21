@@ -4,7 +4,7 @@ StrokeGPT-ReVibed is a work-in-progress refactor of StrokeGPT for controlling Th
 
 The current focus is stability:
 
-- Safer motion interpretation and smoothing
+- More reliable motion interpretation and smoothing
 - A cleaner Python package layout
 - A unified settings UI
 - Ollama model selection
@@ -15,7 +15,7 @@ The current focus is stability:
 
 This is not a finished release. Expect rough edges in the UI, local voice setup, and documentation.
 
-The app currently targets Windows first. Generic Python instructions are included for advanced users.
+The app currently targets Windows first, with equivalent Python setup instructions for macOS and Linux.
 
 ## Requirements
 
@@ -31,118 +31,111 @@ Default Ollama model:
 nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
 ```
 
-You can add or switch models later in the app under **Open Settings -> Model**.
+You can add, switch, and download models later in the app under **Open Settings -> Model**.
 
-## Windows Install
+## Install On Windows
 
-1. Install Python.
+1. Install [Python](https://www.python.org/downloads/windows/) and [Ollama](https://docs.ollama.com/windows).
 
-   Download Python from <https://www.python.org/downloads/windows/>.
+   During Python install, enable **Add python.exe to PATH**. Ollama should be left running in the background after install.
 
-   During install, enable **Add python.exe to PATH**.
-
-2. Install Ollama.
-
-   Download Ollama from <https://ollama.com/download/windows>.
-
-3. Open PowerShell in the project folder.
-
-   In File Explorer, open the `StrokeGPT-ReVibed` folder, click the address bar, type `powershell`, and press Enter.
-
-4. Run the installer script.
+2. Open PowerShell in the `StrokeGPT-ReVibed` folder and run setup.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\install_windows.ps1
 ```
 
-The script will:
+This creates `.venv` and installs `requirements.txt`. Model downloads are started from the app so the UI can show what is being downloaded.
 
-- Create `.venv`
-- Install Python dependencies from `requirements.txt`
-- Pull the default Ollama model if `ollama` is available
-
-5. Start the app.
+3. Start the app.
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python app.py
 ```
 
-6. Open the app.
-
-Go to:
+Open the URL printed by the app. It is usually:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-## Generic Python Install
+## Install On macOS
 
-Use these instructions if you do not want to use the Windows script.
+1. Install [Python](https://www.python.org/downloads/macos/) and [Ollama](https://docs.ollama.com/macos).
 
-1. Create a virtual environment.
+   Open Ollama once after installing it so the `ollama` command is available in Terminal.
 
-```bash
-python -m venv .venv
-```
-
-2. Activate the environment.
-
-Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-macOS/Linux:
+2. Open Terminal in the `StrokeGPT-ReVibed` folder and run setup.
 
 ```bash
+python3 -m venv .venv
 source .venv/bin/activate
-```
-
-3. Install dependencies.
-
-```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-4. Pull the default Ollama model.
+3. Start the app.
 
 ```bash
-ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b
-```
-
-5. Run the app.
-
-```bash
+source .venv/bin/activate
 python app.py
 ```
 
-6. Open:
+Open the URL printed by the app. It is usually:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-## Running Later
+## Install On Linux
 
-After installation, you only need:
+1. Install Python, venv support, pip, curl, and [Ollama](https://docs.ollama.com/linux).
 
-Windows PowerShell:
+   Debian/Ubuntu example:
 
-```powershell
-cd path\to\StrokeGPT-ReVibed
-.\.venv\Scripts\Activate.ps1
+```bash
+sudo apt update
+sudo apt install python3 python3-venv python3-pip curl
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Use your distro's equivalent packages if you are not on Debian or Ubuntu.
+
+2. Open a terminal in the `StrokeGPT-ReVibed` folder and run setup.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+3. Start the app.
+
+```bash
+source .venv/bin/activate
 python app.py
 ```
 
-Then open:
+Open the URL printed by the app. It is usually:
 
 ```text
 http://127.0.0.1:5000
 ```
+
+## Tips And Pitfalls
+
+- The app prints the URL to open. If port `5000` is already blocked, it will try the next free local port.
+- Ollama and Chatterbox model weights can be several GB. Use **Open Settings -> Model -> Download Model** for Ollama models and **Open Settings -> Voice -> Download / Load Local Voice Model** for Chatterbox.
+- Python 3.11 is the safest choice for local Chatterbox voice. If Chatterbox fails on a newer Python, recreate `.venv` with Python 3.11.
+- Local Chatterbox voice is slow with CPU-only Torch, even on a high-end CPU. For low-latency local voice, use **Chatterbox Turbo** and install CUDA-enabled PyTorch from the [official PyTorch selector](https://pytorch.org/get-started/locally/).
+- Ollama must be running before the app can talk to or download local models. If app-based download fails, run `ollama pull nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` manually.
+- The default Ollama model is large. Make sure the drive used by Ollama has enough free space.
+- The Handy needs a connection key and internet access for the Handy API.
+- Windows PowerShell may block scripts. The install command above only relaxes script policy for the current PowerShell process.
+- Keep `my_settings.json` private. It stores local settings and may contain API keys or device credentials.
 
 ## Voice Output
 
@@ -157,6 +150,8 @@ Local Chatterbox is heavier than the rest of the app. Python 3.11 is recommended
 
 For local Chatterbox voice cloning/style reference, use **Browse** in the Voice tab to choose a sample audio file.
 
+For low-latency local voice, use **Chatterbox Turbo** and a CUDA-enabled PyTorch install. If the Voice tab reports CPU-only Torch, local voice generation may be slow even on a high-end CPU. Click **Download / Load Local Voice Model** before testing local voice; first use can download several GB. Longer replies are split into smaller audio chunks so playback can start sooner.
+
 ## Motion Settings
 
 Motion settings are in **Open Settings -> Motion**.
@@ -167,6 +162,8 @@ You can adjust:
 - Auto mode timing
 - Edging mode timing
 - Milking mode timing
+
+The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, pulse, wave, ramp, and tease. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
 
 Start conservatively. The Handy can be intense even at low speed values.
 
@@ -195,8 +192,9 @@ You can:
 - Select a saved Ollama model
 - Add a new model name
 - Switch the model used by the app
+- Download the selected or typed model through Ollama
 
-The model must already be available in Ollama. Pull new models with:
+The app reports whether the current model is installed. **Download Model** uses Ollama and can download several GB. If needed, pull models manually with:
 
 ```bash
 ollama pull model-name:tag
@@ -207,13 +205,13 @@ ollama pull model-name:tag
 Run the test suite:
 
 ```bash
-python -m unittest test_audio_service.py test_motion_control.py test_configuration.py test_handy_controller.py test_motion_scripts.py test_web_static_assets.py
+python -m unittest discover -s tests
 ```
 
 Compile-check Python files:
 
 ```bash
-python -m py_compile app.py strokegpt/*.py test_*.py
+python -m py_compile app.py strokegpt/*.py tests/*.py
 ```
 
 GitHub Actions runs these checks on Python 3.11 for pushes to `master` or `main` and for pull requests. The CI job installs the lightweight dependencies needed by the current regression tests (`Flask`, `requests`, and `elevenlabs`) and intentionally does not install `chatterbox-tts`; local Chatterbox checks stay opt-in because that stack is large and hardware-sensitive.
@@ -222,10 +220,14 @@ GitHub Actions runs these checks on Python 3.11 for pushes to `master` or `main`
 
 ```text
 app.py                  Launcher
-index.html              Web UI
+index.html              Web UI markup
 requirements.txt        Python dependencies
 strokegpt/              Backend package
-test_*.py              Regression tests
+strokegpt/motion_patterns.py
+                        Normalized reusable motion pattern shapes
+tests/                  Regression tests
+static/app.css          Web UI styles
+static/app.js           Web UI behavior
 static/                 Static images
 scripts/                Utility scripts
 ```
