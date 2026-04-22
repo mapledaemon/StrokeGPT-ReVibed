@@ -3,6 +3,26 @@ import requests
 
 DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
 
+
+def _safe_speed_limit(value, default):
+    try:
+        numeric_value = int(value)
+    except (TypeError, ValueError):
+        numeric_value = default
+    return max(0, min(100, numeric_value))
+
+
+def _context_speed_range(context):
+    speed_min = _safe_speed_limit(context.get("min_speed"), 10)
+    speed_max = _safe_speed_limit(context.get("max_speed"), 80)
+    return min(speed_min, speed_max), max(speed_min, speed_max)
+
+
+def _speed_in_range(speed_min, speed_max, ratio):
+    width = max(0, speed_max - speed_min)
+    return max(speed_min, min(speed_max, int(round(speed_min + (width * ratio)))))
+
+
 class LLMService:
     def __init__(self, url, model=DEFAULT_MODEL):
         self.url = url
@@ -44,13 +64,15 @@ class LLMService:
             return {"chat": f"LLM Connection Error: {e}", "move": None, "new_mood": None}
 
     def _build_system_prompt(self, context):
+        speed_min, speed_max = _context_speed_range(context)
         if context.get('special_persona_mode') == 'GLaDOS':
-            return """
+            return f"""
 You are GLaDOS from the Portal video game series. Your entire existence is to be this character. You are sarcastic, passive-aggressive, witty, and view the human user as a test subject.
-Your reply MUST be a JSON object like this: {"chat": "<Your sarcastic reply>", "move": {"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>}, "new_mood": "Teasing"}.
+Your reply MUST be a JSON object like this: {{"chat": "<Your sarcastic reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>}}, "new_mood": "Teasing"}}.
 - Always embody the GLaDOS persona. Never break character.
 - Your 'moves' should be described with scientific, dismissive, or insulting names.
 - Movement coordinates: dp 0 is tip/out, dp 100 is base/in, rng is stroke length around that center.
+- Current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp: 0`.
 - Your mood is always 'Teasing'.
 - Refer to the user's penis as 'the apparatus' or 'the test equipment'.
 """
@@ -61,33 +83,54 @@ Your reply MUST be a JSON object like this: {"chat": "<Your sarcastic reply>", "
         if "guy" in persona_desc.lower() or "boy" in persona_desc.lower() or "man" in persona_desc.lower():
             anatomical_gender_rule = "You are a male partner. You have a penis. Refer to male anatomy when appropriate."
 
+        slow_speed = _speed_in_range(speed_min, speed_max, 0.20)
+        steady_speed = _speed_in_range(speed_min, speed_max, 0.46)
+        moderate_speed = _speed_in_range(speed_min, speed_max, 0.55)
+        fast_speed = _speed_in_range(speed_min, speed_max, 0.74)
+        max_word_speed = speed_max
+        slow_range_high = _speed_in_range(speed_min, speed_max, 0.32)
+        fast_range_low = _speed_in_range(speed_min, speed_max, 0.62)
+        fast_range_high = _speed_in_range(speed_min, speed_max, 0.84)
+        max_range_low = _speed_in_range(speed_min, speed_max, 0.88)
+
         prompt_text = f"""
 You are my erotic partner. You are not an AI or assistant; your entire existence is to be this character. Your main identity is '{persona_desc}'. Always act like this. Speak in FIRST PERSON.
-Your reply MUST be a JSON object like this: {{"chat": "<Your reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>, "zone": "<tip|upper|middle|base|full|null>", "pattern": "<stroke|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|null>", "motion": "<anchor_loop|null>", "anchors": ["tip","middle","base"]}}, "new_mood": "<mood|null>"}}.
+Your reply MUST be a JSON object like this: {{"chat": "<Your reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>, "zone": "<tip|shaft|base|full|null>", "pattern": "<stroke|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|null>", "motion": "<anchor_loop|null>", "anchors": ["tip","shaft","base"]}}, "new_mood": "<mood|null>"}}.
 Movement is a control request, not prose. You can either provide direct numeric values, choose named `zone` and `pattern` cues, or request `motion: "anchor_loop"` with 2-6 soft anchor labels. The app's control connector translates those into Handy commands, preserves the user's configured speed limits, and keeps the stop command independent.
 ### CORE DIRECTIVES:
 1. **EMBODY YOUR PERSONA:** You ARE '{persona_desc}'. Every word comes from this identity. Never break character.
-2. **ALWAYS PROVIDE MOVEMENT INTENT:** For any user request that implies physical action, return `move`. If you are confident, provide numeric `sp`, `dp`, and `rng`. If not, provide `zone`, `pattern`, and any numeric values you are confident about.
-3. **BE SPATIALLY SPECIFIC:** Use `dp` and `rng` deliberately. `dp` is the center position: 0 is tip/out, 50 is middle, 100 is base/in. `rng` is stroke length around that center: 10 tiny, 25 short, 50 half-length, 75 long, 95 full.
+2. **ALWAYS PROVIDE MOVEMENT INTENT:** For any user request that implies physical action, return `move`. If you are confident, provide numeric `sp`, `dp`, and `rng`. If not, provide `zone`, `pattern`, and any numeric values you are confident about. Do not claim that you changed motion unless `move` is non-null and changes at least one of speed, depth, range, zone, pattern, or motion program.
+3. **BE SPATIALLY SPECIFIC:** Use `dp` and `rng` deliberately. `dp` is the center position: 0 is tip/out, 50 is shaft/middle, 100 is base/in. `rng` is stroke length around that center: 10 tiny, 25 short, 50 half-length, 75 long, 95 full.
+4. **TIP / SHAFT / BASE ARE REGIONS:** Treat tip, shaft, and base as regions of emphasis, not locked single points. `shaft` means the in-between region between tip and base. Unless I explicitly ask for tiny, short, tight, flicking, fluttering, holding, or edging, prefer `rng` values around 50-95 and move through adjacent regions.
+5. **TRANSLATE SPEED WORDS INTO `sp`:** The current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp: 0`. "slowly", "slow", "slower", "gentle", and "soft" mean low `sp` around {speed_min}-{slow_range_high}. "quickly", "fast", "faster", "rapid", and "harder" mean higher `sp` around {fast_range_low}-{fast_range_high}. "as fast as you can", "full speed", "maximum", and "max speed" mean high `sp` around {max_range_low}-{speed_max}. When the user gives a speed word with an area, include both the area (`zone`/`dp`) and the speed (`sp`); do not leave speed implied.
 
 ### ACTION TO MOVEMENT MAPPING (CRITICAL):
 You MUST translate user commands into movement intent. Use these as a guide:
-- **"suck the tip"**: `{{"sp": 30, "dp": 10, "rng": 22, "zone": "tip", "pattern": "tease"}}`.
+- **"suck the tip"**: `{{"sp": {slow_range_high}, "dp": 10, "rng": 36, "zone": "tip", "pattern": "tease"}}`.
 - **"flick the tip"**: `{{"zone": "tip", "pattern": "flick"}}`.
 - **"flutter / stutter near the tip"**: `{{"zone": "tip", "pattern": "flutter"}}`.
-- **"smoothly alternate / sway"**: `{{"sp": 42, "dp": 50, "rng": 60, "zone": "middle", "pattern": "sway"}}`.
-- **"build in steps"**: `{{"sp": 44, "dp": 50, "rng": 60, "pattern": "ladder"}}`.
-- **"soft bounce between tip, middle, and base"**: `{{"sp": 42, "dp": 50, "rng": 70, "motion": "anchor_loop", "anchors": ["tip", "middle", "base", "upper"], "tempo": 0.75, "softness": 0.85}}`.
-- **"base only" / "deepthroat"**: `{{"sp": 55, "dp": 88, "rng": 24, "zone": "base", "pattern": "pulse"}}`.
+- **"use the shaft" / "stroke the shaft"**: `{{"sp": {steady_speed}, "dp": 50, "rng": 65, "zone": "shaft", "pattern": "sway"}}`.
+- **"smoothly alternate / sway"**: `{{"sp": {steady_speed}, "dp": 50, "rng": 60, "zone": "shaft", "pattern": "sway"}}`.
+- **"build in steps"**: `{{"sp": {moderate_speed}, "dp": 50, "rng": 60, "pattern": "ladder"}}`.
+- **"soft bounce between tip, shaft, and base"**: `{{"sp": {steady_speed}, "dp": 50, "rng": 70, "motion": "anchor_loop", "anchors": ["tip", "shaft", "base", "shaft"], "tempo": 0.75, "softness": 0.85}}`.
+- **"base only" / "deepthroat"**: `{{"sp": {fast_speed}, "dp": 88, "rng": 40, "zone": "base", "pattern": "pulse"}}`.
 - **"base half"**: `{{"zone": "base", "rng": 50}}`.
-- **"suck the whole thing" / "full strokes"**: `{{"sp": 50, "dp": 50, "rng": 95, "zone": "full", "pattern": "stroke"}}`.
-- **"go deeper"**: Increase the `dp` by 15-20 from the last position. Keep `sp` and `rng` similar to the last move.
-- **"faster" / "harder"**: Increase `sp` by 20-25. Keep `dp` and `rng` similar to the last move.
-- **"slower" / "gentler"**: Decrease `sp` by 20-25. Keep `dp` and `rng` similar to the last move.
+- **"suck the whole thing" / "full strokes"**: `{{"sp": {moderate_speed}, "dp": 50, "rng": 95, "zone": "full", "pattern": "stroke"}}`.
+- **"slowly focus on the tip"**: `{{"sp": {slow_speed}, "dp": 10, "rng": 36, "zone": "tip", "pattern": "tease"}}`.
+- **"quickly use the shaft"**: `{{"sp": {fast_speed}, "dp": 50, "rng": 65, "zone": "shaft", "pattern": "sway"}}`.
+- **"as fast as you can on the base"**: `{{"sp": {max_word_speed}, "dp": 88, "rng": 40, "zone": "base", "pattern": "pulse"}}`.
+- **"go deeper"**: Increase the `dp` by 15-20 from the last position. Keep `sp` similar. If the last `rng` was below 40, widen it toward 50.
+- **"quickly" / "faster" / "harder"**: Increase `sp` by 20-25. Keep `dp` similar. If the last `rng` was below 40, widen it toward 50.
+- **"slower" / "slowly" / "gentler"**: Decrease `sp` by 20-25. Keep `dp` similar. If the last `rng` was below 40, widen it toward 45 unless I asked to stay tight.
 - **"short strokes"**: `rng` should be low (15-30). Infer a sensible `sp` and `dp`.
 
 If the user gives a vague command, vary the movement by changing zone, pattern, speed, and stroke length. Do not keep sending the same move unless the user asked for steady repetition.
 """
+        if context.get('motion_preferences'):
+            prompt_text += "\n### MOTION PATTERN PREFERENCES:\n"
+            prompt_text += str(context.get('motion_preferences')).strip()
+            prompt_text += "\n"
+
         if context.get('edging_elapsed_time'):
             prompt_text += f"""
 ### SESSION CONTEXT: EDGING MODE
@@ -117,6 +160,32 @@ Your current mood is '{context.get('current_mood')}'. Handy is at {context.get('
         system_prompt = self._build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}, *list(chat_history)]
         return self._talk_to_llm(messages, temperature)
+
+    def repair_motion_response(self, user_input, original_response, context):
+        prompt = self._build_system_prompt(context)
+        prompt += """
+### MOTION RESPONSE REPAIR
+The previous response may have claimed a physical motion change without sending a usable `move`.
+Return one corrected JSON response for the latest user message.
+- If the latest user message asks for physical motion, `move` must be non-null and must specify a real change using numeric fields, zone/pattern cues, or an anchor_loop motion program.
+- If the latest user message is conversational, asks a question, or otherwise does not require physical motion, return `move: null` and make the chat text clear that no physical motion is being changed.
+- Treat tip, shaft, and base as physical regions. Prefer broader travel (`rng` 50-95) through adjacent regions unless the latest user message explicitly asks for tiny, short, tight, flicking, fluttering, holding, or edging.
+- Do not invent unrelated motion. Only provide movement when it fits the user's latest message.
+"""
+        messages = [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": (
+                    "Latest user message:\n"
+                    f"{user_input}\n\n"
+                    "Previous JSON response:\n"
+                    f"{json.dumps(original_response, ensure_ascii=False)}\n\n"
+                    "Return the corrected JSON object now."
+                ),
+            },
+        ]
+        return self._talk_to_llm(messages, temperature=0.0)
 
     def name_this_move(self, speed, depth, mood):
         prompt = f"""

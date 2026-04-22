@@ -9,8 +9,58 @@ function normalizeMotionSpeedLimits() {
     el.motionSpeedMaxVal.textContent = `${state.motionMaxSpeed}%`;
 }
 
+function motionBackendDetails(backendId) {
+    return state.motionBackends.find(backend => backend.id === backendId) || {
+        id: 'hamp',
+        label: 'HAMP continuous',
+        description: 'Recommended default for smooth ongoing app motion.',
+        experimental: false,
+    };
+}
+
+function updateMotionBackendUi(backendId) {
+    state.motionBackend = backendId === 'position' ? 'position' : 'hamp';
+    if (el.motionBackendSelect) el.motionBackendSelect.value = state.motionBackend;
+    const details = motionBackendDetails(state.motionBackend);
+    const suffix = details.experimental ? ' (experimental)' : '';
+    if (el.motionBackendStatus) {
+        el.motionBackendStatus.textContent = `Current backend: ${details.label}${suffix}. ${details.description || ''}`.trim();
+    }
+    if (el.appMotionBackendBadge) {
+        el.appMotionBackendBadge.textContent = `App motion: ${details.label}${suffix}`;
+    }
+}
+
+function renderMotionBackendOptions(options = [], currentBackend = 'hamp') {
+    state.motionBackends = options.length ? options : [
+        {
+            id: 'hamp',
+            label: 'HAMP continuous',
+            description: 'Recommended default for smooth ongoing app motion.',
+            experimental: false,
+        },
+        {
+            id: 'position',
+            label: 'Flexible position/script',
+            description: 'Experimental path for pattern fidelity and spatial scripts.',
+            experimental: true,
+        },
+    ];
+    if (el.motionBackendSelect) {
+        el.motionBackendSelect.replaceChildren();
+        state.motionBackends.forEach(backend => {
+            const option = D.createElement('option');
+            option.value = backend.id;
+            option.textContent = `${backend.label}${backend.experimental ? ' (experimental)' : backend.id === 'hamp' ? ' (recommended)' : ''}`;
+            el.motionBackendSelect.appendChild(option);
+        });
+    }
+    updateMotionBackendUi(currentBackend);
+}
+
 export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
+    renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
     setSliderValue(el.motionSpeedMinSlider, el.motionSpeedMinVal, data.min_speed ?? state.motionMinSpeed);
     setSliderValue(el.motionSpeedMaxSlider, el.motionSpeedMaxVal, data.max_speed ?? state.motionMaxSpeed);
     normalizeMotionSpeedLimits();
@@ -21,6 +71,19 @@ export function populateMotionSettings(data = {}) {
     el.milkingMinTimeInput.value = timings.milking_min ?? el.milkingMinTimeInput.value ?? 2.5;
     el.milkingMaxTimeInput.value = timings.milking_max ?? el.milkingMaxTimeInput.value ?? 4.5;
     if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
+}
+
+async function saveMotionBackend() {
+    const motionBackend = el.motionBackendSelect?.value || 'hamp';
+    const data = await apiCall('/set_motion_backend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({motion_backend: motionBackend}),
+    });
+    if (data && data.status === 'success') {
+        updateMotionBackendUi(data.motion_backend);
+        el.statusText.textContent = `Motion backend saved: ${motionBackendDetails(data.motion_backend).label}.`;
+    }
 }
 
 async function saveMotionSpeedLimits() {
@@ -84,13 +147,16 @@ function patternDisplayName(pattern) {
 
 function formatPatternMetadata(pattern) {
     const feedback = pattern.feedback || {};
-    return [
+    const parts = [
         pattern.source || 'unknown',
         `${formatPatternDuration(pattern.duration_ms)} duration`,
         `${pattern.action_count || 0} actions`,
         pattern.readonly ? 'read-only' : 'editable file',
         `feedback ${feedback.thumbs_up || 0}/${feedback.neutral || 0}/${feedback.thumbs_down || 0}`,
-    ].join(' | ');
+    ];
+    if (pattern.source === 'fixed') parts.push(`weight ${pattern.weight ?? 50}/100`);
+    if (!pattern.enabled) parts.push('disabled');
+    return parts.join(' | ');
 }
 
 function createPatternText(pattern, {includeDescription = true} = {}) {
@@ -125,6 +191,56 @@ function createPatternExportButton(pattern) {
         window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
     });
     return exportButton;
+}
+
+function createPatternWeightControl(pattern) {
+    const wrapper = D.createElement('div');
+    wrapper.className = 'motion-pattern-weight-control';
+    wrapper.addEventListener('click', event => event.stopPropagation());
+
+    const label = D.createElement('div');
+    label.className = 'motion-pattern-weight-label';
+    label.textContent = 'Weight';
+
+    const field = D.createElement('div');
+    field.className = 'motion-training-number-field motion-pattern-weight-field';
+
+    const input = D.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.step = '1';
+    input.value = clampNumber(pattern.weight, 0, 100, 50);
+    input.setAttribute('aria-label', `${patternDisplayName(pattern)} LLM weight`);
+    input.addEventListener('change', () => setMotionPatternWeight(pattern.id, input.value));
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            input.blur();
+            setMotionPatternWeight(pattern.id, input.value);
+        }
+    });
+
+    const stepper = D.createElement('div');
+    stepper.className = 'motion-training-number-stepper';
+    [
+        ['motion-training-number-step-up', 1, 'Increase LLM weight'],
+        ['motion-training-number-step-down', -1, 'Decrease LLM weight'],
+    ].forEach(([className, delta, ariaLabel]) => {
+        const button = D.createElement('button');
+        button.type = 'button';
+        button.className = `motion-training-number-step ${className}`;
+        button.setAttribute('aria-label', `${ariaLabel} for ${patternDisplayName(pattern)}`);
+        button.addEventListener('click', () => {
+            input.value = Math.round(clampNumber(Number(input.value) + delta, 0, 100, 50));
+            setMotionPatternWeight(pattern.id, input.value);
+        });
+        stepper.appendChild(button);
+    });
+
+    field.append(input, stepper);
+    wrapper.append(label, field);
+    return wrapper;
 }
 
 function patternById(patternId) {
@@ -588,6 +704,7 @@ function renderCompactMotionPatternList(patterns) {
         const actions = D.createElement('div');
         actions.className = 'motion-pattern-row-actions';
 
+        if (pattern.source === 'fixed') actions.append(createPatternWeightControl(pattern));
         actions.append(createPatternExportButton(pattern));
         main.append(checkbox, text);
         row.append(main, actions);
@@ -757,6 +874,19 @@ async function setMotionPatternEnabled(patternId, enabled) {
     }
 }
 
+async function setMotionPatternWeight(patternId, weight) {
+    const cleanWeight = Math.round(clampNumber(weight, 0, 100, 50));
+    const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}/weight`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({weight: cleanWeight}),
+    });
+    if (data && data.status === 'success') {
+        renderMotionPatterns(data.motion_patterns);
+        el.statusText.textContent = `${data.pattern.name} LLM weight saved: ${data.pattern.weight}.`;
+    }
+}
+
 async function importMotionPatternFile(file) {
     if (!file) return;
     setPatternStatus(`Importing ${file.name}...`);
@@ -889,14 +1019,45 @@ export async function pollMotionStatus() {
 async function likeLastMove() {
     const data = await apiCall('/like_last_move', {method: 'POST'});
     if (data && data.status === 'boosted') {
-        el.statusText.textContent = `Saved '${data.name}' to my memory!`;
+        if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
+        const patternText = data.pattern ? ` Pattern weight updated for ${data.pattern.name}.` : '';
+        el.statusText.textContent = `Saved '${data.name}' to my memory!${patternText}`;
     } else {
         el.statusText.textContent = 'Status: No active move to like.';
     }
 }
 
+async function dislikeLastMove() {
+    const data = await apiCall('/dislike_last_move', {method: 'POST'});
+    if (data && data.status === 'success') {
+        if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
+        el.statusText.textContent = data.message || 'Saved thumbs down feedback.';
+    } else {
+        el.statusText.textContent = data?.message || 'No fixed motion pattern is active to rate.';
+    }
+}
+
+async function startEdgingMode() {
+    el.statusText.textContent = 'Starting edging mode...';
+    const data = await apiCall('/start_edging_mode', {method: 'POST'});
+    if (data && data.status === 'edging_started') {
+        el.statusText.textContent = 'Edging mode started.';
+        el.imCloseBtn.style.display = 'block';
+        startEdgingTimer();
+    }
+}
+
+async function startMilkingMode() {
+    el.statusText.textContent = 'Starting milking mode...';
+    const data = await apiCall('/start_milking_mode', {method: 'POST'});
+    if (data && data.status === 'milking_started') {
+        el.statusText.textContent = 'Milking mode started.';
+    }
+}
+
 export function initMotionControls({sendUserMessage}) {
     D.getElementById('like-this-move-btn').addEventListener('click', likeLastMove);
+    D.getElementById('dislike-this-move-btn')?.addEventListener('click', dislikeLastMove);
     const stopButtons = [D.getElementById('stop-auto-btn'), D.getElementById('emergency-stop-all-btn')];
     stopButtons.forEach(btn => btn.addEventListener('click', () => {
         el.imCloseBtn.style.display = 'none';
@@ -904,11 +1065,7 @@ export function initMotionControls({sendUserMessage}) {
         if (btn.id === 'emergency-stop-all-btn') sendUserMessage('stop');
         else apiCall('/stop_auto_mode', {method: 'POST'});
     }));
-    el.edgingModeBtn.addEventListener('click', () => {
-        apiCall('/start_edging_mode', {method: 'POST'});
-        el.imCloseBtn.style.display = 'block';
-        startEdgingTimer();
-    });
+    el.edgingModeBtn.addEventListener('click', startEdgingMode);
     el.imCloseBtn.addEventListener('click', () => {
         apiCall('/signal_edge', {method: 'POST'});
         el.imCloseBtn.style.transform = 'scale(0.95)';
@@ -916,6 +1073,8 @@ export function initMotionControls({sendUserMessage}) {
     });
     el.motionSpeedMinSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
+    el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
+    el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
@@ -953,7 +1112,7 @@ export function initMotionControls({sendUserMessage}) {
         if (tab.dataset.settingsTab === 'motion') tab.addEventListener('click', refreshMotionPatterns);
     });
     D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
-    D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method: 'POST'}));
+    D.getElementById('milking-mode-btn').addEventListener('click', startMilkingMode);
     updateMotionTrainingStatus();
     updateMotionTrainingEditButtons();
     refreshMotionPatterns();

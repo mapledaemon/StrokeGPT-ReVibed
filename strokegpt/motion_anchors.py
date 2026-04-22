@@ -19,6 +19,7 @@ def _as_number(value: Any) -> Optional[float]:
 ANCHOR_POSITIONS = {
     "tip": 8.0,
     "upper": 28.0,
+    "shaft": 50.0,
     "middle": 50.0,
     "mid": 50.0,
     "lower": 72.0,
@@ -121,7 +122,7 @@ def anchors_from_items(items: Any, *, max_anchors: int = 6) -> tuple[MotionAncho
 def anchors_from_text(text: str, *, max_anchors: int = 6) -> tuple[MotionAnchor, ...]:
     clean_text = _clean_label(text).replace("_", " ")
     found = []
-    for label in ("tip", "upper", "middle", "mid", "lower", "base"):
+    for label in ("tip", "upper", "shaft", "middle", "mid", "lower", "base"):
         for match in re.finditer(rf"\b{re.escape(label)}\b", clean_text):
             found.append((match.start(), label))
     found.sort()
@@ -136,10 +137,10 @@ def default_anchor_items(zone: Optional[str] = None, length: Optional[str] = Non
     if zone == "upper":
         return ("tip", "upper", "middle", "upper")
     if zone == "middle":
-        return ("upper", "middle", "lower", "middle")
+        return ("upper", "shaft", "lower", "shaft")
     if zone == "full" or length == "full":
-        return ("tip", "middle", "base", "middle")
-    return ("upper", "middle", "lower", "middle")
+        return ("tip", "shaft", "base", "shaft")
+    return ("upper", "shaft", "lower", "shaft")
 
 
 def _read_curve(value: Any) -> str:

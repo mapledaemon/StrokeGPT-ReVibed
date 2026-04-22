@@ -75,6 +75,67 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertLessEqual(intent.target.stroke_range, 16)
         self.assertGreaterEqual(intent.target.speed, 58)
 
+    def test_bare_endpoint_cues_keep_more_range(self):
+        tip_intent = self.matcher.parse("focus on the tip", self.current)
+        base_intent = self.matcher.parse("go to the base", self.current)
+
+        self.assertEqual(tip_intent.kind, "move")
+        self.assertEqual(base_intent.kind, "move")
+        self.assertGreaterEqual(tip_intent.target.stroke_range, 36)
+        self.assertGreaterEqual(base_intent.target.stroke_range, 40)
+        self.assertIsNotNone(tip_intent.target.motion_program)
+        self.assertIsNotNone(base_intent.target.motion_program)
+
+    def test_area_focus_does_not_inherit_max_speed(self):
+        current = MotionTarget(100, 50, 80)
+
+        tip_intent = self.matcher.parse("focus on the tip", current)
+        shaft_intent = self.matcher.parse("focus on the shaft", current)
+        base_intent = self.matcher.parse("focus on the base", current)
+
+        self.assertEqual(tip_intent.target.speed, 30)
+        self.assertEqual(shaft_intent.target.speed, 38)
+        self.assertEqual(base_intent.target.speed, 42)
+
+    def test_relative_area_focus_preserves_requested_speed_change(self):
+        current = MotionTarget(30, 50, 80)
+        intent = self.matcher.parse("go faster at the tip", current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertGreater(intent.target.speed, current.speed)
+        self.assertGreaterEqual(intent.target.speed, 52)
+
+    def test_slowly_area_focus_applies_slow_speed_hint(self):
+        current = MotionTarget(70, 50, 80)
+        intent = self.matcher.parse("slowly focus on the tip", current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("slower", intent.matched)
+        self.assertIn("slow", intent.matched)
+        self.assertEqual(intent.target.depth, 10)
+        self.assertEqual(intent.target.speed, 24)
+
+    def test_shaft_maps_to_in_between_region(self):
+        intent = self.matcher.parse("stroke the shaft", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("middle", intent.matched)
+        self.assertEqual(intent.target.depth, 50)
+        self.assertGreaterEqual(intent.target.stroke_range, 50)
+        self.assertIsNotNone(intent.target.motion_program)
+        self.assertEqual(
+            [anchor["label"] for anchor in intent.target.motion_program["anchors"]],
+            ["upper", "shaft", "lower", "shaft"],
+        )
+
+    def test_relative_motion_from_tight_range_broadens(self):
+        current = MotionTarget(30, 10, 18)
+        intent = self.matcher.parse("go faster", current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertGreater(intent.target.speed, current.speed)
+        self.assertGreaterEqual(intent.target.stroke_range, 45)
+
     def test_smooth_alternation_maps_to_wide_sway(self):
         intent = self.matcher.parse("smoothly alternate across the middle", self.current)
 
@@ -95,6 +156,21 @@ class IntentMatcherTests(unittest.TestCase):
         )
         self.assertGreaterEqual(intent.target.stroke_range, 55)
 
+    def test_soft_bounce_accepts_shaft_as_midpoint_anchor(self):
+        intent = self.matcher.parse("soft bounce between tip shaft and base", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("anchor_loop", intent.matched)
+        self.assertIsNotNone(intent.target.motion_program)
+        self.assertEqual(
+            [anchor["label"] for anchor in intent.target.motion_program["anchors"]],
+            ["tip", "shaft", "base"],
+        )
+        self.assertEqual(
+            [anchor["pos"] for anchor in intent.target.motion_program["anchors"]],
+            [8.0, 50.0, 92.0],
+        )
+
     def test_base_half_maps_to_deep_half_length(self):
         intent = self.matcher.parse("use the base half", self.current)
 
@@ -108,6 +184,11 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.kind, "move")
         self.assertIn("tip", intent.matched)
         self.assertLessEqual(intent.target.stroke_range, 12)
+
+    def test_motion_term_question_does_not_trigger_motion(self):
+        intent = self.matcher.parse("what does tip mean?", self.current)
+
+        self.assertEqual(intent.kind, "none")
 
 
 class MotionSanitizerTests(unittest.TestCase):
@@ -137,6 +218,39 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.depth, 10)
         self.assertEqual(target.stroke_range, 18)
 
+    def test_llm_bare_endpoint_cues_keep_more_range(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+
+        target = sanitizer.from_llm_move({"zone": "tip", "pattern": "tease"}, current)
+        base_target = sanitizer.from_llm_move({"zone": "base", "pattern": "pulse"}, current)
+        shaft_target = sanitizer.from_llm_move({"zone": "shaft", "pattern": "sway"}, current)
+
+        self.assertGreaterEqual(target.stroke_range, 36)
+        self.assertGreaterEqual(base_target.stroke_range, 36)
+        self.assertIsNotNone(target.motion_program)
+        self.assertIsNotNone(base_target.motion_program)
+        self.assertEqual(shaft_target.depth, 50)
+        self.assertGreaterEqual(shaft_target.stroke_range, 55)
+
+    def test_llm_area_focus_without_speed_does_not_inherit_max_speed(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(100, 45, 55)
+
+        target = sanitizer.from_llm_move({"zone": "tip"}, current)
+        base_target = sanitizer.from_llm_move({"zone": "base", "pattern": "pulse"}, current)
+
+        self.assertEqual(target.speed, 30)
+        self.assertEqual(base_target.speed, 44)
+
+    def test_llm_area_focus_honors_explicit_speed(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(100, 45, 55)
+
+        target = sanitizer.from_llm_move({"zone": "tip", "sp": 72}, current)
+
+        self.assertEqual(target.speed, 72)
+
     def test_llm_move_accepts_anchor_program(self):
         sanitizer = MotionSanitizer()
         current = MotionTarget(35, 45, 55)
@@ -156,6 +270,31 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertIn("anchor_loop", target.label)
         self.assertEqual(target.motion_program["curve"], "catmull")
         self.assertEqual([anchor["label"] for anchor in target.motion_program["anchors"]], ["tip", "middle", "base", "upper"])
+
+    def test_llm_move_accepts_shaft_anchor_program(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move(
+            {
+                "motion": "anchor_loop",
+                "anchors": ["tip", "shaft", "base", "shaft"],
+                "tempo": 0.85,
+                "softness": 0.9,
+                "rng": 70,
+            },
+            current,
+        )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.stroke_range, 70)
+        self.assertEqual(
+            [anchor["label"] for anchor in target.motion_program["anchors"]],
+            ["tip", "shaft", "base", "shaft"],
+        )
+        self.assertEqual(
+            [anchor["pos"] for anchor in target.motion_program["anchors"]],
+            [8.0, 50.0, 92.0, 50.0],
+        )
 
     def test_transition_path_respects_step_limits(self):
         sanitizer = MotionSanitizer()
@@ -206,6 +345,18 @@ class MotionControllerTests(unittest.TestCase):
 
         self.assertGreater(len(handy.moves), 4)
         self.assertGreater(len({depth for _, depth, _ in handy.moves}), 3)
+
+    def test_position_backend_routes_generated_frames_to_position_moves(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        controller.set_backend("position")
+        intent = IntentMatcher().parse("soft bounce between tip middle and base", controller.current_target())
+
+        controller.apply_generated_target(intent.target)
+
+        self.assertGreater(len(handy.position_moves), 4)
+        self.assertEqual(handy.moves, [])
+        self.assertGreater(len({depth for _, depth, _, _ in handy.position_moves}), 3)
 
     def test_stop_cancels_and_stops_handy(self):
         handy = FakeHandy()

@@ -19,12 +19,22 @@ from .llm import LLMService
 from .audio import AudioService
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic
 from .motion import IntentMatcher, MotionController, MotionTarget
-from .motion_patterns import expand_motion_pattern
+from .motion_patterns import PATTERNS, expand_motion_pattern
+from .motion_preferences import (
+    THUMBS_DOWN_DISABLE_THRESHOLD,
+    adjust_weight_for_feedback,
+    build_motion_preference_payload,
+    clamp_weight,
+    enrich_catalog,
+    feedback_weight,
+    should_auto_disable,
+)
 from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
     PatternLibrary,
     PatternValidationError,
     record_from_payload,
+    slugify_pattern_id,
 )
 
 
@@ -131,6 +141,7 @@ current_mood = "Curious"
 use_long_term_memory = True
 calibration_pos_mm = 0.0
 user_signal_event = threading.Event()
+mode_message_event = threading.Event()
 mode_message_queue = deque(maxlen=5)
 edging_start_time = None
 depth_test_lock = threading.Lock()
@@ -155,6 +166,7 @@ motion_training_state = {
     "last_feedback": "",
     "preview": False,
 }
+last_live_motion_pattern_id = ""
 
 # Easter Egg State
 special_persona_mode = None
@@ -371,7 +383,23 @@ def settings_payload():
         "max_depth": settings.max_depth,
         "min_speed": settings.min_speed,
         "max_speed": settings.max_speed,
+        "motion_backend": settings.motion_backend,
+        "motion_backends": [
+            {
+                "id": "hamp",
+                "label": "HAMP continuous",
+                "description": "Recommended default for smooth ongoing app motion.",
+                "experimental": False,
+            },
+            {
+                "id": "position",
+                "label": "Flexible position/script",
+                "description": "Experimental path for pattern fidelity and spatial scripts.",
+                "experimental": True,
+            },
+        ],
         "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
         "pfp": settings.profile_picture_b64,
         "timings": {
             "auto_min": settings.auto_min_time,
@@ -386,6 +414,7 @@ def settings_payload():
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+    motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
@@ -415,7 +444,13 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
-    return motion_pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback)
+    return enrich_catalog(
+        motion_pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback),
+        settings.motion_pattern_weights,
+    )
+
+def _motion_preference_payload():
+    return build_motion_preference_payload(_motion_pattern_catalog_payload())
 
 def _motion_pattern_record(pattern_id):
     return motion_pattern_library.get_record(
@@ -423,6 +458,170 @@ def _motion_pattern_record(pattern_id):
         settings.motion_pattern_enabled,
         settings.motion_pattern_feedback,
     )
+
+def _motion_pattern_summary(record, include_actions=False):
+    summary = record.to_summary_dict(include_actions=include_actions)
+    catalog = _motion_pattern_catalog_payload()
+    for pattern in catalog.get("patterns", []):
+        if pattern.get("id") == record.pattern_id:
+            for key, value in pattern.items():
+                if key != "actions":
+                    summary[key] = value
+            break
+    return summary
+
+def _fixed_pattern_id_from_target(target):
+    label = getattr(target, "label", "") or ""
+    parts = set(re.split(r"[^a-z0-9_-]+", label.lower()))
+    for pattern_id in PATTERNS:
+        if pattern_id in parts:
+            return pattern_id
+    return ""
+
+def _remember_motion_pattern_from_target(target):
+    global last_live_motion_pattern_id
+    pattern_id = _fixed_pattern_id_from_target(target)
+    if pattern_id:
+        last_live_motion_pattern_id = pattern_id
+    return pattern_id
+
+def _llm_visible_fixed_pattern(pattern_id):
+    catalog = _motion_pattern_catalog_payload()
+    return any(
+        pattern.get("id") == pattern_id
+        and pattern.get("source") == "fixed"
+        and pattern.get("llm_visible")
+        for pattern in catalog.get("patterns", [])
+    )
+
+def _sanitize_llm_move_for_disabled_patterns(move):
+    if not isinstance(move, dict):
+        return move
+    pattern_id = slugify_pattern_id(move.get("pattern") or "")
+    if pattern_id in PATTERNS and not _llm_visible_fixed_pattern(pattern_id):
+        sanitized = dict(move)
+        sanitized.pop("pattern", None)
+        return sanitized
+    return move
+
+MOTION_DIRECT_REQUEST_PATTERNS = (
+    r"\b(?:faster|slower|slowly|harder|softer|gentler|deeper|shallower)\b",
+    r"\b(?:speed\s+up|slow\s+down|ease\s+up)\b",
+    r"\b(?:stroke|strokes|stroking|suck|flick|flutter|pulse|wave|ramp|sway|tease|edge|hold)\b",
+    r"\b(?:go|move|use|try|switch|change|shift|adjust|make|keep|stay)\b.*\b(?:tip|upper|middle|base|deep|shallow|full|range|length|pattern|rhythm|motion|move|stroke|mode)\b",
+    r"\b(?:change|switch|mix)\s+it\s+up\b",
+    r"\b(?:something|anything)\s+(?:different|new)\b",
+    r"\b(?:another|new|different)\s+(?:motion|move|pattern|rhythm|stroke|mode)\b",
+)
+
+NON_ACTION_INFO_PATTERNS = (
+    r"\b(?:what|why|how)\b.*\b(?:mean|means|meaning|work|works|explain|describe)\b",
+    r"\b(?:explain|describe|define|what is|what are|tell me about)\b",
+)
+
+CHAT_MOTION_CLAIM_PATTERNS = (
+    r"\b(?:i(?:'ll| will| am|'m)|let me|now|okay|ok)\b.*\b(?:move|stroke|switch|change|adjust|speed|slow|deepen|tip|base|pattern|rhythm|motion)\b",
+    r"\b(?:switching|changing|adjusting|moving|stroking|speeding|slowing)\b",
+)
+
+def _looks_like_motion_request(text):
+    clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
+    if not clean:
+        return False
+    if any(re.search(pattern, clean) for pattern in NON_ACTION_INFO_PATTERNS):
+        if not any(re.search(pattern, clean) for pattern in MOTION_DIRECT_REQUEST_PATTERNS[:3]):
+            return False
+    return any(re.search(pattern, clean) for pattern in MOTION_DIRECT_REQUEST_PATTERNS)
+
+def _chat_claims_motion_change(text):
+    clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
+    return any(re.search(pattern, clean) for pattern in CHAT_MOTION_CLAIM_PATTERNS)
+
+def _target_has_motion_effect(current, target):
+    if not target:
+        return False
+    if target.motion_program:
+        return True
+    label = (target.label or "").lower()
+    if any(pattern_id in label for pattern_id in PATTERNS):
+        return True
+    current = current.rounded()
+    target = target.rounded()
+    return (
+        current.speed != target.speed
+        or current.depth != target.depth
+        or current.stroke_range != target.stroke_range
+    )
+
+def _target_from_llm_response_move(response, current):
+    if not isinstance(response, dict):
+        return None
+    move = response.get("move")
+    if not move:
+        return None
+    sanitized = _sanitize_llm_move_for_disabled_patterns(move)
+    return motion.sanitizer.from_llm_move(sanitized, current)
+
+def _repair_llm_motion_response_if_needed(user_input, response, context, current):
+    if not isinstance(response, dict):
+        return response, False
+    target = _target_from_llm_response_move(response, current)
+    needs_repair = (
+        (_looks_like_motion_request(user_input) or _chat_claims_motion_change(response.get("chat")))
+        and not _target_has_motion_effect(current, target)
+    )
+    if not needs_repair:
+        return response, False
+    try:
+        repaired = llm.repair_motion_response(user_input, response, context)
+    except Exception as exc:
+        print(f"[WARN] LLM motion repair failed: {exc}")
+        return response, False
+    if not isinstance(repaired, dict):
+        print(f"[WARN] LLM motion repair returned non-dict response: {repaired!r}")
+        return response, False
+    return repaired, True
+
+def _apply_llm_response_move(response, current):
+    target = _target_from_llm_response_move(response, current)
+    if not _target_has_motion_effect(current, target):
+        return None
+    motion.apply_generated_target(target)
+    return target
+
+def _record_motion_pattern_feedback(pattern_id, rating):
+    record = _motion_pattern_record(pattern_id)
+    if not record:
+        return None
+    old_feedback = dict(settings.motion_pattern_feedback.get(record.pattern_id) or {
+        "thumbs_up": 0,
+        "neutral": 0,
+        "thumbs_down": 0,
+    })
+    feedback = dict(old_feedback)
+    feedback[rating] = int(feedback.get(rating, 0)) + 1
+    settings.motion_pattern_feedback[record.pattern_id] = feedback
+    auto_disabled = False
+    if record.source == "fixed":
+        current_weight = settings.motion_pattern_weights.get(record.pattern_id, feedback_weight(old_feedback))
+        settings.motion_pattern_weights[record.pattern_id] = adjust_weight_for_feedback(
+            current_weight,
+            rating,
+            feedback,
+        )
+    if rating == "thumbs_down" and should_auto_disable(feedback):
+        settings.motion_pattern_enabled[record.pattern_id] = False
+        if record.source == "fixed":
+            settings.motion_pattern_weights[record.pattern_id] = 0
+        auto_disabled = True
+    settings.save()
+    updated = _motion_pattern_record(record.pattern_id)
+    return {
+        "pattern": updated,
+        "auto_disabled": auto_disabled,
+        "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
+    }
 
 def _motion_training_snapshot():
     with motion_training_lock:
@@ -607,8 +806,10 @@ def get_current_context():
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
+        'motion_preferences': _motion_preference_payload()["prompt"],
         'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,
         'last_depth_pos': handy.last_depth_pos, 'last_stroke_range': handy.last_stroke_range,
+        'min_speed': settings.min_speed, 'max_speed': settings.max_speed,
         'use_long_term_memory': use_long_term_memory,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
@@ -638,6 +839,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
     _stop_motion_training()
     
     user_signal_event.clear()
+    mode_message_event.clear()
     mode_message_queue.clear()
     if mode_name == 'edging':
         edging_start_time = time.time()
@@ -660,6 +862,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         'send_message': add_message_to_queue, 'get_context': get_current_context,
         'get_timings': get_timings, 'on_stop': on_stop, 'update_mood': update_mood,
         'user_signal_event': user_signal_event,
+        'message_event': mode_message_event,
         'message_queue': mode_message_queue
     }
     auto_mode_active_task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
@@ -684,7 +887,7 @@ def _konami_code_action():
     message = f"Kept you waiting, huh?<pre>{SNAKE_ASCII}</pre>"
     add_message_to_queue(message)
 
-def _handle_chat_commands(text):
+def _handle_chat_commands(text, allow_motion=True):
     intent = intent_matcher.parse(text, motion.current_target())
     if intent.kind == "stop":
         if auto_mode_active_task: auto_mode_active_task.stop()
@@ -707,10 +910,18 @@ def _handle_chat_commands(text):
         start_background_mode(milking_mode_logic, "You're so close... I'm taking over completely now.", mode_name='milking')
         return True, jsonify({"status": "milking_started"})
     if intent.kind == "move" and intent.target:
+        if not allow_motion:
+            return False, None
         motion.apply_generated_target(intent.target)
+        _remember_motion_pattern_from_target(intent.target)
         add_message_to_queue("Adjusting.", add_to_history=False)
         return True, jsonify({"status": "move_applied", "matched": intent.matched})
     return False, None
+
+def _relay_message_to_active_mode(user_input):
+    mode_message_queue.append(user_input)
+    mode_message_event.set()
+    return jsonify({"status": "message_relayed_to_active_mode"})
 
 @app.route('/send_message', methods=['POST'])
 def handle_user_message():
@@ -728,15 +939,17 @@ def handle_user_message():
 
     chat_history.append({"role": "user", "content": user_input})
     
-    handled, response = _handle_chat_commands(user_input.lower())
+    handled, response = _handle_chat_commands(user_input.lower(), allow_motion=not auto_mode_active_task)
     if handled: return response
 
     if auto_mode_active_task:
-        mode_message_queue.append(user_input)
-        return jsonify({"status": "message_relayed_to_active_mode"})
-    
+        return _relay_message_to_active_mode(user_input)
+
+    context = get_current_context()
+    current_before_llm = motion.current_target()
+    motion_repaired = False
     try:
-        llm_response = llm.get_chat_response(chat_history, get_current_context())
+        llm_response = llm.get_chat_response(chat_history, context)
     except Exception as exc:
         print(f"[ERROR] LLM request failed: {exc}")
         llm_response = {
@@ -751,6 +964,12 @@ def handle_user_message():
             "move": None,
             "new_mood": None,
         }
+    llm_response, motion_repaired = _repair_llm_motion_response_if_needed(
+        user_input,
+        llm_response,
+        context,
+        current_before_llm,
+    )
     
     if special_persona_mode is not None:
         special_persona_interactions_left -= 1
@@ -769,9 +988,18 @@ def handle_user_message():
         queue_message=False,
     )
     if new_mood := llm_response.get("new_mood"): global current_mood; current_mood = new_mood
-    if not auto_mode_active_task and (move := llm_response.get("move")):
-        motion.apply_llm_move(move)
-    return jsonify({"status": "ok", "chat": chat_text, "chat_queued": False})
+    motion_applied = False
+    if not auto_mode_active_task:
+        target = _apply_llm_response_move(llm_response, current_before_llm)
+        motion_applied = target is not None
+        _remember_motion_pattern_from_target(target)
+    return jsonify({
+        "status": "ok",
+        "chat": chat_text,
+        "chat_queued": False,
+        "motion_applied": motion_applied,
+        "motion_repaired": motion_repaired,
+    })
 
 @app.route('/check_settings')
 def check_settings_route():
@@ -781,12 +1009,27 @@ def check_settings_route():
 def motion_patterns_route():
     return jsonify(_motion_pattern_catalog_payload())
 
+@app.route('/motion_preferences')
+def motion_preferences_route():
+    payload = _motion_preference_payload()
+    payload["status"] = "success"
+    return jsonify(payload)
+
+@app.route('/motion_preferences/reset', methods=['POST'])
+def reset_motion_preferences_route():
+    settings.motion_pattern_feedback = {}
+    settings.motion_pattern_weights = {}
+    settings.save()
+    payload = _motion_preference_payload()
+    payload["status"] = "success"
+    return jsonify(payload)
+
 @app.route('/motion_patterns/<pattern_id>')
 def motion_pattern_detail_route(pattern_id):
     record = _motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
+    return jsonify({"status": "success", "pattern": _motion_pattern_summary(record, include_actions=True)})
 
 @app.route('/motion_patterns/<pattern_id>/export')
 def export_motion_pattern_route(pattern_id):
@@ -829,7 +1072,7 @@ def import_motion_pattern_route():
         record = motion_pattern_library.import_payload(payload, filename=filename)
     except PatternValidationError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
-    return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
+    return jsonify({"status": "success", "pattern": _motion_pattern_summary(record, include_actions=True)})
 
 @app.route('/motion_patterns/save_generated', methods=['POST'])
 def save_generated_motion_pattern_route():
@@ -852,8 +1095,9 @@ def save_generated_motion_pattern_route():
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({
         "status": "success",
-        "pattern": record.to_summary_dict(include_actions=True),
+        "pattern": _motion_pattern_summary(record, include_actions=True),
         "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
     })
 
 @app.route('/motion_patterns/<pattern_id>/enabled', methods=['POST'])
@@ -867,8 +1111,27 @@ def set_motion_pattern_enabled_route(pattern_id):
     updated = _motion_pattern_record(record.pattern_id)
     return jsonify({
         "status": "success",
-        "pattern": updated.to_summary_dict(include_actions=True),
+        "pattern": _motion_pattern_summary(updated, include_actions=True),
         "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
+    })
+
+@app.route('/motion_patterns/<pattern_id>/weight', methods=['POST'])
+def set_motion_pattern_weight_route(pattern_id):
+    data = _request_json()
+    record = _motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    if record.source != "fixed":
+        return jsonify({"status": "error", "message": "Only fixed patterns have LLM weights."}), 400
+    settings.motion_pattern_weights[record.pattern_id] = clamp_weight(data.get("weight"))
+    settings.save()
+    updated = _motion_pattern_record(record.pattern_id)
+    return jsonify({
+        "status": "success",
+        "pattern": _motion_pattern_summary(updated, include_actions=True),
+        "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
     })
 
 @app.route('/motion_training/status')
@@ -904,30 +1167,27 @@ def motion_training_feedback_route(pattern_id):
     rating = str(data.get("rating", "")).strip().lower()
     if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
         return jsonify({"status": "error", "message": "Feedback must be thumbs_up, neutral, or thumbs_down."}), 400
-    record = _motion_pattern_record(pattern_id)
-    if not record:
+    result = _record_motion_pattern_feedback(pattern_id, rating)
+    if not result:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    feedback = dict(settings.motion_pattern_feedback.get(record.pattern_id) or {
-        "thumbs_up": 0,
-        "neutral": 0,
-        "thumbs_down": 0,
-    })
-    feedback[rating] = int(feedback.get(rating, 0)) + 1
-    settings.motion_pattern_feedback[record.pattern_id] = feedback
-    settings.save()
-    updated = _motion_pattern_record(record.pattern_id)
+    updated = result["pattern"]
+    suffix = ""
+    if result["auto_disabled"]:
+        suffix = f" Disabled after {THUMBS_DOWN_DISABLE_THRESHOLD} thumbs down ratings."
     _set_motion_training_state(
-        pattern_id=record.pattern_id,
-        pattern_name=record.name,
+        pattern_id=updated.pattern_id,
+        pattern_name=updated.name,
         last_feedback=rating,
-        message=f"Saved {rating.replace('_', ' ')} feedback for {record.name}.",
+        message=f"Saved {rating.replace('_', ' ')} feedback for {updated.name}.{suffix}",
         preview=False,
     )
     return jsonify({
         "status": "success",
-        "pattern": updated.to_summary_dict(include_actions=True),
-        "motion_patterns": _motion_pattern_catalog_payload(),
+        "pattern": _motion_pattern_summary(updated, include_actions=True),
+        "motion_patterns": result["motion_patterns"],
+        "motion_preferences": result["motion_preferences"],
         "motion_training": _motion_training_snapshot(),
+        "auto_disabled": result["auto_disabled"],
     })
 
 @app.route('/reset_settings', methods=['POST'])
@@ -1264,6 +1524,17 @@ def set_speed_limits_route():
         "max_speed": settings.max_speed,
     })
 
+@app.route('/set_motion_backend', methods=['POST'])
+def set_motion_backend_route():
+    data = _request_json()
+    settings.motion_backend = settings._normalize_motion_backend(data.get("motion_backend"))
+    motion.set_backend(settings.motion_backend)
+    settings.save()
+    return jsonify({
+        "status": "success",
+        "motion_backend": settings.motion_backend,
+    })
+
 def _timing_pair(data, min_key, max_key, default_min, default_max):
     try:
         first = float(data.get(min_key, default_min))
@@ -1293,6 +1564,13 @@ def set_mode_timings_route():
         },
     })
 
+def _rate_last_live_motion_pattern(rating):
+    if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
+        return None
+    if not last_live_motion_pattern_id:
+        return None
+    return _record_motion_pattern_feedback(last_live_motion_pattern_id, rating)
+
 @app.route('/like_last_move', methods=['POST'])
 def like_last_move_route():
     last_speed = handy.last_relative_speed; last_depth = handy.last_depth_pos
@@ -1300,8 +1578,55 @@ def like_last_move_route():
     sp_range = [max(0, last_speed - 5), min(100, last_speed + 5)]; dp_range = [max(0, last_depth - 5), min(100, last_depth + 5)]
     new_pattern = {"name": pattern_name, "sp_range": [int(p) for p in sp_range], "dp_range": [int(p) for p in dp_range], "moods": [current_mood], "score": 1}
     settings.session_liked_patterns.append(new_pattern)
+    result = _rate_last_live_motion_pattern("thumbs_up")
     add_message_to_queue(f"(I'll remember that you like '{pattern_name}')", add_to_history=False)
-    return jsonify({"status": "boosted", "name": pattern_name})
+    response = {"status": "boosted", "name": pattern_name}
+    if result:
+        response.update({
+            "pattern": _motion_pattern_summary(result["pattern"]),
+            "motion_patterns": result["motion_patterns"],
+            "motion_preferences": result["motion_preferences"],
+        })
+    return jsonify(response)
+
+@app.route('/dislike_last_move', methods=['POST'])
+def dislike_last_move_route():
+    result = _rate_last_live_motion_pattern("thumbs_down")
+    if not result:
+        return jsonify({
+            "status": "no_pattern",
+            "message": "No fixed motion pattern is active to rate.",
+            "motion_preferences": _motion_preference_payload(),
+        })
+    pattern = result["pattern"]
+    message = f"Saved thumbs down feedback for {pattern.name}."
+    if result["auto_disabled"]:
+        message += f" Disabled after {THUMBS_DOWN_DISABLE_THRESHOLD} thumbs down ratings."
+    add_message_to_queue(f"({message})", add_to_history=False)
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "pattern": _motion_pattern_summary(pattern),
+        "motion_patterns": result["motion_patterns"],
+        "motion_preferences": result["motion_preferences"],
+        "auto_disabled": result["auto_disabled"],
+    })
+
+@app.route('/motion_feedback/last', methods=['POST'])
+def rate_last_motion_pattern_route():
+    data = _request_json()
+    rating = str(data.get("rating", "")).strip().lower()
+    result = _rate_last_live_motion_pattern(rating)
+    if not result:
+        return jsonify({"status": "error", "message": "No fixed motion pattern is active to rate."}), 400
+    pattern = result["pattern"]
+    return jsonify({
+        "status": "success",
+        "pattern": _motion_pattern_summary(pattern),
+        "motion_patterns": result["motion_patterns"],
+        "motion_preferences": result["motion_preferences"],
+        "auto_disabled": result["auto_disabled"],
+    })
 
 @app.route('/start_edging_mode', methods=['POST'])
 def start_edging_route():

@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -99,6 +100,12 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('href="/static/app.css"', page)
             self.assertIn('src="/static/app.js"', page)
             self.assertIn('type="module"', page)
+            self.assertIn('id="like-this-move-btn"', page)
+            self.assertIn('id="dislike-this-move-btn"', page)
+            self.assertIn("Preset Modes", page)
+            self.assertIn('class="preset-mode-stack"', page)
+            self.assertIn('class="sidebar-stop-section"', page)
+            self.assertNotIn("DANGER ZONE", page)
             self.assertNotIn("<style>", page)
             self.assertNotIn("<script>", page)
         finally:
@@ -164,6 +171,136 @@ class WebStaticAssetTests(unittest.TestCase):
             messages_for_ui.clear()
             chat_history.clear()
 
+    def test_send_message_repairs_motion_claim_without_move(self):
+        from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_handy_state = (
+            handy.last_relative_speed,
+            handy.last_depth_pos,
+            handy.last_stroke_range,
+        )
+        captured_targets = []
+        messages_for_ui.clear()
+        chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            handy.last_relative_speed = 30
+            handy.last_depth_pos = 40
+            handy.last_stroke_range = 50
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I'll switch to a new rhythm.",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(llm, "repair_motion_response", return_value={
+                "chat": "Switching to a quick tip flick.",
+                "move": {"zone": "tip", "pattern": "flick"},
+                "new_mood": "Teasing",
+            }) as repair, mock.patch.object(motion, "apply_generated_target", side_effect=captured_targets.append), \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "switch to another rhythm",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["chat"], "Switching to a quick tip flick.")
+            self.assertTrue(data["motion_repaired"])
+            self.assertTrue(data["motion_applied"])
+            repair.assert_called_once()
+            self.assertEqual(len(captured_targets), 1)
+            self.assertIn("flick", captured_targets[0].label)
+            self.assertEqual(captured_targets[0].depth, 10)
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            (
+                handy.last_relative_speed,
+                handy.last_depth_pos,
+                handy.last_stroke_range,
+            ) = original_handy_state
+            messages_for_ui.clear()
+            chat_history.clear()
+
+    def test_send_message_does_not_repair_non_action_question(self):
+        from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        messages_for_ui.clear()
+        chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "The tip is the shallow end of the stroke range.",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(llm, "repair_motion_response") as repair, \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "what does tip mean?",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertFalse(data["motion_repaired"])
+            self.assertFalse(data["motion_applied"])
+            repair.assert_not_called()
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            messages_for_ui.clear()
+            chat_history.clear()
+
+    def test_send_message_relay_motion_feedback_to_active_mode(self):
+        from strokegpt.web import audio, auto_mode_active_task, chat_history, handy
+        from strokegpt.web import messages_for_ui, mode_message_event, mode_message_queue, motion, settings
+        import strokegpt.web as web
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_task = auto_mode_active_task
+        messages_for_ui.clear()
+        chat_history.clear()
+        mode_message_queue.clear()
+        mode_message_event.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            web.auto_mode_active_task = SimpleNamespace(name="edging", stop=lambda: None)
+            with mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "focus on the tip",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "message_relayed_to_active_mode")
+            self.assertEqual(list(mode_message_queue), ["focus on the tip"])
+            self.assertTrue(mode_message_event.is_set())
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            web.auto_mode_active_task = original_task
+            mode_message_queue.clear()
+            mode_message_event.clear()
+            messages_for_ui.clear()
+            chat_history.clear()
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:
@@ -179,6 +316,10 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="motion-speed-min-slider"', page)
             self.assertIn('id="motion-speed-max-slider"', page)
             self.assertIn('id="save-motion-speed-limits"', page)
+            self.assertIn('id="motion-backend-select"', page)
+            self.assertIn('id="save-motion-backend-btn"', page)
+            self.assertIn('id="motion-backend-status"', page)
+            self.assertIn('Flexible position/script (experimental)', page)
             self.assertIn('id="motion-pattern-list"', page)
             self.assertIn('id="refresh-motion-patterns-btn"', page)
             self.assertIn('id="import-motion-pattern-btn"', page)
@@ -208,6 +349,7 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="save-motion-training-pattern-btn"', page)
             self.assertIn('id="motion-training-feedback-up"', page)
             self.assertIn('Preview: Flexible position', page)
+            self.assertIn('id="app-motion-backend-badge"', page)
             self.assertIn('App motion: HAMP continuous', page)
             self.assertIn('data-settings-tab="advanced"', page)
             self.assertIn('id="settings-tab-advanced"', page)
@@ -234,9 +376,13 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(".my-button:disabled", css)
             self.assertIn("#rhythm-canvas { display: block; width: 100%; height: 100%; }", css)
             self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
+            self.assertIn(".settings-help", css)
             self.assertIn(".model-actions", css)
             self.assertIn(".motion-pattern-row", css)
             self.assertIn(".motion-pattern-list", css)
+            self.assertIn("#dislike-this-move-btn", css)
+            self.assertIn(".motion-pattern-weight-control", css)
+            self.assertIn(".motion-pattern-weight-field", css)
             self.assertIn(".motion-training-workspace", css)
             self.assertIn(".motion-training-status", css)
             self.assertIn(".motion-training-preview-wrap", css)
@@ -254,6 +400,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(".motion-training-save-row", css)
             self.assertIn(".motion-training-feedback-row", css)
             self.assertIn(".setup-slider", css)
+            self.assertIn(".preset-mode-stack", css)
+            self.assertIn(".sidebar-stop-section", css)
             self.assertIn("@media (max-width: 760px)", css)
         finally:
             response.close()
@@ -293,10 +441,35 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("data.chat_queued === false", script)
         self.assertIn("await pollChatUpdates()", script)
 
+    def test_server_motion_request_detector_accepts_slowly(self):
+        from strokegpt.web import _looks_like_motion_request
+
+        self.assertTrue(_looks_like_motion_request("slowly focus on the tip"))
+
+    def test_llm_context_includes_configured_speed_limits(self):
+        from strokegpt.web import get_current_context, settings
+
+        original_min_speed = settings.min_speed
+        original_max_speed = settings.max_speed
+        try:
+            settings.min_speed = 15
+            settings.max_speed = 55
+
+            context = get_current_context()
+
+            self.assertEqual(context["min_speed"], 15)
+            self.assertEqual(context["max_speed"], 55)
+        finally:
+            settings.min_speed = original_min_speed
+            settings.max_speed = original_max_speed
+
     def test_frontend_js_handles_motion_pattern_list_controls(self):
         script = self.frontend_scripts()
 
         self.assertIn("function renderMotionPatterns", script)
+        self.assertIn("function renderMotionBackendOptions", script)
+        self.assertIn("/set_motion_backend", script)
+        self.assertIn("Flexible position/script", script)
         self.assertIn("refreshMotionPatterns", script)
         self.assertIn("/motion_patterns", script)
         self.assertIn("motionPatternList.replaceChildren", script)
@@ -322,6 +495,14 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("/motion_training/stop", script)
         self.assertIn("sendMotionTrainingFeedback", script)
         self.assertIn("thumbs_up", script)
+        self.assertIn("function createPatternWeightControl", script)
+        self.assertIn("function setMotionPatternWeight", script)
+        self.assertIn("/motion_patterns/${encodeURIComponent(patternId)}/weight", script)
+        self.assertIn("motion-training-number-step-up", script)
+        self.assertIn("motion-training-number-step-down", script)
+        self.assertIn("function dislikeLastMove", script)
+        self.assertIn("/dislike_last_move", script)
+        self.assertIn("weight ${pattern.weight", script)
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
@@ -524,6 +705,33 @@ class WebStaticAssetTests(unittest.TestCase):
             ) = original
             handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
             settings.save()
+
+    def test_motion_backend_can_be_selected_and_saved(self):
+        from strokegpt.web import motion, settings
+
+        original_setting = settings.motion_backend
+        original_controller = motion.backend
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_motion_backend", json={"motion_backend": "position"})
+                self.assertEqual(response.status_code, 200)
+                data = response.get_json()
+                self.assertEqual(data["motion_backend"], "position")
+                self.assertEqual(settings.motion_backend, "position")
+                self.assertEqual(motion.backend, "position")
+
+                response = self.client.get("/check_settings")
+                payload = response.get_json()
+                self.assertEqual(payload["motion_backend"], "position")
+                self.assertTrue(any(item["experimental"] for item in payload["motion_backends"] if item["id"] == "position"))
+
+                response = self.client.post("/set_motion_backend", json={"motion_backend": "bad"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["motion_backend"], "hamp")
+                self.assertEqual(motion.backend, "hamp")
+        finally:
+            settings.motion_backend = original_setting
+            motion.set_backend(original_controller)
 
     def test_ollama_model_can_be_selected_and_saved(self):
         from strokegpt.web import llm, settings

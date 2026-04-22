@@ -8,6 +8,55 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Pattern Preference Integration
+--------------------------------------------------
+
+Branch: codex-motion-preference-integration
+
+- Added LLM-facing fixed motion pattern weights derived from thumbs feedback,
+  with concise prompt instructions that only expose enabled nonzero-weight
+  fixed patterns.
+- Added inline fixed-pattern weight controls to the Motion Patterns list, using
+  the same compact stepper field style as the motion transform controls.
+- Added a Motion settings backend selector for recommended HAMP continuous
+  app motion versus experimental flexible position/script playback.
+- Added a one-shot LLM motion repair pass when a response claims or appears to
+  require motion but provides no usable movement target, while still allowing
+  conversational prompts to produce no device action.
+- Rebalanced spatial mapping so ordinary tip, shaft, and base requests prefer
+  broader regional travel, with shaft treated as the in-between region and
+  tight endpoint motion reserved for explicit tight/flick/flutter/hold cues.
+- Added `shaft` as a soft-anchor midpoint label while preserving `middle` and
+  `mid` aliases for older prompts and saved patterns.
+- Prevented area-only focus commands from inheriting a previous max-speed
+  state, and lowered Handy velocity before changing slide bounds during
+  speed-reducing redirects.
+- Routed motion feedback during active Auto/Edge/Milk modes into the mode
+  planner instead of applying it as a one-off command that the mode could
+  immediately overwrite, and wake the mode loop when feedback arrives.
+- Added `slowly` as a deterministic slow-speed cue so area focus commands like
+  "slowly focus on the tip" apply the same control path as "slower".
+- Added LLM prompt guidance that maps common speed wording such as "slowly",
+  "quickly", and "as fast as you can" into explicit `sp` values derived from
+  the user's configured speed range alongside zone/depth/range fields.
+- Reduced preset mode startup latency by removing the old one-second startup
+  pause before scripted mode movement begins.
+- Replaced the sidebar Danger Zone grouping with a Preset Modes box for Edge
+  Me and Milk Me, leaving the emergency stop button as its own standalone
+  control.
+- Added a chat-level thumbs down button opposite the existing thumbs up button,
+  wired to the last live fixed motion pattern when one is known.
+- Automatically disable a motion pattern in settings after three thumbs down
+  ratings and reflect that state in pattern lists, prompt preferences, and
+  training feedback responses.
+- Kept disabled LLM-selected fixed patterns from reaching motion execution while
+  leaving speed limits, stop handling, and existing MotionController paths
+  intact.
+- Added regression coverage for preference persistence, LLM prompt text,
+  weighted catalog output, chat thumbs-down feedback, auto-disable behavior,
+  disabled-pattern sanitization, and frontend asset wiring.
+
+
 2026-04-22 - PR #26 - Add Motion Pattern Transforms
 ----------------------------------------------------
 
@@ -448,7 +497,7 @@ Merge commit: 72c1f42
 - Documented runtime requirements, local run commands, project layout, voice
   setup, model settings, motion settings, and test commands.
 - Preserved attribution to the original StrokeGPT repository and called out
-  rough edges that remain unfinished.
+  remaining rough edges.
 
 
 2026-04-21 - PR #1 - Refactor StrokeGPT Into ReVibed Prototype
