@@ -14,22 +14,7 @@ Complexity key:
 
 ## Best Next Targets
 
-### 1. Motion Observability And Redirect Diagnostics (S/M)
-
-Why next: it will make device behavior easier to understand before adding more
-generation logic.
-
-- Add Handy position visualization showing reported position, target range,
-  tip/base calibration, active backend, and recent motion path.
-- Add a compact live motion inspector for current speed, depth, range, pattern,
-  backend, and whether the command came from deterministic chat, LLM JSON,
-  repair, training preview, or background mode.
-- Add user-facing diagnostics for redirect behavior: last commanded speed,
-  last slide bounds, and whether a speed-reducing redirect lowered velocity
-  before changing range.
-- Add focused tests for visualization payloads and command-source reporting.
-
-### 2. Motion Training Editor Depth (M)
+### 1. Motion Training Editor Depth (M)
 
 Why next: the training workspace already exists, so richer editing can build on
 the current surface without crowding Settings.
@@ -45,7 +30,7 @@ the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 3. Soft-Anchor Pattern Authoring (M/L)
+### 2. Soft-Anchor Pattern Authoring (M/L)
 
 Why next: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable.
@@ -60,7 +45,7 @@ control while staying inspectable.
   of inventing hidden free-form behavior.
 - Keep anchors as soft waypoints, not hard stops.
 
-### 4. Motion Style Preferences (M)
+### 3. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift.
@@ -74,13 +59,16 @@ drift.
 - Let users reset learned motion feedback and style preferences without a full
   settings reset.
 
-### 5. Runtime And Setup Diagnostics (M)
+### 4. Runtime And Setup Diagnostics (M)
 
 Why next: it reduces support friction and makes model/device state explicit.
 
 - Add a diagnostics tab for Ollama status, selected model install state, local
   voice model state, Torch/CUDA status, Handy key presence, active port, and
   current motion backend.
+- Add optional live Handy position polling where it is useful and does not
+  create excessive device/API traffic, so the sidebar position indicator can
+  compare reported position against commanded targets.
 - Add a setup verifier command that checks Python, dependencies, Ollama,
   Chatterbox availability, Torch/CUDA, port availability, and writable
   user-data folders.
@@ -90,7 +78,7 @@ Why next: it reduces support friction and makes model/device state explicit.
   missing.
 - Keep optional model downloads as explicit UI actions with visible status.
 
-### 6. Local Voice Control MVP (L)
+### 5. Local Voice Control MVP (L)
 
 Why next: voice control is the largest user-facing feature, but it should ship
 as push-to-talk before always-on listening.
@@ -123,7 +111,7 @@ Candidate local ASR providers:
   4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 7. Story Mode (L/XL)
+### 6. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -137,7 +125,7 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
-### 8. Optional Runtime And Packaging Work (XL)
+### 7. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.

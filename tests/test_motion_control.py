@@ -317,6 +317,22 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreater(len(handy.moves), 1)
         self.assertEqual(handy.moves[-1], (70, 60, 80))
 
+    def test_controller_records_observability_trace(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+
+        controller.apply_target(MotionTarget(70, 60, 80, label="wide stroke"), source="unit test")
+
+        snapshot = controller.observability_snapshot()
+        self.assertEqual(snapshot["backend"], "hamp")
+        self.assertEqual(snapshot["source"], "unit test")
+        self.assertEqual(snapshot["label"], "wide stroke")
+        self.assertGreater(len(snapshot["trace"]), 1)
+        self.assertEqual(snapshot["trace"][-1]["depth"], 60)
+        self.assertEqual(snapshot["trace"][-1]["range"], 80)
+        self.assertEqual(snapshot["trace"][-1]["physical_speed"], 70)
+        self.assertFalse(snapshot["playback_active"])
+
     def test_controller_expands_llm_anchor_program(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
@@ -395,6 +411,9 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(all(move[3] is not None for move in handy.position_moves))
         self.assertEqual(handy.last_stroke_range, 40)
         self.assertTrue(handy.stopped)
+        snapshot = controller.observability_snapshot()
+        self.assertEqual(snapshot["source"], "pattern preview")
+        self.assertEqual(snapshot["trace"][-1]["label"], "preview stopped")
 
     def test_apply_position_frames_uses_final_stop_on_target_without_stop_after(self):
         handy = FakeHandy()

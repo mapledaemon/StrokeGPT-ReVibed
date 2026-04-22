@@ -8,7 +8,9 @@ behavior:
 - Keep Handy speed limits and stop behavior reliable while improving motion
   expressiveness.
 - Make LLM-to-motion mapping more visible, especially tip/base, stroke length,
-  range, smooth alternation, and speed wording.
+  range, smooth alternation, speed wording, and the resulting live motion path.
+- Keep current motion state visible through compact speed/depth bars and a
+  sidebar Handy position indicator.
 - Keep motion pattern preferences user-visible through settings weights,
   thumbs feedback, enable/disable controls, and shareable pattern files.
 - Keep HAMP continuous motion as the default while preserving the experimental
@@ -21,14 +23,15 @@ behavior:
 - Add user-visible preference and memory controls so LLM motion adjustments can
   be reviewed, edited, and reset.
 
-See [ROADMAP.md](ROADMAP.md) for planned work such as local voice control,
-Handy position visualization, motion style preferences, and preference/memory
-editing.
+See [ROADMAP.md](ROADMAP.md) for planned work such as deeper motion training
+editing, soft-anchor authoring, motion style preferences, local voice control,
+and preference/memory editing. See [KNOWN_PROBLEMS.md](KNOWN_PROBLEMS.md) for
+current visible rough edges that are not blocking the active branch.
 
 ## Status
 
 This is an experimental local app, not a finished release. Expect rough edges in
-the UI, local voice setup, motion preference handling, and real-device tuning.
+the UI, local voice setup, motion tuning, and real-device validation.
 
 The app currently targets Windows first, with equivalent Python setup instructions for macOS and Linux.
 

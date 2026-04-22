@@ -299,7 +299,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False):
+        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
             calls.append({"frames": frames, "stop_after": stop_after})
             if stop_after:
                 self.web.motion.stop()
@@ -326,7 +326,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False):
+        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
             calls.append({"frames": frames, "stop_after": stop_after})
             if stop_after:
                 self.web.motion.stop()
@@ -375,7 +375,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False):
+        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
             calls.append(tuple(round(frame.target.depth) for frame in frames))
             if stop_after:
                 self.web.motion.stop()

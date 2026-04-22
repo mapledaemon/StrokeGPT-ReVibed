@@ -8,10 +8,42 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Pattern Preference Integration
---------------------------------------------------
+Unreleased - Motion Observability
+---------------------------------
 
+Branch: codex-motion-observability
+
+- Added a live motion observability payload to `/get_status` with active
+  backend, command source, label, recent command trace, playback state, and
+  Handy diagnostics.
+- Kept the bottom visualizer compact with speed and depth bars, and moved chat
+  thumbs feedback buttons into that control row so they do not overlap the chat
+  area.
+- Added a Handy-style vertical cylinder indicator in the sidebar above the
+  standalone emergency stop section, with the current position sliding through
+  the active stroke range for both HAMP and experimental position/script
+  playback.
+- Fixed the cylinder animation clock so it updates continuously between status
+  polls instead of jumping from mismatched browser and server timestamps.
+- Recorded command sources for LLM motion, repaired LLM motion, deterministic
+  chat commands, motion training previews, background modes, backend changes,
+  and stop events.
+- Added Handy diagnostics for relative speed, physical velocity, depth, range,
+  calibration, cached slide bounds, cached velocity, HAMP state, and mode.
+- Added `KNOWN_PROBLEMS.md` to track current visualizer alignment/latency and
+  UI formatting rough edges separately from completed changelog items.
+- Added regression coverage for diagnostics, controller trace recording,
+  status payloads, and frontend visualizer wiring.
+
+
+2026-04-22 - PR #28 - Integrate Motion Pattern Preferences
+----------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/28
 Branch: codex-motion-preference-integration
+Head commit: 4bfb6a8
+Merge commit: 606eefe
+
 
 - Added LLM-facing fixed motion pattern weights derived from thumbs feedback,
   with concise prompt instructions that only expose enabled nonzero-weight
@@ -55,6 +87,19 @@ Branch: codex-motion-preference-integration
 - Added regression coverage for preference persistence, LLM prompt text,
   weighted catalog output, chat thumbs-down feedback, auto-disable behavior,
   disabled-pattern sanitization, and frontend asset wiring.
+
+
+2026-04-22 - PR #27 - Track Motion Pattern Transforms PR
+--------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/27
+Branch: changelog-pr26-history
+Head commit: 082018f
+Merge commit: 5b42670
+
+- Converted the motion pattern transform changelog entry from an unreleased
+  branch entry into the merged PR #26 entry.
+- Recorded the PR link, branch, head commit, and merge commit for PR #26.
 
 
 2026-04-22 - PR #26 - Add Motion Pattern Transforms
