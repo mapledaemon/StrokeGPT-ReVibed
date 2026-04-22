@@ -8,6 +8,24 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Chat Response Delivery Fix
+---------------------------------------
+
+Branch: codex-chat-response-hang-fix
+
+- Changed direct `/send_message` chat replies to return text to the sending
+  browser tab immediately instead of relying only on the shared `/get_updates`
+  polling queue.
+- Kept generated voice/audio queuing for direct replies while avoiding duplicate
+  chat messages in the polling queue.
+- Added frontend handling that clears the typing indicator for no-key, empty
+  message, active-mode relay, request failure, and model-returned-no-chat cases.
+- Added a backend fallback message when the LLM returns movement data or an
+  unreadable payload without usable chat text, preventing a silent `...` hang.
+- Added regression coverage for missing chat text and frontend non-chat status
+  handling.
+
+
 2026-04-22 - PR #16 - Split Frontend Modules And Track PR #15
 --------------------------------------------------------------
 

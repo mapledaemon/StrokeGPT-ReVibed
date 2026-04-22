@@ -53,6 +53,42 @@ export function addChatMessage(sender, text) {
     el.chatView.scrollTop = el.chatView.scrollHeight;
 }
 
+function clearTypingIndicator(statusMessage = '') {
+    el.typingIndicator.style.display = 'none';
+    if (statusMessage) el.statusText.textContent = statusMessage;
+}
+
+function handleSendMessageStatus(data) {
+    if (!data) {
+        clearTypingIndicator('Message failed before the model could answer. Check the app terminal.');
+        return false;
+    }
+
+    const statusMessages = {
+        no_key_set: 'Set your Handy connection key before chatting.',
+        empty_message: 'Type a message first.',
+        message_relayed_to_active_mode: 'Sent to the active mode.',
+    };
+    if (statusMessages[data.status]) {
+        clearTypingIndicator(statusMessages[data.status]);
+        return false;
+    }
+    if (data.status && data.status !== 'ok') {
+        clearTypingIndicator(data.message || `Message failed: ${data.status}`);
+        return false;
+    }
+    if (data.chat) {
+        clearTypingIndicator();
+        addChatMessage('BOT', data.chat);
+        return true;
+    }
+    if (data.chat_queued === false) {
+        clearTypingIndicator('The model returned no chat text. Check Ollama model status and try again.');
+        return false;
+    }
+    return true;
+}
+
 export async function sendUserMessage(message) {
     const persona = el.personaInput.value.trim();
     if (message.trim() || persona !== state.myPersonaDescription) {
@@ -62,11 +98,12 @@ export async function sendUserMessage(message) {
         D.querySelector('#typing-indicator .speaker-name').textContent = state.aiName;
         el.typingIndicator.style.display = 'flex';
         el.chatView.scrollTop = el.chatView.scrollHeight;
-        await apiCall('/send_message', {
+        const data = await apiCall('/send_message', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({message, key: state.myHandyKey, persona_desc: state.myPersonaDescription}),
         });
+        if (handleSendMessageStatus(data)) await pollChatUpdates();
     }
 }
 
