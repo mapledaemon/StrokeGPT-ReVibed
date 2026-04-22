@@ -3,6 +3,7 @@ import random
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
+from .motion_anchors import AnchorProgram, coerce_anchor_program
 from .motion import MotionTarget
 
 
@@ -42,6 +43,15 @@ class MotionPattern:
 class PatternFrame:
     target: MotionTarget
     delay_factor: float
+
+
+@dataclass(frozen=True)
+class FrameStyle:
+    name: str
+    window_scale: float = 0.3
+    speed_scale: float = 1.0
+    depth_jitter: float = 0.0
+    range_jitter: float = 0.0
 
 
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
@@ -113,6 +123,23 @@ def _interpolate(start: float, end: float, amount: float, method: str = "cosine"
     elif method == "cubic":
         amount = amount * amount * (3.0 - 2.0 * amount)
     return start + (end - start) * amount
+
+
+def minimum_jerk(amount: float) -> float:
+    amount = _clamp(amount, 0.0, 1.0)
+    return 10.0 * amount**3 - 15.0 * amount**4 + 6.0 * amount**5
+
+
+def _catmull_rom(p0: float, p1: float, p2: float, p3: float, amount: float) -> float:
+    amount = _clamp(amount, 0.0, 1.0)
+    amount2 = amount * amount
+    amount3 = amount2 * amount
+    return 0.5 * (
+        2.0 * p1
+        + (-p0 + p2) * amount
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * amount2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * amount3
+    )
 
 
 def inject_intermediate_actions(
@@ -234,6 +261,79 @@ def prepare_pattern_actions(pattern: MotionPattern) -> tuple[PatternAction, ...]
             interpolation="linear",
         )
     return actions
+
+
+def _anchor_segment_pos(
+    values: tuple[float, ...],
+    index: int,
+    amount: float,
+    *,
+    curve: str,
+    softness: float,
+    closed: bool,
+) -> float:
+    current = values[index]
+    next_index = (index + 1) % len(values)
+    following = values[next_index]
+
+    eased = _interpolate(current, following, minimum_jerk(amount), "linear")
+    if curve == "cosine":
+        return _interpolate(current, following, amount, "cosine")
+    if curve != "catmull" or len(values) < 3:
+        return eased
+
+    if closed:
+        previous = values[(index - 1) % len(values)]
+        after = values[(index + 2) % len(values)]
+    else:
+        previous = values[index - 1] if index > 0 else current
+        after = values[index + 2] if index + 2 < len(values) else following
+
+    spline = _clamp(_catmull_rom(previous, current, following, after, amount))
+    return _interpolate(eased, spline, softness, "linear")
+
+
+def prepare_anchor_actions(program: Any, rng: Optional[random.Random] = None) -> tuple[PatternAction, ...]:
+    anchor_program = coerce_anchor_program(program, require_request=False)
+    if anchor_program is None or len(anchor_program.anchors) < 2:
+        return ()
+
+    rng = rng or random.Random()
+    values = tuple(anchor.pos for anchor in anchor_program.anchors)
+    segment_count = len(values) if anchor_program.closed else len(values) - 1
+    if segment_count <= 0:
+        return ()
+
+    segment_ms = int(round(620 / max(0.25, anchor_program.tempo)))
+    sample_interval_ms = anchor_program.sample_interval_ms
+    actions = [PatternAction(0, values[0])]
+    current_time = 0
+
+    for repeat_index in range(anchor_program.repeats):
+        for segment_index in range(segment_count):
+            start_time = current_time
+            sample_count = max(2, math.ceil(segment_ms / sample_interval_ms))
+            for sample_index in range(1, sample_count + 1):
+                amount = sample_index / sample_count
+                pos = _anchor_segment_pos(
+                    values,
+                    segment_index,
+                    amount,
+                    curve=anchor_program.curve,
+                    softness=anchor_program.softness,
+                    closed=anchor_program.closed,
+                )
+                if anchor_program.variation:
+                    pos += rng.uniform(-anchor_program.variation * 6.0, anchor_program.variation * 6.0)
+                actions.append(PatternAction(start_time + int(round(segment_ms * amount)), _clamp(pos)))
+            current_time += segment_ms
+
+        if repeat_index + 1 < anchor_program.repeats and anchor_program.closed:
+            actions.append(PatternAction(current_time, values[0]))
+
+    actions = normalize_actions(actions, min_interval_ms=50)
+    actions = simplify_collinear_actions(actions, position_tolerance=0.45)
+    return limit_action_delta(actions, anchor_program.max_step_delta, interpolation="linear")
 
 
 PATTERNS = {
@@ -396,21 +496,16 @@ def pattern_names() -> tuple[str, ...]:
     return tuple(PATTERNS.keys())
 
 
-def expand_pattern(
-    pattern_name: str,
-    current: MotionTarget,
+def _actions_to_frames(
+    actions: tuple[PatternAction, ...],
     target: MotionTarget,
-    rng: Optional[random.Random] = None,
+    style: FrameStyle,
+    *,
+    rng: random.Random,
 ) -> list[PatternFrame]:
-    pattern = PATTERNS.get((pattern_name or "").lower())
-    if not pattern:
-        return []
-
-    actions = prepare_pattern_actions(pattern)
     if not actions:
         return []
 
-    rng = rng or random.Random()
     target = target.clamped()
     half_range = target.stroke_range / 2.0
     shallow = _clamp(target.depth - half_range)
@@ -433,22 +528,80 @@ def expand_pattern(
         normalized_pos = _clamp(action.pos) / 100.0
         depth = shallow + (deep - shallow) * normalized_pos
         range_wave = 0.75 + abs(normalized_pos - 0.5) * 0.5
-        local_range = max(5.0, min(target.stroke_range, target.stroke_range * pattern.window_scale * range_wave))
-        if pattern.range_jitter:
-            local_range += rng.uniform(-pattern.range_jitter, pattern.range_jitter)
+        local_range = max(5.0, min(target.stroke_range, target.stroke_range * style.window_scale * range_wave))
+        if style.range_jitter:
+            local_range += rng.uniform(-style.range_jitter, style.range_jitter)
         local_range = _clamp(local_range, 5.0, target.stroke_range)
-        if pattern.depth_jitter:
-            depth += rng.uniform(-pattern.depth_jitter, pattern.depth_jitter)
+        if style.depth_jitter:
+            depth += rng.uniform(-style.depth_jitter, style.depth_jitter)
 
         frames.append(
             PatternFrame(
                 MotionTarget(
-                    speed=target.speed * pattern.speed_scale,
+                    speed=target.speed * style.speed_scale,
                     depth=depth,
                     stroke_range=local_range,
-                    label=f"{target.label} {pattern.name} {index + 1}",
+                    label=f"{target.label} {style.name} {index + 1}",
                 ).clamped(),
                 delay_factor=delay_factor,
             )
         )
     return frames
+
+
+def expand_pattern(
+    pattern_name: str,
+    current: MotionTarget,
+    target: MotionTarget,
+    rng: Optional[random.Random] = None,
+) -> list[PatternFrame]:
+    pattern = PATTERNS.get((pattern_name or "").lower())
+    if not pattern:
+        return []
+
+    actions = prepare_pattern_actions(pattern)
+    if not actions:
+        return []
+
+    return _actions_to_frames(
+        actions,
+        target,
+        FrameStyle(
+            name=pattern.name,
+            window_scale=pattern.window_scale,
+            speed_scale=pattern.speed_scale,
+            depth_jitter=pattern.depth_jitter,
+            range_jitter=pattern.range_jitter,
+        ),
+        rng=rng or random.Random(),
+    )
+
+
+def expand_anchor_program(
+    current: MotionTarget,
+    target: MotionTarget,
+    program: Any,
+    rng: Optional[random.Random] = None,
+) -> list[PatternFrame]:
+    anchor_program = coerce_anchor_program(program, require_request=False)
+    if anchor_program is None:
+        return []
+
+    actions = prepare_anchor_actions(anchor_program, rng=rng)
+    if not actions:
+        return []
+
+    window_scale = 0.22 + (1.0 - anchor_program.softness) * 0.18
+    speed_scale = 0.85 + anchor_program.tempo * 0.18
+    return _actions_to_frames(
+        actions,
+        target,
+        FrameStyle(
+            name="anchor_loop",
+            window_scale=window_scale,
+            speed_scale=speed_scale,
+            depth_jitter=anchor_program.variation * 4.0,
+            range_jitter=anchor_program.variation * 2.5,
+        ),
+        rng=rng or random.Random(),
+    )

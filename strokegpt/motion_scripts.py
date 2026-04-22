@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .motion import MotionTarget
-from .motion_patterns import expand_pattern
+from .motion_patterns import expand_anchor_program, expand_pattern
 
 
 @dataclass(frozen=True)
@@ -130,6 +130,9 @@ class MotionScriptPlanner:
 
     def _feedback_steps(self, current, target):
         target = target.clamped()
+        if target.motion_program:
+            return self._anchor_feedback_steps(current, target)
+
         pattern = self._pattern_from_label(target.label)
         if pattern:
             return self._pattern_feedback_steps(current, target, pattern)
@@ -177,6 +180,21 @@ class MotionScriptPlanner:
         frames = expand_pattern(pattern, current, target, rng=self.rng)
         steps.extend(
             ScriptStep(frame.target, mood=mood_by_pattern.get(pattern, "Confident"), delay_factor=frame.delay_factor)
+            for frame in frames
+        )
+        return steps
+
+    def _anchor_feedback_steps(self, current, target):
+        bridge = MotionTarget(
+            (current.speed + target.speed) / 2,
+            (current.depth + target.depth) / 2,
+            (current.stroke_range + target.stroke_range) / 2,
+            label=f"{target.label} bridge",
+        ).clamped()
+        steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
+        frames = expand_anchor_program(current, target, target.motion_program, rng=self.rng)
+        steps.extend(
+            ScriptStep(frame.target, mood="Intimate", delay_factor=frame.delay_factor)
             for frame in frames
         )
         return steps

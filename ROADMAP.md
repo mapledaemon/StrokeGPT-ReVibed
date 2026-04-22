@@ -57,9 +57,9 @@ Candidate local ASR providers:
 ## Motion, Patterns, And Visualization
 
 - Add a small pattern browser/editor for reusable motion shapes.
-- Build on the internal funscript-style action pipeline with user-visible
-  controls for smoothing, repeat count, large-step limiting, and point
-  simplification.
+- Build on the internal funscript-style action and soft-anchor pipelines with
+  user-visible controls for smoothing, repeat count, tempo, softness,
+  large-step limiting, and point simplification.
 - Import user-provided `.funscript` snippets into internal movement targets
   after license/attribution and preview concerns are resolved.
 - Add a pattern evaluation view that visualizes speed, depth, range, and zone
@@ -75,6 +75,9 @@ Candidate local ASR providers:
 - Add pattern transform presets inspired by funscript tooling: remap range,
   halve/double timing, smooth sparse actions, repeat a stroke shape, and apply
   subtle randomized variation with a preview before playback.
+- Add a soft-anchor editor where users can arrange 2-6 targets such as tip,
+  upper, middle, lower, and base, then preview Catmull/minimum-jerk trajectory
+  output before sending it to the device.
 - Add command-focused tests for stop, faster, slower, tip, base, full stroke,
   edge, hold, and ambiguous motion requests.
 

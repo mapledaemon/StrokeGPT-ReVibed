@@ -244,9 +244,11 @@ You can adjust:
 - Edging mode timing
 - Milking mode timing
 
-The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
+The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. It can also accept a soft anchor loop, where the model provides 2-6 anchors such as tip, middle, and base plus simple feel controls like tempo and softness. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
 
 Named motion patterns are prepared through a small funscript-style action pipeline before they are sent to the motion controller. The app sorts and deduplicates action points, smooths sparse patterns with eased intermediate points, repeats reusable shapes without stopping at the seam, limits large position jumps, and removes redundant straight-line points.
+
+Soft anchor loops use robotics-style trajectory ideas: anchors are treated as soft waypoints, Catmull-Rom or minimum-jerk interpolation fills the path between them, and the existing large-step limiter keeps target changes bounded. This is intended for commands like "soft bounce between tip, middle, and base" without turning the movement into a hard two-point bounce.
 
 Start conservatively. The Handy can be intense even at low speed values.
 

@@ -534,7 +534,7 @@ def _handle_chat_commands(text):
         start_background_mode(milking_mode_logic, "You're so close... I'm taking over completely now.", mode_name='milking')
         return True, jsonify({"status": "milking_started"})
     if intent.kind == "move" and intent.target:
-        motion.apply_target(intent.target)
+        motion.apply_generated_target(intent.target)
         add_message_to_queue("Adjusting.", add_to_history=False)
         return True, jsonify({"status": "move_applied", "matched": intent.matched})
     return False, None
