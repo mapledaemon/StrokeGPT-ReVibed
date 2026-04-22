@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #40 - Add LLM Mode Decisions
+---------------------------------------------
+
+Branch: codex-llm-mode-decisions
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/40
+
+- Added a bounded LLM decision contract for Edge and Milk modes with action,
+  duration, intensity, and optional short narration.
+- Let Edge and Milk mode starts ask the local model for a finite duration and
+  intensity while falling back to deterministic timing if the model is
+  unavailable or invalid.
+- Let the I'm Close signal in Edge choose between pullback/hold behavior,
+  switching into Milk, or stopping, using edge count and recent chat context.
+- Let the I'm Close signal in Milk extend the bounded sequence by the model's
+  chosen duration and intensity.
+- Wired the existing Memories sidebar button to toggle long-term memory context
+  on/off visibly and update the runtime memory flag used by LLM prompts.
+- Kept stop handling, user speed limits, smoothing, and deterministic fallback
+  behavior intact.
+
+
 2026-04-22 - PR #39 - Add Experimental Modes Sidebar
 -----------------------------------------------------
 

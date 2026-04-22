@@ -403,6 +403,7 @@ def settings_payload():
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "ollama_diagnostics_level": settings.ollama_diagnostics_level,
         "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
+        "use_long_term_memory": use_long_term_memory,
         "diagnostics_levels": _diagnostics_level_options(),
         "motion_backends": [
             {
@@ -805,6 +806,7 @@ def _stop_motion_training():
 
 def reset_runtime_state():
     global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
+    global use_long_term_memory
     global special_persona_mode, special_persona_interactions_left
 
     if auto_mode_active_task:
@@ -822,6 +824,7 @@ def reset_runtime_state():
     current_mood = "Curious"
     calibration_pos_mm = 0.0
     edging_start_time = None
+    use_long_term_memory = True
     special_persona_mode = None
     special_persona_interactions_left = 0
     _set_motion_training_state(
@@ -906,6 +909,30 @@ def start_background_mode(mode_logic, initial_message, mode_name):
             'milking': (settings.milking_min_time, settings.milking_max_time),
             'edging': (settings.edging_min_time, settings.edging_max_time)
         }.get(n, (3, 5))
+    def set_mode_name(n):
+        global auto_mode_active_task, edging_start_time
+        if auto_mode_active_task:
+            auto_mode_active_task.name = n
+        if n == 'edging' and edging_start_time is None:
+            edging_start_time = time.time()
+        elif n != 'edging':
+            edging_start_time = None
+    def mode_decision(**kwargs):
+        context = get_current_context()
+        target = kwargs.get("current_target")
+        current_target = {
+            "speed": getattr(target, "speed", None),
+            "depth": getattr(target, "depth", None),
+            "stroke_range": getattr(target, "stroke_range", None),
+        }
+        return llm.get_mode_decision(
+            chat_history,
+            context,
+            mode=kwargs.get("mode", mode_name),
+            event=kwargs.get("event", "start"),
+            edge_count=kwargs.get("edge_count", 0),
+            current_target=current_target,
+        )
 
     services = {'llm': llm, 'handy': handy, 'motion': motion}
     callbacks = {
@@ -915,6 +942,8 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         'message_event': mode_message_event,
         'message_queue': mode_message_queue,
         'remember_pattern': _remember_motion_pattern_from_target,
+        'set_mode_name': set_mode_name,
+        'mode_decision': mode_decision,
     }
     auto_mode_active_task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
     auto_mode_active_task.start()
@@ -1376,6 +1405,20 @@ def set_ai_name_route():
 
     settings.ai_name = name; settings.save()
     return jsonify({"status": "success", "name": name})
+
+@app.route('/toggle_memory', methods=['POST'])
+def toggle_memory_route():
+    global use_long_term_memory
+    data = _request_json()
+    if "enabled" in data:
+        enabled = data.get("enabled")
+        if isinstance(enabled, str):
+            use_long_term_memory = enabled.strip().lower() in {"1", "true", "yes", "on"}
+        else:
+            use_long_term_memory = bool(enabled)
+    else:
+        use_long_term_memory = not use_long_term_memory
+    return jsonify({"status": "success", "use_long_term_memory": use_long_term_memory})
 
 @app.route('/signal_edge', methods=['POST'])
 def signal_edge_route():

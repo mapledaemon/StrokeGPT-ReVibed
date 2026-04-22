@@ -257,6 +257,46 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('{"chat": "<Your sarcastic reply>"', prompt)
         self.assertIn("Current configured speed range is `12-44`", prompt)
 
+    def test_mode_decision_prompt_includes_bounded_edge_context(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+        captured = {}
+
+        def fake_talk(messages, temperature=0.3):
+            captured["messages"] = messages
+            captured["temperature"] = temperature
+            return {
+                "action": "switch_to_milk",
+                "duration_seconds": 25,
+                "intensity": 72,
+                "chat": "Switching gears.",
+            }
+
+        service._talk_to_llm = fake_talk
+        response = service.get_mode_decision(
+            [{"role": "user", "content": "I'm close"}],
+            {
+                "current_mood": "Anticipatory",
+                "min_speed": 12,
+                "max_speed": 64,
+                "edging_elapsed_time": "3m 2s",
+            },
+            mode="edging",
+            event="close_signal",
+            edge_count=2,
+            current_target={"speed": 40, "depth": 55, "stroke_range": 48},
+        )
+
+        prompt = captured["messages"][0]["content"]
+        self.assertEqual(response["action"], "switch_to_milk")
+        self.assertEqual(captured["temperature"], 0.2)
+        self.assertIn('"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>"', prompt)
+        self.assertIn("duration_seconds", prompt)
+        self.assertIn("5-180", prompt)
+        self.assertIn("configured speed range `12-64`", prompt)
+        self.assertIn("mode: edging", prompt)
+        self.assertIn("event: close_signal", prompt)
+        self.assertIn("edge_count: 2", prompt)
+
     def test_legacy_model_migrates_to_new_default(self):
         fake_path = FakePath(json.dumps({"ollama_model": LEGACY_OLLAMA_MODEL}))
         settings = SettingsManager("settings.json")

@@ -26,11 +26,6 @@ surprising before deeper pattern generation work.
   intact.
 - Treat the Freestyle experimental control as a future neural-style mapping
   entry point; do not wire it to HAMP or the current scripted Auto framework.
-- Add LLM-directed finite mode decisions for Edge/Milk transitions: on mode
-  start and on the I'm Close signal, the model should be able to choose a
-  bounded duration, intensity, and action such as hold-then-resume, pull back,
-  switch to Milk, or stop, using chat history and edge count as visible
-  context.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
 - Let preset modes speak occasionally without turning mode timers into repeated
