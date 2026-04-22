@@ -42,6 +42,30 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual([path for path, _body in handy.commands].count("slide"), 1)
         self.assertEqual([path for path, _body in handy.commands].count("hamp/velocity"), 2)
 
+    def test_move_lowers_velocity_before_changing_slide_bounds(self):
+        handy = RecordingHandyController()
+
+        handy.move(100, 50, 80)
+        handy.commands.clear()
+        handy.move(20, 10, 36)
+
+        self.assertEqual(
+            [path for path, _body in handy.commands],
+            ["hamp/velocity", "slide"],
+        )
+
+    def test_move_raises_velocity_after_changing_slide_bounds(self):
+        handy = RecordingHandyController()
+
+        handy.move(20, 50, 80)
+        handy.commands.clear()
+        handy.move(80, 10, 36)
+
+        self.assertEqual(
+            [path for path, _body in handy.commands],
+            ["slide", "hamp/velocity"],
+        )
+
     def test_stop_clears_motion_cache_so_next_move_reapplies_bounds(self):
         handy = RecordingHandyController()
 

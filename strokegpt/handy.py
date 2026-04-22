@@ -136,14 +136,21 @@ class HandyController:
 
         slide_min, slide_max = self._normalize_slide_bounds(slide_min, slide_max)
 
-        if not self._send_slide_bounds(slide_min, slide_max):
-            return
-        
         # Calculate and set the final velocity
         relative_speed_pct = self._safe_percent(speed)
         final_physical_speed = self._relative_speed_to_velocity(relative_speed_pct)
-        
-        if not self._send_velocity(final_physical_speed):
+
+        # When redirecting from fast motion into a narrower/deeper range, lower
+        # velocity before changing slide bounds so the device does not race to
+        # the new focus area using the previous high speed.
+        velocity_first = self._last_velocity is not None and final_physical_speed < self._last_velocity
+        if velocity_first and not self._send_velocity(final_physical_speed):
+            return
+
+        if not self._send_slide_bounds(slide_min, slide_max):
+            return
+
+        if not velocity_first and not self._send_velocity(final_physical_speed):
             return
 
         # Update state variables for the next command

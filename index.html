@@ -32,7 +32,8 @@
             </div>
         </div>
         <div id="bottom-input-area">
-            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">👍</button>
+            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
+            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
             <div id="visualizer-box"><canvas id="rhythm-canvas"></canvas></div>
             <div id="message-input-line">
                 <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command...">
@@ -52,10 +53,14 @@
                 <button id="im-close-btn" class="my-button sidebar-button milking" style="display: none;">I'm Close!</button>
             </div>
         </div>
-        <div class="setting-section" style="margin-top: auto;">
-            <h3>DANGER ZONE</h3>
-            <button id="edging-mode-btn" class="my-button sidebar-button edging" style="margin-bottom: 10px;">Edge Me</button>
-            <button id="milking-mode-btn" class="my-button sidebar-button milking" style="margin-bottom: 10px;">Milk Me</button>
+        <div class="setting-section">
+            <h3>Preset Modes</h3>
+            <div class="preset-mode-stack">
+                <button id="edging-mode-btn" class="my-button sidebar-button edging">Edge Me</button>
+                <button id="milking-mode-btn" class="my-button sidebar-button milking">Milk Me</button>
+            </div>
+        </div>
+        <div class="sidebar-stop-section">
             <button id="emergency-stop-all-btn" class="my-button sidebar-button stop">STOP EVERYTHING</button>
         </div>
     </div>
@@ -143,6 +148,15 @@
             </div>
             <div id="settings-tab-motion" class="settings-panel">
                 <div class="settings-subsection motion-panel">
+                    <h4>Motion Backend</h4>
+                    <select id="motion-backend-select" class="select-box">
+                        <option value="hamp">HAMP continuous (recommended)</option>
+                        <option value="position">Flexible position/script (experimental)</option>
+                    </select>
+                    <button id="save-motion-backend-btn" class="my-button">Save Motion Backend</button>
+                    <div id="motion-backend-status" class="settings-help">Current backend: HAMP continuous.</div>
+                </div>
+                <div class="settings-subsection motion-panel">
                     <h4>Speed Limits</h4>
                     <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider"><span id="motion-speed-min-val">10%</span></div>
                     <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider"><span id="motion-speed-max-val">80%</span></div>
@@ -215,7 +229,7 @@
                         </div>
                         <div class="motion-backend-stack">
                             <span class="motion-backend-badge">Preview: Flexible position</span>
-                            <span class="motion-backend-badge">App motion: HAMP continuous</span>
+                            <span id="app-motion-backend-badge" class="motion-backend-badge">App motion: HAMP continuous</span>
                         </div>
                     </div>
                     <div class="motion-training-preview-wrap">

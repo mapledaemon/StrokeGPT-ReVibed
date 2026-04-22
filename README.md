@@ -2,14 +2,17 @@
 
 StrokeGPT-ReVibed is a work-in-progress refactor of StrokeGPT for controlling The Handy through a local web app, an Ollama language model, and optional voice output.
 
-The current focus is reliability, visibility, and local-first control:
+The current focus is reliable local control with visible, editable motion
+behavior:
 
 - Keep Handy speed limits and stop behavior reliable while improving motion
   expressiveness.
 - Make LLM-to-motion mapping more visible, especially tip/base, stroke length,
-  range, and smooth alternation.
-- Start motion training in staged pieces: shareable pattern files, settings
-  controls, training playback, transform previews, and visible preferences.
+  range, smooth alternation, and speed wording.
+- Keep motion pattern preferences user-visible through settings weights,
+  thumbs feedback, enable/disable controls, and shareable pattern files.
+- Keep HAMP continuous motion as the default while preserving the experimental
+  flexible position/script backend for pattern testing.
 - Improve UI formatting so chat, settings, model downloads, and device controls
   stay readable at common window sizes.
 - Keep model downloads explicit and user-triggered.
@@ -24,8 +27,8 @@ editing.
 
 ## Status
 
-This is not a finished release. Expect rough edges in the UI, local voice setup,
-motion preference handling, and documentation.
+This is an experimental local app, not a finished release. Expect rough edges in
+the UI, local voice setup, motion preference handling, and real-device tuning.
 
 The app currently targets Windows first, with equivalent Python setup instructions for macOS and Linux.
 
@@ -242,15 +245,34 @@ Motion settings are in **Open Settings -> Motion**.
 You can adjust:
 
 - Speed limits
+- Motion backend selection
 - Auto mode timing
 - Edging mode timing
 - Milking mode timing
+- Motion pattern enablement, import/export, feedback-derived weights, and
+  inline fixed-pattern LLM weight controls
 
-The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. It can also accept a soft anchor loop, where the model provides 2-6 anchors such as tip, middle, and base plus simple feel controls like tempo and softness. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
+The motion connector accepts direct numeric movement requests from the model and named cues such as tip, shaft, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. It can also accept a soft anchor loop, where the model provides 2-6 anchors such as tip, shaft/middle, and base plus simple feel controls like tempo and softness. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
 
 Named motion patterns are prepared through a small funscript-style action pipeline before they are sent to the motion controller. The app sorts and deduplicates action points, smooths sparse patterns with eased intermediate points, repeats reusable shapes without stopping at the seam, limits large position jumps, and removes redundant straight-line points.
 
-Soft anchor loops use robotics-style trajectory ideas: anchors are treated as soft waypoints, Catmull-Rom or minimum-jerk interpolation fills the path between them, and the existing large-step limiter keeps target changes bounded. This is intended for commands like "soft bounce between tip, middle, and base" without turning the movement into a hard two-point bounce.
+Soft anchor loops use robotics-style trajectory ideas: anchors are treated as soft waypoints, Catmull-Rom or minimum-jerk interpolation fills the path between them, and the existing large-step limiter keeps target changes bounded. This is intended for commands like "soft bounce between tip, shaft, and base" without turning the movement into a hard two-point bounce.
+
+Area-only focus commands use moderate default speeds instead of inheriting a previous maximum speed. When a redirect lowers speed and changes the Handy range, the app sends the lower velocity before the new slide bounds so the device does not lurch into the new area at the old speed.
+
+Speed wording sent to the LLM is derived from the configured speed range.
+For example, "as fast as you can" maps to the current Motion tab max speed
+instead of a hardcoded global value.
+
+The fixed motion patterns shown to the LLM have simple 0-100 weights. Thumbs up
+raises a matching fixed pattern's weight, thumbs down lowers it, and three
+thumbs down ratings disable that pattern in settings. Disabled fixed patterns
+and fixed patterns at weight 0 are not offered to the model for `move.pattern`,
+but users can re-enable or raise their weight from **Open Settings -> Motion**.
+
+The app motion backend defaults to **HAMP continuous** for smoother ongoing
+movement. **Flexible position/script** is available in Motion settings as an
+experimental backend for testing spatial pattern fidelity.
 
 Start conservatively. The Handy can be intense even at low speed values.
 

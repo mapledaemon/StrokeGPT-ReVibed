@@ -58,6 +58,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
+        self.assertEqual(saved["motion_pattern_weights"], {})
+        self.assertEqual(saved["motion_backend"], "hamp")
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -74,6 +76,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(settings.motion_pattern_enabled, {})
         self.assertEqual(settings.motion_pattern_feedback, {})
+        self.assertEqual(settings.motion_pattern_weights, {})
+        self.assertEqual(settings.motion_backend, "hamp")
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -106,6 +110,93 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_feedback, {
             "soft-wave": {"thumbs_up": 3, "neutral": 0, "thumbs_down": 0},
         })
+
+    def test_motion_pattern_weight_map_is_normalized(self):
+        fake_path = FakePath(json.dumps({
+            "motion_pattern_weights": {
+                " Soft Wave ": "74",
+                "too high": 180,
+                "too low": -20,
+                "": 50,
+            },
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertEqual(settings.motion_pattern_weights, {
+            "soft-wave": 74,
+            "too-high": 100,
+            "too-low": 0,
+        })
+
+    def test_motion_backend_is_normalized(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"motion_backend": "position-script"}))
+        settings.load()
+        self.assertEqual(settings.motion_backend, "position")
+
+        settings.file_path = FakePath(json.dumps({"motion_backend": "unknown"}))
+        settings.load()
+        self.assertEqual(settings.motion_backend, "hamp")
+
+    def test_llm_prompt_includes_motion_pattern_preferences(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "Available fixed move.pattern weights from 0-100.\nsway=74",
+        })
+
+        self.assertIn("MOTION PATTERN PREFERENCES", prompt)
+        self.assertIn("sway=74", prompt)
+        self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
+        self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
+        self.assertIn("TRANSLATE SPEED WORDS INTO `sp`", prompt)
+        self.assertIn("The current configured speed range is `10-80`", prompt)
+        self.assertIn('"slowly focus on the tip"', prompt)
+        self.assertIn('"slowly focus on the tip"**: `{"sp": 24', prompt)
+        self.assertIn('"quickly use the shaft"', prompt)
+        self.assertIn('"quickly use the shaft"**: `{"sp": 62', prompt)
+        self.assertIn('"as fast as you can on the base"', prompt)
+        self.assertIn('"as fast as you can on the base"**: `{"sp": 80', prompt)
+
+    def test_llm_prompt_speed_guidance_uses_configured_speed_ceiling(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 5,
+            "max_speed": 50,
+            "motion_preferences": "",
+        })
+
+        self.assertIn("The current configured speed range is `5-50`", prompt)
+        self.assertIn('"as fast as you can on the base"**: `{"sp": 50', prompt)
+        self.assertNotIn('"sp": 88', prompt)
+
+    def test_glados_prompt_speed_guidance_uses_configured_speed_ceiling(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "special_persona_mode": "GLaDOS",
+            "min_speed": 12,
+            "max_speed": 44,
+        })
+
+        self.assertIn('{"chat": "<Your sarcastic reply>"', prompt)
+        self.assertIn("Current configured speed range is `12-44`", prompt)
 
     def test_legacy_model_migrates_to_new_default(self):
         fake_path = FakePath(json.dumps({"ollama_model": LEGACY_OLLAMA_MODEL}))

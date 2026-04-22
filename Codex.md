@@ -6,7 +6,9 @@ This file is for future coding agents continuing StrokeGPT-ReVibed. Keep it free
 
 StrokeGPT-ReVibed is a work-in-progress fork/refactor of StrokeGPT. It is a local Flask web app for controlling The Handy through natural language, Ollama model responses, deterministic motion reliability logic, and optional voice output.
 
-The current goal is not feature expansion. The current goal is stabilization, simplification, and making the app easier to safely maintain.
+The current goal is incremental, test-backed feature work that also makes the
+app easier to safely maintain. Keep each branch scoped, document user-visible
+behavior, and route motion changes through the shared controller path.
 
 ## Current Architecture
 
@@ -46,7 +48,8 @@ The sidebar should stay sparse:
 
 - Open Settings
 - Control Actions
-- Danger Zone
+- Preset Modes
+- Standalone emergency stop
 
 The unified settings popup has tabs:
 
@@ -64,9 +67,31 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - The app intentionally uses a deterministic motion layer between LLM output and hardware commands.
 - The motion layer is primarily for reliability: spatial language mapping, pattern expansion, configured speed limits, and consistent stop behavior.
 - The LLM may provide direct numeric moves or named zone/pattern cues, but hardware movement should still pass through `MotionController` and `HandyController`.
+- If the LLM claims or appears to need a motion change but sends no usable
+  movement target, the web connector performs one repair prompt. The repair
+  pass must still allow `move: null` for conversational or informational
+  requests.
 - Keep motion transitions smooth and clamped to user settings.
 - `strokegpt/motion_patterns.py` prepares pattern actions before expansion: sort/dedupe, minimum interval filtering, repeat expansion, eased interpolation, large-step limiting, and redundant point simplification. Keep that pipeline dependency-free unless a larger funscript importer is deliberately added.
-- `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. Treat anchors as soft waypoints, not hard stops.
+- `strokegpt/motion_preferences.py` turns enabled fixed patterns and thumbs
+  feedback into simple LLM-facing weights. Disabled fixed patterns should stay
+  visible in settings but hidden from the LLM prompt to avoid confusing smaller
+  local models.
+- Motion backend selection is persisted as `motion_backend`. Keep `hamp` as
+  the recommended default for app motion and label `position` flexible
+  position/script playback as experimental until more device testing lands.
+- `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. `shaft` is accepted as the user-facing midpoint label, with `middle`/`mid` kept as aliases. Treat anchors as soft waypoints, not hard stops.
+- Spatial cues should treat `tip`, `shaft`, and `base` as regions of emphasis,
+  not single lock points. `shaft` is the in-between region; ordinary zone cues
+  should prefer adjacent regional travel, while tight endpoint focus should
+  require explicit tiny/short/flick/flutter/hold style wording.
+- Area-only focus commands should not inherit a previous high-speed state. When
+  reducing speed and changing Handy slide bounds, `HandyController.move()` must
+  send the lower velocity before the new bounds so the device does not jump to a
+  new region at the old speed.
+- When Auto, Edge, or Milk mode is active, motion feedback from chat should be
+  queued into the active mode planner and wake the mode loop. Do not apply it as
+  a one-off command that the next scripted mode step can immediately overwrite.
 - Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
 - Browser UI code is split by behavior under `static/js/`. Keep new frontend
@@ -114,14 +139,19 @@ python app.py
 
 ## Suggested Next Tasks
 
-1. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
-2. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
-3. Improve local Chatterbox setup documentation and failure messages.
-4. Add an explicit stop/safety state indicator in the UI.
-5. Review the LLM prompt for reliability and reduce prompt bloat.
-6. Review and clean legacy easter egg content.
-7. Add release notes that clearly mark the app as experimental.
-8. Continue motion training in stages using `docs/motion_training_prompts.md`.
+Use `ROADMAP.md` as the source of truth for future work. Before starting a new
+branch, remove any roadmap item that has already landed and is covered in
+`Changelog.txt`.
+
+Good next targets are:
+
+1. Motion observability and Handy position visualization.
+2. Motion training editor depth, especially point dragging and original versus
+   edited preview.
+3. Soft-anchor pattern authoring with visible trajectory controls.
+4. Runtime/setup diagnostics for Ollama, Torch/CUDA, voice, port, and Handy
+   state.
+5. Local push-to-talk voice control MVP.
 
 ## Continuation Prompts
 
