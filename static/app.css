@@ -105,7 +105,8 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .my-button:disabled { cursor: not-allowed; opacity: 0.55; transform: none; box-shadow: none; }
 .my-button:disabled:hover { background-color: #2a313b; transform: none; box-shadow: none; }
 .control-action-stack { display: flex; flex-direction: column; gap: 10px; }
-.preset-mode-stack { display: flex; flex-direction: column; gap: 10px; }
+.preset-mode-stack, .experimental-mode-stack { display: flex; flex-direction: column; gap: 10px; }
+.experimental-mode-section { border-color: rgba(189, 147, 249, 0.42); }
 .sidebar-stop-section { margin-top: 0; }
 #like-this-move-btn, #dislike-this-move-btn { width: 42px; height: 42px; min-width: 0; padding: 0; border-radius: 50%; z-index: 12; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.34); font-size: 1.05rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
 #like-this-move-btn { border-color: rgba(127, 183, 163, 0.65); background: #263d36; }
@@ -116,6 +117,9 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .sidebar-button.edging:hover { background-color: #e4c77d; }
 .sidebar-button.milking { background-color: var(--pink); }
 .sidebar-button.milking:hover { background-color: #e0a0b6; }
+.sidebar-button.experimental { background-color: #3a314d; border-color: rgba(189, 147, 249, 0.55); color: var(--foreground); }
+.sidebar-button.experimental:hover { background-color: #463b5c; }
+.sidebar-button.experimental:disabled, .sidebar-button.experimental:disabled:hover { background-color: #302a3d; border-color: rgba(189, 147, 249, 0.36); transform: none; box-shadow: none; }
 .sidebar-button.stop { background-color: var(--red); border-color: #f04a58; color: #fff; box-shadow: 0 0 0 1px rgba(224, 27, 47, 0.35), 0 4px 12px rgba(193, 18, 31, 0.35); }
 .sidebar-button.stop:hover { background-color: var(--red-hover); border-color: #ff6670; }
 .sidebar-button.stop:active { background-color: var(--red-dark); }

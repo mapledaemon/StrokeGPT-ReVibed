@@ -24,6 +24,8 @@ surprising before deeper pattern generation work.
 - If freestyle or LLM-controlled auto timing is added, gate it behind explicit
   experimental controls and keep stop handling, speed limits, and smoothing
   intact.
+- Treat the Freestyle experimental control as a future neural-style mapping
+  entry point; do not wire it to HAMP or the current scripted Auto framework.
 - Add LLM-directed finite mode decisions for Edge/Milk transitions: on mode
   start and on the I'm Close signal, the model should be able to choose a
   bounded duration, intensity, and action such as hold-then-resume, pull back,
