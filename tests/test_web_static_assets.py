@@ -179,6 +179,10 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="motion-speed-min-slider"', page)
             self.assertIn('id="motion-speed-max-slider"', page)
             self.assertIn('id="save-motion-speed-limits"', page)
+            self.assertIn('id="motion-pattern-list"', page)
+            self.assertIn('id="refresh-motion-patterns-btn"', page)
+            self.assertIn('id="import-motion-pattern-btn"', page)
+            self.assertIn('id="motion-pattern-import-input"', page)
             self.assertIn('data-settings-tab="advanced"', page)
             self.assertIn('id="settings-tab-advanced"', page)
             self.assertIn('id="reset-settings-btn"', page)
@@ -205,6 +209,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn("#rhythm-canvas { display: block; width: 100%; height: 100%; }", css)
             self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
             self.assertIn(".model-actions", css)
+            self.assertIn(".motion-pattern-row", css)
+            self.assertIn(".motion-pattern-list", css)
             self.assertIn(".setup-slider", css)
             self.assertIn("@media (max-width: 760px)", css)
         finally:
@@ -244,6 +250,17 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("addChatMessage('BOT', data.chat)", script)
         self.assertIn("data.chat_queued === false", script)
         self.assertIn("await pollChatUpdates()", script)
+
+    def test_frontend_js_handles_motion_pattern_list_controls(self):
+        script = self.frontend_scripts()
+
+        self.assertIn("function renderMotionPatterns", script)
+        self.assertIn("refreshMotionPatterns", script)
+        self.assertIn("/motion_patterns", script)
+        self.assertIn("motionPatternList.replaceChildren", script)
+        self.assertIn("motionPatternImportInput", script)
+        self.assertIn("FormData", script)
+        self.assertIn("Import failed", script)
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")

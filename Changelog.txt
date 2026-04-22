@@ -8,6 +8,21 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Pattern Settings List
+-----------------------------------------
+
+Branch: codex-motion-pattern-settings
+
+- Added a Motion tab pattern list that shows built-in and imported patterns
+  with source, duration, action count, read-only state, and enable checkboxes.
+- Added local enabled/disabled pattern persistence through portable settings
+  without changing the underlying shareable pattern files.
+- Added browser import controls for `.json` and `.funscript` action patterns
+  and export buttons for listed patterns.
+- Added route, settings, and frontend regression tests for pattern enablement,
+  import/export visibility, and Motion tab rendering.
+
+
 Unreleased - Motion Pattern Library Foundation
 ----------------------------------------------
 

@@ -20,6 +20,7 @@ export function populateMotionSettings(data = {}) {
     el.edgingMaxTimeInput.value = timings.edging_max ?? el.edgingMaxTimeInput.value ?? 8;
     el.milkingMinTimeInput.value = timings.milking_min ?? el.milkingMinTimeInput.value ?? 2.5;
     el.milkingMaxTimeInput.value = timings.milking_max ?? el.milkingMaxTimeInput.value ?? 4.5;
+    if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
 }
 
 async function saveMotionSpeedLimits() {
@@ -62,6 +63,135 @@ async function saveModeTimings() {
     if (data && data.status === 'success') {
         populateMotionSettings({timings: data.timings});
         el.statusText.textContent = 'Mode timings saved.';
+    }
+}
+
+function formatPatternDuration(durationMs) {
+    const duration = Math.max(0, Number(durationMs) || 0);
+    if (duration >= 1000) return `${(duration / 1000).toFixed(duration >= 10_000 ? 0 : 1)}s`;
+    return `${Math.round(duration)}ms`;
+}
+
+function setPatternStatus(message, color = 'var(--comment)') {
+    if (!el.motionPatternStatus) return;
+    el.motionPatternStatus.textContent = message;
+    el.motionPatternStatus.style.color = color;
+}
+
+export function renderMotionPatterns(catalog = {}) {
+    if (!el.motionPatternList) return;
+    const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
+    state.motionPatterns = patterns;
+    el.motionPatternList.replaceChildren();
+
+    if (!patterns.length) {
+        setPatternStatus('No motion patterns found.', 'var(--yellow)');
+        return;
+    }
+
+    patterns.forEach(pattern => {
+        const row = D.createElement('div');
+        row.className = 'motion-pattern-row';
+
+        const main = D.createElement('label');
+        main.className = 'motion-pattern-main';
+
+        const checkbox = D.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = Boolean(pattern.enabled);
+        checkbox.dataset.patternId = pattern.id;
+        checkbox.addEventListener('change', async () => {
+            checkbox.disabled = true;
+            await setMotionPatternEnabled(pattern.id, checkbox.checked);
+            checkbox.disabled = false;
+        });
+
+        const text = D.createElement('div');
+        text.className = 'motion-pattern-text';
+
+        const name = D.createElement('div');
+        name.className = 'motion-pattern-name';
+        name.textContent = pattern.name || pattern.id || 'Unnamed pattern';
+
+        const meta = D.createElement('div');
+        meta.className = 'motion-pattern-meta';
+        meta.textContent = [
+            pattern.source || 'unknown',
+            `${formatPatternDuration(pattern.duration_ms)} duration`,
+            `${pattern.action_count || 0} actions`,
+            pattern.readonly ? 'read-only' : 'editable file',
+        ].join(' | ');
+
+        text.append(name, meta);
+        if (pattern.description) {
+            const description = D.createElement('div');
+            description.className = 'motion-pattern-description';
+            description.textContent = pattern.description;
+            text.appendChild(description);
+        }
+
+        const exportButton = D.createElement('button');
+        exportButton.type = 'button';
+        exportButton.className = 'my-button motion-pattern-export';
+        exportButton.textContent = 'Export';
+        exportButton.addEventListener('click', () => {
+            window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
+        });
+
+        main.append(checkbox, text);
+        row.append(main, exportButton);
+        el.motionPatternList.appendChild(row);
+    });
+
+    const errors = Array.isArray(catalog.errors) ? catalog.errors : [];
+    if (errors.length) {
+        setPatternStatus(`Loaded ${patterns.length} patterns. ${errors.length} file issue(s) need attention.`, 'var(--yellow)');
+    } else {
+        setPatternStatus(`Loaded ${patterns.length} patterns.`, 'var(--cyan)');
+    }
+}
+
+export async function refreshMotionPatterns() {
+    setPatternStatus('Loading motion patterns...');
+    const data = await apiCall('/motion_patterns');
+    if (data) renderMotionPatterns(data);
+    return data;
+}
+
+async function setMotionPatternEnabled(patternId, enabled) {
+    const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}/enabled`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled}),
+    });
+    if (data && data.status === 'success') {
+        renderMotionPatterns(data.motion_patterns);
+        el.statusText.textContent = `${data.pattern.name} pattern ${data.pattern.enabled ? 'enabled' : 'disabled'}.`;
+    }
+}
+
+async function importMotionPatternFile(file) {
+    if (!file) return;
+    setPatternStatus(`Importing ${file.name}...`);
+    const body = new FormData();
+    body.append('pattern', file);
+    try {
+        const response = await fetch('/import_motion_pattern', {method: 'POST', body});
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status !== 'success') {
+            const message = data.message || `Could not import ${file.name}.`;
+            setPatternStatus(message, 'var(--yellow)');
+            el.statusText.textContent = message;
+            return;
+        }
+        el.statusText.textContent = `Imported pattern: ${data.pattern.name}.`;
+        await refreshMotionPatterns();
+    } catch (error) {
+        const message = `Import failed: ${error.message}`;
+        setPatternStatus(message, 'var(--yellow)');
+        el.statusText.textContent = message;
+    } finally {
+        el.motionPatternImportInput.value = '';
     }
 }
 
@@ -169,6 +299,13 @@ export function initMotionControls({sendUserMessage}) {
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
+    el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
+    el.importMotionPatternBtn.addEventListener('click', () => el.motionPatternImportInput.click());
+    el.motionPatternImportInput.addEventListener('change', event => importMotionPatternFile(event.target.files[0]));
+    el.settingsTabs.forEach(tab => {
+        if (tab.dataset.settingsTab === 'motion') tab.addEventListener('click', refreshMotionPatterns);
+    });
     D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
     D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method: 'POST'}));
+    refreshMotionPatterns();
 }

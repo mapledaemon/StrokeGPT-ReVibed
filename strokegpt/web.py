@@ -358,6 +358,7 @@ def settings_payload():
         "max_depth": settings.max_depth,
         "min_speed": settings.min_speed,
         "max_speed": settings.max_speed,
+        "motion_patterns": _motion_pattern_catalog_payload(),
         "pfp": settings.profile_picture_b64,
         "timings": {
             "auto_min": settings.auto_min_time,
@@ -399,6 +400,9 @@ def apply_settings_to_services():
             settings.local_tts_repetition_penalty,
             settings.local_tts_engine,
         )
+
+def _motion_pattern_catalog_payload():
+    return motion_pattern_library.catalog(settings.motion_pattern_enabled)
 
 def reset_runtime_state():
     global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
@@ -616,18 +620,18 @@ def check_settings_route():
 
 @app.route('/motion_patterns')
 def motion_patterns_route():
-    return jsonify(motion_pattern_library.catalog())
+    return jsonify(_motion_pattern_catalog_payload())
 
 @app.route('/motion_patterns/<pattern_id>')
 def motion_pattern_detail_route(pattern_id):
-    record = motion_pattern_library.get_record(pattern_id)
+    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
 
 @app.route('/motion_patterns/<pattern_id>/export')
 def export_motion_pattern_route(pattern_id):
-    record = motion_pattern_library.get_record(pattern_id)
+    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     payload = json.dumps(record.to_export_dict(), indent=2).encode("utf-8")
@@ -667,6 +671,21 @@ def import_motion_pattern_route():
     except PatternValidationError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
+
+@app.route('/motion_patterns/<pattern_id>/enabled', methods=['POST'])
+def set_motion_pattern_enabled_route(pattern_id):
+    data = _request_json()
+    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    settings.motion_pattern_enabled[record.pattern_id] = bool(data.get("enabled", True))
+    settings.save()
+    updated = motion_pattern_library.get_record(record.pattern_id, settings.motion_pattern_enabled)
+    return jsonify({
+        "status": "success",
+        "pattern": updated.to_summary_dict(include_actions=True),
+        "motion_patterns": _motion_pattern_catalog_payload(),
+    })
 
 @app.route('/reset_settings', methods=['POST'])
 def reset_settings_route():

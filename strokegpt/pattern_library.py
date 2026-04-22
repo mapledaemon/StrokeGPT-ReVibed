@@ -1,6 +1,6 @@
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .motion_patterns import MotionPattern, PATTERNS, PatternAction, normalize_actions
@@ -188,6 +188,9 @@ class PatternRecord:
             payload["actions"] = [{"at": action.at, "pos": action.pos} for action in self.actions]
         return payload
 
+    def with_enabled(self, enabled):
+        return replace(self, enabled=bool(enabled))
+
 
 def _style_from_payload(payload):
     style = payload.get("style") if isinstance(payload.get("style"), dict) else {}
@@ -299,10 +302,20 @@ class PatternLibrary:
                 errors.append({"file": path.name, "message": str(exc)})
         return tuple(records), errors
 
-    def catalog(self):
+    def _apply_enabled_overrides(self, records, enabled_overrides=None):
+        enabled_overrides = enabled_overrides or {}
+        return tuple(
+            record.with_enabled(enabled_overrides[record.pattern_id])
+            if record.pattern_id in enabled_overrides
+            else record
+            for record in records
+        )
+
+    def catalog(self, enabled_overrides=None):
         records = list(self.builtin_records())
         user_records, errors = self.load_user_patterns()
         records.extend(user_records)
+        records = self._apply_enabled_overrides(records, enabled_overrides)
         return {
             "schema_version": SCHEMA_VERSION,
             "pattern_dir": str(self.user_pattern_dir),
@@ -310,12 +323,14 @@ class PatternLibrary:
             "errors": errors,
         }
 
-    def get_record(self, pattern_id):
+    def get_record(self, pattern_id, enabled_overrides=None):
         requested = slugify_pattern_id(pattern_id)
-        for record in self.builtin_records():
+        records = self._apply_enabled_overrides(self.builtin_records(), enabled_overrides)
+        for record in records:
             if record.pattern_id == requested:
                 return record
-        for record in self.load_user_patterns()[0]:
+        records = self._apply_enabled_overrides(self.load_user_patterns()[0], enabled_overrides)
+        for record in records:
             if record.pattern_id == requested:
                 return record
         return None
