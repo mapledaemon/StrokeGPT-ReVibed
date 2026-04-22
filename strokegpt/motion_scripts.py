@@ -149,7 +149,7 @@ class MotionScriptPlanner:
 
     def _pattern_from_label(self, label):
         clean_label = (label or "").lower()
-        for pattern in ("flick", "pulse", "hold", "wave", "ramp", "tease"):
+        for pattern in ("flick", "flutter", "pulse", "hold", "wave", "ramp", "ladder", "surge", "sway", "tease"):
             if pattern in clean_label:
                 return pattern
         return None
@@ -164,10 +164,14 @@ class MotionScriptPlanner:
         steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         mood_by_pattern = {
             "flick": "Playful",
+            "flutter": "Playful",
             "pulse": "Dominant",
             "hold": "Confident",
             "wave": "Anticipatory",
             "ramp": "Anticipatory",
+            "ladder": "Anticipatory",
+            "surge": "Passionate",
+            "sway": "Intimate",
             "tease": "Teasing",
         }
         frames = expand_pattern(pattern, current, target, rng=self.rng)
