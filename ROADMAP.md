@@ -56,10 +56,8 @@ Candidate local ASR providers:
 
 ## Motion, Patterns, And Visualization
 
-- Add a dedicated motion training workspace for pattern playback, editing,
-  visualization, and feedback. This may be a separate full-screen view,
-  independent panel, or large modal rather than part of the compact settings
-  dialog.
+- Expand the dedicated Motion Training workspace from its initial
+  playback/feedback/preview shell into a larger pattern editing surface.
 - Add a motion training module in staged PRs: pattern file registry first,
   settings enable/disable list second, device playback and feedback third, then
   transform buttons and LLM preference integration.
@@ -82,8 +80,8 @@ Candidate local ASR providers:
   pattern can be sent to the device.
 - Import user-provided `.funscript` snippets into internal movement targets
   after license/attribution and preview concerns are resolved.
-- Add a pattern evaluation view that visualizes speed, depth, range, and zone
-  changes before sending anything to The Handy.
+- Expand the pattern preview into an evaluation view that visualizes speed,
+  depth, range, and zone changes before sending anything to The Handy.
 - Add Handy position visualization that shows current reported position, target
   range, tip/base calibration, and recent motion path.
 - Add a motion style preference selector for broad movement feel such as

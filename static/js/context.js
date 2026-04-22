@@ -65,9 +65,16 @@ export const el = {
     motionPatternStatus: D.getElementById('motion-pattern-status'),
     refreshMotionPatternsBtn: D.getElementById('refresh-motion-patterns-btn'),
     importMotionPatternBtn: D.getElementById('import-motion-pattern-btn'),
+    openMotionTrainingBtn: D.getElementById('open-motion-training-btn'),
     motionPatternImportInput: D.getElementById('motion-pattern-import-input'),
+    motionTrainingDialog: D.getElementById('motion-training-dialog'),
+    closeMotionTrainingBtn: D.getElementById('close-motion-training-btn'),
     motionTrainingStatus: D.getElementById('motion-training-status'),
     stopMotionTrainingBtn: D.getElementById('stop-motion-training-btn'),
+    motionTrainingPatternList: D.getElementById('motion-training-pattern-list'),
+    motionTrainingPatternTitle: D.getElementById('motion-training-pattern-title'),
+    motionTrainingPatternMeta: D.getElementById('motion-training-pattern-meta'),
+    motionTrainingPreviewCanvas: D.getElementById('motion-training-preview-canvas'),
     motionTrainingFeedbackUp: D.getElementById('motion-training-feedback-up'),
     motionTrainingFeedbackNeutral: D.getElementById('motion-training-feedback-neutral'),
     motionTrainingFeedbackDown: D.getElementById('motion-training-feedback-down'),
@@ -107,6 +114,8 @@ export const state = {
     localTtsStatusPolling: false,
     motionPatterns: [],
     motionTraining: {state: 'idle', pattern_id: '', pattern_name: ''},
+    motionTrainingSelectedPatternId: '',
+    motionTrainingPreviewPattern: null,
 };
 
 export const ctx = el.rhythmCanvas.getContext('2d');

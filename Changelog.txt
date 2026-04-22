@@ -8,6 +8,24 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Training Workspace
+--------------------------------------
+
+Branch: codex-motion-training-workspace
+
+- Added a dedicated Motion Training workspace opened from the compact Motion
+  settings tab.
+- Moved pattern playback, Stop Preview, feedback controls, backend labels, and
+  the pattern shape preview out of compact settings.
+- Kept compact Motion settings focused on refresh, import, export, enablement,
+  and status so dense pattern controls have room to grow.
+- Added a canvas preview for selected pattern position curves, with explicit
+  labels showing flexible-position preview playback versus current HAMP
+  continuous app motion.
+- Added frontend regression coverage for the workspace markup, CSS layout
+  guards, and JavaScript wiring.
+
+
 2026-04-22 - PR #22 - Add Motion Training Player
 ------------------------------------------------
 

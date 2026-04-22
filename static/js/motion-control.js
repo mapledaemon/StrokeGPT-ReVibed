@@ -78,6 +78,59 @@ function setPatternStatus(message, color = 'var(--comment)') {
     el.motionPatternStatus.style.color = color;
 }
 
+function patternDisplayName(pattern) {
+    return pattern.name || pattern.id || 'Unnamed pattern';
+}
+
+function formatPatternMetadata(pattern) {
+    const feedback = pattern.feedback || {};
+    return [
+        pattern.source || 'unknown',
+        `${formatPatternDuration(pattern.duration_ms)} duration`,
+        `${pattern.action_count || 0} actions`,
+        pattern.readonly ? 'read-only' : 'editable file',
+        `feedback ${feedback.thumbs_up || 0}/${feedback.neutral || 0}/${feedback.thumbs_down || 0}`,
+    ].join(' | ');
+}
+
+function createPatternText(pattern, {includeDescription = true} = {}) {
+    const text = D.createElement('div');
+    text.className = 'motion-pattern-text';
+
+    const name = D.createElement('div');
+    name.className = 'motion-pattern-name';
+    name.textContent = patternDisplayName(pattern);
+
+    const meta = D.createElement('div');
+    meta.className = 'motion-pattern-meta';
+    meta.textContent = formatPatternMetadata(pattern);
+
+    text.append(name, meta);
+    if (includeDescription && pattern.description) {
+        const description = D.createElement('div');
+        description.className = 'motion-pattern-description';
+        description.textContent = pattern.description;
+        text.appendChild(description);
+    }
+    return text;
+}
+
+function createPatternExportButton(pattern) {
+    const exportButton = D.createElement('button');
+    exportButton.type = 'button';
+    exportButton.className = 'my-button motion-pattern-export';
+    exportButton.textContent = 'Export';
+    exportButton.addEventListener('click', event => {
+        event.stopPropagation();
+        window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
+    });
+    return exportButton;
+}
+
+function patternById(patternId) {
+    return state.motionPatterns.find(pattern => pattern.id === patternId);
+}
+
 function updateMotionTrainingStatus(status = {}) {
     state.motionTraining = {
         state: status.state || state.motionTraining.state || 'idle',
@@ -92,12 +145,18 @@ function updateMotionTrainingStatus(status = {}) {
     const hasPattern = Boolean(state.motionTraining.pattern_id);
     el.motionTrainingStatus.textContent = state.motionTraining.message || 'Training player idle.';
     el.motionTrainingStatus.style.color = isPlaying ? 'var(--cyan)' : 'var(--comment)';
-    el.stopMotionTrainingBtn.disabled = !isPlaying;
+    if (el.stopMotionTrainingBtn) el.stopMotionTrainingBtn.disabled = !isPlaying;
     [
         el.motionTrainingFeedbackUp,
         el.motionTrainingFeedbackNeutral,
         el.motionTrainingFeedbackDown,
-    ].forEach(button => { button.disabled = !hasPattern; });
+    ].forEach(button => {
+        if (button) button.disabled = !hasPattern;
+    });
+    if (state.motionTraining.pattern_id && !state.motionTrainingSelectedPatternId) {
+        state.motionTrainingSelectedPatternId = state.motionTraining.pattern_id;
+        renderMotionTrainingPatternList(state.motionPatterns);
+    }
 }
 
 async function fetchJsonWithMessage(endpoint, options = {}) {
@@ -116,14 +175,138 @@ async function fetchJsonWithMessage(endpoint, options = {}) {
     }
 }
 
-export function renderMotionPatterns(catalog = {}) {
+function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern) {
+    const canvas = el.motionTrainingPreviewCanvas;
+    if (!canvas) return;
+    const bounds = canvas.getBoundingClientRect();
+    const width = Math.max(320, Math.round(bounds.width || canvas.width || 640));
+    const height = Math.max(180, Math.round(bounds.height || canvas.height || 260));
+    if (canvas.width !== width || canvas.height !== height) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+
+    const previewCtx = canvas.getContext('2d');
+    const pad = 34;
+    previewCtx.clearRect(0, 0, width, height);
+    previewCtx.fillStyle = '#101217';
+    previewCtx.fillRect(0, 0, width, height);
+
+    previewCtx.strokeStyle = 'rgba(232, 230, 223, 0.12)';
+    previewCtx.lineWidth = 1;
+    previewCtx.font = '11px Inter, sans-serif';
+    previewCtx.fillStyle = 'rgba(232, 230, 223, 0.62)';
+    [0, 25, 50, 75, 100].forEach(position => {
+        const y = pad + ((100 - position) / 100) * (height - pad * 2);
+        previewCtx.beginPath();
+        previewCtx.moveTo(pad, y);
+        previewCtx.lineTo(width - pad, y);
+        previewCtx.stroke();
+        previewCtx.fillText(`${position}`, 7, y + 4);
+    });
+    for (let i = 0; i <= 4; i++) {
+        const x = pad + (i / 4) * (width - pad * 2);
+        previewCtx.beginPath();
+        previewCtx.moveTo(x, pad);
+        previewCtx.lineTo(x, height - pad);
+        previewCtx.stroke();
+    }
+
+    const actions = Array.isArray(pattern?.actions)
+        ? pattern.actions
+            .map(action => ({at: Number(action.at), pos: Number(action.pos)}))
+            .filter(action => Number.isFinite(action.at) && Number.isFinite(action.pos))
+            .sort((a, b) => a.at - b.at)
+        : [];
+
+    if (!actions.length) {
+        previewCtx.fillStyle = 'rgba(232, 230, 223, 0.72)';
+        previewCtx.textAlign = 'center';
+        previewCtx.fillText('Select a pattern to preview its position curve.', width / 2, height / 2);
+        previewCtx.textAlign = 'left';
+        return;
+    }
+
+    const start = actions[0].at;
+    const end = actions[actions.length - 1].at;
+    const duration = Math.max(1, end - start);
+    const xFor = action => pad + ((action.at - start) / duration) * (width - pad * 2);
+    const yFor = action => pad + ((100 - clampNumber(action.pos, 0, 100, 50)) / 100) * (height - pad * 2);
+
+    previewCtx.strokeStyle = '#7fb7a3';
+    previewCtx.lineWidth = 2.5;
+    previewCtx.beginPath();
+    actions.forEach((action, index) => {
+        const x = xFor(action);
+        const y = yFor(action);
+        if (index === 0) previewCtx.moveTo(x, y);
+        else previewCtx.lineTo(x, y);
+    });
+    previewCtx.stroke();
+
+    previewCtx.fillStyle = '#d8b66a';
+    actions.forEach(action => {
+        previewCtx.beginPath();
+        previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
+        previewCtx.fill();
+    });
+
+    previewCtx.fillStyle = 'rgba(232, 230, 223, 0.7)';
+    previewCtx.fillText('tip', width - pad + 6, pad + 4);
+    previewCtx.fillText('base', width - pad + 6, height - pad + 4);
+}
+
+function setMotionTrainingDetail(pattern) {
+    state.motionTrainingPreviewPattern = pattern || null;
+    if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
+        drawMotionTrainingPreview(pattern);
+        return;
+    }
+    if (!pattern) {
+        el.motionTrainingPatternTitle.textContent = 'No pattern selected';
+        el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
+        drawMotionTrainingPreview(null);
+        return;
+    }
+    el.motionTrainingPatternTitle.textContent = patternDisplayName(pattern);
+    const actionCount = Array.isArray(pattern.actions) ? pattern.actions.length : pattern.action_count || 0;
+    el.motionTrainingPatternMeta.textContent = `${formatPatternMetadata({...pattern, action_count: actionCount})} | flexible-position preview`;
+    drawMotionTrainingPreview(pattern);
+}
+
+function setMotionTrainingLoadingDetail(pattern) {
+    if (!pattern || !el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) return;
+    el.motionTrainingPatternTitle.textContent = patternDisplayName(pattern);
+    el.motionTrainingPatternMeta.textContent = `${formatPatternMetadata(pattern)} | loading preview...`;
+}
+
+async function selectMotionTrainingPattern(patternId) {
+    const cleanId = String(patternId || '').trim();
+    if (!cleanId) {
+        state.motionTrainingSelectedPatternId = '';
+        setMotionTrainingDetail(null);
+        renderMotionTrainingPatternList(state.motionPatterns);
+        return;
+    }
+
+    state.motionTrainingSelectedPatternId = cleanId;
+    renderMotionTrainingPatternList(state.motionPatterns);
+    const summary = patternById(cleanId);
+    if (summary) setMotionTrainingLoadingDetail(summary);
+
+    const data = await fetchJsonWithMessage(`/motion_patterns/${encodeURIComponent(cleanId)}`);
+    if (data && data.status === 'success' && data.pattern) {
+        state.motionTrainingSelectedPatternId = data.pattern.id;
+        setMotionTrainingDetail(data.pattern);
+        renderMotionTrainingPatternList(state.motionPatterns);
+    } else if (!summary) {
+        setMotionTrainingDetail(null);
+    }
+}
+
+function renderCompactMotionPatternList(patterns) {
     if (!el.motionPatternList) return;
-    const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
-    state.motionPatterns = patterns;
     el.motionPatternList.replaceChildren();
 
     if (!patterns.length) {
-        setPatternStatus('No motion patterns found.', 'var(--yellow)');
         return;
     }
 
@@ -144,31 +327,42 @@ export function renderMotionPatterns(catalog = {}) {
             checkbox.disabled = false;
         });
 
-        const text = D.createElement('div');
-        text.className = 'motion-pattern-text';
+        const text = createPatternText(pattern);
 
-        const name = D.createElement('div');
-        name.className = 'motion-pattern-name';
-        name.textContent = pattern.name || pattern.id || 'Unnamed pattern';
+        const actions = D.createElement('div');
+        actions.className = 'motion-pattern-row-actions';
 
-        const meta = D.createElement('div');
-        meta.className = 'motion-pattern-meta';
-        const feedback = pattern.feedback || {};
-        meta.textContent = [
-            pattern.source || 'unknown',
-            `${formatPatternDuration(pattern.duration_ms)} duration`,
-            `${pattern.action_count || 0} actions`,
-            pattern.readonly ? 'read-only' : 'editable file',
-            `feedback ${feedback.thumbs_up || 0}/${feedback.neutral || 0}/${feedback.thumbs_down || 0}`,
-        ].join(' | ');
+        actions.append(createPatternExportButton(pattern));
+        main.append(checkbox, text);
+        row.append(main, actions);
+        el.motionPatternList.appendChild(row);
+    });
+}
 
-        text.append(name, meta);
-        if (pattern.description) {
-            const description = D.createElement('div');
-            description.className = 'motion-pattern-description';
-            description.textContent = pattern.description;
-            text.appendChild(description);
-        }
+function renderMotionTrainingPatternList(patterns) {
+    if (!el.motionTrainingPatternList) return;
+    el.motionTrainingPatternList.replaceChildren();
+
+    if (!patterns.length) return;
+
+    patterns.forEach(pattern => {
+        const row = D.createElement('div');
+        row.className = 'motion-pattern-row motion-training-pattern-row';
+        if (pattern.id === state.motionTrainingSelectedPatternId) row.classList.add('selected');
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `Preview ${patternDisplayName(pattern)}`);
+        row.addEventListener('click', () => selectMotionTrainingPattern(pattern.id));
+        row.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectMotionTrainingPattern(pattern.id);
+            }
+        });
+
+        const main = D.createElement('div');
+        main.className = 'motion-pattern-main';
+        main.appendChild(createPatternText(pattern));
 
         const actions = D.createElement('div');
         actions.className = 'motion-pattern-row-actions';
@@ -177,21 +371,35 @@ export function renderMotionPatterns(catalog = {}) {
         playButton.type = 'button';
         playButton.className = 'my-button motion-pattern-play';
         playButton.textContent = 'Play';
-        playButton.addEventListener('click', () => startMotionTraining(pattern.id));
-
-        const exportButton = D.createElement('button');
-        exportButton.type = 'button';
-        exportButton.className = 'my-button motion-pattern-export';
-        exportButton.textContent = 'Export';
-        exportButton.addEventListener('click', () => {
-            window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
+        playButton.addEventListener('click', event => {
+            event.stopPropagation();
+            startMotionTraining(pattern.id);
         });
 
-        actions.append(playButton, exportButton);
-        main.append(checkbox, text);
+        actions.append(playButton, createPatternExportButton(pattern));
         row.append(main, actions);
-        el.motionPatternList.appendChild(row);
+        el.motionTrainingPatternList.appendChild(row);
     });
+}
+
+export function renderMotionPatterns(catalog = {}) {
+    const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
+    state.motionPatterns = patterns;
+    renderCompactMotionPatternList(patterns);
+    renderMotionTrainingPatternList(patterns);
+
+    if (!patterns.length) {
+        setPatternStatus('No motion patterns found.', 'var(--yellow)');
+        state.motionTrainingSelectedPatternId = '';
+        setMotionTrainingDetail(null);
+        return;
+    }
+
+    if (state.motionTrainingSelectedPatternId && !patternById(state.motionTrainingSelectedPatternId)) {
+        state.motionTrainingSelectedPatternId = '';
+        setMotionTrainingDetail(null);
+        renderMotionTrainingPatternList(patterns);
+    }
 
     const errors = Array.isArray(catalog.errors) ? catalog.errors : [];
     if (errors.length) {
@@ -202,6 +410,7 @@ export function renderMotionPatterns(catalog = {}) {
 }
 
 async function startMotionTraining(patternId) {
+    await selectMotionTrainingPattern(patternId);
     const data = await fetchJsonWithMessage('/motion_training/start', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -235,6 +444,7 @@ async function sendMotionTrainingFeedback(rating) {
     if (data && data.status === 'success') {
         updateMotionTrainingStatus(data.motion_training);
         renderMotionPatterns(data.motion_patterns);
+        if (data.pattern) setMotionTrainingDetail(data.pattern);
         el.statusText.textContent = data.motion_training.message || 'Pattern feedback saved.';
     }
 }
@@ -281,6 +491,37 @@ async function importMotionPatternFile(file) {
     } finally {
         el.motionPatternImportInput.value = '';
     }
+}
+
+async function openMotionTrainingWorkspace() {
+    if (!el.motionTrainingDialog) return;
+    el.motionTrainingDialog.classList.add('open');
+    let selectedId = state.motionTrainingSelectedPatternId
+        || state.motionTraining.pattern_id
+        || state.motionPatterns[0]?.id
+        || '';
+
+    if (!state.motionPatterns.length) {
+        const data = await refreshMotionPatterns();
+        const patterns = Array.isArray(data?.patterns) ? data.patterns : state.motionPatterns;
+        selectedId = state.motionTrainingSelectedPatternId
+            || state.motionTraining.pattern_id
+            || patterns[0]?.id
+            || '';
+    }
+
+    if (selectedId) await selectMotionTrainingPattern(selectedId);
+    else setMotionTrainingDetail(null);
+    window.requestAnimationFrame(() => drawMotionTrainingPreview());
+}
+
+function closeMotionTrainingWorkspace() {
+    if (!el.motionTrainingDialog) return;
+    el.motionTrainingDialog.classList.remove('open');
+}
+
+function drawOpenMotionTrainingPreview() {
+    if (el.motionTrainingDialog?.classList.contains('open')) drawMotionTrainingPreview();
 }
 
 export function resizeCanvas() {
@@ -391,6 +632,17 @@ export function initMotionControls({sendUserMessage}) {
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     el.importMotionPatternBtn.addEventListener('click', () => el.motionPatternImportInput.click());
     el.motionPatternImportInput.addEventListener('change', event => importMotionPatternFile(event.target.files[0]));
+    if (el.openMotionTrainingBtn) el.openMotionTrainingBtn.addEventListener('click', openMotionTrainingWorkspace);
+    if (el.closeMotionTrainingBtn) el.closeMotionTrainingBtn.addEventListener('click', closeMotionTrainingWorkspace);
+    if (el.motionTrainingDialog) {
+        el.motionTrainingDialog.addEventListener('click', event => {
+            if (event.target === el.motionTrainingDialog) closeMotionTrainingWorkspace();
+        });
+    }
+    D.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && el.motionTrainingDialog?.classList.contains('open')) closeMotionTrainingWorkspace();
+    });
+    window.addEventListener('resize', drawOpenMotionTrainingPreview);
     el.stopMotionTrainingBtn.addEventListener('click', stopMotionTraining);
     el.motionTrainingFeedbackUp.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_up'));
     el.motionTrainingFeedbackNeutral.addEventListener('click', () => sendMotionTrainingFeedback('neutral'));

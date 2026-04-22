@@ -160,16 +160,10 @@
                     <div class="motion-pattern-actions">
                         <button id="refresh-motion-patterns-btn" class="my-button">Refresh Patterns</button>
                         <button id="import-motion-pattern-btn" class="my-button">Import Pattern</button>
+                        <button id="open-motion-training-btn" class="my-button">Open Motion Training</button>
                     </div>
                     <input type="file" id="motion-pattern-import-input" accept=".json,.funscript,application/json" style="display: none;">
                     <div id="motion-pattern-status" style="font-size: 0.85em; color: var(--comment);">Pattern list not loaded yet.</div>
-                    <div class="motion-training-controls">
-                        <div id="motion-training-status" class="motion-training-status">Training player idle.</div>
-                        <button id="stop-motion-training-btn" class="my-button stop" disabled>Stop Preview</button>
-                        <button id="motion-training-feedback-up" class="my-button" disabled>Thumbs Up</button>
-                        <button id="motion-training-feedback-neutral" class="my-button" disabled>Neutral</button>
-                        <button id="motion-training-feedback-down" class="my-button" disabled>Thumbs Down</button>
-                    </div>
                     <div id="motion-pattern-list" class="motion-pattern-list"></div>
                 </div>
             </div>
@@ -195,6 +189,43 @@
                     <h4>Settings Data</h4>
                     <button id="reset-settings-btn" class="my-button stop">Reset All Settings</button>
                     <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="motion-training-dialog" class="modal-overlay">
+        <div class="modal-box motion-training-box">
+            <div class="modal-header">
+                <h3>Motion Training</h3>
+                <button id="close-motion-training-btn" class="modal-close" aria-label="Close motion training">&times;</button>
+            </div>
+            <div class="motion-training-workspace">
+                <div class="motion-training-list-pane">
+                    <div class="motion-training-toolbar">
+                        <div id="motion-training-status" class="motion-training-status">Training player idle.</div>
+                        <button id="stop-motion-training-btn" class="my-button stop" disabled>Stop Preview</button>
+                    </div>
+                    <div id="motion-training-pattern-list" class="motion-pattern-list motion-training-pattern-list"></div>
+                </div>
+                <div class="motion-training-detail-pane">
+                    <div class="motion-training-detail-header">
+                        <div>
+                            <h4 id="motion-training-pattern-title">No pattern selected</h4>
+                            <div id="motion-training-pattern-meta" class="motion-pattern-meta">Select a pattern to preview its shape.</div>
+                        </div>
+                        <div class="motion-backend-stack">
+                            <span class="motion-backend-badge">Preview: Flexible position</span>
+                            <span class="motion-backend-badge">App motion: HAMP continuous</span>
+                        </div>
+                    </div>
+                    <div class="motion-training-preview-wrap">
+                        <canvas id="motion-training-preview-canvas"></canvas>
+                    </div>
+                    <div class="motion-training-feedback-row">
+                        <button id="motion-training-feedback-up" class="my-button" disabled>Thumbs Up</button>
+                        <button id="motion-training-feedback-neutral" class="my-button" disabled>Neutral</button>
+                        <button id="motion-training-feedback-down" class="my-button" disabled>Thumbs Down</button>
+                    </div>
                 </div>
             </div>
         </div>
