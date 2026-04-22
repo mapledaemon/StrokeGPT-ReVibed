@@ -559,6 +559,15 @@ def expand_pattern(
     if not pattern:
         return []
 
+    return expand_motion_pattern(pattern, current, target, rng=rng)
+
+
+def expand_motion_pattern(
+    pattern: MotionPattern,
+    current: MotionTarget,
+    target: MotionTarget,
+    rng: Optional[random.Random] = None,
+) -> list[PatternFrame]:
     actions = prepare_pattern_actions(pattern)
     if not actions:
         return []

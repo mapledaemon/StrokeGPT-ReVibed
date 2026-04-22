@@ -183,6 +183,9 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="refresh-motion-patterns-btn"', page)
             self.assertIn('id="import-motion-pattern-btn"', page)
             self.assertIn('id="motion-pattern-import-input"', page)
+            self.assertIn('id="motion-training-status"', page)
+            self.assertIn('id="stop-motion-training-btn"', page)
+            self.assertIn('id="motion-training-feedback-up"', page)
             self.assertIn('data-settings-tab="advanced"', page)
             self.assertIn('id="settings-tab-advanced"', page)
             self.assertIn('id="reset-settings-btn"', page)
@@ -211,6 +214,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(".model-actions", css)
             self.assertIn(".motion-pattern-row", css)
             self.assertIn(".motion-pattern-list", css)
+            self.assertIn(".motion-training-controls", css)
+            self.assertIn(".motion-training-status", css)
             self.assertIn(".setup-slider", css)
             self.assertIn("@media (max-width: 760px)", css)
         finally:
@@ -261,6 +266,10 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("motionPatternImportInput", script)
         self.assertIn("FormData", script)
         self.assertIn("Import failed", script)
+        self.assertIn("/motion_training/start", script)
+        self.assertIn("/motion_training/stop", script)
+        self.assertIn("sendMotionTrainingFeedback", script)
+        self.assertIn("thumbs_up", script)
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")

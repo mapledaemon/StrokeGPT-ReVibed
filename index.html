@@ -163,6 +163,13 @@
                     </div>
                     <input type="file" id="motion-pattern-import-input" accept=".json,.funscript,application/json" style="display: none;">
                     <div id="motion-pattern-status" style="font-size: 0.85em; color: var(--comment);">Pattern list not loaded yet.</div>
+                    <div class="motion-training-controls">
+                        <div id="motion-training-status" class="motion-training-status">Training player idle.</div>
+                        <button id="stop-motion-training-btn" class="my-button stop" disabled>Stop Preview</button>
+                        <button id="motion-training-feedback-up" class="my-button" disabled>Thumbs Up</button>
+                        <button id="motion-training-feedback-neutral" class="my-button" disabled>Neutral</button>
+                        <button id="motion-training-feedback-down" class="my-button" disabled>Thumbs Down</button>
+                    </div>
                     <div id="motion-pattern-list" class="motion-pattern-list"></div>
                 </div>
             </div>

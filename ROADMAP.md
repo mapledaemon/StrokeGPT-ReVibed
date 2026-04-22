@@ -56,16 +56,27 @@ Candidate local ASR providers:
 
 ## Motion, Patterns, And Visualization
 
-- Add a small pattern browser/editor for reusable motion shapes.
+- Add a dedicated motion training workspace for pattern playback, editing,
+  visualization, and feedback. This may be a separate full-screen view,
+  independent panel, or large modal rather than part of the compact settings
+  dialog.
 - Add a motion training module in staged PRs: pattern file registry first,
   settings enable/disable list second, device playback and feedback third, then
   transform buttons and LLM preference integration.
-- The settings pattern list should remain a management surface until playback
-  controls are added in a later PR; checking or unchecking a pattern should not
-  send movement to the device.
+- Keep the training player focused on explicit previews: checking or
+  unchecking a pattern should not send movement to the device, and feedback
+  should remain visible training data until a later preference-integration PR.
+- Keep the Motion settings tab as a compact management surface for enablement,
+  import/export, and status. Do not put dense pattern editing, smoothing,
+  harshening, sequencing, or visualization controls there.
 - Build on the internal funscript-style action and soft-anchor pipelines with
   user-visible controls for smoothing, repeat count, tempo, softness,
   large-step limiting, and point simplification.
+- Preserve both Handy motion backends as the pattern work matures: continuous
+  HAMP range/velocity playback for smooth ongoing app motion, and flexible
+  position/script-style playback for pattern previews, generated scripts, and
+  spatially specific motion. Add a user-visible selector before either path is
+  used as the default replacement for the current app motion behavior.
 - Store user-generated and imported patterns as individual shareable files in
   `user_data/patterns`, with import/export controls and validation before any
   pattern can be sent to the device.
@@ -77,6 +88,9 @@ Candidate local ASR providers:
   range, tip/base calibration, and recent motion path.
 - Add a motion style preference selector for broad movement feel such as
   smooth, steady, teasing, pulsing, ramping, or high-variation.
+- Add a motion backend selector for HAMP continuous motion versus flexible
+  position/script playback, with clear labels explaining smoothness, pattern
+  fidelity, and latency tradeoffs.
 - Improve LLM prompt examples around spatial requests: tip, upper, middle,
   base, full length, short stroke, half length, and smooth alternation.
 - Keep range changes continuous. A single range should not become a static
@@ -84,6 +98,8 @@ Candidate local ASR providers:
 - Add pattern transform presets inspired by funscript tooling: remap range,
   halve/double timing, smooth sparse actions, repeat a stroke shape, and apply
   subtle randomized variation with a preview before playback.
+- Add training workspace transform buttons for smoothing and harshening a
+  copied preview pattern before the user rates or saves it.
 - Add a soft-anchor editor where users can arrange 2-6 targets such as tip,
   upper, middle, lower, and base, then preview Catmull/minimum-jerk trajectory
   output before sending it to the device.

@@ -523,9 +523,37 @@ class MotionController:
         target = target.rounded()
         self.handy.move(target.speed, target.depth, target.stroke_range)
 
-    def apply_frames(self, frames: list[Any]) -> None:
+    def _position_velocity(self, start: MotionTarget, target: MotionTarget, duration_seconds: float) -> int | None:
+        if hasattr(self.handy, "velocity_for_depth_interval"):
+            return self.handy.velocity_for_depth_interval(
+                target.speed,
+                start.depth,
+                target.depth,
+                duration_seconds,
+            )
+        return None
+
+    def _apply_position_step(
+        self,
+        target: MotionTarget,
+        *,
+        stop_on_target: bool = True,
+        velocity: int | None = None,
+    ) -> None:
+        target = target.rounded()
+        if hasattr(self.handy, "move_to_depth"):
+            self.handy.move_to_depth(
+                target.speed,
+                target.depth,
+                stop_on_target=stop_on_target,
+                velocity=velocity,
+            )
+        else:
+            self.handy.move(target.speed, target.depth, target.stroke_range)
+
+    def apply_frames(self, frames: list[Any], *, stop_after: bool = False) -> bool:
         if not frames:
-            return
+            return False
 
         with self._lock:
             self._generation += 1
@@ -534,17 +562,59 @@ class MotionController:
         for frame in frames:
             with self._lock:
                 if generation != self._generation:
-                    return
+                    return False
 
             for step in self.sanitizer.transition_path(self.current_target(), frame.target):
                 with self._lock:
                     if generation != self._generation:
-                        return
+                        return False
                 self._apply_step(step)
                 time.sleep(self.step_delay)
 
             if self.step_delay > 0:
                 time.sleep(self.step_delay * frame.delay_factor)
+
+        if stop_after:
+            with self._lock:
+                if generation != self._generation:
+                    return False
+                self._generation += 1
+            self.handy.stop()
+        return True
+
+    def apply_position_frames(self, frames: list[Any], *, stop_after: bool = False) -> bool:
+        if not frames:
+            return False
+
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+
+        previous_target = self.current_target()
+        frame_count = len(frames)
+        for index, frame in enumerate(frames):
+            with self._lock:
+                if generation != self._generation:
+                    return False
+            delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
+            is_last_frame = index == frame_count - 1
+            velocity = self._position_velocity(previous_target, frame.target, delay_seconds)
+            self._apply_position_step(
+                frame.target,
+                stop_on_target=is_last_frame and not stop_after,
+                velocity=velocity,
+            )
+            previous_target = frame.target
+            if self.step_delay > 0:
+                time.sleep(delay_seconds)
+
+        if stop_after:
+            with self._lock:
+                if generation != self._generation:
+                    return False
+                self._generation += 1
+            self.handy.stop()
+        return True
 
     def _expanded_frames(self, target: MotionTarget) -> list[Any]:
         current = self.current_target()

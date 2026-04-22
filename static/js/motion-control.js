@@ -78,6 +78,44 @@ function setPatternStatus(message, color = 'var(--comment)') {
     el.motionPatternStatus.style.color = color;
 }
 
+function updateMotionTrainingStatus(status = {}) {
+    state.motionTraining = {
+        state: status.state || state.motionTraining.state || 'idle',
+        pattern_id: status.pattern_id || state.motionTraining.pattern_id || '',
+        pattern_name: status.pattern_name || state.motionTraining.pattern_name || '',
+        message: status.message || '',
+        last_feedback: status.last_feedback || '',
+    };
+    if (!el.motionTrainingStatus) return;
+
+    const isPlaying = state.motionTraining.state === 'playing' || state.motionTraining.state === 'starting';
+    const hasPattern = Boolean(state.motionTraining.pattern_id);
+    el.motionTrainingStatus.textContent = state.motionTraining.message || 'Training player idle.';
+    el.motionTrainingStatus.style.color = isPlaying ? 'var(--cyan)' : 'var(--comment)';
+    el.stopMotionTrainingBtn.disabled = !isPlaying;
+    [
+        el.motionTrainingFeedbackUp,
+        el.motionTrainingFeedbackNeutral,
+        el.motionTrainingFeedbackDown,
+    ].forEach(button => { button.disabled = !hasPattern; });
+}
+
+async function fetchJsonWithMessage(endpoint, options = {}) {
+    try {
+        const response = await fetch(endpoint, options);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.status === 'error') {
+            const message = data.message || `Request failed: ${response.status}`;
+            el.statusText.textContent = message;
+            return data;
+        }
+        return data;
+    } catch (error) {
+        el.statusText.textContent = `Request failed: ${error.message}`;
+        return undefined;
+    }
+}
+
 export function renderMotionPatterns(catalog = {}) {
     if (!el.motionPatternList) return;
     const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
@@ -115,11 +153,13 @@ export function renderMotionPatterns(catalog = {}) {
 
         const meta = D.createElement('div');
         meta.className = 'motion-pattern-meta';
+        const feedback = pattern.feedback || {};
         meta.textContent = [
             pattern.source || 'unknown',
             `${formatPatternDuration(pattern.duration_ms)} duration`,
             `${pattern.action_count || 0} actions`,
             pattern.readonly ? 'read-only' : 'editable file',
+            `feedback ${feedback.thumbs_up || 0}/${feedback.neutral || 0}/${feedback.thumbs_down || 0}`,
         ].join(' | ');
 
         text.append(name, meta);
@@ -130,6 +170,15 @@ export function renderMotionPatterns(catalog = {}) {
             text.appendChild(description);
         }
 
+        const actions = D.createElement('div');
+        actions.className = 'motion-pattern-row-actions';
+
+        const playButton = D.createElement('button');
+        playButton.type = 'button';
+        playButton.className = 'my-button motion-pattern-play';
+        playButton.textContent = 'Play';
+        playButton.addEventListener('click', () => startMotionTraining(pattern.id));
+
         const exportButton = D.createElement('button');
         exportButton.type = 'button';
         exportButton.className = 'my-button motion-pattern-export';
@@ -138,8 +187,9 @@ export function renderMotionPatterns(catalog = {}) {
             window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
         });
 
+        actions.append(playButton, exportButton);
         main.append(checkbox, text);
-        row.append(main, exportButton);
+        row.append(main, actions);
         el.motionPatternList.appendChild(row);
     });
 
@@ -148,6 +198,44 @@ export function renderMotionPatterns(catalog = {}) {
         setPatternStatus(`Loaded ${patterns.length} patterns. ${errors.length} file issue(s) need attention.`, 'var(--yellow)');
     } else {
         setPatternStatus(`Loaded ${patterns.length} patterns.`, 'var(--cyan)');
+    }
+}
+
+async function startMotionTraining(patternId) {
+    const data = await fetchJsonWithMessage('/motion_training/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pattern_id: patternId}),
+    });
+    if (data && data.motion_training) {
+        updateMotionTrainingStatus(data.motion_training);
+        el.statusText.textContent = data.motion_training.message || 'Motion training started.';
+    }
+}
+
+async function stopMotionTraining() {
+    const data = await apiCall('/motion_training/stop', {method: 'POST'});
+    if (data && data.motion_training) {
+        updateMotionTrainingStatus(data.motion_training);
+        el.statusText.textContent = data.motion_training.message || 'Motion training stopped.';
+    }
+}
+
+async function sendMotionTrainingFeedback(rating) {
+    const patternId = state.motionTraining.pattern_id;
+    if (!patternId) {
+        el.statusText.textContent = 'Play or select a pattern before sending feedback.';
+        return;
+    }
+    const data = await fetchJsonWithMessage(`/motion_training/${encodeURIComponent(patternId)}/feedback`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({rating}),
+    });
+    if (data && data.status === 'success') {
+        updateMotionTrainingStatus(data.motion_training);
+        renderMotionPatterns(data.motion_patterns);
+        el.statusText.textContent = data.motion_training.message || 'Pattern feedback saved.';
     }
 }
 
@@ -265,6 +353,7 @@ export async function pollMotionStatus() {
     }[data.mood] || '';
     el.moodDisplay.textContent = `Mood: ${data.mood} ${emoji}`;
     drawHandyVisualizer(data.speed || 0, data.depth || 0);
+    if (data.motion_training) updateMotionTrainingStatus(data.motion_training);
 }
 
 async function likeLastMove() {
@@ -302,10 +391,15 @@ export function initMotionControls({sendUserMessage}) {
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     el.importMotionPatternBtn.addEventListener('click', () => el.motionPatternImportInput.click());
     el.motionPatternImportInput.addEventListener('change', event => importMotionPatternFile(event.target.files[0]));
+    el.stopMotionTrainingBtn.addEventListener('click', stopMotionTraining);
+    el.motionTrainingFeedbackUp.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_up'));
+    el.motionTrainingFeedbackNeutral.addEventListener('click', () => sendMotionTrainingFeedback('neutral'));
+    el.motionTrainingFeedbackDown.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_down'));
     el.settingsTabs.forEach(tab => {
         if (tab.dataset.settingsTab === 'motion') tab.addEventListener('click', refreshMotionPatterns);
     });
     D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
     D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method: 'POST'}));
+    updateMotionTrainingStatus();
     refreshMotionPatterns();
 }

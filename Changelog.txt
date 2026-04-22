@@ -8,6 +8,39 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Training Player
+-----------------------------------
+
+Branch: codex-motion-training-player
+
+- Added a Motion tab training player that can play one listed pattern at a
+  time through `MotionController` without creating a separate Handy control
+  path.
+- Added training status, stop-preview handling, and direct stop-command
+  integration so active training playback can be interrupted through the same
+  motion stop path as chat and background modes.
+- Stopped Handy movement automatically after a preview finishes naturally, so
+  the UI cannot mark training idle while the device keeps repeating the last
+  HAMP command.
+- Changed motion training previews to use position-target playback instead of
+  HAMP range/velocity playback, so selected pattern shapes do not collapse into
+  the same continuous stroke feel.
+- Smoothed position-target previews by using non-stopping intermediate targets
+  and interval-aware velocities capped by the configured user speed limits,
+  preserving pattern flexibility without returning previews to HAMP.
+- Added Thumbs Up, Neutral, and Thumbs Down feedback controls for played
+  patterns, persisted in portable settings without changing LLM behavior yet.
+- Added arbitrary `MotionPattern` frame expansion for imported/generated
+  pattern records, plus route, settings, frontend, and pattern expansion
+  regression coverage.
+- Updated the roadmap to move future dense pattern editing, visualization, and
+  transform controls into a larger motion training workspace instead of the
+  compact settings menu.
+- Updated the roadmap to preserve both continuous HAMP motion and flexible
+  position/script playback in later stages, with a future selector before
+  either path becomes the default app motion backend.
+
+
 Unreleased - Motion Pattern Settings List
 -----------------------------------------
 

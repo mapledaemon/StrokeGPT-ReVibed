@@ -56,6 +56,7 @@ def default_settings_dict():
         "patterns": [],
         "milking_patterns": [],
         "motion_pattern_enabled": {},
+        "motion_pattern_feedback": {},
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -144,6 +145,7 @@ class SettingsManager:
         self.patterns = _as_list(data.get("patterns", []))
         self.milking_patterns = _as_list(data.get("milking_patterns", []))
         self.motion_pattern_enabled = self._normalize_bool_map(data.get("motion_pattern_enabled", {}))
+        self.motion_pattern_feedback = self._normalize_feedback_map(data.get("motion_pattern_feedback", {}))
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
@@ -226,6 +228,7 @@ class SettingsManager:
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
+            "motion_pattern_feedback": self._normalize_feedback_map(self.motion_pattern_feedback),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,
@@ -294,6 +297,21 @@ class SettingsManager:
             cleaned = re.sub(r"[^a-z0-9_-]+", "-", str(key or "").strip().lower()).strip("-_")
             if cleaned:
                 normalized[cleaned[:64]] = bool(value)
+        return normalized
+
+    def _normalize_feedback_map(self, values):
+        if not isinstance(values, dict):
+            return {}
+        normalized = {}
+        for key, feedback in values.items():
+            cleaned = re.sub(r"[^a-z0-9_-]+", "-", str(key or "").strip().lower()).strip("-_")
+            if not cleaned or not isinstance(feedback, dict):
+                continue
+            normalized[cleaned[:64]] = {
+                "thumbs_up": _clamp_int(feedback.get("thumbs_up"), 0, 1_000_000, 0),
+                "neutral": _clamp_int(feedback.get("neutral"), 0, 1_000_000, 0),
+                "thumbs_down": _clamp_int(feedback.get("thumbs_down"), 0, 1_000_000, 0),
+            }
         return normalized
 
     def _timing_pair(self, first, second, default_first, default_second):

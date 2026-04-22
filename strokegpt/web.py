@@ -19,6 +19,7 @@ from .llm import LLMService
 from .audio import AudioService
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic
 from .motion import IntentMatcher, MotionController, MotionTarget
+from .motion_patterns import expand_motion_pattern
 from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
     PatternLibrary,
@@ -141,6 +142,16 @@ ollama_pull_state = {
     "completed": 0,
     "total": 0,
     "percent": None,
+}
+motion_training_lock = threading.Lock()
+motion_training_thread = None
+motion_training_stop_event = threading.Event()
+motion_training_state = {
+    "state": "idle",
+    "pattern_id": "",
+    "pattern_name": "",
+    "message": "Motion training idle.",
+    "last_feedback": "",
 }
 
 # Easter Egg State
@@ -402,7 +413,96 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
-    return motion_pattern_library.catalog(settings.motion_pattern_enabled)
+    return motion_pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback)
+
+def _motion_pattern_record(pattern_id):
+    return motion_pattern_library.get_record(
+        pattern_id,
+        settings.motion_pattern_enabled,
+        settings.motion_pattern_feedback,
+    )
+
+def _motion_training_snapshot():
+    with motion_training_lock:
+        return dict(motion_training_state)
+
+def _set_motion_training_state(**updates):
+    with motion_training_lock:
+        motion_training_state.update(updates)
+        return dict(motion_training_state)
+
+def _training_target_for_record(record):
+    current = motion.current_target()
+    speed = current.speed if current.speed > 0 else 35
+    if settings.min_speed >= settings.max_speed:
+        speed = max(10, min(45, speed))
+    depth = current.depth if current.depth > 0 else 50
+    stroke_range = current.stroke_range if current.stroke_range >= 30 else 50
+    return MotionTarget(
+        speed=speed,
+        depth=depth,
+        stroke_range=stroke_range,
+        label=f"training {record.pattern_id}",
+    ).clamped()
+
+def _run_motion_training_pattern(record):
+    try:
+        target = _training_target_for_record(record)
+        frames = expand_motion_pattern(record.to_motion_pattern(), motion.current_target(), target)
+        if not frames:
+            _set_motion_training_state(
+                state="error",
+                message=f"Pattern {record.name} has no playable frames.",
+            )
+            return
+        _set_motion_training_state(
+            state="playing",
+            pattern_id=record.pattern_id,
+            pattern_name=record.name,
+            message=f"Playing {record.name}.",
+        )
+        completed = motion.apply_position_frames(frames, stop_after=True)
+        if motion_training_stop_event.is_set():
+            _set_motion_training_state(
+                state="stopped",
+                pattern_id=record.pattern_id,
+                pattern_name=record.name,
+                message=f"Stopped {record.name}.",
+            )
+        elif not completed:
+            _set_motion_training_state(
+                state="stopped",
+                pattern_id=record.pattern_id,
+                pattern_name=record.name,
+                message=f"Interrupted {record.name}.",
+            )
+        else:
+            _set_motion_training_state(
+                state="idle",
+                pattern_id=record.pattern_id,
+                pattern_name=record.name,
+                message=f"Finished {record.name}.",
+            )
+    except Exception as exc:
+        _set_motion_training_state(
+            state="error",
+            pattern_id=record.pattern_id,
+            pattern_name=record.name,
+            message=f"Pattern playback failed: {exc}",
+        )
+    finally:
+        motion_training_stop_event.clear()
+
+def _stop_motion_training():
+    motion_training_stop_event.set()
+    snapshot = _motion_training_snapshot()
+    if snapshot.get("state") in {"playing", "starting"}:
+        _set_motion_training_state(
+            state="stopped",
+            message=f"Stopped {snapshot.get('pattern_name') or 'motion training'}.",
+        )
+    motion.stop()
+    return _motion_training_snapshot()
 
 def reset_runtime_state():
     global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
@@ -413,7 +513,7 @@ def reset_runtime_state():
         auto_mode_active_task.join(timeout=5)
         auto_mode_active_task = None
 
-    motion.stop()
+    _stop_motion_training()
     settings.reset_to_defaults(save=True)
     apply_settings_to_services()
     chat_history.clear()
@@ -425,6 +525,13 @@ def reset_runtime_state():
     edging_start_time = None
     special_persona_mode = None
     special_persona_interactions_left = 0
+    _set_motion_training_state(
+        state="idle",
+        pattern_id="",
+        pattern_name="",
+        message="Motion training idle.",
+        last_feedback="",
+    )
 
 SNAKE_ASCII = """
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠟⠛⠛⠋⠉⠛⠟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -477,6 +584,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
     if auto_mode_active_task:
         auto_mode_active_task.stop()
         auto_mode_active_task.join(timeout=5)
+    _stop_motion_training()
     
     user_signal_event.clear()
     mode_message_queue.clear()
@@ -529,7 +637,7 @@ def _handle_chat_commands(text):
     intent = intent_matcher.parse(text, motion.current_target())
     if intent.kind == "stop":
         if auto_mode_active_task: auto_mode_active_task.stop()
-        motion.stop()
+        _stop_motion_training()
         add_message_to_queue("Stopping.", add_to_history=False)
         return True, jsonify({"status": "stopped"})
     if "up up down down left right left right b a" in text:
@@ -624,14 +732,14 @@ def motion_patterns_route():
 
 @app.route('/motion_patterns/<pattern_id>')
 def motion_pattern_detail_route(pattern_id):
-    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
+    record = _motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
 
 @app.route('/motion_patterns/<pattern_id>/export')
 def export_motion_pattern_route(pattern_id):
-    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
+    record = _motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     payload = json.dumps(record.to_export_dict(), indent=2).encode("utf-8")
@@ -675,16 +783,88 @@ def import_motion_pattern_route():
 @app.route('/motion_patterns/<pattern_id>/enabled', methods=['POST'])
 def set_motion_pattern_enabled_route(pattern_id):
     data = _request_json()
-    record = motion_pattern_library.get_record(pattern_id, settings.motion_pattern_enabled)
+    record = _motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     settings.motion_pattern_enabled[record.pattern_id] = bool(data.get("enabled", True))
     settings.save()
-    updated = motion_pattern_library.get_record(record.pattern_id, settings.motion_pattern_enabled)
+    updated = _motion_pattern_record(record.pattern_id)
     return jsonify({
         "status": "success",
         "pattern": updated.to_summary_dict(include_actions=True),
         "motion_patterns": _motion_pattern_catalog_payload(),
+    })
+
+@app.route('/motion_training/status')
+def motion_training_status_route():
+    return jsonify({"status": "success", "motion_training": _motion_training_snapshot()})
+
+@app.route('/motion_training/start', methods=['POST'])
+def start_motion_training_route():
+    global motion_training_thread
+    data = _request_json()
+    pattern_id = data.get("pattern_id", "")
+    record = _motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    if not handy.handy_key:
+        return jsonify({"status": "error", "message": "Set a Handy connection key before playing motion training patterns."}), 400
+    if auto_mode_active_task:
+        return jsonify({"status": "error", "message": "Stop the active mode before playing a training pattern."}), 409
+
+    with motion_training_lock:
+        if motion_training_thread and motion_training_thread.is_alive():
+            return jsonify({"status": "error", "message": "A motion training pattern is already playing."}), 409
+        motion_training_stop_event.clear()
+        motion_training_state.update({
+            "state": "starting",
+            "pattern_id": record.pattern_id,
+            "pattern_name": record.name,
+            "message": f"Starting {record.name}.",
+        })
+        motion_training_thread = threading.Thread(
+            target=_run_motion_training_pattern,
+            args=(record,),
+            daemon=True,
+        )
+        motion_training_thread.start()
+        snapshot = dict(motion_training_state)
+    return jsonify({"status": "started", "motion_training": snapshot})
+
+@app.route('/motion_training/stop', methods=['POST'])
+def stop_motion_training_route():
+    snapshot = _stop_motion_training()
+    return jsonify({"status": "stopped", "motion_training": snapshot})
+
+@app.route('/motion_training/<pattern_id>/feedback', methods=['POST'])
+def motion_training_feedback_route(pattern_id):
+    data = _request_json()
+    rating = str(data.get("rating", "")).strip().lower()
+    if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
+        return jsonify({"status": "error", "message": "Feedback must be thumbs_up, neutral, or thumbs_down."}), 400
+    record = _motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    feedback = dict(settings.motion_pattern_feedback.get(record.pattern_id) or {
+        "thumbs_up": 0,
+        "neutral": 0,
+        "thumbs_down": 0,
+    })
+    feedback[rating] = int(feedback.get(rating, 0)) + 1
+    settings.motion_pattern_feedback[record.pattern_id] = feedback
+    settings.save()
+    updated = _motion_pattern_record(record.pattern_id)
+    _set_motion_training_state(
+        pattern_id=record.pattern_id,
+        pattern_name=record.name,
+        last_feedback=rating,
+        message=f"Saved {rating.replace('_', ' ')} feedback for {record.name}.",
+    )
+    return jsonify({
+        "status": "success",
+        "pattern": updated.to_summary_dict(include_actions=True),
+        "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_training": _motion_training_snapshot(),
     })
 
 @app.route('/reset_settings', methods=['POST'])
@@ -993,6 +1173,7 @@ def get_status_route():
         "speed": handy.last_stroke_speed,
         "depth": handy.last_depth_pos,
         "range": handy.last_stroke_range,
+        "motion_training": _motion_training_snapshot(),
     })
 
 @app.route('/set_depth_limits', methods=['POST'])
