@@ -22,6 +22,8 @@ The current goal is not feature expansion. The current goal is stabilization, si
 - `strokegpt/llm.py`: Ollama API integration and prompt construction.
 - `strokegpt/motion.py`: deterministic intent matching, safety clamping, and smooth transitions.
 - `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes.
+- `strokegpt/pattern_library.py`: shareable motion pattern schema, built-in
+  pattern catalog, and user pattern file registry.
 - `strokegpt/motion_scripts.py`: longer scripted motion plans.
 - `strokegpt/background_modes.py`: auto, edging, and milking background modes.
 - `strokegpt/audio.py`: ElevenLabs and local Chatterbox TTS providers.
@@ -76,6 +78,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Local Chatterbox defaults to the Turbo engine when available, reports Torch/CUDA status in the Voice tab, and splits long replies into smaller audio chunks. Do not preload/download Chatterbox weights automatically; the Voice tab has an explicit download/load button because first use may download several GB.
 - The Model tab reports Ollama availability and has an explicit download button for selected or typed Ollama models. Do not hide large model downloads in startup code.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
+- Before pushing a PR, provide a local PowerShell validation script for the
+  user to run, include a final app launch step for manual browser/device
+  testing, and make sure `Changelog.txt` already describes the branch.
 
 ## Known Rough Edges
 
@@ -116,6 +121,7 @@ python app.py
 5. Review the LLM prompt for reliability and reduce prompt bloat.
 6. Review and clean legacy easter egg content.
 7. Add release notes that clearly mark the app as experimental.
+8. Continue motion training in stages using `docs/motion_training_prompts.md`.
 
 ## Continuation Prompts
 

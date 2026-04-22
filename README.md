@@ -8,6 +8,8 @@ The current focus is reliability, visibility, and local-first control:
   expressiveness.
 - Make LLM-to-motion mapping more visible, especially tip/base, stroke length,
   range, and smooth alternation.
+- Start motion training in staged pieces: shareable pattern files first, then
+  settings controls, training playback, transforms, and visible preferences.
 - Improve UI formatting so chat, settings, model downloads, and device controls
   stay readable at common window sizes.
 - Keep model downloads explicit and user-triggered.
@@ -306,9 +308,12 @@ GitHub Actions runs these checks on Python 3.11 for pushes to `master` or `main`
 ```text
 app.py                  Launcher
 index.html              Web UI markup
+docs/                   Follow-up implementation prompts and planning notes
 ROADMAP.md             Planned local voice, motion, device, and UI work
 requirements.txt        Python dependencies
 strokegpt/              Backend package
+strokegpt/pattern_library.py
+                        Shareable motion pattern registry and import/export
 strokegpt/motion_patterns.py
                         Normalized reusable motion pattern shapes
 tests/                  Regression tests

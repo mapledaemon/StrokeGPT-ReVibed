@@ -57,9 +57,15 @@ Candidate local ASR providers:
 ## Motion, Patterns, And Visualization
 
 - Add a small pattern browser/editor for reusable motion shapes.
+- Add a motion training module in staged PRs: pattern file registry first,
+  settings enable/disable list second, device playback and feedback third, then
+  transform buttons and LLM preference integration.
 - Build on the internal funscript-style action and soft-anchor pipelines with
   user-visible controls for smoothing, repeat count, tempo, softness,
   large-step limiting, and point simplification.
+- Store user-generated and imported patterns as individual shareable files in
+  `user_data/patterns`, with import/export controls and validation before any
+  pattern can be sent to the device.
 - Import user-provided `.funscript` snippets into internal movement targets
   after license/attribution and preview concerns are resolved.
 - Add a pattern evaluation view that visualizes speed, depth, range, and zone

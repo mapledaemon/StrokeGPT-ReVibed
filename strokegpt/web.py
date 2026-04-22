@@ -19,11 +19,19 @@ from .llm import LLMService
 from .audio import AudioService
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic
 from .motion import IntentMatcher, MotionController, MotionTarget
+from .pattern_library import (
+    ALLOWED_IMPORT_EXTENSIONS,
+    PatternLibrary,
+    PatternValidationError,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
+USER_DATA_DIR = PROJECT_ROOT / "user_data"
+MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
+MAX_PATTERN_IMPORT_BYTES = 1_000_000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 
@@ -88,6 +96,7 @@ handy = HandyController(settings.handy_key)
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
 motion = MotionController(handy)
 intent_matcher = IntentMatcher()
+motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
 
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
 llm = LLMService(url=LLM_URL, model=ollama_model)
@@ -604,6 +613,60 @@ def handle_user_message():
 @app.route('/check_settings')
 def check_settings_route():
     return jsonify(settings_payload())
+
+@app.route('/motion_patterns')
+def motion_patterns_route():
+    return jsonify(motion_pattern_library.catalog())
+
+@app.route('/motion_patterns/<pattern_id>')
+def motion_pattern_detail_route(pattern_id):
+    record = motion_pattern_library.get_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
+
+@app.route('/motion_patterns/<pattern_id>/export')
+def export_motion_pattern_route(pattern_id):
+    record = motion_pattern_library.get_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    payload = json.dumps(record.to_export_dict(), indent=2).encode("utf-8")
+    return send_file(
+        io.BytesIO(payload),
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=f"{record.pattern_id}.strokegpt-pattern.json",
+    )
+
+def _read_uploaded_pattern_payload(upload):
+    filename = secure_filename(upload.filename or "pattern.json")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_IMPORT_EXTENSIONS:
+        raise PatternValidationError("Pattern imports must be .json or .funscript files.")
+    raw = upload.read(MAX_PATTERN_IMPORT_BYTES + 1)
+    if len(raw) > MAX_PATTERN_IMPORT_BYTES:
+        raise PatternValidationError("Pattern import is too large.")
+    try:
+        return filename, json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PatternValidationError(f"Pattern file is not valid JSON: {exc}") from exc
+
+@app.route('/import_motion_pattern', methods=['POST'])
+def import_motion_pattern_route():
+    try:
+        if "pattern" in request.files:
+            filename, payload = _read_uploaded_pattern_payload(request.files["pattern"])
+        else:
+            payload = _request_json()
+            filename = (
+                secure_filename(payload.get("filename") or "pattern.json")
+                if isinstance(payload, dict)
+                else "pattern.json"
+            )
+        record = motion_pattern_library.import_payload(payload, filename=filename)
+    except PatternValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
 
 @app.route('/reset_settings', methods=['POST'])
 def reset_settings_route():
