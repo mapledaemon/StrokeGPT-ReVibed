@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Frontend Module Split And PR #15 Changelog Record
+2026-04-22 - PR #16 - Split Frontend Modules And Track PR #15
 --------------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/16
 Branch: changelog-pr15-history
+Head commit: 4155a92
+Merge commit: dac0719
 
 - Converted `static/app.js` into a small browser-module orchestrator.
 - Added focused frontend modules for shared context, settings/model/persona,
