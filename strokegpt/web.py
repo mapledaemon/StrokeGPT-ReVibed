@@ -46,6 +46,7 @@ ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aa
 MAX_PATTERN_IMPORT_BYTES = 1_000_000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
+MOTION_FEEDBACK_HISTORY_LIMIT = 20
 
 
 def resource_path(*parts):
@@ -463,10 +464,12 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
-    return enrich_catalog(
+    payload = enrich_catalog(
         motion_pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback),
         settings.motion_pattern_weights,
     )
+    payload["feedback_history"] = list(settings.motion_pattern_feedback_history[:MOTION_FEEDBACK_HISTORY_LIMIT])
+    return payload
 
 def _motion_preference_payload():
     return build_motion_preference_payload(_motion_pattern_catalog_payload())
@@ -612,7 +615,23 @@ def _apply_llm_response_move(response, current, source="llm"):
     motion.apply_generated_target(target, source=source)
     return target
 
-def _record_motion_pattern_feedback(pattern_id, rating):
+def _append_motion_feedback_history(record, rating, source, updated_pattern):
+    entry = {
+        "pattern_id": record.pattern_id,
+        "pattern_name": record.name,
+        "rating": rating,
+        "source": source or "feedback",
+        "at": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+    }
+    if updated_pattern:
+        entry["enabled"] = bool(getattr(updated_pattern, "enabled", True))
+        if updated_pattern.source == "fixed":
+            entry["weight"] = _motion_pattern_summary(updated_pattern).get("weight", 50)
+    settings.motion_pattern_feedback_history = (
+        [entry] + list(settings.motion_pattern_feedback_history or [])
+    )[:MOTION_FEEDBACK_HISTORY_LIMIT]
+
+def _record_motion_pattern_feedback(pattern_id, rating, source="feedback"):
     record = _motion_pattern_record(pattern_id)
     if not record:
         return None
@@ -640,8 +659,9 @@ def _record_motion_pattern_feedback(pattern_id, rating):
         if record.source == "fixed":
             settings.motion_pattern_weights[record.pattern_id] = 0
         auto_disabled = True
-    settings.save()
     updated = _motion_pattern_record(record.pattern_id)
+    _append_motion_feedback_history(record, rating, source, updated)
+    settings.save()
     return {
         "pattern": updated,
         "auto_disabled": auto_disabled,
@@ -1181,6 +1201,25 @@ def set_motion_pattern_weight_route(pattern_id):
         "motion_preferences": _motion_preference_payload(),
     })
 
+@app.route('/motion_patterns/<pattern_id>/feedback/reset', methods=['POST'])
+def reset_motion_pattern_feedback_route(pattern_id):
+    record = _motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    settings.motion_pattern_feedback.pop(record.pattern_id, None)
+    if record.source == "fixed":
+        settings.motion_pattern_weights.pop(record.pattern_id, None)
+    updated = _motion_pattern_record(record.pattern_id)
+    _append_motion_feedback_history(record, "reset", "settings reset", updated)
+    settings.save()
+    return jsonify({
+        "status": "success",
+        "message": f"Reset feedback for {updated.name}.",
+        "pattern": _motion_pattern_summary(updated, include_actions=True),
+        "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
+    })
+
 @app.route('/motion_training/status')
 def motion_training_status_route():
     return jsonify({"status": "success", "motion_training": _motion_training_snapshot()})
@@ -1214,7 +1253,7 @@ def motion_training_feedback_route(pattern_id):
     rating = str(data.get("rating", "")).strip().lower()
     if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
         return jsonify({"status": "error", "message": "Feedback must be thumbs_up, neutral, or thumbs_down."}), 400
-    result = _record_motion_pattern_feedback(pattern_id, rating)
+    result = _record_motion_pattern_feedback(pattern_id, rating, source="motion training")
     if not result:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
     updated = result["pattern"]
@@ -1639,12 +1678,12 @@ def set_mode_timings_route():
         },
     })
 
-def _rate_last_live_motion_pattern(rating):
+def _rate_last_live_motion_pattern(rating, source="chat feedback"):
     if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
         return None
     if not last_live_motion_pattern_id:
         return None
-    return _record_motion_pattern_feedback(last_live_motion_pattern_id, rating)
+    return _record_motion_pattern_feedback(last_live_motion_pattern_id, rating, source=source)
 
 @app.route('/like_last_move', methods=['POST'])
 def like_last_move_route():
@@ -1653,7 +1692,7 @@ def like_last_move_route():
     sp_range = [max(0, last_speed - 5), min(100, last_speed + 5)]; dp_range = [max(0, last_depth - 5), min(100, last_depth + 5)]
     new_pattern = {"name": pattern_name, "sp_range": [int(p) for p in sp_range], "dp_range": [int(p) for p in dp_range], "moods": [current_mood], "score": 1}
     settings.session_liked_patterns.append(new_pattern)
-    result = _rate_last_live_motion_pattern("thumbs_up")
+    result = _rate_last_live_motion_pattern("thumbs_up", source="chat thumbs up")
     add_message_to_queue(f"(I'll remember that you like '{pattern_name}')", add_to_history=False)
     response = {"status": "boosted", "name": pattern_name}
     if result:
@@ -1666,7 +1705,7 @@ def like_last_move_route():
 
 @app.route('/dislike_last_move', methods=['POST'])
 def dislike_last_move_route():
-    result = _rate_last_live_motion_pattern("thumbs_down")
+    result = _rate_last_live_motion_pattern("thumbs_down", source="chat thumbs down")
     if not result:
         return jsonify({
             "status": "no_pattern",
@@ -1691,7 +1730,7 @@ def dislike_last_move_route():
 def rate_last_motion_pattern_route():
     data = _request_json()
     rating = str(data.get("rating", "")).strip().lower()
-    result = _rate_last_live_motion_pattern(rating)
+    result = _rate_last_live_motion_pattern(rating, source="chat feedback")
     if not result:
         return jsonify({"status": "error", "message": "No fixed motion pattern is active to rate."}), 400
     pattern = result["pattern"]

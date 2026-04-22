@@ -58,6 +58,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
+        self.assertEqual(saved["motion_pattern_feedback_history"], [])
         self.assertEqual(saved["motion_pattern_weights"], {})
         self.assertEqual(saved["motion_backend"], "hamp")
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
@@ -79,6 +80,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(settings.motion_pattern_enabled, {})
         self.assertEqual(settings.motion_pattern_feedback, {})
+        self.assertEqual(settings.motion_pattern_feedback_history, [])
         self.assertEqual(settings.motion_pattern_weights, {})
         self.assertEqual(settings.motion_backend, "hamp")
         self.assertEqual(settings.motion_diagnostics_level, "compact")
@@ -135,6 +137,36 @@ class ModelConfigurationTests(unittest.TestCase):
             "too-high": 100,
             "too-low": 0,
         })
+
+    def test_motion_pattern_feedback_history_is_normalized(self):
+        fake_path = FakePath(json.dumps({
+            "motion_pattern_feedback_history": [
+                {
+                    "pattern_id": " Soft Wave ",
+                    "pattern_name": "  Soft   Wave  ",
+                    "rating": "thumbs_up",
+                    "source": " chat   thumbs up ",
+                    "weight": 120,
+                    "enabled": "",
+                    "at": "2026-04-22 10:00:00 UTC",
+                },
+                {"pattern_id": "bad", "rating": "unknown"},
+                "ignored",
+            ],
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertEqual(settings.motion_pattern_feedback_history, [{
+            "pattern_id": "soft-wave",
+            "pattern_name": "Soft Wave",
+            "rating": "thumbs_up",
+            "source": "chat thumbs up",
+            "at": "2026-04-22 10:00:00 UTC",
+            "weight": 100,
+            "enabled": False,
+        }])
 
     def test_motion_backend_is_normalized(self):
         settings = SettingsManager("settings.json")

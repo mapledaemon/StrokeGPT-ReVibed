@@ -61,6 +61,7 @@ def default_settings_dict():
         "milking_patterns": [],
         "motion_pattern_enabled": {},
         "motion_pattern_feedback": {},
+        "motion_pattern_feedback_history": [],
         "motion_pattern_weights": {},
         "motion_backend": DEFAULT_MOTION_BACKEND,
         "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
@@ -155,6 +156,9 @@ class SettingsManager:
         self.milking_patterns = _as_list(data.get("milking_patterns", []))
         self.motion_pattern_enabled = self._normalize_bool_map(data.get("motion_pattern_enabled", {}))
         self.motion_pattern_feedback = self._normalize_feedback_map(data.get("motion_pattern_feedback", {}))
+        self.motion_pattern_feedback_history = self._normalize_feedback_history(
+            data.get("motion_pattern_feedback_history", [])
+        )
         self.motion_pattern_weights = self._normalize_weight_map(data.get("motion_pattern_weights", {}))
         self.motion_backend = self._normalize_motion_backend(data.get("motion_backend", defaults["motion_backend"]))
         self.motion_diagnostics_level = self._normalize_diagnostics_level(
@@ -249,6 +253,9 @@ class SettingsManager:
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
             "motion_pattern_feedback": self._normalize_feedback_map(self.motion_pattern_feedback),
+            "motion_pattern_feedback_history": self._normalize_feedback_history(
+                self.motion_pattern_feedback_history
+            ),
             "motion_pattern_weights": self._normalize_weight_map(self.motion_pattern_weights),
             "motion_backend": self._normalize_motion_backend(self.motion_backend),
             "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
@@ -337,6 +344,37 @@ class SettingsManager:
                 "neutral": _clamp_int(feedback.get("neutral"), 0, 1_000_000, 0),
                 "thumbs_down": _clamp_int(feedback.get("thumbs_down"), 0, 1_000_000, 0),
             }
+        return normalized
+
+    def _normalize_feedback_history(self, values):
+        if not isinstance(values, list):
+            return []
+        normalized = []
+        for entry in values:
+            if not isinstance(entry, dict):
+                continue
+            pattern_id = re.sub(
+                r"[^a-z0-9_-]+",
+                "-",
+                str(entry.get("pattern_id") or "").strip().lower(),
+            ).strip("-_")
+            rating = str(entry.get("rating") or "").strip().lower()
+            if not pattern_id or rating not in {"thumbs_up", "neutral", "thumbs_down", "reset"}:
+                continue
+            item = {
+                "pattern_id": pattern_id[:64],
+                "pattern_name": " ".join(str(entry.get("pattern_name") or pattern_id).split())[:96],
+                "rating": rating,
+                "source": " ".join(str(entry.get("source") or "feedback").split())[:64],
+                "at": " ".join(str(entry.get("at") or "").split())[:40],
+            }
+            if "weight" in entry:
+                item["weight"] = _clamp_int(entry.get("weight"), 0, 100, 50)
+            if "enabled" in entry:
+                item["enabled"] = bool(entry.get("enabled"))
+            normalized.append(item)
+            if len(normalized) >= 20:
+                break
         return normalized
 
     def _normalize_weight_map(self, values):

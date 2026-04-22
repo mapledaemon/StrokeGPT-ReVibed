@@ -177,6 +177,10 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .settings-checkbox-line { display: flex; align-items: center; gap: 8px; color: var(--foreground); font-size: 0.9rem; }
 .settings-checkbox-line input { flex: 0 0 auto; }
 .diagnostics-output { margin: 0; max-height: 180px; overflow: auto; padding: 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.78rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+.motion-feedback-history { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; line-height: 1.35; overflow-wrap: anywhere; }
+.motion-feedback-history-title { color: var(--foreground); font-weight: 700; }
+.motion-feedback-history-empty { color: var(--comment); }
+.motion-feedback-history-row { color: var(--comment); }
 .motion-pattern-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 2px; }
 .motion-pattern-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); }
 .motion-pattern-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
@@ -185,8 +189,8 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .motion-pattern-name { font-weight: 600; color: var(--foreground); overflow-wrap: anywhere; }
 .motion-pattern-meta { margin-top: 3px; color: var(--comment); font-size: 0.82rem; overflow-wrap: anywhere; }
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
-.motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; min-width: 92px; }
-.motion-pattern-play, .motion-pattern-export { width: auto; min-width: 84px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
+.motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; min-width: 104px; }
+.motion-pattern-play, .motion-pattern-export, .motion-pattern-feedback-reset { width: auto; min-width: 96px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
 .motion-pattern-weight-control { display: flex; flex-direction: column; gap: 4px; min-width: 92px; }
 .motion-pattern-weight-label { color: var(--comment); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
 .motion-pattern-weight-field { min-height: 34px; }

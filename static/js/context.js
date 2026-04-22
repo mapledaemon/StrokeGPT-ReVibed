@@ -72,6 +72,7 @@ export const el = {
     milkingMaxTimeInput: D.getElementById('milking-max-time'),
     motionPatternList: D.getElementById('motion-pattern-list'),
     motionPatternStatus: D.getElementById('motion-pattern-status'),
+    motionFeedbackHistory: D.getElementById('motion-feedback-history'),
     motionFeedbackAutoDisableCheckbox: D.getElementById('motion-feedback-auto-disable-checkbox'),
     refreshMotionPatternsBtn: D.getElementById('refresh-motion-patterns-btn'),
     importMotionPatternBtn: D.getElementById('import-motion-pattern-btn'),

@@ -150,14 +150,33 @@ function patternDisplayName(pattern) {
     return pattern.name || pattern.id || 'Unnamed pattern';
 }
 
-function formatPatternMetadata(pattern) {
+function patternFeedbackCounts(pattern) {
     const feedback = pattern.feedback || {};
+    return {
+        thumbsUp: Number(feedback.thumbs_up) || 0,
+        neutral: Number(feedback.neutral) || 0,
+        thumbsDown: Number(feedback.thumbs_down) || 0,
+    };
+}
+
+function patternHasFeedbackState(pattern) {
+    const counts = patternFeedbackCounts(pattern);
+    return counts.thumbsUp + counts.neutral + counts.thumbsDown > 0
+        || (pattern.source === 'fixed' && Number(pattern.weight) !== 50);
+}
+
+function formatPatternFeedback(pattern) {
+    const counts = patternFeedbackCounts(pattern);
+    return `feedback +${counts.thumbsUp} / ${counts.neutral} / -${counts.thumbsDown}`;
+}
+
+function formatPatternMetadata(pattern) {
     const parts = [
         pattern.source || 'unknown',
         `${formatPatternDuration(pattern.duration_ms)} duration`,
         `${pattern.action_count || 0} actions`,
         pattern.readonly ? 'read-only' : 'editable file',
-        `feedback ${feedback.thumbs_up || 0}/${feedback.neutral || 0}/${feedback.thumbs_down || 0}`,
+        formatPatternFeedback(pattern),
     ];
     if (pattern.source === 'fixed') parts.push(`weight ${pattern.weight ?? 50}/100`);
     if (!pattern.enabled) parts.push('disabled');
@@ -196,6 +215,18 @@ function createPatternExportButton(pattern) {
         window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
     });
     return exportButton;
+}
+
+function createPatternFeedbackResetButton(pattern) {
+    const resetButton = D.createElement('button');
+    resetButton.type = 'button';
+    resetButton.className = 'my-button motion-pattern-feedback-reset';
+    resetButton.textContent = 'Reset';
+    resetButton.addEventListener('click', event => {
+        event.stopPropagation();
+        resetMotionPatternFeedback(pattern.id);
+    });
+    return resetButton;
 }
 
 function createPatternWeightControl(pattern) {
@@ -724,6 +755,7 @@ function renderCompactMotionPatternList(patterns) {
         actions.className = 'motion-pattern-row-actions';
 
         if (pattern.source === 'fixed') actions.append(createPatternWeightControl(pattern));
+        if (patternHasFeedbackState(pattern)) actions.append(createPatternFeedbackResetButton(pattern));
         actions.append(createPatternExportButton(pattern));
         main.append(checkbox, text);
         row.append(main, actions);
@@ -768,15 +800,56 @@ function renderMotionTrainingPatternList(patterns) {
             startMotionTraining(pattern.id);
         });
 
-        actions.append(playButton, createPatternExportButton(pattern));
+        actions.append(playButton);
+        if (patternHasFeedbackState(pattern)) actions.append(createPatternFeedbackResetButton(pattern));
+        actions.append(createPatternExportButton(pattern));
         row.append(main, actions);
         el.motionTrainingPatternList.appendChild(row);
+    });
+}
+
+function feedbackRatingLabel(rating) {
+    if (rating === 'thumbs_up') return 'thumbs up';
+    if (rating === 'thumbs_down') return 'thumbs down';
+    if (rating === 'neutral') return 'neutral';
+    if (rating === 'reset') return 'reset';
+    return 'feedback';
+}
+
+function renderMotionFeedbackHistory(history = []) {
+    if (!el.motionFeedbackHistory) return;
+    el.motionFeedbackHistory.replaceChildren();
+
+    const entries = Array.isArray(history) ? history.slice(0, 5) : [];
+    const title = D.createElement('div');
+    title.className = 'motion-feedback-history-title';
+    title.textContent = 'Recent feedback';
+    el.motionFeedbackHistory.appendChild(title);
+
+    if (!entries.length) {
+        const empty = D.createElement('div');
+        empty.className = 'motion-feedback-history-empty';
+        empty.textContent = 'No recent pattern feedback.';
+        el.motionFeedbackHistory.appendChild(empty);
+        return;
+    }
+
+    entries.forEach(entry => {
+        const row = D.createElement('div');
+        row.className = 'motion-feedback-history-row';
+        const name = entry.pattern_name || entry.pattern_id || 'pattern';
+        const rating = feedbackRatingLabel(entry.rating);
+        const source = entry.source || 'feedback';
+        const weight = Number.isFinite(Number(entry.weight)) ? `, weight ${entry.weight}` : '';
+        row.textContent = `${name}: ${rating} from ${source}${weight}`;
+        el.motionFeedbackHistory.appendChild(row);
     });
 }
 
 export function renderMotionPatterns(catalog = {}) {
     const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
     state.motionPatterns = patterns;
+    renderMotionFeedbackHistory(catalog.feedback_history);
     renderCompactMotionPatternList(patterns);
     renderMotionTrainingPatternList(patterns);
 
@@ -903,6 +976,21 @@ async function setMotionPatternWeight(patternId, weight) {
     if (data && data.status === 'success') {
         renderMotionPatterns(data.motion_patterns);
         el.statusText.textContent = `${data.pattern.name} LLM weight saved: ${data.pattern.weight}.`;
+    }
+}
+
+async function resetMotionPatternFeedback(patternId) {
+    const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}/feedback/reset`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({}),
+    });
+    if (data && data.status === 'success') {
+        renderMotionPatterns(data.motion_patterns);
+        if (data.pattern && data.pattern.id === state.motionTrainingSelectedPatternId) {
+            setMotionTrainingDetail(data.pattern);
+        }
+        el.statusText.textContent = data.message || 'Pattern feedback reset.';
     }
 }
 
