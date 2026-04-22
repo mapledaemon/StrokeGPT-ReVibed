@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Pattern Transform Workspace
------------------------------------------------
+2026-04-22 - PR #26 - Add Motion Pattern Transforms
+----------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/26
 Branch: codex-motion-pattern-transforms
+Head commit: cde4fb1
+Merge commit: c16195b
 
 - Added workspace-only pattern transform controls for smoothing, harshening,
   tempo changes, and range remapping.
