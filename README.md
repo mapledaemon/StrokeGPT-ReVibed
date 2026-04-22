@@ -358,3 +358,15 @@ StrokeGPT-ReVibed is derived from StrokeGPT:
 This fork preserves attribution and repository history. It is not affiliated with the original project maintainers.
 
 The original repository did not include a local license file at the time this fork was prepared.
+
+
+## Support Development
+
+This project is free and open source, developed and maintained in my spare time by [me](https://github.com/mapledaemon/). If you find pleasure in this program, please consider donating, no matter how small.
+
+Your donation mainly helps cover token cost, which heavily limits development speed at the moment given the compute shortage. It also helps me afford hardware replacements in this challenging environment.
+
+| Ethereum | Bitcoin |
+|:---:|:---:|
+| 0x1319841646b196F81283a1bf08d8a0256Cdd414B | bc1pwqvmmzhdnmgp3px7l0ltsrrjk7hzlppnhhk6fm3e2l24xdvgpd7srm5zg6 |
+| <img src="./public/img/Ethereum.png" alt="Ethereum" width="150"> | <img src="./public/img/Bitcoin.png" alt="Bitcoin" width="150"> |
