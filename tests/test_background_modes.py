@@ -1,16 +1,29 @@
 import threading
 import time
 import unittest
+from collections import deque
+from unittest import mock
 
+from strokegpt import background_modes
 from strokegpt.background_modes import AutoModeThread, _sleep_with_stop
+from strokegpt.motion import MotionTarget
 
 
 class FakeMotionController:
     def __init__(self):
         self.stopped = False
+        self.applied = []
 
     def stop(self):
         self.stopped = True
+
+    def current_target(self):
+        if self.applied:
+            return self.applied[-1]
+        return MotionTarget(20, 30, 40)
+
+    def apply_target(self, target, source="target"):
+        self.applied.append(target)
 
 
 class AutoModeThreadTests(unittest.TestCase):
@@ -81,6 +94,32 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertTrue(motion.stopped)
         self.assertTrue(cleanup_called)
         self.assertEqual(messages, ["Starting.", "Okay, you're in control now."])
+
+    def test_milking_close_signal_extends_bounded_sequence(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        remembered = []
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": remembered.append,
+        }
+
+        with mock.patch.object(background_modes.random, "randint", side_effect=[2, 3]):
+            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
+                background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(len(motion.applied), 5)
+        self.assertTrue(any("Staying with it" in message for message in messages))
+        self.assertEqual(len(remembered), len(motion.applied))
+        self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
 
 
 if __name__ == "__main__":

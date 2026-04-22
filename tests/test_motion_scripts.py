@@ -51,6 +51,86 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(step.mood, "Dominant")
         self.assertIn("Edge count: 2", step.message)
         self.assertLessEqual(step.target.speed, 10)
+        self.assertGreaterEqual(step.target.depth, 84)
+        self.assertLessEqual(step.target.stroke_range, 20)
+        self.assertIn("Edge Pull Back", step.target.label)
+
+    def test_mode_specific_patterns_are_cataloged(self):
+        names = pattern_names()
+
+        self.assertIn("milking-pressure-build", names)
+        self.assertIn("milking-final-wave", names)
+        self.assertIn("edge-build-low", names)
+        self.assertIn("edge-pull-back", names)
+
+    def test_milking_plan_uses_catalog_pattern_labels(self):
+        planner = MotionScriptPlanner("milking", rng=random.Random(2))
+        current = MotionTarget(20, 30, 40)
+        steps = [planner.next_step(current) for _ in range(8)]
+        labels = [step.target.label for step in steps]
+
+        self.assertTrue(any(label.startswith("Milking ") for label in labels))
+        self.assertFalse(any(label == "current" for label in labels))
+        self.assertFalse(any(label.startswith("pressure build") for label in labels))
+
+    def test_edge_reaction_ramps_down_then_recovers_to_hold(self):
+        planner = MotionScriptPlanner("edging", rng=random.Random(5))
+        current = MotionTarget(50, 80, 40)
+
+        steps = [planner.next_step(current, edge_count=3)]
+        steps.extend(planner.next_step(current) for _ in range(10))
+        reaction_labels = [step.target.label for step in steps]
+
+        pullback_index = next(
+            index for index, label in enumerate(reaction_labels)
+            if label.startswith("Edge Pull Back")
+        )
+        recover_index = next(
+            index for index, label in enumerate(reaction_labels)
+            if label.startswith("Edge Recover")
+        )
+        hold_index = next(
+            index for index, label in enumerate(reaction_labels)
+            if label.startswith("Edge Hold")
+        )
+
+        self.assertLess(pullback_index, recover_index)
+        self.assertLess(recover_index, hold_index)
+
+    def test_edge_patterns_use_expected_regions(self):
+        hold_frames = expand_pattern(
+            "edge-hold",
+            MotionTarget(30, 40, 50),
+            MotionTarget(34, 32, 46, "Edge Hold"),
+            rng=random.Random(17),
+        )
+        recover_frames = expand_pattern(
+            "edge-recover",
+            MotionTarget(30, 40, 50),
+            MotionTarget(18, 68, 48, "Edge Recover"),
+            rng=random.Random(18),
+        )
+        pullback_frames = expand_pattern(
+            "edge-pull-back",
+            MotionTarget(30, 40, 50),
+            MotionTarget(14, 88, 18, "Edge Pull Back"),
+            rng=random.Random(19),
+        )
+
+        self.assertTrue(hold_frames)
+        hold_depths = [frame.target.depth for frame in hold_frames]
+        self.assertTrue(all(depth <= 55 for depth in hold_depths))
+        self.assertGreater(max(hold_depths), 35)
+
+        self.assertTrue(recover_frames)
+        recover_depths = [frame.target.depth for frame in recover_frames]
+        self.assertTrue(all(60 <= depth <= 88 for depth in recover_depths))
+        self.assertGreater(max(recover_depths), 80)
+
+        self.assertTrue(pullback_frames)
+        pullback_depths = [frame.target.depth for frame in pullback_frames]
+        self.assertTrue(all(depth >= 88 for depth in pullback_depths))
+        self.assertGreater(max(pullback_depths), 94)
 
     def test_pattern_palette_uses_funscript_style_actions(self):
         self.assertIn("flick", pattern_names())

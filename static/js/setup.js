@@ -5,6 +5,7 @@ import { populateMotionSettings } from './motion-control.js';
 import {
     fillPersonaPromptSelect,
     normalizePersonaPrompt,
+    populateDiagnosticsSettings,
     populateModelOptions,
     populatePersonaPromptOptions,
     setPersonaPrompt,
@@ -153,6 +154,7 @@ export async function startupCheck() {
             el.typingIndicatorPfp.src = data.pfp;
         }
         populateModelOptions(data.ollama_models, data.ollama_model);
+        populateDiagnosticsSettings(data);
         updateOllamaStatus(data.ollama_status);
         populateDeviceSettings(data);
         populateMotionSettings(data);
@@ -170,6 +172,7 @@ export async function startupCheck() {
     } else {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model);
+        populateDiagnosticsSettings(data || {});
         updateOllamaStatus(data && data.ollama_status);
         populateDeviceSettings(data || {});
         populateMotionSettings(data || {});

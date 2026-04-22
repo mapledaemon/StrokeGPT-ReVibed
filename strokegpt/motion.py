@@ -145,6 +145,13 @@ def _normalize_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value).lower()).strip()
 
 
+def _slugify_motion_pattern_id(value: Any) -> str:
+    cleaned = str(value or "").strip().lower()
+    cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned)
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-_")
+    return cleaned[:64]
+
+
 def _matches_any(text: str, patterns: Iterable[str]) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
@@ -468,6 +475,14 @@ class MotionSanitizer:
             if move.get(key) is not None and _as_number(move.get(key)) is None
         )
         cues = _detect_motion_cues(cue_text)
+        explicit_pattern = self._explicit_pattern_id(move.get("pattern"))
+        if explicit_pattern:
+            cues = MotionCues(
+                zone=cues.zone,
+                length=cues.length,
+                pattern=explicit_pattern,
+                speed_hint=cues.speed_hint,
+            )
         motion_program = coerce_anchor_program_dict(
             move,
             zone=cues.zone,
@@ -522,6 +537,14 @@ class MotionSanitizer:
             if value is not None:
                 return value
         return None
+
+    def _explicit_pattern_id(self, value: Any) -> Optional[str]:
+        pattern_id = _slugify_motion_pattern_id(value)
+        if not pattern_id:
+            return None
+        from .motion_patterns import PATTERNS
+
+        return pattern_id if pattern_id in PATTERNS else None
 
 
 class MotionController:
@@ -781,7 +804,14 @@ class MotionController:
 
     def _pattern_from_label(self, label: str) -> Optional[str]:
         clean_label = (label or "").lower()
-        for pattern in ("flick", "flutter", "pulse", "hold", "wave", "ramp", "ladder", "surge", "sway", "tease", "stroke"):
-            if pattern in clean_label:
+        slug_label = _slugify_motion_pattern_id(label)
+        from .motion_patterns import PATTERNS
+
+        for pattern in sorted(PATTERNS, key=len, reverse=True):
+            if (
+                pattern in clean_label
+                or slug_label == pattern
+                or slug_label.startswith(f"{pattern}-")
+            ):
                 return pattern
         return None

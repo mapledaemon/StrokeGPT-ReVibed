@@ -20,6 +20,8 @@ DEFAULT_PERSONA_PROMPTS = [
 ]
 DEFAULT_MOTION_BACKEND = "hamp"
 MOTION_BACKENDS = {"hamp", "position"}
+DEFAULT_DIAGNOSTICS_LEVEL = "compact"
+DIAGNOSTICS_LEVELS = {"compact", "status", "debug"}
 
 
 def normalize_ollama_model(model):
@@ -61,6 +63,9 @@ def default_settings_dict():
         "motion_pattern_feedback": {},
         "motion_pattern_weights": {},
         "motion_backend": DEFAULT_MOTION_BACKEND,
+        "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
+        "ollama_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
+        "motion_feedback_auto_disable": False,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -152,6 +157,15 @@ class SettingsManager:
         self.motion_pattern_feedback = self._normalize_feedback_map(data.get("motion_pattern_feedback", {}))
         self.motion_pattern_weights = self._normalize_weight_map(data.get("motion_pattern_weights", {}))
         self.motion_backend = self._normalize_motion_backend(data.get("motion_backend", defaults["motion_backend"]))
+        self.motion_diagnostics_level = self._normalize_diagnostics_level(
+            data.get("motion_diagnostics_level", defaults["motion_diagnostics_level"])
+        )
+        self.ollama_diagnostics_level = self._normalize_diagnostics_level(
+            data.get("ollama_diagnostics_level", defaults["ollama_diagnostics_level"])
+        )
+        self.motion_feedback_auto_disable = bool(
+            data.get("motion_feedback_auto_disable", defaults["motion_feedback_auto_disable"])
+        )
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
@@ -237,6 +251,9 @@ class SettingsManager:
             "motion_pattern_feedback": self._normalize_feedback_map(self.motion_pattern_feedback),
             "motion_pattern_weights": self._normalize_weight_map(self.motion_pattern_weights),
             "motion_backend": self._normalize_motion_backend(self.motion_backend),
+            "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
+            "ollama_diagnostics_level": self._normalize_diagnostics_level(self.ollama_diagnostics_level),
+            "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,
@@ -339,6 +356,16 @@ class SettingsManager:
         if cleaned in {"position", "position_script", "position-script", "flexible_position", "flexible"}:
             return "position"
         return DEFAULT_MOTION_BACKEND
+
+    def _normalize_diagnostics_level(self, value):
+        cleaned = str(value or "").strip().lower()
+        if cleaned in {"off", "minimal", "default", "normal"}:
+            return "compact"
+        if cleaned in {"basic", "info", "verbose"}:
+            return "status"
+        if cleaned in DIAGNOSTICS_LEVELS:
+            return cleaned
+        return DEFAULT_DIAGNOSTICS_LEVEL
 
     def _timing_pair(self, first, second, default_first, default_second):
         first = _clamp_float(first, 1.0, 60.0, default_first)

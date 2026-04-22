@@ -104,6 +104,11 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="dislike-this-move-btn"', page)
             self.assertIn('id="motion-meter-panel"', page)
             self.assertIn('id="motion-feedback-buttons"', page)
+            self.assertIn('id="motion-sequence-indicator"', page)
+            self.assertIn('id="motion-diagnostics-panel"', page)
+            self.assertIn('id="ollama-diagnostics-level-select"', page)
+            self.assertIn('id="motion-diagnostics-level-select"', page)
+            self.assertIn('id="motion-feedback-auto-disable-checkbox"', page)
             self.assertIn('id="sidebar-motion-indicator"', page)
             self.assertIn('id="handy-cylinder-indicator"', page)
             self.assertNotIn('id="motion-trace-panel"', page)
@@ -143,7 +148,7 @@ class WebStaticAssetTests(unittest.TestCase):
 
     def test_status_payload_includes_motion_observability(self):
         from strokegpt.motion import MotionTarget
-        from strokegpt.web import handy, motion
+        from strokegpt.web import handy, motion, settings
 
         original_state = (
             handy.last_relative_speed,
@@ -152,8 +157,10 @@ class WebStaticAssetTests(unittest.TestCase):
             handy.last_stroke_range,
             handy.min_handy_depth,
             handy.max_handy_depth,
+            settings.motion_diagnostics_level,
         )
         try:
+            settings.motion_diagnostics_level = "debug"
             handy.last_relative_speed = 55
             handy.last_stroke_speed = 42
             handy.last_depth_pos = 60
@@ -172,6 +179,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertEqual(payload["relative_speed"], 55)
             self.assertIn("motion_observability", payload)
             observability = payload["motion_observability"]
+            self.assertEqual(payload["motion_diagnostics_level"], "debug")
+            self.assertEqual(observability["diagnostics_level"], "debug")
             self.assertEqual(observability["source"], "unit test")
             self.assertIn("diagnostics", observability)
             self.assertEqual(observability["diagnostics"]["physical_speed"], 42)
@@ -186,6 +195,7 @@ class WebStaticAssetTests(unittest.TestCase):
                 handy.last_stroke_range,
                 handy.min_handy_depth,
                 handy.max_handy_depth,
+                settings.motion_diagnostics_level,
             ) = original_state
             with motion._observability_lock:
                 motion._trace.clear()
@@ -405,6 +415,33 @@ class WebStaticAssetTests(unittest.TestCase):
             messages_for_ui.clear()
             chat_history.clear()
 
+    def test_close_signal_wakes_edging_or_milking_mode(self):
+        from strokegpt.web import auto_mode_active_task, mode_message_event, user_signal_event
+        import strokegpt.web as web
+
+        original_task = auto_mode_active_task
+        user_signal_event.clear()
+        mode_message_event.clear()
+        try:
+            for mode_name in ("edging", "milking"):
+                with self.subTest(mode_name=mode_name):
+                    user_signal_event.clear()
+                    mode_message_event.clear()
+                    web.auto_mode_active_task = SimpleNamespace(name=mode_name, stop=lambda: None)
+
+                    response = self.client.post("/signal_edge")
+
+                    self.assertEqual(response.status_code, 200)
+                    data = response.get_json()
+                    self.assertEqual(data["status"], "signaled")
+                    self.assertEqual(data["mode"], mode_name)
+                    self.assertTrue(user_signal_event.is_set())
+                    self.assertTrue(mode_message_event.is_set())
+        finally:
+            web.auto_mode_active_task = original_task
+            user_signal_event.clear()
+            mode_message_event.clear()
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:
@@ -483,12 +520,16 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(".my-button:disabled", css)
             self.assertIn("#motion-meter-panel", css)
             self.assertIn("#motion-feedback-buttons", css)
+            self.assertIn(".motion-sequence-indicator", css)
+            self.assertIn(".motion-diagnostics-panel", css)
             self.assertIn("#sidebar-motion-indicator", css)
             self.assertIn("#handy-cylinder-indicator", css)
             self.assertIn("#handy-cylinder-range { position: absolute; left: 8px; right: 8px; top: 8%; height: 84%;", css)
-            self.assertIn("#visualizer-box { width: min(440px, 100%);", css)
+            self.assertIn("#visualizer-box { width: min(620px, 100%);", css)
             self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
             self.assertIn(".settings-help", css)
+            self.assertIn(".settings-checkbox-line", css)
+            self.assertIn(".diagnostics-output", css)
             self.assertIn(".model-actions", css)
             self.assertIn(".motion-pattern-row", css)
             self.assertIn(".motion-pattern-list", css)
@@ -602,6 +643,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertNotIn("el.handyCylinderRange.style.top", script)
         self.assertIn("full_travel_mm", script)
         self.assertIn("function updateMotionMeters", script)
+        self.assertIn("function updateMotionSequenceIndicator", script)
+        self.assertIn("function updateMotionDiagnosticsPanel", script)
+        self.assertIn("motionSequenceIndicator", script)
+        self.assertIn("function saveMotionFeedbackOptions", script)
+        self.assertIn("/motion_feedback_options", script)
         self.assertIn("function updateHandyCylinder", script)
         self.assertIn("handyCylinderPosition", script)
         self.assertIn("/set_motion_backend", script)
@@ -640,7 +686,12 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("motion-training-number-step-down", script)
         self.assertIn("function dislikeLastMove", script)
         self.assertIn("/dislike_last_move", script)
+        self.assertIn("/signal_edge", script)
+        self.assertIn("Milking mode extended", script)
+        self.assertIn("data.active_mode", script)
         self.assertIn("weight ${pattern.weight", script)
+        self.assertIn("/set_diagnostics_levels", script)
+        self.assertIn("function updateOllamaDiagnostics", script)
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
@@ -870,6 +921,49 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)
+
+    def test_diagnostics_levels_can_be_selected_and_saved(self):
+        from strokegpt.web import settings
+
+        original_motion_level = settings.motion_diagnostics_level
+        original_ollama_level = settings.ollama_diagnostics_level
+        try:
+            with mock.patch.object(settings, "save"), \
+                    mock.patch("strokegpt.web._ollama_status_payload", return_value={"diagnostics_level": "debug"}):
+                response = self.client.post("/set_diagnostics_levels", json={
+                    "motion_diagnostics_level": "verbose",
+                    "ollama_diagnostics_level": "debug",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["motion_diagnostics_level"], "status")
+            self.assertEqual(data["ollama_diagnostics_level"], "debug")
+            self.assertEqual(settings.motion_diagnostics_level, "status")
+            self.assertEqual(settings.ollama_diagnostics_level, "debug")
+            self.assertIn("diagnostics_levels", data)
+        finally:
+            settings.motion_diagnostics_level = original_motion_level
+            settings.ollama_diagnostics_level = original_ollama_level
+
+    def test_motion_feedback_auto_disable_option_can_be_saved(self):
+        from strokegpt.web import settings
+
+        original = settings.motion_feedback_auto_disable
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/motion_feedback_options", json={"auto_disable": True})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["motion_feedback_auto_disable"])
+            self.assertTrue(settings.motion_feedback_auto_disable)
+            self.assertIn("motion_patterns", data)
+            self.assertIn("motion_preferences", data)
+        finally:
+            settings.motion_feedback_auto_disable = original
 
     def test_ollama_model_can_be_selected_and_saved(self):
         from strokegpt.web import llm, settings

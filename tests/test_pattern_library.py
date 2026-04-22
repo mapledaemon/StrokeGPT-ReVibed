@@ -163,6 +163,16 @@ class PatternLibraryTests(unittest.TestCase):
             self.assertFalse(stroke["enabled"])
             self.assertEqual(stroke["feedback"], {"thumbs_up": 4, "neutral": 1, "thumbs_down": 2})
 
+    def test_catalog_includes_mode_specific_fixed_patterns(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+
+            catalog = library.catalog()
+            ids = {pattern["id"] for pattern in catalog["patterns"]}
+
+            self.assertIn("milking-pressure-build", ids)
+            self.assertIn("edge-build-low", ids)
+
 
 @unittest.skipIf(MISSING_WEB_MODULES, f"missing app dependencies: {', '.join(MISSING_WEB_MODULES)}")
 class MotionPatternRouteTests(unittest.TestCase):
@@ -180,6 +190,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_pattern_enabled = dict(self.web.settings.motion_pattern_enabled)
         self.original_pattern_feedback = dict(self.web.settings.motion_pattern_feedback)
         self.original_pattern_weights = dict(self.web.settings.motion_pattern_weights)
+        self.original_feedback_auto_disable = self.web.settings.motion_feedback_auto_disable
         self.original_settings_save = self.web.settings.save
         self.original_audio_generate = self.web.audio.generate_audio_for_text
         self.original_last_live_pattern = self.web.last_live_motion_pattern_id
@@ -198,6 +209,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_enabled = {}
         self.web.settings.motion_pattern_feedback = {}
         self.web.settings.motion_pattern_weights = {}
+        self.web.settings.motion_feedback_auto_disable = False
         self.web.settings.save = lambda *args, **kwargs: None
         self.web.audio.generate_audio_for_text = lambda *args, **kwargs: None
         self.web.last_live_motion_pattern_id = ""
@@ -217,6 +229,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_enabled = self.original_pattern_enabled
         self.web.settings.motion_pattern_feedback = self.original_pattern_feedback
         self.web.settings.motion_pattern_weights = self.original_pattern_weights
+        self.web.settings.motion_feedback_auto_disable = self.original_feedback_auto_disable
         self.web.settings.save = self.original_settings_save
         self.web.audio.generate_audio_for_text = self.original_audio_generate
         self.web.last_live_motion_pattern_id = self.original_last_live_pattern
@@ -430,7 +443,21 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(self.web.settings.motion_pattern_weights["stroke"], 60)
         self.assertIn("motion_preferences", data)
 
-    def test_three_thumbs_down_auto_disables_pattern(self):
+    def test_three_thumbs_down_does_not_auto_disable_by_default(self):
+        for _ in range(3):
+            response = self.client.post("/motion_training/sway/feedback", json={"rating": "thumbs_down"})
+            self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertFalse(data["auto_disabled"])
+        self.assertTrue(data["pattern"]["enabled"])
+        self.assertNotEqual(data["pattern"]["weight"], 0)
+        self.assertNotIn("sway", self.web.settings.motion_pattern_enabled)
+        self.assertEqual(self.web.settings.motion_pattern_feedback["sway"]["thumbs_down"], 3)
+        self.assertIn("sway", data["motion_preferences"]["prompt"])
+
+    def test_three_thumbs_down_auto_disables_pattern_when_enabled(self):
+        self.web.settings.motion_feedback_auto_disable = True
         for _ in range(3):
             response = self.client.post("/motion_training/sway/feedback", json={"rating": "thumbs_down"})
             self.assertEqual(response.status_code, 200)
@@ -477,11 +504,23 @@ class MotionPatternRouteTests(unittest.TestCase):
 
         data = response.get_json()
         self.assertEqual(data["status"], "success")
-        self.assertTrue(data["auto_disabled"])
+        self.assertFalse(data["auto_disabled"])
         self.assertEqual(data["pattern"]["id"], "tease")
-        self.assertFalse(data["pattern"]["enabled"])
-        self.assertEqual(data["pattern"]["weight"], 0)
+        self.assertTrue(data["pattern"]["enabled"])
+        self.assertEqual(data["pattern"]["weight"], 1)
         self.assertEqual(self.web.settings.motion_pattern_feedback["tease"]["thumbs_down"], 3)
+
+    def test_friendly_mode_pattern_labels_map_to_fixed_pattern_ids(self):
+        from strokegpt.motion import MotionTarget
+
+        self.assertEqual(
+            self.web._fixed_pattern_id_from_target(MotionTarget(30, 80, 20, "Edge Hold 3")),
+            "edge-hold",
+        )
+        self.assertEqual(
+            self.web._fixed_pattern_id_from_target(MotionTarget(60, 55, 80, "Milking Wide Pressure 4")),
+            "milking-wide-pressure",
+        )
 
     def test_disabled_llm_pattern_is_removed_before_motion(self):
         self.web.settings.motion_pattern_enabled = {"flutter": False}

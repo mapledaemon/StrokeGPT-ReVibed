@@ -218,6 +218,14 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.depth, 10)
         self.assertEqual(target.stroke_range, 18)
 
+    def test_llm_move_accepts_mode_pattern_ids(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move({"pattern": "milking-pressure-build"}, current)
+
+        self.assertIsNotNone(target)
+        self.assertIn("milking-pressure-build", target.label)
+
     def test_llm_bare_endpoint_cues_keep_more_range(self):
         sanitizer = MotionSanitizer()
         current = MotionTarget(35, 45, 55)

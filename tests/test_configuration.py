@@ -60,6 +60,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_weights"], {})
         self.assertEqual(saved["motion_backend"], "hamp")
+        self.assertEqual(saved["motion_diagnostics_level"], "compact")
+        self.assertEqual(saved["ollama_diagnostics_level"], "compact")
+        self.assertFalse(saved["motion_feedback_auto_disable"])
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -78,6 +81,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_feedback, {})
         self.assertEqual(settings.motion_pattern_weights, {})
         self.assertEqual(settings.motion_backend, "hamp")
+        self.assertEqual(settings.motion_diagnostics_level, "compact")
+        self.assertEqual(settings.ollama_diagnostics_level, "compact")
+        self.assertFalse(settings.motion_feedback_auto_disable)
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -140,6 +146,27 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.file_path = FakePath(json.dumps({"motion_backend": "unknown"}))
         settings.load()
         self.assertEqual(settings.motion_backend, "hamp")
+
+    def test_diagnostics_levels_are_normalized(self):
+        fake_path = FakePath(json.dumps({
+            "motion_diagnostics_level": "verbose",
+            "ollama_diagnostics_level": "debug",
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertEqual(settings.motion_diagnostics_level, "status")
+        self.assertEqual(settings.ollama_diagnostics_level, "debug")
+
+        settings.file_path = FakePath(json.dumps({
+            "motion_diagnostics_level": "bad",
+            "ollama_diagnostics_level": "off",
+        }))
+        settings.load()
+
+        self.assertEqual(settings.motion_diagnostics_level, "compact")
+        self.assertEqual(settings.ollama_diagnostics_level, "compact")
 
     def test_llm_prompt_includes_motion_pattern_preferences(self):
         service = LLMService(url="http://localhost:11434/api/chat")

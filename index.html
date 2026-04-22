@@ -34,6 +34,7 @@
         <div id="bottom-input-area">
             <div id="visualizer-box">
                 <div id="motion-quick-status-row">
+                    <div id="motion-sequence-indicator" class="motion-sequence-indicator">Idle</div>
                     <div id="motion-meter-panel">
                         <div class="motion-meter-row">
                             <span class="motion-meter-label">Speed</span>
@@ -51,6 +52,7 @@
                         <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
                     </div>
                 </div>
+                <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
             </div>
             <div id="message-input-line">
                 <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command...">
@@ -136,6 +138,16 @@
                     </div>
                     <div id="ollama-model-status" style="font-size: 0.85em; color: var(--comment);">Current model not loaded yet.</div>
                 </div>
+                <div class="settings-subsection">
+                    <h4>Ollama Diagnostics</h4>
+                    <select id="ollama-diagnostics-level-select" class="select-box">
+                        <option value="compact">Compact</option>
+                        <option value="status">Status</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                    <button id="save-ollama-diagnostics-level-btn" class="my-button">Save Ollama Diagnostics</button>
+                    <pre id="ollama-diagnostics-output" class="diagnostics-output">No Ollama requests recorded.</pre>
+                </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
                 <select id="audio-provider-select" class="select-box">
@@ -184,6 +196,15 @@
                     <div id="motion-backend-status" class="settings-help">Current backend: HAMP continuous.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
+                    <h4>Motion Diagnostics</h4>
+                    <select id="motion-diagnostics-level-select" class="select-box">
+                        <option value="compact">Compact</option>
+                        <option value="status">Status</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                    <button id="save-motion-diagnostics-level-btn" class="my-button">Save Motion Diagnostics</button>
+                </div>
+                <div class="settings-subsection motion-panel">
                     <h4>Speed Limits</h4>
                     <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider"><span id="motion-speed-min-val">10%</span></div>
                     <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider"><span id="motion-speed-max-val">80%</span></div>
@@ -198,6 +219,7 @@
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Patterns</h4>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="motion-feedback-auto-disable-checkbox"> Auto-disable repeated dislikes</label>
                     <div class="motion-pattern-actions">
                         <button id="refresh-motion-patterns-btn" class="my-button">Refresh Patterns</button>
                         <button id="import-motion-pattern-btn" class="my-button">Import Pattern</button>
