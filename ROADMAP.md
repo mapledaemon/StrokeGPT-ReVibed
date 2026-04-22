@@ -21,7 +21,6 @@ the current surface without crowding Settings.
 
 - Add point dragging on the motion graph with snap/undo and validation before
   playback.
-- Add side-by-side original versus edited previews before rating or saving.
 - Add transform history with per-step undo/redo.
 - Add remaining pattern transforms: repeat a stroke shape, simplify noisy
   points, mirror timing, and apply subtle randomized variation.

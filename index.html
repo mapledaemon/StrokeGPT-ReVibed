@@ -259,8 +259,19 @@
                             <span id="app-motion-backend-badge" class="motion-backend-badge">App motion: HAMP continuous</span>
                         </div>
                     </div>
-                    <div class="motion-training-preview-wrap">
-                        <canvas id="motion-training-preview-canvas"></canvas>
+                    <div class="motion-training-preview-grid">
+                        <div class="motion-training-preview-panel">
+                            <div class="motion-training-preview-label">Original</div>
+                            <div class="motion-training-preview-wrap">
+                                <canvas id="motion-training-original-preview-canvas" aria-label="Original pattern preview"></canvas>
+                            </div>
+                        </div>
+                        <div class="motion-training-preview-panel">
+                            <div class="motion-training-preview-label">Edited</div>
+                            <div class="motion-training-preview-wrap">
+                                <canvas id="motion-training-preview-canvas" aria-label="Edited pattern preview"></canvas>
+                            </div>
+                        </div>
                     </div>
                     <div class="motion-training-transform-panel">
                         <div class="motion-training-control-section">
