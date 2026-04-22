@@ -8,6 +8,23 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Pattern Library Foundation
+----------------------------------------------
+
+Branch: codex-motion-pattern-library
+
+- Added a staged prompt set for the motion training roadmap, covering pattern
+  files, settings enable/disable controls, training playback and feedback,
+  smoothing/harshening transforms, and LLM preference integration.
+- Added a dependency-free motion pattern library foundation that exposes
+  built-in patterns and validates imported funscript-style action files.
+- Added user pattern import/export routes backed by individual shareable files
+  under `user_data/patterns`, which stays ignored with local settings data.
+- Updated roadmap and Codex handoff notes so future motion training PRs stay
+  staged, tested locally before push, launched for manual user testing, and
+  documented in the changelog.
+
+
 2026-04-22 - PR #18 - Fix Direct Chat Response Delivery
 --------------------------------------------------------
 
