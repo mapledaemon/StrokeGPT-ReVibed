@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Training Workspace
---------------------------------------
+2026-04-22 - PR #24 - Add Motion Training Workspace
+----------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/24
 Branch: codex-motion-training-workspace
+Head commit: 4596453
+Merge commit: 59a8686
 
 - Added a dedicated Motion Training workspace opened from the compact Motion
   settings tab.
