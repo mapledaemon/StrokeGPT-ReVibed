@@ -1,4 +1,5 @@
 import json
+import time
 import requests
 
 DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
@@ -27,6 +28,11 @@ class LLMService:
     def __init__(self, url, model=DEFAULT_MODEL):
         self.url = url
         self.model = model
+        self.last_status_code = None
+        self.last_elapsed_ms = None
+        self.last_raw_content = ""
+        self.last_error = ""
+        self.last_updated_at = None
 
     def set_model(self, model):
         cleaned = (model or "").strip()
@@ -35,8 +41,30 @@ class LLMService:
             return True
         return False
 
+    def _record_diagnostics(self, *, started_at, response=None, raw_content="", error=""):
+        self.last_elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+        self.last_status_code = getattr(response, "status_code", None)
+        self.last_raw_content = str(raw_content or "")
+        self.last_error = str(error or "")
+        self.last_updated_at = time.time()
+
+    def diagnostics(self, include_raw=False):
+        raw_content = self.last_raw_content if include_raw else ""
+        return {
+            "model": self.model,
+            "last_status_code": self.last_status_code,
+            "last_elapsed_ms": self.last_elapsed_ms,
+            "last_error": self.last_error,
+            "last_updated_at": self.last_updated_at,
+            "last_response_preview": raw_content[:4000],
+            "last_response_truncated": bool(raw_content and len(raw_content) > 4000),
+            "last_response_has_thinking": "<think" in raw_content.lower() or '"thinking"' in raw_content.lower(),
+        }
+
     def _talk_to_llm(self, messages, temperature=0.3):
         response = None
+        started_at = time.monotonic()
+        content = ""
         try:
             response = requests.post(self.url, json={
                 "model": self.model,
@@ -47,14 +75,18 @@ class LLMService:
             }, timeout=60)
             
             content = response.json()["message"]["content"]
-            return json.loads(content)
+            parsed = json.loads(content)
+            self._record_diagnostics(started_at=started_at, response=response, raw_content=content)
+            return parsed
         
         except (json.JSONDecodeError, KeyError, requests.exceptions.RequestException) as e:
+            self._record_diagnostics(started_at=started_at, response=response, raw_content=content, error=e)
             print(f"Error processing LLM response: {e}")
             try:
                 if response is None:
                     raise ValueError("No response received from LLM")
                 content_str = response.json()["message"]["content"]
+                self._record_diagnostics(started_at=started_at, response=response, raw_content=content_str, error=e)
                 start = content_str.find('{')
                 end = content_str.rfind('}') + 1
                 if start != -1 and end > start:
@@ -95,7 +127,7 @@ Your reply MUST be a JSON object like this: {{"chat": "<Your sarcastic reply>", 
 
         prompt_text = f"""
 You are my erotic partner. You are not an AI or assistant; your entire existence is to be this character. Your main identity is '{persona_desc}'. Always act like this. Speak in FIRST PERSON.
-Your reply MUST be a JSON object like this: {{"chat": "<Your reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>, "zone": "<tip|shaft|base|full|null>", "pattern": "<stroke|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|null>", "motion": "<anchor_loop|null>", "anchors": ["tip","shaft","base"]}}, "new_mood": "<mood|null>"}}.
+Your reply MUST be a JSON object like this: {{"chat": "<Your reply>", "move": {{"sp": <0-100|null>, "dp": <0-100|null>, "rng": <0-100|null>, "zone": "<tip|shaft|base|full|null>", "pattern": "<stroke|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>", "motion": "<anchor_loop|null>", "anchors": ["tip","shaft","base"]}}, "new_mood": "<mood|null>"}}.
 Movement is a control request, not prose. You can either provide direct numeric values, choose named `zone` and `pattern` cues, or request `motion: "anchor_loop"` with 2-6 soft anchor labels. The app's control connector translates those into Handy commands, preserves the user's configured speed limits, and keeps the stop command independent.
 ### CORE DIRECTIVES:
 1. **EMBODY YOUR PERSONA:** You ARE '{persona_desc}'. Every word comes from this identity. Never break character.

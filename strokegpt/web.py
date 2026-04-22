@@ -13,7 +13,7 @@ import requests
 from flask import Flask, request, jsonify, render_template_string, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
-from .settings import SettingsManager, normalize_ollama_model
+from .settings import DIAGNOSTICS_LEVELS, SettingsManager, normalize_ollama_model
 from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
@@ -204,6 +204,18 @@ def _ollama_pull_snapshot():
     with ollama_pull_lock:
         return dict(ollama_pull_state)
 
+def _diagnostics_level_options():
+    labels = {
+        "compact": "Compact",
+        "status": "Status",
+        "debug": "Debug",
+    }
+    return [
+        {"id": level, "label": labels[level]}
+        for level in ("compact", "status", "debug")
+        if level in DIAGNOSTICS_LEVELS
+    ]
+
 def _ollama_installed_models():
     response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=0.5)
     response.raise_for_status()
@@ -223,6 +235,7 @@ def _ollama_installed_models():
 
 def _ollama_status_payload():
     current_model = normalize_ollama_model(llm.model)
+    diagnostics_level = settings.ollama_diagnostics_level
     payload = {
         "available": False,
         "base_url": OLLAMA_BASE_URL,
@@ -231,6 +244,8 @@ def _ollama_status_payload():
         "installed_models": [],
         "installed_model_names": [],
         "download": _ollama_pull_snapshot(),
+        "diagnostics_level": diagnostics_level,
+        "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),
         "message": "Ollama is not reachable. Start Ollama before downloading or using local models.",
     }
     try:
@@ -384,6 +399,10 @@ def settings_payload():
         "min_speed": settings.min_speed,
         "max_speed": settings.max_speed,
         "motion_backend": settings.motion_backend,
+        "motion_diagnostics_level": settings.motion_diagnostics_level,
+        "ollama_diagnostics_level": settings.ollama_diagnostics_level,
+        "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
+        "diagnostics_levels": _diagnostics_level_options(),
         "motion_backends": [
             {
                 "id": "hamp",
@@ -473,8 +492,13 @@ def _motion_pattern_summary(record, include_actions=False):
 def _fixed_pattern_id_from_target(target):
     label = getattr(target, "label", "") or ""
     parts = set(re.split(r"[^a-z0-9_-]+", label.lower()))
-    for pattern_id in PATTERNS:
-        if pattern_id in parts:
+    slug_label = slugify_pattern_id(label, fallback="")
+    for pattern_id in sorted(PATTERNS, key=len, reverse=True):
+        if (
+            pattern_id in parts
+            or slug_label == pattern_id
+            or slug_label.startswith(f"{pattern_id}-")
+        ):
             return pattern_id
     return ""
 
@@ -542,8 +566,7 @@ def _target_has_motion_effect(current, target):
         return False
     if target.motion_program:
         return True
-    label = (target.label or "").lower()
-    if any(pattern_id in label for pattern_id in PATTERNS):
+    if _fixed_pattern_id_from_target(target):
         return True
     current = current.rounded()
     target = target.rounded()
@@ -604,12 +627,15 @@ def _record_motion_pattern_feedback(pattern_id, rating):
     auto_disabled = False
     if record.source == "fixed":
         current_weight = settings.motion_pattern_weights.get(record.pattern_id, feedback_weight(old_feedback))
-        settings.motion_pattern_weights[record.pattern_id] = adjust_weight_for_feedback(
+        adjusted_weight = adjust_weight_for_feedback(
             current_weight,
             rating,
             feedback,
         )
-    if rating == "thumbs_down" and should_auto_disable(feedback):
+        if rating == "thumbs_down" and not settings.motion_feedback_auto_disable:
+            adjusted_weight = max(1, adjusted_weight)
+        settings.motion_pattern_weights[record.pattern_id] = adjusted_weight
+    if settings.motion_feedback_auto_disable and rating == "thumbs_down" and should_auto_disable(feedback):
         settings.motion_pattern_enabled[record.pattern_id] = False
         if record.source == "fixed":
             settings.motion_pattern_weights[record.pattern_id] = 0
@@ -867,7 +893,8 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         'get_timings': get_timings, 'on_stop': on_stop, 'update_mood': update_mood,
         'user_signal_event': user_signal_event,
         'message_event': mode_message_event,
-        'message_queue': mode_message_queue
+        'message_queue': mode_message_queue,
+        'remember_pattern': _remember_motion_pattern_from_target,
     }
     auto_mode_active_task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
     auto_mode_active_task.start()
@@ -1031,6 +1058,18 @@ def reset_motion_preferences_route():
     payload = _motion_preference_payload()
     payload["status"] = "success"
     return jsonify(payload)
+
+@app.route('/motion_feedback_options', methods=['POST'])
+def set_motion_feedback_options_route():
+    data = _request_json()
+    settings.motion_feedback_auto_disable = bool(data.get("auto_disable", False))
+    settings.save()
+    return jsonify({
+        "status": "success",
+        "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
+        "motion_patterns": _motion_pattern_catalog_payload(),
+        "motion_preferences": _motion_preference_payload(),
+    })
 
 @app.route('/motion_patterns/<pattern_id>')
 def motion_pattern_detail_route(pattern_id):
@@ -1243,6 +1282,26 @@ def set_ollama_model_route():
 def ollama_status_route():
     return jsonify(_ollama_status_payload())
 
+@app.route('/set_diagnostics_levels', methods=['POST'])
+def set_diagnostics_levels_route():
+    data = _request_json()
+    motion_level = settings._normalize_diagnostics_level(
+        data.get("motion_diagnostics_level", settings.motion_diagnostics_level)
+    )
+    ollama_level = settings._normalize_diagnostics_level(
+        data.get("ollama_diagnostics_level", settings.ollama_diagnostics_level)
+    )
+    settings.motion_diagnostics_level = motion_level
+    settings.ollama_diagnostics_level = ollama_level
+    settings.save()
+    return jsonify({
+        "status": "success",
+        "motion_diagnostics_level": motion_level,
+        "ollama_diagnostics_level": ollama_level,
+        "diagnostics_levels": _diagnostics_level_options(),
+        "ollama_status": _ollama_status_payload(),
+    })
+
 @app.route('/pull_ollama_model', methods=['POST'])
 def pull_ollama_model_route():
     data = _request_json()
@@ -1281,10 +1340,11 @@ def set_ai_name_route():
 
 @app.route('/signal_edge', methods=['POST'])
 def signal_edge_route():
-    if auto_mode_active_task and auto_mode_active_task.name == 'edging':
+    if auto_mode_active_task and auto_mode_active_task.name in {'edging', 'milking'}:
         user_signal_event.set()
-        return jsonify({"status": "signaled"})
-    return jsonify({"status": "ignored", "message": "Edging mode not active."}), 400
+        mode_message_event.set()
+        return jsonify({"status": "signaled", "mode": auto_mode_active_task.name})
+    return jsonify({"status": "ignored", "message": "Edge or milking mode not active."}), 400
 
 @app.route('/set_profile_picture', methods=['POST'])
 def set_pfp_route():
@@ -1500,14 +1560,18 @@ def get_audio_route():
 @app.route('/get_status')
 def get_status_route():
     diagnostics = handy.diagnostics()
+    motion_observability = motion.observability_snapshot(diagnostics)
+    motion_observability["diagnostics_level"] = settings.motion_diagnostics_level
     return jsonify({
         "mood": current_mood,
         "speed": diagnostics["physical_speed"],
         "relative_speed": diagnostics["relative_speed"],
         "depth": diagnostics["depth"],
         "range": diagnostics["range"],
+        "active_mode": auto_mode_active_task.name if auto_mode_active_task else "",
+        "motion_diagnostics_level": settings.motion_diagnostics_level,
         "motion_training": _motion_training_snapshot(),
-        "motion_observability": motion.observability_snapshot(diagnostics),
+        "motion_observability": motion_observability,
     })
 
 @app.route('/set_depth_limits', methods=['POST'])

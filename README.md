@@ -255,7 +255,7 @@ You can adjust:
 - Motion pattern enablement, import/export, feedback-derived weights, and
   inline fixed-pattern LLM weight controls
 
-The motion connector accepts direct numeric movement requests from the model and named cues such as tip, shaft, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. It can also accept a soft anchor loop, where the model provides 2-6 anchors such as tip, shaft/middle, and base plus simple feel controls like tempo and softness. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
+The motion connector accepts direct numeric movement requests from the model and named cues such as tip, shaft, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. It can also accept any enabled fixed pattern id listed in Motion Pattern Preferences, including the Edge and Milk mode patterns exposed in the Motion Patterns menu. Soft anchor loops are supported too, where the model provides 2-6 anchors such as tip, shaft/middle, and base plus simple feel controls like tempo and softness. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
 
 Named motion patterns are prepared through a small funscript-style action pipeline before they are sent to the motion controller. The app sorts and deduplicates action points, smooths sparse patterns with eased intermediate points, repeats reusable shapes without stopping at the seam, limits large position jumps, and removes redundant straight-line points.
 

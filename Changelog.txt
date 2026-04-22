@@ -8,6 +8,38 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #33 - Add Diagnostics Verbosity Controls
+---------------------------------------------------------
+
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/33
+
+Branch: codex-diagnostics-verbosity
+
+- Reconciled `ROADMAP.md` with the desktop planning notes and moved
+  diagnostics/verbosity controls to the top of the future-work list.
+- Added persistent motion and Ollama diagnostics verbosity settings with
+  compact, status, and debug levels.
+- Added a compact current motion sequence indicator to the left of the
+  speed/depth meters, plus optional debug details below the meter row.
+- Added Ollama diagnostics output for provider status, last request timing,
+  error state, and raw local response preview when debug verbosity is selected.
+- Gated repeated-thumbs-down pattern auto-disable behind a visible Motion
+  setting; it is off by default so feedback no longer silently disables
+  patterns.
+- Integrated Edge and Milk scripted sequences into the fixed motion pattern
+  catalog so their labels, enablement, weights, and feedback use the same
+  Motion Patterns interface as other built-ins.
+- Replaced raw Edge/Milk status labels such as `pressure build` and `current`
+  with catalog pattern names, and made the I'm Close signal extend Milk while
+  Edge pulls back into a bounded pullback/recover/hold path.
+- Tuned Edge pullback, recover, and hold regions so pullback stays base-only,
+  recover stays base-mid, and hold stays mid-tip.
+- Made the Edge `I'm Close` reaction run as a bounded pullback, recover, then
+  hold sequence before returning to normal Edge planning.
+- Added the LLM-directed Edge/Milk duration, intensity, hold/resume, and
+  switch-to-Milk decision as future roadmap work.
+
+
 2026-04-22 - PR #31 - Add Motion Training Compare Preview
 ----------------------------------------------------------
 

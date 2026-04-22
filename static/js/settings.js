@@ -104,12 +104,90 @@ export function updateOllamaStatus(status) {
         el.downloadOllamaModelBtn.disabled = state.ollamaDownloadPolling;
         el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
     }
+    updateOllamaDiagnostics(status);
 }
 
 export async function refreshOllamaStatus() {
     const data = await apiCall('/ollama_status');
     if (data) updateOllamaStatus(data);
     return data;
+}
+
+function populateDiagnosticsLevelSelect(selectEl, levels = [], currentLevel = 'compact') {
+    if (!selectEl) return;
+    const options = levels.length ? levels : [
+        {id: 'compact', label: 'Compact'},
+        {id: 'status', label: 'Status'},
+        {id: 'debug', label: 'Debug'},
+    ];
+    selectEl.innerHTML = '';
+    options.forEach(level => {
+        const option = D.createElement('option');
+        option.value = level.id;
+        option.textContent = level.label;
+        selectEl.appendChild(option);
+    });
+    selectEl.value = currentLevel || 'compact';
+}
+
+export function updateOllamaDiagnostics(status = {}) {
+    if (!el.ollamaDiagnosticsOutput) return;
+    const level = status.diagnostics_level || state.ollamaDiagnosticsLevel || 'compact';
+    state.ollamaDiagnosticsLevel = level;
+    if (el.ollamaDiagnosticsLevelSelect) el.ollamaDiagnosticsLevelSelect.value = level;
+    if (level === 'compact') {
+        el.ollamaDiagnosticsOutput.hidden = true;
+        el.ollamaDiagnosticsOutput.textContent = '';
+        return;
+    }
+
+    const diagnostics = status.llm_diagnostics || {};
+    const lines = [
+        `Provider: ${status.available ? 'Ollama reachable' : 'Ollama unavailable'}`,
+        `Model: ${status.current_model || diagnostics.model || 'unknown'}`,
+    ];
+    if (diagnostics.last_updated_at) {
+        const elapsed = diagnostics.last_elapsed_ms ?? 'unknown';
+        const code = diagnostics.last_status_code ?? 'n/a';
+        lines.push(`Last request: ${elapsed}ms, HTTP ${code}`);
+    } else {
+        lines.push('Last request: none recorded');
+    }
+    if (diagnostics.last_error) lines.push(`Last error: ${diagnostics.last_error}`);
+    if (level === 'debug') {
+        const raw = diagnostics.last_response_preview || '';
+        lines.push(`Thinking text detected: ${diagnostics.last_response_has_thinking ? 'yes' : 'no'}`);
+        lines.push('Raw response:');
+        lines.push(raw || '(none recorded)');
+        if (diagnostics.last_response_truncated) lines.push('(truncated)');
+    }
+    el.ollamaDiagnosticsOutput.hidden = false;
+    el.ollamaDiagnosticsOutput.textContent = lines.join('\n');
+}
+
+export function populateDiagnosticsSettings(data = {}) {
+    state.diagnosticsLevels = data.diagnostics_levels || state.diagnosticsLevels || [];
+    state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
+    state.ollamaDiagnosticsLevel = data.ollama_diagnostics_level || state.ollamaDiagnosticsLevel || 'compact';
+    populateDiagnosticsLevelSelect(el.motionDiagnosticsLevelSelect, state.diagnosticsLevels, state.motionDiagnosticsLevel);
+    populateDiagnosticsLevelSelect(el.ollamaDiagnosticsLevelSelect, state.diagnosticsLevels, state.ollamaDiagnosticsLevel);
+    updateOllamaDiagnostics(data.ollama_status || {diagnostics_level: state.ollamaDiagnosticsLevel});
+}
+
+async function saveDiagnosticsLevels() {
+    const data = await apiCall('/set_diagnostics_levels', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            motion_diagnostics_level: el.motionDiagnosticsLevelSelect?.value || state.motionDiagnosticsLevel,
+            ollama_diagnostics_level: el.ollamaDiagnosticsLevelSelect?.value || state.ollamaDiagnosticsLevel,
+        }),
+    });
+    if (data && data.status === 'success') {
+        populateDiagnosticsSettings(data);
+        updateOllamaStatus(data.ollama_status);
+        el.statusText.textContent = 'Diagnostics settings saved.';
+    }
 }
 
 async function setOllamaModel(model) {
@@ -249,6 +327,8 @@ export function initSettingsControls({addChatMessage}) {
     D.getElementById('save-ollama-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelInput.value));
     el.downloadOllamaModelBtn.addEventListener('click', downloadOllamaModel);
     el.refreshOllamaStatusBtn.addEventListener('click', refreshOllamaStatus);
+    el.saveMotionDiagnosticsLevelBtn.addEventListener('click', saveDiagnosticsLevels);
+    el.saveOllamaDiagnosticsLevelBtn.addEventListener('click', saveDiagnosticsLevels);
     el.ollamaModelSelect.addEventListener('change', () => {
         el.ollamaModelInput.value = el.ollamaModelSelect.value;
         refreshOllamaStatus();

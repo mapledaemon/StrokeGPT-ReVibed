@@ -90,13 +90,20 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None):
     get_timings = callbacks["get_timings"]
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
+    user_signal_event = callbacks.get("user_signal_event")
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
+    remember_pattern = callbacks.get("remember_pattern", lambda target: None)
     planner = MotionScriptPlanner(mode)
     step_count = 0
 
     while not stop_event.is_set() and (max_steps is None or step_count < max_steps):
         min_time, max_time = get_timings(mode)
+        if mode == "milking" and user_signal_event and user_signal_event.is_set():
+            user_signal_event.clear()
+            if max_steps is not None:
+                max_steps += random.randint(10, 16)
+            send_message("Staying with it a little longer.")
         user_message = _check_for_user_message(message_queue, message_event)
         feedback_target = _feedback_target(stop_event, motion_controller, user_message)
         if stop_event.is_set():
@@ -107,6 +114,7 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None):
             send_message(step.message)
         update_mood(step.mood)
         motion_controller.apply_target(step.target, source=f"{mode} mode")
+        remember_pattern(step.target)
         step_count += 1
         _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event)
 
@@ -116,7 +124,7 @@ def auto_mode_logic(stop_event, services, callbacks):
 
 
 def milking_mode_logic(stop_event, services, callbacks):
-    _run_scripted_mode(stop_event, services, callbacks, "milking", max_steps=random.randint(14, 22))
+    _run_scripted_mode(stop_event, services, callbacks, "milking", max_steps=random.randint(34, 48))
     if not stop_event.is_set():
         callbacks["send_message"]("Finishing the sequence.")
         _sleep_with_stop(stop_event, 2)
@@ -127,13 +135,18 @@ def edging_mode_logic(stop_event, services, callbacks):
     get_timings = callbacks["get_timings"]
     update_mood = callbacks["update_mood"]
     send_message = callbacks["send_message"]
+    remember_pattern = callbacks.get("remember_pattern", lambda target: None)
     user_signal_event = callbacks["user_signal_event"]
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
     planner = MotionScriptPlanner("edging")
     edge_count = 0
+    step_count = 0
+    max_steps = random.randint(56, 78)
+    stop_after_reaction_steps = None
+    completed_after_signal = False
 
-    while not stop_event.is_set():
+    while not stop_event.is_set() and step_count < max_steps:
         edging_min, edging_max = get_timings("edging")
         user_message = _check_for_user_message(message_queue, message_event)
         feedback_target = _feedback_target(stop_event, motion_controller, user_message)
@@ -144,6 +157,8 @@ def edging_mode_logic(stop_event, services, callbacks):
             user_signal_event.clear()
             edge_count += 1
             step = planner.next_step(motion_controller.current_target(), edge_count=edge_count)
+            if edge_count >= 3:
+                stop_after_reaction_steps = len(planner.steps)
         else:
             step = planner.next_step(motion_controller.current_target(), feedback_target=feedback_target)
 
@@ -151,8 +166,18 @@ def edging_mode_logic(stop_event, services, callbacks):
             send_message(step.message)
         update_mood(step.mood)
         motion_controller.apply_target(step.target, source="edging mode")
+        remember_pattern(step.target)
+        step_count += 1
         _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event)
+        if stop_after_reaction_steps is not None:
+            stop_after_reaction_steps -= 1
+            if stop_after_reaction_steps < 0:
+                completed_after_signal = True
+                break
 
-    if not stop_event.is_set():
+    if completed_after_signal:
+        send_message(f"Holding there. Edge count: {edge_count}.")
+        update_mood("Afterglow")
+    elif not stop_event.is_set():
         send_message(f"Session complete. Edge count: {edge_count}.")
         update_mood("Afterglow")

@@ -60,6 +60,11 @@ function renderMotionBackendOptions(options = [], currentBackend = 'hamp') {
 
 export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
+    state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
+    state.motionFeedbackAutoDisable = data.motion_feedback_auto_disable ?? state.motionFeedbackAutoDisable ?? false;
+    if (el.motionFeedbackAutoDisableCheckbox) {
+        el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
+    }
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
     setSliderValue(el.motionSpeedMinSlider, el.motionSpeedMinVal, data.min_speed ?? state.motionMinSpeed);
     setSliderValue(el.motionSpeedMaxSlider, el.motionSpeedMaxVal, data.max_speed ?? state.motionMaxSpeed);
@@ -980,6 +985,66 @@ function updateMotionMeters(diagnostics = {}) {
     if (el.motionDepthMeterValue) el.motionDepthMeterValue.textContent = `${depth}%`;
 }
 
+async function saveMotionFeedbackOptions() {
+    const data = await apiCall('/motion_feedback_options', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({auto_disable: Boolean(el.motionFeedbackAutoDisableCheckbox?.checked)}),
+    });
+    if (data && data.status === 'success') {
+        state.motionFeedbackAutoDisable = Boolean(data.motion_feedback_auto_disable);
+        if (el.motionFeedbackAutoDisableCheckbox) el.motionFeedbackAutoDisableCheckbox.checked = state.motionFeedbackAutoDisable;
+        if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
+        el.statusText.textContent = state.motionFeedbackAutoDisable
+            ? 'Repeated thumbs down can disable patterns.'
+            : 'Repeated thumbs down will not disable patterns.';
+    }
+}
+
+function updateMotionSequenceIndicator(payload = {}) {
+    if (!el.motionSequenceIndicator) return;
+    const label = String(payload.label || '').trim();
+    const source = String(payload.source || '').trim();
+    const backend = payload.backend === 'position' ? 'Position' : 'HAMP';
+    const sequence = label || source || 'Idle';
+    const level = payload.diagnostics_level || state.motionDiagnosticsLevel || 'compact';
+    state.motionDiagnosticsLevel = level;
+    el.motionSequenceIndicator.textContent = level === 'compact'
+        ? sequence
+        : `${sequence} | ${backend}`;
+    el.motionSequenceIndicator.title = source && source !== sequence
+        ? `${source}: ${sequence}`
+        : sequence;
+}
+
+function updateMotionDiagnosticsPanel(payload = {}) {
+    if (!el.motionDiagnosticsPanel) return;
+    const level = payload.diagnostics_level || state.motionDiagnosticsLevel || 'compact';
+    state.motionDiagnosticsLevel = level;
+    if (level !== 'debug') {
+        el.motionDiagnosticsPanel.hidden = true;
+        el.motionDiagnosticsPanel.textContent = '';
+        return;
+    }
+    const diagnostics = payload.diagnostics || {};
+    const lastCommandTime = payload.last_command_time
+        ? `${Math.max(0, Date.now() / 1000 - payload.last_command_time).toFixed(1)}s ago`
+        : 'none';
+    const lines = [
+        `Source: ${payload.source || 'idle'}`,
+        `Backend: ${payload.backend || state.motionBackend || 'hamp'}`,
+        `Playback: ${payload.playback_active ? 'active' : 'idle'}`,
+        `Last command: ${lastCommandTime}`,
+        `Relative speed: ${Math.round(clampPercent(diagnostics.relative_speed, 0))}%`,
+        `Physical speed: ${Math.round(observationNumber(diagnostics.physical_speed, 0))}`,
+        `Depth/range: ${Math.round(clampPercent(diagnostics.depth, 50))}% / ${Math.round(clampPercent(diagnostics.range, 50))}%`,
+        `Position: ${observationNumber(diagnostics.position_mm, 0).toFixed(1)}mm`,
+        `HAMP: ${diagnostics.hamp_started ? 'started' : 'stopped'}`,
+    ];
+    el.motionDiagnosticsPanel.hidden = false;
+    el.motionDiagnosticsPanel.textContent = lines.join(' | ');
+}
+
 function normalizedPercentRange(minValue, maxValue, fallbackMin = 0, fallbackMax = 100) {
     const min = clampPercent(minValue, fallbackMin);
     const max = clampPercent(maxValue, fallbackMax);
@@ -1090,6 +1155,8 @@ export function updateMotionObservability(payload = {}) {
     payload = payload || {};
     const diagnostics = payload.diagnostics || {};
     updateMotionMeters(diagnostics);
+    updateMotionSequenceIndicator(payload);
+    updateMotionDiagnosticsPanel(payload);
     updateHandyCylinder(payload);
 }
 
@@ -1146,6 +1213,9 @@ export async function pollMotionStatus() {
         Afterglow: '\u{1F60C}',
     }[data.mood] || '';
     el.moodDisplay.textContent = `Mood: ${data.mood} ${emoji}`;
+    if (el.imCloseBtn) {
+        el.imCloseBtn.style.display = ['edging', 'milking'].includes(data.active_mode) ? 'block' : 'none';
+    }
     state.motionObservability = data.motion_observability || {
         backend: state.motionBackend,
         source: 'status',
@@ -1197,6 +1267,7 @@ async function startMilkingMode() {
     const data = await apiCall('/start_milking_mode', {method: 'POST'});
     if (data && data.status === 'milking_started') {
         el.statusText.textContent = 'Milking mode started.';
+        el.imCloseBtn.style.display = 'block';
     }
 }
 
@@ -1211,8 +1282,13 @@ export function initMotionControls({sendUserMessage}) {
         else apiCall('/stop_auto_mode', {method: 'POST'});
     }));
     el.edgingModeBtn.addEventListener('click', startEdgingMode);
-    el.imCloseBtn.addEventListener('click', () => {
-        apiCall('/signal_edge', {method: 'POST'});
+    el.imCloseBtn.addEventListener('click', async () => {
+        const data = await apiCall('/signal_edge', {method: 'POST'});
+        if (data && data.status === 'signaled') {
+            el.statusText.textContent = data.mode === 'milking'
+                ? 'Milking mode extended.'
+                : 'Close signal sent.';
+        }
         el.imCloseBtn.style.transform = 'scale(0.95)';
         setTimeout(() => { el.imCloseBtn.style.transform = ''; }, 100);
     });
@@ -1223,6 +1299,9 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
+    if (el.motionFeedbackAutoDisableCheckbox) {
+        el.motionFeedbackAutoDisableCheckbox.addEventListener('change', saveMotionFeedbackOptions);
+    }
     el.importMotionPatternBtn.addEventListener('click', () => el.motionPatternImportInput.click());
     el.motionPatternImportInput.addEventListener('change', event => importMotionPatternFile(event.target.files[0]));
     if (el.openMotionTrainingBtn) el.openMotionTrainingBtn.addEventListener('click', openMotionTrainingWorkspace);

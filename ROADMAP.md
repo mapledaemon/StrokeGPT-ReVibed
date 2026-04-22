@@ -14,7 +14,109 @@ Complexity key:
 
 ## Best Next Targets
 
-### 1. Motion Training Editor Depth (M)
+### 1. Diagnostics And Verbosity Controls (S/M)
+
+Why next: recent motion observability work already exposes useful data, so the
+app can make runtime state more visible without changing motion behavior.
+
+- Add user-visible verbosity levels for motion diagnostics and Ollama
+  diagnostics.
+- Keep the default compact, with higher motion verbosity showing the active
+  motion source, pattern/name, backend, Handy timing, latency, connection state,
+  and available position diagnostics.
+- Let higher Ollama verbosity expose the latest local provider status and raw
+  returned content where available, including model-emitted thinking text if the
+  local model returns it in the response body.
+- Keep debug output local and inspectable; do not treat raw diagnostics as
+  hidden memory or prompt context.
+- Reuse the existing `/get_status` motion observability payload before adding
+  another polling path.
+
+### 2. Feedback Governance And Pattern Library (M)
+
+Why next: feedback currently affects model-visible pattern weights, so users
+need full control over any automatic changes.
+
+- Make feedback changes visible in Settings, including numeric weights,
+  enablement, and feedback counts.
+- Add clearer feedback-history indicators for fixed and trained patterns.
+- Add a reset path for individual pattern feedback without clearing the whole
+  motion preference set.
+- Keep disabled motion patterns out of LLM-visible pattern preferences.
+- Keep fixed/generated pattern files importable, exportable, and shareable from
+  the larger Motion Training workspace rather than crowding compact Settings.
+
+### 3. Motion Vocabulary And Preset Semantics (S/M)
+
+Why next: consistent terms make both deterministic commands and LLM outputs less
+surprising before deeper pattern generation work.
+
+- Define named motion semantics for `milk`, `flick`, `freestyle`,
+  deterministic speed ranges, full-range behavior, and optional LLM-controlled
+  auto timing.
+- Make `milk` use most or all of the configured safe stroke range unless the
+  user has constrained it.
+- Make `flick` a quick upward/outward move followed by a slower return.
+- If freestyle or LLM-controlled auto timing is added, gate it behind explicit
+  experimental controls and keep stop handling, speed limits, and smoothing
+  intact.
+- Add LLM-directed finite mode decisions for Edge/Milk transitions: on mode
+  start and on the I'm Close signal, the model should be able to choose a
+  bounded duration, intensity, and action such as hold-then-resume, pull back,
+  switch to Milk, or stop, using chat history and edge count as visible
+  context.
+- Let preset modes speak occasionally without turning mode timers into repeated
+  narration.
+
+### 4. Motion Style Preferences (M)
+
+Why next: this is a clean way to steer model behavior without hidden prompt
+drift.
+
+- Add a user-visible motion style selector for broad movement feel, such as
+  smooth, steady, teasing, pulsing, ramping, high-variation, full-range, or
+  freestyle.
+- Store style preferences separately from persona prompts so users can change
+  character without losing device behavior preferences.
+- Include style preferences in model context as concise, inspectable numeric
+  or enumerated values rather than natural-language memory.
+- Let users reset learned motion feedback and style preferences without a full
+  settings reset.
+
+### 5. Soft-Anchor Pattern Authoring (M/L)
+
+Why next: it addresses the gap between fixed scripts and raw LLM numeric
+control while staying inspectable.
+
+- Add a soft-anchor editor where users can arrange 2-6 targets such as tip,
+  upper, shaft/middle, lower, and base.
+- Preview Catmull-Rom and minimum-jerk trajectory output before sending it to
+  the device.
+- Expose tempo, softness, large-step limiting, and repeat count as visible
+  controls.
+- Let the LLM choose from saved soft-anchor patterns by id and weight instead
+  of inventing hidden free-form behavior.
+- Keep anchors as soft waypoints, not hard stops.
+- Treat the anchors like pattern-matching notes: movement should slide through
+  targets smoothly, may slow down to hit a target, and should not snap or stop
+  just because a target was reached.
+
+### 6. Architecture Audit And Refactor Targets (M)
+
+Why next: the app has accumulated adapters and translation layers while motion
+control stabilized; targeted cleanup should happen before larger feature work.
+
+- Check for code that translates between multiple overlapping schemas or
+  function sets and decide whether each layer should be preserved, simplified,
+  or rewritten.
+- Evaluate whether Python remains adequate for the app's runtime, UI, and local
+  model-control constraints before considering any rewrite.
+- Evaluate fuzzy-logic style controllers only as an experiment with clear
+  human-test feedback, because motion feel is subjective and easy to overfit.
+- Prefer practical maintainability refactors when they improve editability,
+  recoverability, or safety.
+
+### 7. Motion Training Editor Depth (M)
 
 Why next: the training workspace already exists, so richer editing can build on
 the current surface without crowding Settings.
@@ -29,38 +131,23 @@ the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 2. Soft-Anchor Pattern Authoring (M/L)
+### 8. User Profile And Preference Setup (M)
 
-Why next: it addresses the gap between fixed scripts and raw LLM numeric
-control while staying inspectable.
+Why later: identity and preference setup affects persona prompts and model
+context, so it should follow runtime diagnostics and motion vocabulary cleanup.
 
-- Add a soft-anchor editor where users can arrange 2-6 targets such as tip,
-  upper, shaft/middle, lower, and base.
-- Preview Catmull-Rom and minimum-jerk trajectory output before sending it to
-  the device.
-- Expose tempo, softness, large-step limiting, and repeat count as visible
-  controls.
-- Let the LLM choose from saved soft-anchor patterns by id and weight instead
-  of inventing hidden free-form behavior.
-- Keep anchors as soft waypoints, not hard stops.
+- Add a user profile picture and custom user display name.
+- Consider using the user profile control as the settings entry point in the
+  upper-right area.
+- Add startup and Settings selectors for user identity and interested-in
+  preferences, with custom values.
+- Keep identity/preferences inspectable and resettable; do not bury them inside
+  natural-language memory.
 
-### 3. Motion Style Preferences (M)
+### 9. Runtime And Setup Diagnostics (M)
 
-Why next: this is a clean way to steer model behavior without hidden prompt
-drift.
-
-- Add a user-visible motion style selector for broad movement feel, such as
-  smooth, steady, teasing, pulsing, ramping, high-variation, or full-range.
-- Store style preferences separately from persona prompts so users can change
-  character without losing device behavior preferences.
-- Include style preferences in model context as concise, inspectable numeric
-  or enumerated values rather than natural-language memory.
-- Let users reset learned motion feedback and style preferences without a full
-  settings reset.
-
-### 4. Runtime And Setup Diagnostics (M)
-
-Why next: it reduces support friction and makes model/device state explicit.
+Why later: broader setup checks should follow the first diagnostics verbosity
+slice.
 
 - Add a diagnostics tab for Ollama status, selected model install state, local
   voice model state, Torch/CUDA status, Handy key presence, active port, and
@@ -77,7 +164,38 @@ Why next: it reduces support friction and makes model/device state explicit.
   missing.
 - Keep optional model downloads as explicit UI actions with visible status.
 
-### 5. Local Voice Control MVP (L)
+### 10. Reference Research Backlog (S/M)
+
+Why later: the external projects are useful inputs, but each needs licensing,
+scope, and architecture review before implementation.
+
+- Review Handy-control references:
+  https://github.com/defucilis/thehandy,
+  https://github.com/Yazui1/handy-companion,
+  https://github.com/KarilChan/handy-koikatsu-server, and
+  https://thehandyapp.ddns.net/#/voice-commands-page.
+- Review funscript and editor references:
+  https://github.com/throwaway734/Simple-Funscript-Editor,
+  https://github.com/michael-mueller-git/Python-Funscript-Editor,
+  https://github.com/defucilis/funscript-io,
+  https://github.com/mnh86/NimbleFunscriptPlayer,
+  https://github.com/justfortheNSFW/Funscript-Tools,
+  https://github.com/OpenFunscripter/OFS,
+  https://github.com/michael-mueller-git/mtfg-rs,
+  https://github.com/ilor1/HapticsEditor-v2,
+  https://github.com/ncdxncdx/FunscriptDancer, and
+  https://github.com/funjack/funscripting.
+- Review pattern-generation and example-script references:
+  https://github.com/ack00gar/FunGen-AI-Powered-Funscript-Generator/tree/main,
+  https://github.com/FredTungsten/Scripts/tree/master,
+  https://github.com/Aguy1724/thehandy_resources, and
+  https://github.com/Amethyst-Sysadmin/Howl.
+- Review device-abstraction references:
+  https://github.com/ConAcademy/buttplug-mcp,
+  https://github.com/ofs69/syncopathy, and
+  https://github.com/buttplugio/awesome-buttplug.
+
+### 11. Local Voice Control MVP (L)
 
 Why next: voice control is the largest user-facing feature, but it should ship
 as push-to-talk before always-on listening.
@@ -110,7 +228,7 @@ Candidate local ASR providers:
   4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 6. Story Mode (L/XL)
+### 12. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -124,7 +242,7 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
-### 7. Optional Runtime And Packaging Work (XL)
+### 13. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
@@ -143,6 +261,8 @@ runtime shows a clear app-level benefit.
 - Speed limits, smoothing, stop handling, and user-visible preferences are
   shared reliability constraints. Voice control, story mode, LLM output, and
   pattern playback should all route through the same motion layer.
+- Repeated thumbs-down auto-disable must remain opt-in, visible, and reversible;
+  feedback should not silently hide motion patterns from the user.
 - HAMP continuous motion should remain the recommended default until flexible
   position/script playback has more real-device validation for smoothness,
   pattern fidelity, latency, and recovery behavior.

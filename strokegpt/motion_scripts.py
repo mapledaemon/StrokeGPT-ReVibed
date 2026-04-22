@@ -1,10 +1,18 @@
 import random
+import re
 from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 
 from .motion import MotionTarget
-from .motion_patterns import expand_anchor_program, expand_pattern
+from .motion_patterns import PATTERNS, expand_anchor_program, expand_pattern
+
+
+def _slug_label(value):
+    cleaned = str(value or "").strip().lower()
+    cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned)
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-_")
+    return cleaned
 
 
 @dataclass(frozen=True)
@@ -42,36 +50,36 @@ AUTO_ARCS = (
 
 MILKING_ARCS = (
     (
-        ("pressure build", "Dominant", 54, 48, 70),
-        ("wide pressure", "Passionate", 62, 54, 78),
-        ("deep pulse", "Overwhelmed", 72, 76, 38),
-        ("fast middle", "Excited", 78, 48, 46),
-        ("deep finish", "Dominant", 68, 82, 34),
-        ("recover", "Afterglow", 28, 30, 28),
+        ("milking-pressure-build", "Dominant", 54, 48, 70),
+        ("milking-wide-pressure", "Passionate", 62, 54, 78),
+        ("milking-deep-pulse", "Overwhelmed", 72, 76, 38),
+        ("milking-fast-middle", "Excited", 78, 48, 46),
+        ("milking-deep-finish", "Dominant", 68, 82, 34),
+        ("milking-recover", "Afterglow", 28, 30, 28),
     ),
     (
-        ("steady press", "Confident", 58, 44, 62),
-        ("short burst", "Excited", 74, 34, 30),
-        ("full drive", "Passionate", 66, 52, 88),
-        ("deep squeeze", "Dominant", 76, 86, 24),
-        ("final wave", "Breathless", 70, 58, 74),
+        ("milking-steady-press", "Confident", 58, 44, 62),
+        ("milking-short-burst", "Excited", 74, 34, 30),
+        ("milking-full-drive", "Passionate", 66, 52, 88),
+        ("milking-deep-squeeze", "Dominant", 76, 86, 24),
+        ("milking-final-wave", "Breathless", 70, 58, 74),
     ),
 )
 
 EDGING_ARCS = (
     (
-        ("build low", "Seductive", 24, 24, 32),
-        ("build mid", "Anticipatory", 34, 42, 48),
-        ("hold", "Confident", 38, 50, 42),
-        ("tip tease", "Playful", 42, 14, 18),
-        ("recover", "Loving", 16, 14, 14),
+        ("edge-build-low", "Seductive", 24, 24, 32),
+        ("edge-build-mid", "Anticipatory", 34, 42, 48),
+        ("edge-hold", "Confident", 34, 32, 46),
+        ("edge-tip-tease", "Playful", 42, 14, 18),
+        ("edge-recover", "Loving", 18, 68, 48),
     ),
     (
-        ("slow wide", "Intimate", 24, 48, 62),
-        ("shallow snap", "Teasing", 46, 16, 20),
-        ("middle hold", "Confident", 36, 44, 36),
-        ("deeper risk", "Dominant", 48, 74, 30),
-        ("pull back", "Loving", 14, 12, 12),
+        ("edge-slow-wide", "Intimate", 24, 48, 62),
+        ("edge-shallow-snap", "Teasing", 46, 16, 20),
+        ("edge-middle-hold", "Confident", 36, 44, 36),
+        ("edge-deeper-risk", "Dominant", 48, 74, 30),
+        ("edge-pull-back", "Loving", 14, 88, 18),
     ),
 )
 
@@ -94,7 +102,7 @@ class MotionScriptPlanner:
         if feedback_target:
             self.steps = deque(self._feedback_steps(current, feedback_target))
         elif edge_count is not None:
-            self.steps = deque(self._edge_reaction_steps(edge_count))
+            self.steps = deque(self._edge_reaction_steps(current, edge_count))
         elif not self.steps:
             self.steps = deque(self._build_arc(current))
 
@@ -110,10 +118,31 @@ class MotionScriptPlanner:
         self.last_arc_index = arc_index
 
         base_arc = arcs[arc_index]
-        steps = [ScriptStep(current.clamped(), mood="Curious", delay_factor=0.5)]
-        for label, mood, speed, depth, stroke_range in base_arc:
-            steps.extend(self._varied_cluster(label, mood, speed, depth, stroke_range))
+        steps = []
+        previous = current.clamped()
+        for pattern_id, mood, speed, depth, stroke_range in base_arc:
+            pattern_steps = self._pattern_cluster(previous, pattern_id, mood, speed, depth, stroke_range)
+            steps.extend(pattern_steps)
+            if pattern_steps:
+                previous = pattern_steps[-1].target
         return steps
+
+    def _pattern_cluster(self, current, pattern_id, mood, speed, depth, stroke_range):
+        pattern = PATTERNS.get(pattern_id)
+        label = pattern.name if pattern else pattern_id
+        target = MotionTarget(
+            speed + self.rng.uniform(-3, 3),
+            depth + self.rng.uniform(-5, 5),
+            stroke_range + self.rng.uniform(-7, 7),
+            label=label,
+        ).clamped()
+        frames = expand_pattern(pattern_id, current, target, rng=self.rng)
+        if not frames:
+            return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.75, 1.15))]
+        return [
+            ScriptStep(frame.target, mood=mood, delay_factor=frame.delay_factor)
+            for frame in frames
+        ]
 
     def _varied_cluster(self, label, mood, speed, depth, stroke_range):
         cluster_size = self.rng.randint(1, 3)
@@ -152,8 +181,9 @@ class MotionScriptPlanner:
 
     def _pattern_from_label(self, label):
         clean_label = (label or "").lower()
-        for pattern in ("flick", "flutter", "pulse", "hold", "wave", "ramp", "ladder", "surge", "sway", "tease"):
-            if pattern in clean_label:
+        slug_label = _slug_label(label)
+        for pattern in sorted(PATTERNS, key=len, reverse=True):
+            if pattern in clean_label or slug_label == pattern or slug_label.startswith(f"{pattern}-"):
                 return pattern
         return None
 
@@ -199,13 +229,52 @@ class MotionScriptPlanner:
         )
         return steps
 
-    def _edge_reaction_steps(self, edge_count):
+    def _edge_reaction_steps(self, current, edge_count):
         intensity = min(18 + edge_count * 3, 32)
-        return [
-            ScriptStep(MotionTarget(8, 10, 10, "pull back").clamped(), mood="Dominant", message=f"Backing off. Edge count: {edge_count}.", delay_factor=0.6),
-            ScriptStep(MotionTarget(intensity, 16, 16, "recover").clamped(), mood="Loving", delay_factor=1.2),
-            ScriptStep(MotionTarget(intensity + 8, 28, 26, "restart").clamped(), mood="Teasing", delay_factor=1.0),
-        ]
+        steps = self._pattern_cluster(
+            current.clamped(),
+            "edge-pull-back",
+            "Dominant",
+            8,
+            88,
+            18,
+        )
+        if not steps:
+            steps = [
+                ScriptStep(
+                    MotionTarget(8, 88, 18, PATTERNS["edge-pull-back"].name).clamped(),
+                    mood="Dominant",
+                    delay_factor=0.6,
+                )
+            ]
+        first_step = steps[0]
+        steps[0] = ScriptStep(
+            first_step.target,
+            mood=first_step.mood,
+            message=f"Backing off. Edge count: {edge_count}.",
+            delay_factor=first_step.delay_factor,
+        )
+        steps.extend(
+            self._pattern_cluster(
+                steps[-1].target,
+                "edge-recover",
+                "Loving",
+                intensity,
+                68,
+                48,
+            )
+        )
+        steps.extend(
+            self._pattern_cluster(
+                steps[-1].target,
+                "edge-hold",
+                "Confident",
+                intensity,
+                32,
+                46,
+            )
+        )
+        return steps
 
     def _near(self, target, suffix):
         return MotionTarget(
