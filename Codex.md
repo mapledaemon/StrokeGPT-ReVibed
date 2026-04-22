@@ -106,6 +106,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Before pushing a PR, provide a local PowerShell validation script for the
   user to run, include a final app launch step for manual browser/device
   testing, and make sure `Changelog.txt` already describes the branch.
+- Once a branch has an open PR, change its changelog heading from `Unreleased`
+  to the PR-numbered entry before leaving the PR ready to merge. Do not rely on
+  a follow-up changelog-only PR just to convert `Unreleased` after merge.
 
 ## Known Rough Edges
 

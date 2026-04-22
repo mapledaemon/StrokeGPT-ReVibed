@@ -540,8 +540,7 @@ async function fetchJsonWithMessage(endpoint, options = {}) {
     }
 }
 
-function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern) {
-    const canvas = el.motionTrainingPreviewCanvas;
+function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor = '#7fb7a3', pointColor = '#d8b66a') {
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
     const width = Math.max(320, Math.round(bounds.width || canvas.width || 640));
@@ -585,7 +584,7 @@ function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern)
     if (!actions.length) {
         previewCtx.fillStyle = 'rgba(232, 230, 223, 0.72)';
         previewCtx.textAlign = 'center';
-        previewCtx.fillText('Select a pattern to preview its position curve.', width / 2, height / 2);
+        previewCtx.fillText(emptyText, width / 2, height / 2);
         previewCtx.textAlign = 'left';
         return;
     }
@@ -596,7 +595,7 @@ function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern)
     const xFor = action => pad + ((action.at - start) / duration) * (width - pad * 2);
     const yFor = action => pad + ((100 - clampNumber(action.pos, 0, 100, 50)) / 100) * (height - pad * 2);
 
-    previewCtx.strokeStyle = '#7fb7a3';
+    previewCtx.strokeStyle = lineColor;
     previewCtx.lineWidth = 2.5;
     previewCtx.beginPath();
     actions.forEach((action, index) => {
@@ -607,7 +606,7 @@ function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern)
     });
     previewCtx.stroke();
 
-    previewCtx.fillStyle = '#d8b66a';
+    previewCtx.fillStyle = pointColor;
     actions.forEach(action => {
         previewCtx.beginPath();
         previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
@@ -617,6 +616,21 @@ function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern)
     previewCtx.fillStyle = 'rgba(232, 230, 223, 0.7)';
     previewCtx.fillText('tip', width - pad + 6, pad + 4);
     previewCtx.fillText('base', width - pad + 6, height - pad + 4);
+}
+
+function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern) {
+    drawPatternPreviewCanvas(
+        el.motionTrainingOriginalPreviewCanvas,
+        state.motionTrainingOriginalPattern,
+        'Select a pattern to preview.',
+        '#7d89a6',
+        '#a9b0c6',
+    );
+    drawPatternPreviewCanvas(
+        el.motionTrainingPreviewCanvas,
+        pattern,
+        state.motionTrainingOriginalPattern ? 'Edited preview appears here.' : 'Select a pattern to preview.',
+    );
 }
 
 function setMotionTrainingDetail(pattern) {

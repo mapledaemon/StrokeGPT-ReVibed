@@ -2,16 +2,40 @@
 StrokeGPT-ReVibed Changelog
 ===========================
 
-This changelog tracks merged pull requests made in the StrokeGPT-ReVibed fork,
-plus the current unreleased branch when active work is underway. It starts from
-the fork baseline and records the project work that has landed through PRs in
-this repository.
+This changelog tracks pull requests made in the StrokeGPT-ReVibed fork, plus
+the current unreleased branch only before a pull request exists. Once a branch
+has an open PR, its changelog entry should use the PR number instead of
+`Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Chat Text Delivery Reliability
--------------------------------------------
+2026-04-22 - PR #31 - Add Motion Training Compare Preview
+----------------------------------------------------------
+
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/31
+
+Branch: codex-motion-training-compare-preview
+
+- Added side-by-side Original and Edited canvases in the Motion Training
+  workspace so transforms can be compared before preview playback or saving a
+  trained copy.
+- Widened the Motion Training dialog, narrowed the list pane, and let the graph
+  area use more available width and height for easier curve comparison.
+- Kept compact Motion settings unchanged, with the comparison UI limited to the
+  larger Motion Training workspace.
+- Updated frontend regression coverage for the new preview markup, responsive
+  layout guards, and JavaScript canvas wiring.
+- Removed the completed side-by-side preview item from `ROADMAP.md` so it stays
+  focused on future work.
+
+
+2026-04-22 - PR #32 - Queue LLM Chat Replies For UI Delivery
+-------------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/32
 
 Branch: codex-chat-text-queue-reliability
+Head commit: 6ebb0ec
+Merge commit: 26689f8
 
 - Queued normal local LLM replies for the chat UI while still returning the
   reply text from `/send_message`, so the same text used for local voice output

@@ -78,6 +78,7 @@ export const el = {
     motionTrainingPatternList: D.getElementById('motion-training-pattern-list'),
     motionTrainingPatternTitle: D.getElementById('motion-training-pattern-title'),
     motionTrainingPatternMeta: D.getElementById('motion-training-pattern-meta'),
+    motionTrainingOriginalPreviewCanvas: D.getElementById('motion-training-original-preview-canvas'),
     motionTrainingPreviewCanvas: D.getElementById('motion-training-preview-canvas'),
     motionTransformSmoothBtn: D.getElementById('motion-transform-smooth-btn'),
     motionTransformHarshenBtn: D.getElementById('motion-transform-harshen-btn'),
