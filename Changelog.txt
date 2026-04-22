@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Pattern Filters
------------------------------------
+2026-04-21 - PR #13 - Add Funscript-Inspired Motion Pattern Filters
+--------------------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/13
 Branch: codex-motion-pattern-filters
+Head commit: a10fadb
+Merge commit: 4fb8b49
 
 - Added dependency-free funscript-style action preparation for live Handy
   patterns: timestamp sorting/deduplication, minimum action intervals, repeat
