@@ -364,7 +364,7 @@ The original repository did not include a local license file at the time this fo
 
 This project is free and open source, developed and maintained in my spare time by [me](https://github.com/mapledaemon/). If you find pleasure in this program, please consider donating, no matter how small.
 
-Your donation mainly helps cover token cost, which heavily limits development speed at the moment given the compute shortage. It also helps me afford hardware replacements in this challenging environment.
+Your donation mainly helps cover token cost, which heavily limits development speed at the moment given the compute shortage. It also helps me afford hardware replacements in this challenging environment. If you want me to integrate support for a different stroker or toy, submit an issue and donate enough to cover the cost. I'll gladly implement it. Any toys for men (including insertables) are fine, just nothing as large as a hismith, vacuglide or smaller.
 
 <p align="center">
   <strong>Ethereum</strong><br>
