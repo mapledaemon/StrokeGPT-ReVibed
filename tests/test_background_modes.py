@@ -121,6 +121,87 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(len(remembered), len(motion.applied))
         self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
 
+    def test_milking_close_signal_uses_llm_duration_and_intensity(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        decisions = []
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"]))
+            if kwargs["event"] == "start":
+                return {"action": "continue", "duration_seconds": 5, "intensity": 20}
+            return {
+                "action": "continue",
+                "duration_seconds": 5,
+                "intensity": 100,
+                "chat": "Keeping the finish going.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (1, 1),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": lambda _target: None,
+            "mode_decision": mode_decision,
+        }
+
+        with mock.patch.object(background_modes.random, "randint", return_value=2):
+            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
+                background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(decisions, [("milking", "start"), ("milking", "close_signal")])
+        self.assertEqual(len(motion.applied), 10)
+        self.assertTrue(any("Keeping the finish going" in message for message in messages))
+        self.assertTrue(all(target.speed >= 0 for target in motion.applied))
+
+    def test_edging_close_signal_can_switch_to_milking_from_llm_decision(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        mode_names = []
+        decisions = []
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"], kwargs["edge_count"]))
+            if kwargs["event"] == "start":
+                return {"action": "continue", "duration_seconds": 6, "intensity": 40}
+            return {
+                "action": "switch_to_milk",
+                "duration_seconds": 5,
+                "intensity": 80,
+                "chat": "Switching to milk.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (1, 1),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": lambda _target: None,
+            "mode_decision": mode_decision,
+            "set_mode_name": mode_names.append,
+        }
+
+        with mock.patch.object(background_modes.random, "randint", return_value=2):
+            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
+                background_modes.edging_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertIn(("edging", "start", 0), decisions)
+        self.assertIn(("edging", "close_signal", 1), decisions)
+        self.assertIn("milking", mode_names)
+        self.assertTrue(any("Switching to milk" in message for message in messages))
+        self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,6 +58,13 @@ function renderMotionBackendOptions(options = [], currentBackend = 'hamp') {
     updateMotionBackendUi(currentBackend);
 }
 
+function updateMemoryToggleUi(enabled) {
+    state.useLongTermMemory = Boolean(enabled);
+    if (!el.toggleMemoryBtn) return;
+    el.toggleMemoryBtn.textContent = `Memories: ${state.useLongTermMemory ? 'ON' : 'OFF'}`;
+    el.toggleMemoryBtn.setAttribute('aria-pressed', state.useLongTermMemory ? 'true' : 'false');
+}
+
 export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
     state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
@@ -65,6 +72,7 @@ export function populateMotionSettings(data = {}) {
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
     }
+    updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
     setSliderValue(el.motionSpeedMinSlider, el.motionSpeedMinVal, data.min_speed ?? state.motionMinSpeed);
     setSliderValue(el.motionSpeedMaxSlider, el.motionSpeedMaxVal, data.max_speed ?? state.motionMaxSpeed);
@@ -101,6 +109,14 @@ async function saveMotionSpeedLimits() {
     if (res && res.status === 'success') {
         populateMotionSettings({min_speed: res.min_speed, max_speed: res.max_speed});
         el.statusText.textContent = `Speed limits saved: ${state.motionMinSpeed}-${state.motionMaxSpeed}%.`;
+    }
+}
+
+async function toggleLongTermMemory() {
+    const data = await apiCall('/toggle_memory', {method: 'POST'});
+    if (data && data.status === 'success') {
+        updateMemoryToggleUi(data.use_long_term_memory);
+        el.statusText.textContent = `Long-term memories ${data.use_long_term_memory ? 'enabled' : 'disabled'}.`;
     }
 }
 
@@ -1304,6 +1320,9 @@ export async function pollMotionStatus() {
     if (el.imCloseBtn) {
         el.imCloseBtn.style.display = ['edging', 'milking'].includes(data.active_mode) ? 'block' : 'none';
     }
+    if (data.active_mode !== 'edging' && state.edgingTimerInterval) {
+        stopEdgingTimer();
+    }
     state.motionObservability = data.motion_observability || {
         backend: state.motionBackend,
         source: 'status',
@@ -1370,6 +1389,7 @@ export function initMotionControls({sendUserMessage}) {
         else apiCall('/stop_auto_mode', {method: 'POST'});
     }));
     el.edgingModeBtn.addEventListener('click', startEdgingMode);
+    el.toggleMemoryBtn?.addEventListener('click', toggleLongTermMemory);
     el.imCloseBtn.addEventListener('click', async () => {
         const data = await apiCall('/signal_edge', {method: 'POST'});
         if (data && data.status === 'signaled') {

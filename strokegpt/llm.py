@@ -194,6 +194,45 @@ Your current mood is '{context.get('current_mood')}'. Handy is at {context.get('
         messages = [{"role": "system", "content": system_prompt}, *list(chat_history)]
         return self._talk_to_llm(messages, temperature)
 
+    def get_mode_decision(self, chat_history, context, *, mode, event, edge_count=0, current_target=None):
+        speed_min, speed_max = _context_speed_range(context)
+        current_target = current_target or {}
+        prompt = f"""
+You are choosing a finite motion-mode decision for StrokeGPT-ReVibed.
+Return ONLY a JSON object with this exact shape:
+{{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <5-180>, "intensity": <0-100>, "chat": "<short optional line|null>"}}
+
+Rules:
+- This is not free-running control. Every decision must be finite and bounded.
+- Choose `intensity` on a 0-100 scale while respecting the user's configured speed range `{speed_min}-{speed_max}`; the app will still clamp all device output to user limits.
+- Use `switch_to_milk` only when the current mode is `edging`.
+- In `milking`, an I'm Close signal usually means continue or hold briefly and extend the bounded sequence, unless recent context says to stop.
+- In `edging`, an I'm Close signal can hold-then-resume, pull back, switch to Milk, or stop. Use edge count and recent chat history to decide.
+- Keep `chat` short. Use null if no mode narration is needed.
+
+Mode event:
+- mode: {mode}
+- event: {event}
+- edge_count: {edge_count}
+- current_speed: {current_target.get("speed")}
+- current_depth: {current_target.get("depth")}
+- current_range: {current_target.get("stroke_range")}
+- current_mood: {context.get("current_mood")}
+- edging_elapsed_time: {context.get("edging_elapsed_time")}
+"""
+        messages = [
+            {"role": "system", "content": prompt},
+            *list(chat_history)[-8:],
+            {
+                "role": "user",
+                "content": (
+                    "Choose the next bounded mode decision now. "
+                    "Return only the JSON object."
+                ),
+            },
+        ]
+        return self._talk_to_llm(messages, temperature=0.2)
+
     def repair_motion_response(self, user_input, original_response, context):
         prompt = self._build_system_prompt(context)
         prompt += """

@@ -109,6 +109,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="ollama-diagnostics-level-select"', page)
             self.assertIn('id="motion-diagnostics-level-select"', page)
             self.assertIn('id="motion-feedback-auto-disable-checkbox"', page)
+            self.assertIn('id="toggle-memory-btn"', page)
+            self.assertIn("Memories: ON", page)
             self.assertIn('id="sidebar-motion-indicator"', page)
             self.assertIn('id="handy-cylinder-indicator"', page)
             self.assertNotIn('id="motion-trace-panel"', page)
@@ -446,6 +448,30 @@ class WebStaticAssetTests(unittest.TestCase):
             user_signal_event.clear()
             mode_message_event.clear()
 
+    def test_memory_toggle_route_updates_runtime_state(self):
+        import strokegpt.web as web
+
+        original = web.use_long_term_memory
+        try:
+            web.use_long_term_memory = True
+
+            response = self.client.get("/check_settings")
+            self.assertTrue(response.get_json()["use_long_term_memory"])
+
+            response = self.client.post("/toggle_memory")
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertFalse(data["use_long_term_memory"])
+            self.assertFalse(web.use_long_term_memory)
+
+            response = self.client.post("/toggle_memory", json={"enabled": True})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()["use_long_term_memory"])
+            self.assertTrue(web.use_long_term_memory)
+        finally:
+            web.use_long_term_memory = original
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:
@@ -655,6 +681,11 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function updateMotionMeters", script)
         self.assertIn("function updateMotionSequenceIndicator", script)
         self.assertIn("function updateMotionDiagnosticsPanel", script)
+        self.assertIn("function updateMemoryToggleUi", script)
+        self.assertIn("async function toggleLongTermMemory", script)
+        self.assertIn("/toggle_memory", script)
+        self.assertIn("Memories: ${state.useLongTermMemory ? 'ON' : 'OFF'}", script)
+        self.assertIn("aria-pressed", script)
         self.assertIn("motionSequenceIndicator", script)
         self.assertIn("function saveMotionFeedbackOptions", script)
         self.assertIn("/motion_feedback_options", script)
