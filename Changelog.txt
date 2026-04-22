@@ -8,6 +8,32 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Motion Pattern Transform Workspace
+-----------------------------------------------
+
+Branch: codex-motion-pattern-transforms
+
+- Added workspace-only pattern transform controls for smoothing, harshening,
+  tempo changes, and range remapping.
+- Made tempo controls adjust a persisted tempo scale that changes preview and
+  playback cadence instead of only stretching action timestamps.
+- Split Motion Training transforms into Shape and Duration/Tempo sections,
+  with readouts for graph duration and playback tempo.
+- Added compact arrow controls for duration and tempo adjustments and made the
+  Motion Training window taller for the expanded editor controls.
+- Replaced skinny timing arrow glyphs with filled triangle controls and added
+  larger in-field range steppers for remap inputs.
+- Changed default saved edit names to use `(edited)` suffixes.
+- Made selected patterns editable as temporary preview copies, leaving the
+  original fixed/imported pattern unchanged until the user saves a new pattern.
+- Added edited preview playback through the existing flexible position-frame
+  training path without saving the temporary copy first.
+- Added Save As New Pattern for transformed copies, persisted as trained
+  shareable pattern files under the existing user pattern registry.
+- Kept compact Motion settings unchanged and limited dense editing controls to
+  the larger Motion Training workspace.
+
+
 2026-04-22 - PR #24 - Add Motion Training Workspace
 ----------------------------------------------------
 

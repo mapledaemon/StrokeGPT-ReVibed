@@ -159,9 +159,9 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
 .motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; min-width: 92px; }
 .motion-pattern-play, .motion-pattern-export { width: auto; min-width: 84px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
-.motion-training-box { width: min(1080px, 100%); height: min(760px, calc(100vh - 32px)); max-height: calc(100vh - 32px); overflow: hidden; display: flex; flex-direction: column; }
+.motion-training-box { width: min(1240px, 100%); height: min(880px, calc(100vh - 20px)); max-height: calc(100vh - 20px); overflow: hidden; display: flex; flex-direction: column; }
 .motion-training-box .modal-header { flex-shrink: 0; }
-.motion-training-workspace { display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.15fr); gap: 14px; min-height: 0; overflow: hidden; flex: 1; }
+.motion-training-workspace { display: grid; grid-template-columns: minmax(300px, 0.85fr) minmax(460px, 1.25fr); gap: 14px; min-height: 0; overflow: hidden; flex: 1; }
 .motion-training-list-pane, .motion-training-detail-pane { min-width: 0; min-height: 0; padding: 12px; border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); }
 .motion-training-list-pane { display: flex; flex-direction: column; gap: 10px; }
 .motion-training-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
@@ -178,6 +178,36 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .motion-backend-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; white-space: nowrap; }
 .motion-training-preview-wrap { height: min(38vh, 380px); min-height: 260px; border: 1px solid #2d333d; border-radius: 6px; overflow: hidden; background: #101217; }
 #motion-training-preview-canvas { width: 100%; height: 100%; display: block; }
+.motion-training-transform-panel { display: flex; flex-direction: column; gap: 10px; }
+.motion-training-control-section { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: rgba(20, 23, 30, 0.72); }
+.motion-training-section-title { color: var(--foreground); font-size: 0.82rem; font-weight: 700; }
+.motion-training-transform-actions { display: grid; grid-template-columns: repeat(3, minmax(78px, 1fr)); gap: 8px; }
+.motion-training-range-row { display: grid; grid-template-columns: minmax(96px, 0.55fr) minmax(96px, 0.55fr) minmax(130px, 1fr); gap: 8px; }
+.motion-training-number-field { position: relative; min-height: 38px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); overflow: hidden; }
+.motion-training-number-field:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.3); }
+.motion-training-number-field input[type="number"] { height: 100%; min-height: 38px; padding: 8px 32px 8px 10px; border: 0; border-radius: 0; background: transparent; box-shadow: none; -moz-appearance: textfield; }
+.motion-training-number-field input[type="number"]:focus { box-shadow: none; border-color: transparent; }
+.motion-training-number-field input[type="number"]::-webkit-outer-spin-button,
+.motion-training-number-field input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.motion-training-number-stepper { position: absolute; top: 0; right: 0; bottom: 0; width: 28px; display: grid; grid-template-rows: 1fr 1fr; border-left: 1px solid #37404c; }
+.motion-training-number-step { position: relative; display: flex; align-items: center; justify-content: center; border: 0; border-bottom: 1px solid #37404c; background: #2b313b; cursor: pointer; }
+.motion-training-number-step:last-child { border-bottom: 0; }
+.motion-training-number-step:hover { background: #363d49; }
+.motion-training-number-step::before { content: ""; width: 11px; height: 8px; display: block; background: var(--foreground); }
+.motion-training-number-step-up::before { clip-path: polygon(50% 0, 0 100%, 100% 100%); }
+.motion-training-number-step-down::before { clip-path: polygon(50% 100%, 0 0, 100% 0); }
+.motion-training-timing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.motion-training-timing-control { display: grid; grid-template-columns: minmax(0, 1fr) 42px 42px; gap: 6px; align-items: stretch; }
+.motion-training-readout { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.8rem; }
+.motion-training-readout strong { color: var(--foreground); font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
+.motion-training-save-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.75fr) minmax(160px, 1fr); gap: 8px; }
+.motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-timing-control .my-button, .motion-training-save-row .my-button { width: auto; min-width: 0; min-height: 34px; padding: 7px 9px; font-size: 0.82rem; }
+.motion-training-timing-control .motion-training-icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.motion-training-icon-button .motion-training-arrow { width: 20px; height: 16px; display: block; background: var(--foreground); }
+.motion-training-icon-button:disabled .motion-training-arrow { background: rgba(248, 248, 242, 0.36); }
+.motion-training-arrow-up { clip-path: polygon(50% 0, 0 100%, 100% 100%); }
+.motion-training-arrow-down { clip-path: polygon(50% 100%, 0 0, 100% 0); }
+.motion-training-edit-status { min-height: 30px; display: flex; align-items: center; padding: 6px 8px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.82rem; overflow-wrap: anywhere; }
 .motion-training-feedback-row { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 10px; }
 .motion-training-feedback-row .my-button { width: auto; min-width: 0; }
 
@@ -206,10 +236,11 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
     .browse-line .my-button { width: 100%; }
     .motion-pattern-row { grid-template-columns: 1fr; }
     .motion-pattern-play, .motion-pattern-export { width: 100%; }
-    .motion-training-box { width: 100%; height: calc(100vh - 24px); max-height: calc(100vh - 24px); }
+    .motion-training-box { width: 100%; height: calc(100vh - 16px); max-height: calc(100vh - 16px); }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
-    .motion-training-toolbar, .motion-training-detail-header, .motion-training-feedback-row { grid-template-columns: 1fr; }
-    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button { width: 100%; }
+    .motion-training-toolbar, .motion-training-detail-header, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row { grid-template-columns: 1fr; }
+    .motion-training-timing-control { grid-template-columns: minmax(0, 1fr) 38px 38px; }
+    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button { width: 100%; }
     .motion-backend-stack { justify-content: flex-start; max-width: none; }
     .motion-training-preview-wrap { height: 260px; min-height: 220px; }
 }

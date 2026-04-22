@@ -131,6 +131,254 @@ function patternById(patternId) {
     return state.motionPatterns.find(pattern => pattern.id === patternId);
 }
 
+function clonePattern(pattern) {
+    return pattern ? JSON.parse(JSON.stringify(pattern)) : null;
+}
+
+function normalizedActions(actions) {
+    return (Array.isArray(actions) ? actions : [])
+        .map(action => ({
+            at: Math.max(0, Math.round(Number(action.at) || 0)),
+            pos: clampNumber(action.pos, 0, 100, 50),
+        }))
+        .filter(action => Number.isFinite(action.at) && Number.isFinite(action.pos))
+        .sort((a, b) => a.at - b.at)
+        .filter((action, index, all) => index === all.length - 1 || action.at !== all[index + 1].at);
+}
+
+function updatePatternStats(pattern) {
+    if (!pattern) return null;
+    const actions = normalizedActions(pattern?.actions);
+    const duration = actions.length > 1 ? actions[actions.length - 1].at - actions[0].at : 0;
+    return {
+        ...pattern,
+        actions,
+        action_count: actions.length,
+        duration_ms: Math.max(0, duration),
+    };
+}
+
+function patternTempoScale(pattern) {
+    return clampNumber(pattern?.style?.tempo_scale, 0.25, 4, 1);
+}
+
+function updateMotionTrainingTimingReadouts(pattern) {
+    if (el.motionTrainingDurationValue) el.motionTrainingDurationValue.textContent = formatPatternDuration(pattern?.duration_ms);
+    if (el.motionTrainingTempoValue) el.motionTrainingTempoValue.textContent = `${patternTempoScale(pattern).toFixed(2)}x`;
+}
+
+function syncRangeInputsFromPattern(pattern) {
+    const actions = normalizedActions(pattern?.actions);
+    if (!actions.length || !el.motionTrainingRangeMinInput || !el.motionTrainingRangeMaxInput) return;
+    const positions = actions.map(action => action.pos);
+    el.motionTrainingRangeMinInput.value = Math.round(Math.min(...positions));
+    el.motionTrainingRangeMaxInput.value = Math.round(Math.max(...positions));
+}
+
+function stepMotionTrainingRangeInput(button) {
+    const input = D.getElementById(button?.dataset?.rangeStepTarget || '');
+    if (!input) return;
+    const step = clampNumber(button.dataset.rangeStep, -10, 10, 1);
+    const current = clampNumber(input.value, 0, 100, 0);
+    input.value = Math.round(clampNumber(current + step, 0, 100, current));
+    input.focus();
+}
+
+function setMotionEditStatus(message, color = 'var(--comment)') {
+    if (!el.motionTrainingEditStatus) return;
+    el.motionTrainingEditStatus.textContent = message;
+    el.motionTrainingEditStatus.style.color = color;
+}
+
+function updateMotionTrainingEditButtons() {
+    const hasEditable = Boolean(state.motionTrainingEditedPattern);
+    const dirty = Boolean(state.motionTrainingDirty);
+    [
+        el.motionTransformSmoothBtn,
+        el.motionTransformHarshenBtn,
+        el.motionTransformDurationDownBtn,
+        el.motionTransformDurationUpBtn,
+        el.motionTransformTempoDownBtn,
+        el.motionTransformTempoUpBtn,
+        el.motionTransformRangeBtn,
+        el.playMotionTrainingPreviewBtn,
+    ].forEach(button => {
+        if (button) button.disabled = !hasEditable;
+    });
+    if (el.motionTransformResetBtn) el.motionTransformResetBtn.disabled = !hasEditable || !dirty;
+    if (el.saveMotionTrainingPatternBtn) el.saveMotionTrainingPatternBtn.disabled = !hasEditable || !dirty;
+    if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.disabled = !hasEditable;
+}
+
+function editablePatternPayload() {
+    const pattern = updatePatternStats(state.motionTrainingEditedPattern);
+    const originalName = patternDisplayName(state.motionTrainingOriginalPattern || pattern);
+    const name = (el.motionTrainingSaveNameInput?.value || '').trim() || `${originalName} (edited)`;
+    return {
+        schema_version: 1,
+        kind: 'actions',
+        id: name,
+        name,
+        description: `Edited from ${originalName}.`,
+        source: 'trained',
+        enabled: true,
+        style: pattern.style || {},
+        actions: normalizedActions(pattern.actions),
+        tags: ['training', 'edited'],
+    };
+}
+
+function refreshMotionTrainingDetail(message = '') {
+    const pattern = updatePatternStats(state.motionTrainingEditedPattern);
+    state.motionTrainingEditedPattern = pattern;
+    state.motionTrainingPreviewPattern = pattern;
+
+    if (!pattern) {
+        if (el.motionTrainingPatternTitle) el.motionTrainingPatternTitle.textContent = 'No pattern selected';
+        if (el.motionTrainingPatternMeta) el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
+        setMotionEditStatus('Select a pattern to edit a temporary copy.');
+        updateMotionTrainingTimingReadouts(null);
+        drawMotionTrainingPreview(null);
+        updateMotionTrainingEditButtons();
+        return;
+    }
+
+    if (el.motionTrainingPatternTitle) {
+        el.motionTrainingPatternTitle.textContent = state.motionTrainingDirty
+            ? `${patternDisplayName(pattern)} (edited preview)`
+            : patternDisplayName(pattern);
+    }
+    if (el.motionTrainingPatternMeta) {
+        const suffix = state.motionTrainingDirty ? 'unsaved edited copy' : 'editable temporary copy';
+        el.motionTrainingPatternMeta.textContent = `${formatPatternMetadata(pattern)} | tempo ${patternTempoScale(pattern).toFixed(2)}x | ${suffix}`;
+    }
+    if (message) setMotionEditStatus(message, state.motionTrainingDirty ? 'var(--cyan)' : 'var(--comment)');
+    updateMotionTrainingTimingReadouts(pattern);
+    drawMotionTrainingPreview(pattern);
+    updateMotionTrainingEditButtons();
+}
+
+function setEditedPatternActions(actions, message) {
+    if (!state.motionTrainingEditedPattern) return;
+    state.motionTrainingEditedPattern = updatePatternStats({
+        ...state.motionTrainingEditedPattern,
+        actions: normalizedActions(actions),
+    });
+    state.motionTrainingDirty = true;
+    refreshMotionTrainingDetail(message);
+}
+
+function interpolatePosition(a, b, amount) {
+    const eased = (1 - Math.cos(Math.PI * amount)) / 2;
+    return a + ((b - a) * eased);
+}
+
+function smoothEditedPattern() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    if (actions.length < 2) return;
+    const dense = [];
+    actions.forEach((action, index) => {
+        if (index === 0) dense.push(action);
+        const previous = actions[index - 1];
+        if (!previous) return;
+        const gap = action.at - previous.at;
+        const inserts = Math.min(8, Math.max(0, Math.floor(gap / 140)));
+        for (let step = 1; step <= inserts; step++) {
+            const amount = step / (inserts + 1);
+            dense.push({
+                at: Math.round(previous.at + gap * amount),
+                pos: interpolatePosition(previous.pos, action.pos, amount),
+            });
+        }
+        dense.push(action);
+    });
+    const smoothed = dense.map((action, index) => {
+        if (index === 0 || index === dense.length - 1) return action;
+        const before = dense[index - 1].pos;
+        const after = dense[index + 1].pos;
+        return {...action, pos: (before * 0.25) + (action.pos * 0.5) + (after * 0.25)};
+    });
+    setEditedPatternActions(smoothed, 'Smoothed the temporary copy.');
+}
+
+function harshenEditedPattern() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    if (actions.length < 2) return;
+    const positions = actions.map(action => action.pos);
+    const center = (Math.min(...positions) + Math.max(...positions)) / 2;
+    const sharpened = actions.map(action => ({
+        ...action,
+        pos: clampNumber(center + ((action.pos - center) * 1.22), 0, 100, action.pos),
+    }));
+    setEditedPatternActions(sharpened, 'Harshened the temporary copy.');
+}
+
+function setEditedPatternTempo(multiplier, message) {
+    if (!state.motionTrainingEditedPattern) return;
+    const tempoScale = clampNumber(patternTempoScale(state.motionTrainingEditedPattern) * multiplier, 0.25, 4, 1);
+    state.motionTrainingEditedPattern = updatePatternStats({
+        ...state.motionTrainingEditedPattern,
+        style: {
+            ...(state.motionTrainingEditedPattern.style || {}),
+            tempo_scale: tempoScale,
+        },
+    });
+    state.motionTrainingDirty = true;
+    refreshMotionTrainingDetail(`${message} Tempo ${tempoScale.toFixed(2)}x.`);
+}
+
+function setEditedPatternDuration(scale, message) {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    if (actions.length < 2) return;
+    const start = actions[0].at;
+    const currentDuration = Math.max(1, actions[actions.length - 1].at - start);
+    const targetDuration = clampNumber(currentDuration * scale, 120, 300000, currentDuration);
+    const effectiveScale = targetDuration / currentDuration;
+    const scaled = actions.map((action, index) => ({
+        ...action,
+        at: index === 0 ? 0 : Math.max(index, Math.round((action.at - start) * effectiveScale)),
+    }));
+    const tempoScale = clampNumber(patternTempoScale(state.motionTrainingEditedPattern) / effectiveScale, 0.25, 4, 1);
+    state.motionTrainingEditedPattern = updatePatternStats({
+        ...state.motionTrainingEditedPattern,
+        actions: normalizedActions(scaled),
+        style: {
+            ...(state.motionTrainingEditedPattern.style || {}),
+            tempo_scale: tempoScale,
+        },
+    });
+    state.motionTrainingDirty = true;
+    const duration = formatPatternDuration(state.motionTrainingEditedPattern.duration_ms);
+    refreshMotionTrainingDetail(`${message} Duration ${duration}; tempo ${tempoScale.toFixed(2)}x.`);
+}
+
+function remapEditedPatternRange() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    if (actions.length < 2) return;
+    const inputMin = clampNumber(el.motionTrainingRangeMinInput?.value, 0, 100, 0);
+    const inputMax = clampNumber(el.motionTrainingRangeMaxInput?.value, 0, 100, 100);
+    const targetMin = Math.min(inputMin, inputMax);
+    const targetMax = Math.max(inputMin, inputMax);
+    const positions = actions.map(action => action.pos);
+    const sourceMin = Math.min(...positions);
+    const sourceMax = Math.max(...positions);
+    const sourceSpan = Math.max(1, sourceMax - sourceMin);
+    const targetSpan = Math.max(1, targetMax - targetMin);
+    const remapped = actions.map(action => ({
+        ...action,
+        pos: targetMin + (((action.pos - sourceMin) / sourceSpan) * targetSpan),
+    }));
+    setEditedPatternActions(remapped, `Remapped the temporary copy to ${Math.round(targetMin)}-${Math.round(targetMax)}%.`);
+}
+
+function resetEditedPattern() {
+    if (!state.motionTrainingOriginalPattern) return;
+    state.motionTrainingEditedPattern = updatePatternStats(clonePattern(state.motionTrainingOriginalPattern));
+    state.motionTrainingDirty = false;
+    syncRangeInputsFromPattern(state.motionTrainingEditedPattern);
+    refreshMotionTrainingDetail('Reset to the selected pattern.');
+}
+
 function updateMotionTrainingStatus(status = {}) {
     state.motionTraining = {
         state: status.state || state.motionTraining.state || 'idle',
@@ -138,11 +386,12 @@ function updateMotionTrainingStatus(status = {}) {
         pattern_name: status.pattern_name || state.motionTraining.pattern_name || '',
         message: status.message || '',
         last_feedback: status.last_feedback || '',
+        preview: Boolean(status.preview),
     };
     if (!el.motionTrainingStatus) return;
 
     const isPlaying = state.motionTraining.state === 'playing' || state.motionTraining.state === 'starting';
-    const hasPattern = Boolean(state.motionTraining.pattern_id);
+    const hasPattern = Boolean(state.motionTraining.pattern_id) && !state.motionTraining.preview;
     el.motionTrainingStatus.textContent = state.motionTraining.message || 'Training player idle.';
     el.motionTrainingStatus.style.color = isPlaying ? 'var(--cyan)' : 'var(--comment)';
     if (el.stopMotionTrainingBtn) el.stopMotionTrainingBtn.disabled = !isPlaying;
@@ -255,21 +504,28 @@ function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern)
 }
 
 function setMotionTrainingDetail(pattern) {
-    state.motionTrainingPreviewPattern = pattern || null;
+    state.motionTrainingOriginalPattern = updatePatternStats(clonePattern(pattern));
+    state.motionTrainingEditedPattern = updatePatternStats(clonePattern(pattern));
+    state.motionTrainingPreviewPattern = state.motionTrainingEditedPattern || null;
+    state.motionTrainingDirty = false;
     if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
-        drawMotionTrainingPreview(pattern);
+        drawMotionTrainingPreview(state.motionTrainingPreviewPattern);
+        updateMotionTrainingEditButtons();
         return;
     }
     if (!pattern) {
         el.motionTrainingPatternTitle.textContent = 'No pattern selected';
         el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
+        if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.value = '';
+        setMotionEditStatus('Select a pattern to edit a temporary copy.');
+        updateMotionTrainingTimingReadouts(null);
         drawMotionTrainingPreview(null);
+        updateMotionTrainingEditButtons();
         return;
     }
-    el.motionTrainingPatternTitle.textContent = patternDisplayName(pattern);
-    const actionCount = Array.isArray(pattern.actions) ? pattern.actions.length : pattern.action_count || 0;
-    el.motionTrainingPatternMeta.textContent = `${formatPatternMetadata({...pattern, action_count: actionCount})} | flexible-position preview`;
-    drawMotionTrainingPreview(pattern);
+    if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.value = `${patternDisplayName(pattern)} (edited)`;
+    syncRangeInputsFromPattern(state.motionTrainingEditedPattern);
+    refreshMotionTrainingDetail('Editing a temporary copy.');
 }
 
 function setMotionTrainingLoadingDetail(pattern) {
@@ -422,6 +678,22 @@ async function startMotionTraining(patternId) {
     }
 }
 
+async function playEditedMotionTrainingPreview() {
+    if (!state.motionTrainingEditedPattern) {
+        el.statusText.textContent = 'Select a pattern before playing an edited preview.';
+        return;
+    }
+    const data = await fetchJsonWithMessage('/motion_training/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pattern: editablePatternPayload()}),
+    });
+    if (data && data.motion_training) {
+        updateMotionTrainingStatus(data.motion_training);
+        el.statusText.textContent = data.motion_training.message || 'Edited preview started.';
+    }
+}
+
 async function stopMotionTraining() {
     const data = await apiCall('/motion_training/stop', {method: 'POST'});
     if (data && data.motion_training) {
@@ -432,8 +704,8 @@ async function stopMotionTraining() {
 
 async function sendMotionTrainingFeedback(rating) {
     const patternId = state.motionTraining.pattern_id;
-    if (!patternId) {
-        el.statusText.textContent = 'Play or select a pattern before sending feedback.';
+    if (!patternId || state.motionTraining.preview) {
+        el.statusText.textContent = 'Play a saved pattern before sending feedback.';
         return;
     }
     const data = await fetchJsonWithMessage(`/motion_training/${encodeURIComponent(patternId)}/feedback`, {
@@ -446,6 +718,23 @@ async function sendMotionTrainingFeedback(rating) {
         renderMotionPatterns(data.motion_patterns);
         if (data.pattern) setMotionTrainingDetail(data.pattern);
         el.statusText.textContent = data.motion_training.message || 'Pattern feedback saved.';
+    }
+}
+
+async function saveEditedMotionPattern() {
+    if (!state.motionTrainingEditedPattern || !state.motionTrainingDirty) return;
+    const payload = editablePatternPayload();
+    const data = await fetchJsonWithMessage('/motion_patterns/save_generated', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pattern: payload}),
+    });
+    if (data && data.status === 'success') {
+        state.motionTrainingSelectedPatternId = data.pattern.id;
+        renderMotionPatterns(data.motion_patterns);
+        setMotionTrainingDetail(data.pattern);
+        setMotionEditStatus(`Saved ${data.pattern.name}.`, 'var(--cyan)');
+        el.statusText.textContent = `Saved motion pattern: ${data.pattern.name}.`;
     }
 }
 
@@ -643,6 +932,19 @@ export function initMotionControls({sendUserMessage}) {
         if (event.key === 'Escape' && el.motionTrainingDialog?.classList.contains('open')) closeMotionTrainingWorkspace();
     });
     window.addEventListener('resize', drawOpenMotionTrainingPreview);
+    el.motionTransformSmoothBtn?.addEventListener('click', smoothEditedPattern);
+    el.motionTransformHarshenBtn?.addEventListener('click', harshenEditedPattern);
+    el.motionTransformDurationDownBtn?.addEventListener('click', () => setEditedPatternDuration(0.85, 'Shortened the temporary copy.'));
+    el.motionTransformDurationUpBtn?.addEventListener('click', () => setEditedPatternDuration(1.18, 'Lengthened the temporary copy.'));
+    el.motionTransformTempoDownBtn?.addEventListener('click', () => setEditedPatternTempo(0.85, 'Lowered the temporary copy tempo.'));
+    el.motionTransformTempoUpBtn?.addEventListener('click', () => setEditedPatternTempo(1.18, 'Raised the temporary copy tempo.'));
+    D.querySelectorAll('[data-range-step-target]').forEach(button => {
+        button.addEventListener('click', () => stepMotionTrainingRangeInput(button));
+    });
+    el.motionTransformRangeBtn?.addEventListener('click', remapEditedPatternRange);
+    el.motionTransformResetBtn?.addEventListener('click', resetEditedPattern);
+    el.playMotionTrainingPreviewBtn?.addEventListener('click', playEditedMotionTrainingPreview);
+    el.saveMotionTrainingPatternBtn?.addEventListener('click', saveEditedMotionPattern);
     el.stopMotionTrainingBtn.addEventListener('click', stopMotionTraining);
     el.motionTrainingFeedbackUp.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_up'));
     el.motionTrainingFeedbackNeutral.addEventListener('click', () => sendMotionTrainingFeedback('neutral'));
@@ -653,5 +955,6 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
     D.getElementById('milking-mode-btn').addEventListener('click', () => apiCall('/start_milking_mode', {method: 'POST'}));
     updateMotionTrainingStatus();
+    updateMotionTrainingEditButtons();
     refreshMotionPatterns();
 }

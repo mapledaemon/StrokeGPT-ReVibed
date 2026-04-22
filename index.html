@@ -221,6 +221,60 @@
                     <div class="motion-training-preview-wrap">
                         <canvas id="motion-training-preview-canvas"></canvas>
                     </div>
+                    <div class="motion-training-transform-panel">
+                        <div class="motion-training-control-section">
+                            <div class="motion-training-section-title">Shape</div>
+                            <div class="motion-training-transform-actions">
+                                <button id="motion-transform-smooth-btn" class="my-button" disabled>Smooth</button>
+                                <button id="motion-transform-harshen-btn" class="my-button" disabled>Harshen</button>
+                                <button id="motion-transform-reset-btn" class="my-button" disabled>Reset</button>
+                            </div>
+                            <div class="motion-training-range-row">
+                                <div class="motion-training-number-field">
+                                    <input type="number" id="motion-training-range-min" min="0" max="100" step="1" value="0" aria-label="Pattern minimum position">
+                                    <div class="motion-training-number-stepper">
+                                        <button type="button" class="motion-training-number-step motion-training-number-step-up" data-range-step-target="motion-training-range-min" data-range-step="1" aria-label="Increase pattern minimum position"></button>
+                                        <button type="button" class="motion-training-number-step motion-training-number-step-down" data-range-step-target="motion-training-range-min" data-range-step="-1" aria-label="Decrease pattern minimum position"></button>
+                                    </div>
+                                </div>
+                                <div class="motion-training-number-field">
+                                    <input type="number" id="motion-training-range-max" min="0" max="100" step="1" value="100" aria-label="Pattern maximum position">
+                                    <div class="motion-training-number-stepper">
+                                        <button type="button" class="motion-training-number-step motion-training-number-step-up" data-range-step-target="motion-training-range-max" data-range-step="1" aria-label="Increase pattern maximum position"></button>
+                                        <button type="button" class="motion-training-number-step motion-training-number-step-down" data-range-step-target="motion-training-range-max" data-range-step="-1" aria-label="Decrease pattern maximum position"></button>
+                                    </div>
+                                </div>
+                                <button id="motion-transform-range-btn" class="my-button" disabled>Remap Range</button>
+                            </div>
+                        </div>
+                        <div class="motion-training-control-section">
+                            <div class="motion-training-section-title">Duration and tempo</div>
+                            <div class="motion-training-timing-grid">
+                                <div class="motion-training-timing-control">
+                                    <div class="motion-training-readout">
+                                        <span>Duration</span>
+                                        <strong id="motion-training-duration-value">0ms</strong>
+                                    </div>
+                                    <button id="motion-transform-duration-down-btn" class="my-button motion-training-icon-button" aria-label="Shorten duration" title="Shorten duration" disabled><span class="motion-training-arrow motion-training-arrow-down" aria-hidden="true"></span></button>
+                                    <button id="motion-transform-duration-up-btn" class="my-button motion-training-icon-button" aria-label="Lengthen duration" title="Lengthen duration" disabled><span class="motion-training-arrow motion-training-arrow-up" aria-hidden="true"></span></button>
+                                </div>
+                                <div class="motion-training-timing-control">
+                                    <div class="motion-training-readout">
+                                        <span>Tempo</span>
+                                        <strong id="motion-training-tempo-value">1.00x</strong>
+                                    </div>
+                                    <button id="motion-transform-tempo-down-btn" class="my-button motion-training-icon-button" aria-label="Lower tempo" title="Lower tempo" disabled><span class="motion-training-arrow motion-training-arrow-down" aria-hidden="true"></span></button>
+                                    <button id="motion-transform-tempo-up-btn" class="my-button motion-training-icon-button" aria-label="Raise tempo" title="Raise tempo" disabled><span class="motion-training-arrow motion-training-arrow-up" aria-hidden="true"></span></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="motion-training-save-row">
+                            <input type="text" id="motion-training-save-name" class="input-text" placeholder="New pattern name">
+                            <button id="play-motion-training-preview-btn" class="my-button" disabled>Play Preview</button>
+                            <button id="save-motion-training-pattern-btn" class="my-button" disabled>Save As New Pattern</button>
+                        </div>
+                        <div id="motion-training-edit-status" class="motion-training-edit-status">Select a pattern to edit a temporary copy.</div>
+                    </div>
                     <div class="motion-training-feedback-row">
                         <button id="motion-training-feedback-up" class="my-button" disabled>Thumbs Up</button>
                         <button id="motion-training-feedback-neutral" class="my-button" disabled>Neutral</button>

@@ -24,6 +24,7 @@ from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
     PatternLibrary,
     PatternValidationError,
+    record_from_payload,
 )
 
 
@@ -152,6 +153,7 @@ motion_training_state = {
     "pattern_name": "",
     "message": "Motion training idle.",
     "last_feedback": "",
+    "preview": False,
 }
 
 # Easter Egg State
@@ -445,21 +447,25 @@ def _training_target_for_record(record):
         label=f"training {record.pattern_id}",
     ).clamped()
 
-def _run_motion_training_pattern(record):
+def _run_motion_training_pattern(record, *, preview=False):
     try:
         target = _training_target_for_record(record)
         frames = expand_motion_pattern(record.to_motion_pattern(), motion.current_target(), target)
         if not frames:
             _set_motion_training_state(
                 state="error",
+                pattern_id=record.pattern_id,
+                pattern_name=record.name,
                 message=f"Pattern {record.name} has no playable frames.",
+                preview=preview,
             )
             return
         _set_motion_training_state(
             state="playing",
             pattern_id=record.pattern_id,
             pattern_name=record.name,
-            message=f"Playing {record.name}.",
+            message=f"Playing {'edited preview' if preview else record.name}.",
+            preview=preview,
         )
         completed = motion.apply_position_frames(frames, stop_after=True)
         if motion_training_stop_event.is_set():
@@ -468,6 +474,7 @@ def _run_motion_training_pattern(record):
                 pattern_id=record.pattern_id,
                 pattern_name=record.name,
                 message=f"Stopped {record.name}.",
+                preview=preview,
             )
         elif not completed:
             _set_motion_training_state(
@@ -475,6 +482,7 @@ def _run_motion_training_pattern(record):
                 pattern_id=record.pattern_id,
                 pattern_name=record.name,
                 message=f"Interrupted {record.name}.",
+                preview=preview,
             )
         else:
             _set_motion_training_state(
@@ -482,6 +490,7 @@ def _run_motion_training_pattern(record):
                 pattern_id=record.pattern_id,
                 pattern_name=record.name,
                 message=f"Finished {record.name}.",
+                preview=preview,
             )
     except Exception as exc:
         _set_motion_training_state(
@@ -489,9 +498,49 @@ def _run_motion_training_pattern(record):
             pattern_id=record.pattern_id,
             pattern_name=record.name,
             message=f"Pattern playback failed: {exc}",
+            preview=preview,
         )
     finally:
         motion_training_stop_event.clear()
+
+def _training_payload_record(data):
+    payload = data.get("pattern") if isinstance(data.get("pattern"), dict) else data
+    if not isinstance(payload, dict):
+        raise PatternValidationError("Motion training preview requires a pattern object.")
+    return record_from_payload(
+        payload,
+        fallback_id="edited-preview",
+        source_override="trained",
+        readonly=False,
+    )
+
+def _start_motion_training_record(record, *, preview=False):
+    global motion_training_thread
+    if not handy.handy_key:
+        return jsonify({"status": "error", "message": "Set a Handy connection key before playing motion training patterns."}), 400
+    if auto_mode_active_task:
+        return jsonify({"status": "error", "message": "Stop the active mode before playing a training pattern."}), 409
+
+    with motion_training_lock:
+        if motion_training_thread and motion_training_thread.is_alive():
+            return jsonify({"status": "error", "message": "A motion training pattern is already playing."}), 409
+        motion_training_stop_event.clear()
+        motion_training_state.update({
+            "state": "starting",
+            "pattern_id": record.pattern_id,
+            "pattern_name": record.name,
+            "message": f"Starting {'edited preview' if preview else record.name}.",
+            "preview": preview,
+        })
+        motion_training_thread = threading.Thread(
+            target=_run_motion_training_pattern,
+            args=(record,),
+            kwargs={"preview": preview},
+            daemon=True,
+        )
+        motion_training_thread.start()
+        snapshot = dict(motion_training_state)
+    return jsonify({"status": "started", "motion_training": snapshot})
 
 def _stop_motion_training():
     motion_training_stop_event.set()
@@ -500,6 +549,7 @@ def _stop_motion_training():
         _set_motion_training_state(
             state="stopped",
             message=f"Stopped {snapshot.get('pattern_name') or 'motion training'}.",
+            preview=bool(snapshot.get("preview")),
         )
     motion.stop()
     return _motion_training_snapshot()
@@ -531,6 +581,7 @@ def reset_runtime_state():
         pattern_name="",
         message="Motion training idle.",
         last_feedback="",
+        preview=False,
     )
 
 SNAKE_ASCII = """
@@ -780,6 +831,31 @@ def import_motion_pattern_route():
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "pattern": record.to_summary_dict(include_actions=True)})
 
+@app.route('/motion_patterns/save_generated', methods=['POST'])
+def save_generated_motion_pattern_route():
+    data = _request_json()
+    payload = data.get("pattern") if isinstance(data.get("pattern"), dict) else {}
+    filename_source = (
+        data.get("filename")
+        or payload.get("id")
+        or payload.get("name")
+        or "trained-pattern"
+    )
+    filename = secure_filename(f"{filename_source}.json")
+    try:
+        record = motion_pattern_library.import_payload(
+            payload,
+            filename=filename,
+            source_override="trained",
+        )
+    except PatternValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({
+        "status": "success",
+        "pattern": record.to_summary_dict(include_actions=True),
+        "motion_patterns": _motion_pattern_catalog_payload(),
+    })
+
 @app.route('/motion_patterns/<pattern_id>/enabled', methods=['POST'])
 def set_motion_pattern_enabled_route(pattern_id):
     data = _request_json()
@@ -801,35 +877,21 @@ def motion_training_status_route():
 
 @app.route('/motion_training/start', methods=['POST'])
 def start_motion_training_route():
-    global motion_training_thread
     data = _request_json()
     pattern_id = data.get("pattern_id", "")
     record = _motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    if not handy.handy_key:
-        return jsonify({"status": "error", "message": "Set a Handy connection key before playing motion training patterns."}), 400
-    if auto_mode_active_task:
-        return jsonify({"status": "error", "message": "Stop the active mode before playing a training pattern."}), 409
+    return _start_motion_training_record(record, preview=False)
 
-    with motion_training_lock:
-        if motion_training_thread and motion_training_thread.is_alive():
-            return jsonify({"status": "error", "message": "A motion training pattern is already playing."}), 409
-        motion_training_stop_event.clear()
-        motion_training_state.update({
-            "state": "starting",
-            "pattern_id": record.pattern_id,
-            "pattern_name": record.name,
-            "message": f"Starting {record.name}.",
-        })
-        motion_training_thread = threading.Thread(
-            target=_run_motion_training_pattern,
-            args=(record,),
-            daemon=True,
-        )
-        motion_training_thread.start()
-        snapshot = dict(motion_training_state)
-    return jsonify({"status": "started", "motion_training": snapshot})
+@app.route('/motion_training/preview', methods=['POST'])
+def preview_motion_training_route():
+    data = _request_json()
+    try:
+        record = _training_payload_record(data)
+    except PatternValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return _start_motion_training_record(record, preview=True)
 
 @app.route('/motion_training/stop', methods=['POST'])
 def stop_motion_training_route():
@@ -859,6 +921,7 @@ def motion_training_feedback_route(pattern_id):
         pattern_name=record.name,
         last_feedback=rating,
         message=f"Saved {rating.replace('_', ' ')} feedback for {record.name}.",
+        preview=False,
     )
     return jsonify({
         "status": "success",

@@ -56,11 +56,11 @@ Candidate local ASR providers:
 
 ## Motion, Patterns, And Visualization
 
-- Expand the dedicated Motion Training workspace from its initial
-  playback/feedback/preview shell into a larger pattern editing surface.
+- Expand the dedicated Motion Training workspace beyond its initial transform
+  controls into a full pattern editing surface.
 - Add a motion training module in staged PRs: pattern file registry first,
   settings enable/disable list second, device playback and feedback third, then
-  transform buttons and LLM preference integration.
+  richer transform controls and LLM preference integration.
 - Keep the training player focused on explicit previews: checking or
   unchecking a pattern should not send movement to the device, and feedback
   should remain visible training data until a later preference-integration PR.
@@ -93,11 +93,11 @@ Candidate local ASR providers:
   base, full length, short stroke, half length, and smooth alternation.
 - Keep range changes continuous. A single range should not become a static
   pattern unless the user explicitly asks to edge, hold, or pause.
-- Add pattern transform presets inspired by funscript tooling: remap range,
-  halve/double timing, smooth sparse actions, repeat a stroke shape, and apply
-  subtle randomized variation with a preview before playback.
-- Add training workspace transform buttons for smoothing and harshening a
-  copied preview pattern before the user rates or saves it.
+- Add more pattern transform presets inspired by funscript tooling: repeat a
+  stroke shape, simplify noisy points, mirror timing, and apply subtle
+  randomized variation with a preview before playback.
+- Expand training workspace transforms with per-step undo and side-by-side
+  original versus edited previews before the user rates or saves a pattern.
 - Add a soft-anchor editor where users can arrange 2-6 targets such as tip,
   upper, middle, lower, and base, then preview Catmull/minimum-jerk trajectory
   output before sending it to the device.
