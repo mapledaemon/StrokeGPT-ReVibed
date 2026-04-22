@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Training Player
------------------------------------
+2026-04-22 - PR #22 - Add Motion Training Player
+------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/22
 Branch: codex-motion-training-player
+Head commit: 6eab28f
+Merge commit: 1d7e889
 
 - Added a Motion tab training player that can play one listed pattern at a
   time through `MotionController` without creating a separate Handy control
@@ -41,10 +44,13 @@ Branch: codex-motion-training-player
   either path becomes the default app motion backend.
 
 
-Unreleased - Motion Pattern Settings List
------------------------------------------
+2026-04-22 - PR #21 - Add Motion Pattern Settings List
+------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/21
 Branch: codex-motion-pattern-settings
+Head commit: c00905f
+Merge commit: 3f9ee6f
 
 - Added a Motion tab pattern list that shows built-in and imported patterns
   with source, duration, action count, read-only state, and enable checkboxes.
@@ -56,10 +62,13 @@ Branch: codex-motion-pattern-settings
   import/export visibility, and Motion tab rendering.
 
 
-Unreleased - Motion Pattern Library Foundation
-----------------------------------------------
+2026-04-22 - PR #20 - Add Motion Pattern Library Foundation
+-----------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/20
 Branch: codex-motion-pattern-library
+Head commit: a5b80b8
+Merge commit: fefa619
 
 - Added a staged prompt set for the motion training roadmap, covering pattern
   files, settings enable/disable controls, training playback and feedback,
