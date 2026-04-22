@@ -5,6 +5,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional
 
+from .motion_anchors import coerce_anchor_program_dict
+
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
@@ -25,6 +27,7 @@ class MotionTarget:
     depth: float
     stroke_range: float
     label: str = "custom"
+    motion_program: Optional[dict[str, Any]] = None
 
     def clamped(self) -> "MotionTarget":
         return MotionTarget(
@@ -32,6 +35,7 @@ class MotionTarget:
             depth=_clamp(self.depth),
             stroke_range=_clamp(self.stroke_range, 5.0, 100.0),
             label=self.label,
+            motion_program=self.motion_program,
         )
 
     def rounded(self) -> "MotionTarget":
@@ -41,6 +45,7 @@ class MotionTarget:
             depth=round(target.depth),
             stroke_range=round(target.stroke_range),
             label=target.label,
+            motion_program=target.motion_program,
         )
 
 
@@ -110,6 +115,7 @@ LENGTH_PATTERNS = (
 )
 
 PATTERN_PATTERNS = (
+    ("anchor_loop", (r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b")),
     ("flutter", (r"\bflutter\b", r"\bstutter\b", r"\bquick\s+little\s+pulses?\b")),
     ("flick", (r"\bflicks?\b", r"\bsnap\b")),
     ("pulse", (r"\bpuls(?:e|ing)\b", r"\bpump(?:ing)?\b")),
@@ -180,6 +186,7 @@ def _target_from_cues(
     depth: Optional[float] = None,
     stroke_range: Optional[float] = None,
     label_prefix: Optional[str] = None,
+    motion_program: Optional[dict[str, Any]] = None,
 ) -> MotionTarget:
     next_speed = current.speed
     next_depth = current.depth
@@ -227,9 +234,16 @@ def _target_from_cues(
     elif cues.pattern == "sway":
         next_speed = max(next_speed, 34.0)
         next_range = max(next_range, 55.0)
+    elif cues.pattern == "anchor_loop":
+        next_speed = max(next_speed, 36.0)
+        next_range = max(next_range, 55.0)
     elif cues.pattern == "tease":
         next_speed = min(max(next_speed, 22.0), 38.0)
         next_range = min(next_range, 28.0)
+
+    if motion_program and cues.pattern != "anchor_loop":
+        next_speed = max(next_speed, 36.0)
+        next_range = max(next_range, 55.0)
 
     if speed is not None:
         next_speed = speed
@@ -241,7 +255,13 @@ def _target_from_cues(
     labels = cues.labels()
     if label_prefix:
         labels.insert(0, label_prefix)
-    return MotionTarget(next_speed, next_depth, next_range, "+".join(labels) or "custom").clamped()
+    return MotionTarget(
+        next_speed,
+        next_depth,
+        next_range,
+        "+".join(labels) or "custom",
+        motion_program=motion_program,
+    ).clamped()
 
 
 class IntentMatcher:
@@ -291,6 +311,7 @@ class IntentMatcher:
         stroke_range = current.stroke_range
         labels = []
         cues = _detect_motion_cues(text)
+        motion_program = self._motion_program_from_text(text, cues)
 
         if self._matches_any(text, (r"\bfaster\b", r"\bspeed\s+up\b", r"\bmore\s+speed\b")):
             speed += 22
@@ -318,12 +339,32 @@ class IntentMatcher:
                 MotionTarget(speed, depth, stroke_range),
                 cues,
                 label_prefix="+".join(labels) if labels else None,
+                motion_program=motion_program,
             )
             return cue_target
+
+        if motion_program:
+            return _target_from_cues(
+                MotionTarget(speed, depth, stroke_range),
+                MotionCues(pattern="anchor_loop"),
+                label_prefix="+".join(labels) if labels else None,
+                motion_program=motion_program,
+            )
 
         if not labels:
             return None
         return MotionTarget(speed, depth, stroke_range, "+".join(labels))
+
+    def _motion_program_from_text(self, text: str, cues: MotionCues) -> Optional[dict[str, Any]]:
+        if not self._matches_any(text, (r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b")):
+            return None
+        return coerce_anchor_program_dict(
+            {"motion": "anchor_loop"},
+            zone=cues.zone,
+            length=cues.length,
+            text=text,
+            require_request=False,
+        )
 
     def _normalize(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.lower()).strip()
@@ -341,10 +382,6 @@ class MotionSanitizer:
     def from_llm_move(self, move: Any, current: MotionTarget) -> Optional[MotionTarget]:
         if not isinstance(move, dict):
             return None
-
-        speed = self._read_field(move, ("sp", "speed", "tempo", "pace", "intensity"))
-        depth = self._read_field(move, ("dp", "depth", "position", "center", "centre", "anchor"))
-        stroke_range = self._read_field(move, ("rng", "range", "stroke_range", "length", "amplitude", "span"))
 
         cue_text = " ".join(
             str(move.get(key))
@@ -369,17 +406,29 @@ class MotionSanitizer:
             if move.get(key) is not None and _as_number(move.get(key)) is None
         )
         cues = _detect_motion_cues(cue_text)
+        motion_program = coerce_anchor_program_dict(
+            move,
+            zone=cues.zone,
+            length=cues.length,
+            text=cue_text,
+        )
+        speed_keys = ("sp", "speed", "intensity") if motion_program else ("sp", "speed", "tempo", "pace", "intensity")
+        speed = self._read_field(move, speed_keys)
+        depth = self._read_field(move, ("dp", "depth", "position", "center", "centre", "anchor"))
+        stroke_range = self._read_field(move, ("rng", "range", "stroke_range", "length", "amplitude", "span"))
 
-        if speed is None and depth is None and stroke_range is None and not cues.labels():
+        if speed is None and depth is None and stroke_range is None and not cues.labels() and not motion_program:
             return None
 
+        label_prefix = "llm+anchor_loop" if motion_program and not cues.labels() else "llm"
         return _target_from_cues(
             current,
             cues,
             speed=speed,
             depth=depth,
             stroke_range=stroke_range,
-            label_prefix="llm",
+            label_prefix=label_prefix,
+            motion_program=motion_program,
         )
 
     def transition_path(self, current: MotionTarget, target: MotionTarget) -> list[MotionTarget]:
@@ -455,8 +504,15 @@ class MotionController:
     def apply_llm_move(self, move: Any) -> Optional[MotionTarget]:
         target = self.sanitizer.from_llm_move(move, self.current_target())
         if target:
-            self.apply_target(target)
+            self.apply_generated_target(target)
         return target
+
+    def apply_generated_target(self, target: MotionTarget) -> None:
+        frames = self._expanded_frames(target)
+        if frames:
+            self.apply_frames(frames)
+        else:
+            self.apply_target(target)
 
     def stop(self) -> None:
         with self._lock:
@@ -466,3 +522,47 @@ class MotionController:
     def _apply_step(self, target: MotionTarget) -> None:
         target = target.rounded()
         self.handy.move(target.speed, target.depth, target.stroke_range)
+
+    def apply_frames(self, frames: list[Any]) -> None:
+        if not frames:
+            return
+
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+
+        for frame in frames:
+            with self._lock:
+                if generation != self._generation:
+                    return
+
+            for step in self.sanitizer.transition_path(self.current_target(), frame.target):
+                with self._lock:
+                    if generation != self._generation:
+                        return
+                self._apply_step(step)
+                time.sleep(self.step_delay)
+
+            if self.step_delay > 0:
+                time.sleep(self.step_delay * frame.delay_factor)
+
+    def _expanded_frames(self, target: MotionTarget) -> list[Any]:
+        current = self.current_target()
+        if target.motion_program:
+            from .motion_patterns import expand_anchor_program
+
+            return expand_anchor_program(current, target, target.motion_program)
+
+        pattern = self._pattern_from_label(target.label)
+        if pattern:
+            from .motion_patterns import expand_pattern
+
+            return expand_pattern(pattern, current, target)
+        return []
+
+    def _pattern_from_label(self, label: str) -> Optional[str]:
+        clean_label = (label or "").lower()
+        for pattern in ("flick", "flutter", "pulse", "hold", "wave", "ramp", "ladder", "surge", "sway", "tease", "stroke"):
+            if pattern in clean_label:
+                return pattern
+        return None

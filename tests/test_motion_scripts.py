@@ -5,11 +5,14 @@ from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import (
     PATTERNS,
     PatternAction,
+    expand_anchor_program,
     expand_pattern,
     inject_intermediate_actions,
     limit_action_delta,
+    minimum_jerk,
     normalize_actions,
     pattern_names,
+    prepare_anchor_actions,
     prepare_pattern_actions,
     repeat_actions,
 )
@@ -89,6 +92,11 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertLess(actions[1].pos, 100)
         self.assertGreater(actions[1].pos, actions[2].pos)
 
+    def test_minimum_jerk_easing_keeps_endpoints_and_midpoint(self):
+        self.assertEqual(minimum_jerk(0), 0)
+        self.assertEqual(minimum_jerk(1), 1)
+        self.assertAlmostEqual(minimum_jerk(0.5), 0.5)
+
     def test_repeat_actions_extends_shape_without_duplicate_seam(self):
         actions = repeat_actions(
             (PatternAction(0, 10), PatternAction(50, 80), PatternAction(100, 10)),
@@ -115,6 +123,25 @@ class MotionScriptPlannerTests(unittest.TestCase):
                 self.assertTrue(deltas)
                 self.assertTrue(all(delta <= pattern.max_step_delta for delta in deltas))
 
+    def test_anchor_program_generates_bounded_soft_targets(self):
+        actions = prepare_anchor_actions(
+            {
+                "motion": "anchor_loop",
+                "anchors": ["tip", "middle", "base", "upper"],
+                "tempo": 0.9,
+                "softness": 0.85,
+                "sample_interval_ms": 140,
+                "max_step_delta": 22,
+            },
+            rng=random.Random(12),
+        )
+
+        self.assertGreater(len(actions), 10)
+        self.assertEqual(actions[0].pos, 8)
+        self.assertTrue(all(0 <= action.pos <= 100 for action in actions))
+        self.assertEqual(len({action.at for action in actions}), len(actions))
+        self.assertTrue(all(abs(end.pos - start.pos) <= 22 for start, end in zip(actions, actions[1:])))
+
     def test_hold_pattern_still_alternates_position(self):
         frames = expand_pattern(
             "hold",
@@ -140,6 +167,41 @@ class MotionScriptPlannerTests(unittest.TestCase):
                 self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
                 self.assertLessEqual(sum(frame.delay_factor for frame in frames), 3.75)
 
+    def test_anchor_program_expands_to_motion_frames(self):
+        frames = expand_anchor_program(
+            MotionTarget(30, 40, 50),
+            MotionTarget(
+                45,
+                50,
+                70,
+                "llm+anchor_loop",
+                motion_program={
+                    "type": "anchor_loop",
+                    "anchors": [
+                        {"label": "tip", "pos": 8},
+                        {"label": "middle", "pos": 50},
+                        {"label": "base", "pos": 92},
+                    ],
+                    "tempo": 0.8,
+                    "softness": 0.9,
+                    "sample_interval_ms": 160,
+                    "max_step_delta": 24,
+                },
+            ),
+            {
+                "type": "anchor_loop",
+                "anchors": ["tip", "middle", "base"],
+                "tempo": 0.8,
+                "softness": 0.9,
+            },
+            rng=random.Random(13),
+        )
+
+        self.assertGreater(len(frames), 8)
+        self.assertTrue(all(frame.target.motion_program is None for frame in frames))
+        self.assertGreater(len({round(frame.target.depth) for frame in frames}), 3)
+        self.assertLessEqual(sum(frame.delay_factor for frame in frames), 4.0)
+
     def test_feedback_pattern_expands_to_smooth_sequence(self):
         planner = MotionScriptPlanner("auto", rng=random.Random(8))
         current = MotionTarget(30, 40, 50)
@@ -151,6 +213,30 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(steps[0].message, "Adjusting.")
         self.assertGreater(len({round(step.target.depth) for step in steps[1:]}), 2)
         self.assertTrue(all("flick" in step.target.label for step in steps[1:]))
+
+    def test_feedback_anchor_program_expands_to_smooth_sequence(self):
+        planner = MotionScriptPlanner("auto", rng=random.Random(14))
+        current = MotionTarget(30, 40, 50)
+        feedback = MotionTarget(
+            44,
+            50,
+            70,
+            "llm+anchor_loop",
+            motion_program={
+                "type": "anchor_loop",
+                "anchors": ["tip", "middle", "base"],
+                "tempo": 0.8,
+                "softness": 0.85,
+                "sample_interval_ms": 180,
+            },
+        )
+
+        steps = [planner.next_step(current, feedback_target=feedback)]
+        steps.extend(planner.next_step(current) for _ in range(5))
+
+        self.assertEqual(steps[0].message, "Adjusting.")
+        self.assertGreater(len({round(step.target.depth) for step in steps[1:]}), 3)
+        self.assertTrue(all("anchor_loop" in step.target.label for step in steps[1:]))
 
 
 if __name__ == "__main__":

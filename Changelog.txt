@@ -8,6 +8,28 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Soft Anchor Motion Programs
+----------------------------------------
+
+Branch: codex-soft-anchor-motion
+
+- Added robotics-inspired soft anchor-loop motion programs that let the model
+  select 2-6 waypoint labels such as tip, middle, and base while the backend
+  compiles a smooth target stream.
+- Added Catmull-Rom and minimum-jerk trajectory generation for anchor loops,
+  plus bounded large-step limiting so anchors behave like soft waypoints
+  instead of hard stops.
+- Updated direct LLM and deterministic chat-command motion execution so
+  compiled pattern and anchor frames run through the same `MotionController`
+  path used for normal targets.
+- Added natural-language and LLM JSON support for `motion: "anchor_loop"`,
+  `anchors`, `tempo`, `softness`, and related bounded controls.
+- Updated README, ROADMAP, and Codex handoff notes for the new motion control
+  surface.
+- Added regression tests for anchor parsing, trajectory generation, direct LLM
+  execution, and scripted feedback expansion.
+
+
 2026-04-21 - PR #13 - Add Funscript-Inspired Motion Pattern Filters
 --------------------------------------------------------------------
 

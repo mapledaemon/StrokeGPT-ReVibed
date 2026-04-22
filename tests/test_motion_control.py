@@ -72,6 +72,18 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.target.depth, 50)
         self.assertGreaterEqual(intent.target.stroke_range, 55)
 
+    def test_soft_bounce_maps_to_anchor_program(self):
+        intent = self.matcher.parse("soft bounce between tip middle and base", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("anchor_loop", intent.matched)
+        self.assertIsNotNone(intent.target.motion_program)
+        self.assertEqual(
+            [anchor["label"] for anchor in intent.target.motion_program["anchors"]],
+            ["tip", "middle", "base"],
+        )
+        self.assertGreaterEqual(intent.target.stroke_range, 55)
+
     def test_base_half_maps_to_deep_half_length(self):
         intent = self.matcher.parse("use the base half", self.current)
 
@@ -114,6 +126,26 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.depth, 10)
         self.assertEqual(target.stroke_range, 18)
 
+    def test_llm_move_accepts_anchor_program(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move(
+            {
+                "motion": "anchor_loop",
+                "anchors": ["tip", "middle", "base", "upper"],
+                "tempo": 0.85,
+                "softness": 0.9,
+                "rng": 70,
+            },
+            current,
+        )
+
+        self.assertEqual(target.stroke_range, 70)
+        self.assertGreaterEqual(target.speed, 36)
+        self.assertIn("anchor_loop", target.label)
+        self.assertEqual(target.motion_program["curve"], "catmull")
+        self.assertEqual([anchor["label"] for anchor in target.motion_program["anchors"]], ["tip", "middle", "base", "upper"])
+
     def test_transition_path_respects_step_limits(self):
         sanitizer = MotionSanitizer()
         current = MotionTarget(0, 0, 10)
@@ -134,6 +166,35 @@ class MotionControllerTests(unittest.TestCase):
         controller.apply_target(MotionTarget(70, 60, 80))
         self.assertGreater(len(handy.moves), 1)
         self.assertEqual(handy.moves[-1], (70, 60, 80))
+
+    def test_controller_expands_llm_anchor_program(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        target = controller.apply_llm_move(
+            {
+                "motion": "anchor_loop",
+                "anchors": ["tip", "middle", "base"],
+                "sp": 45,
+                "rng": 70,
+                "tempo": 1.0,
+                "sample_interval_ms": 220,
+                "max_step_delta": 40,
+            }
+        )
+
+        self.assertIsNotNone(target.motion_program)
+        self.assertGreater(len(handy.moves), 4)
+        self.assertGreater(len({depth for _, depth, _ in handy.moves}), 3)
+
+    def test_controller_expands_direct_anchor_target(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        intent = IntentMatcher().parse("soft bounce between tip middle and base", controller.current_target())
+
+        controller.apply_generated_target(intent.target)
+
+        self.assertGreater(len(handy.moves), 4)
+        self.assertGreater(len({depth for _, depth, _ in handy.moves}), 3)
 
     def test_stop_cancels_and_stops_handy(self):
         handy = FakeHandy()
