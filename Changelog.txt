@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Soft Anchor Motion Programs
-----------------------------------------
+2026-04-21 - PR #15 - Add Soft Anchor Motion Programs
+------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/15
 Branch: codex-soft-anchor-motion
+Head commit: 15efd26
+Merge commit: 4579273
 
 - Added robotics-inspired soft anchor-loop motion programs that let the model
   select 2-6 waypoint labels such as tip, middle, and base while the backend
