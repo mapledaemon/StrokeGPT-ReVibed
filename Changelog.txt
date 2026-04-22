@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #36 - Tighten Donation QR Layout
+-------------------------------------------------
+
+Branch: codex-readme-donation-no-scroll
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/36
+
+- Replaced the README donation table with stacked QR blocks to avoid a
+  horizontal scrollbar on narrow GitHub views.
+- Reduced the rendered QR dimensions while keeping the repo-local SVG assets
+  from PR #35.
+- Kept the wallet addresses split across short lines under each QR code.
+
+
 2026-04-22 - PR #35 - Fix Donation QR Formatting
 -------------------------------------------------
 
