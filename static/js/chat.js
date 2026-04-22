@@ -77,9 +77,13 @@ function handleSendMessageStatus(data) {
         clearTypingIndicator(data.message || `Message failed: ${data.status}`);
         return false;
     }
-    if (data.chat) {
+    if (data.chat && data.chat_queued !== true) {
         clearTypingIndicator();
         addChatMessage('BOT', data.chat);
+        return true;
+    }
+    if (data.chat_queued === true) {
+        clearTypingIndicator();
         return true;
     }
     if (data.chat_queued === false) {

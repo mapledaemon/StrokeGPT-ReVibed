@@ -214,7 +214,7 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertEqual(data["status"], "ok")
-            self.assertFalse(data["chat_queued"])
+            self.assertTrue(data["chat_queued"])
             self.assertIn("no chat text", data["chat"])
 
             updates = self.client.get("/get_updates")
@@ -222,7 +222,49 @@ class WebStaticAssetTests(unittest.TestCase):
                 queued = updates.get_json()["messages"]
             finally:
                 updates.close()
-            self.assertEqual(queued, [])
+            self.assertEqual(len(queued), 1)
+            self.assertIn("no chat text", queued[0])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            messages_for_ui.clear()
+            chat_history.clear()
+
+    def test_send_message_queues_same_text_used_for_local_tts(self):
+        from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        spoken = []
+        messages_for_ui.clear()
+        chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "This text should be visible and spoken.",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+                response = self.client.post("/send_message", json={
+                    "message": "say something",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["chat"], "This text should be visible and spoken.")
+            self.assertTrue(data["chat_queued"])
+
+            updates = self.client.get("/get_updates")
+            try:
+                queued = updates.get_json()["messages"]
+            finally:
+                updates.close()
+            self.assertEqual(queued, ["This text should be visible and spoken."])
+            self.assertEqual(spoken, ["This text should be visible and spoken."])
         finally:
             handy.handy_key = original_key
             settings.handy_key = original_settings_key
@@ -505,6 +547,8 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("no_key_set", script)
         self.assertIn("message_relayed_to_active_mode", script)
         self.assertIn("addChatMessage('BOT', data.chat)", script)
+        self.assertIn("data.chat_queued !== true", script)
+        self.assertIn("data.chat_queued === true", script)
         self.assertIn("data.chat_queued === false", script)
         self.assertIn("await pollChatUpdates()", script)
 

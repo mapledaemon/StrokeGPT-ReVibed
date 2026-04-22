@@ -989,7 +989,7 @@ def handle_user_message():
     add_message_to_queue(
         chat_text,
         add_to_history=bool(str(raw_chat_text or "").strip()),
-        queue_message=False,
+        queue_message=True,
     )
     if new_mood := llm_response.get("new_mood"): global current_mood; current_mood = new_mood
     motion_applied = False
@@ -1004,7 +1004,7 @@ def handle_user_message():
     return jsonify({
         "status": "ok",
         "chat": chat_text,
-        "chat_queued": False,
+        "chat_queued": True,
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
     })

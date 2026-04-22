@@ -8,6 +8,20 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
+Unreleased - Chat Text Delivery Reliability
+-------------------------------------------
+
+Branch: codex-chat-text-queue-reliability
+
+- Queued normal local LLM replies for the chat UI while still returning the
+  reply text from `/send_message`, so the same text used for local voice output
+  remains available to the polling update path.
+- Updated the browser send-message handler to avoid duplicate direct rendering
+  when the server marks a reply as queued.
+- Added regression coverage that verifies the queued chat text matches the text
+  handed to the voice generator.
+
+
 2026-04-22 - PR #29 - Add Motion Observability UI
 --------------------------------------------------
 
