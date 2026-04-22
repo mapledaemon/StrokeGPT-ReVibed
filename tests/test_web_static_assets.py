@@ -102,6 +102,12 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('type="module"', page)
             self.assertIn('id="like-this-move-btn"', page)
             self.assertIn('id="dislike-this-move-btn"', page)
+            self.assertIn('id="motion-meter-panel"', page)
+            self.assertIn('id="motion-feedback-buttons"', page)
+            self.assertIn('id="sidebar-motion-indicator"', page)
+            self.assertIn('id="handy-cylinder-indicator"', page)
+            self.assertNotIn('id="motion-trace-panel"', page)
+            self.assertNotIn('id="rhythm-canvas"', page)
             self.assertIn("Preset Modes", page)
             self.assertIn('class="preset-mode-stack"', page)
             self.assertIn('class="sidebar-stop-section"', page)
@@ -134,6 +140,58 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertEqual(audio_response.data, b"RIFFtest")
         finally:
             audio_response.close()
+
+    def test_status_payload_includes_motion_observability(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import handy, motion
+
+        original_state = (
+            handy.last_relative_speed,
+            handy.last_stroke_speed,
+            handy.last_depth_pos,
+            handy.last_stroke_range,
+            handy.min_handy_depth,
+            handy.max_handy_depth,
+        )
+        try:
+            handy.last_relative_speed = 55
+            handy.last_stroke_speed = 42
+            handy.last_depth_pos = 60
+            handy.last_stroke_range = 70
+            handy.min_handy_depth = 0
+            handy.max_handy_depth = 100
+            motion._record_target(MotionTarget(55, 60, 70, label="test trace"), source="unit test")
+
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["relative_speed"], 55)
+            self.assertIn("motion_observability", payload)
+            observability = payload["motion_observability"]
+            self.assertEqual(observability["source"], "unit test")
+            self.assertIn("diagnostics", observability)
+            self.assertEqual(observability["diagnostics"]["physical_speed"], 42)
+            self.assertEqual(observability["diagnostics"]["physical_depth"], 60)
+            self.assertTrue(observability["trace"])
+            self.assertEqual(observability["trace"][-1]["label"], "test trace")
+        finally:
+            (
+                handy.last_relative_speed,
+                handy.last_stroke_speed,
+                handy.last_depth_pos,
+                handy.last_stroke_range,
+                handy.min_handy_depth,
+                handy.max_handy_depth,
+            ) = original_state
+            with motion._observability_lock:
+                motion._trace.clear()
+                motion._last_source = "idle"
+                motion._last_label = "idle"
+                motion._last_command_time = None
 
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, settings
@@ -198,7 +256,11 @@ class WebStaticAssetTests(unittest.TestCase):
                 "chat": "Switching to a quick tip flick.",
                 "move": {"zone": "tip", "pattern": "flick"},
                 "new_mood": "Teasing",
-            }) as repair, mock.patch.object(motion, "apply_generated_target", side_effect=captured_targets.append), \
+            }) as repair, mock.patch.object(
+                motion,
+                "apply_generated_target",
+                side_effect=lambda target, **_kwargs: captured_targets.append(target),
+            ), \
                     mock.patch.object(audio, "generate_audio_for_text", return_value=None):
                 response = self.client.post("/send_message", json={
                     "message": "switch to another rhythm",
@@ -374,7 +436,12 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn("white-space: pre-wrap", css)
             self.assertIn("repeat(auto-fit, minmax(150px, 1fr))", css)
             self.assertIn(".my-button:disabled", css)
-            self.assertIn("#rhythm-canvas { display: block; width: 100%; height: 100%; }", css)
+            self.assertIn("#motion-meter-panel", css)
+            self.assertIn("#motion-feedback-buttons", css)
+            self.assertIn("#sidebar-motion-indicator", css)
+            self.assertIn("#handy-cylinder-indicator", css)
+            self.assertIn("#handy-cylinder-range { position: absolute; left: 8px; right: 8px; top: 8%; height: 84%;", css)
+            self.assertIn("#visualizer-box { width: min(440px, 100%);", css)
             self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
             self.assertIn(".settings-help", css)
             self.assertIn(".model-actions", css)
@@ -411,7 +478,7 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertNotIn("innerHTML +=", script)
         self.assertIn("elevenLabsVoiceSelect.replaceChildren", script)
-        self.assertIn("rhythmCanvas.getBoundingClientRect", script)
+        self.assertIn("startHandyCylinderAnimation", script)
         self.assertIn("slider-container setup-slider", script)
 
     def test_frontend_js_polls_local_voice_status_and_serializes_playback(self):
@@ -468,6 +535,21 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertIn("function renderMotionPatterns", script)
         self.assertIn("function renderMotionBackendOptions", script)
+        self.assertIn("function cylinderAnimatedDepth", script)
+        self.assertIn("function positionBackendAnimatedDepth", script)
+        self.assertIn("function calibratedCylinderRange", script)
+        self.assertIn("function activeStrokeZone", script)
+        self.assertIn("startHandyCylinderAnimation", script)
+        self.assertIn("Date.now() / 1000", script)
+        self.assertIn("motion_observability", script)
+        self.assertIn("physical_speed", script)
+        self.assertIn("physical_depth", script)
+        self.assertIn("stroke_zone", script)
+        self.assertNotIn("el.handyCylinderRange.style.top", script)
+        self.assertIn("full_travel_mm", script)
+        self.assertIn("function updateMotionMeters", script)
+        self.assertIn("function updateHandyCylinder", script)
+        self.assertIn("handyCylinderPosition", script)
         self.assertIn("/set_motion_backend", script)
         self.assertIn("Flexible position/script", script)
         self.assertIn("refreshMotionPatterns", script)

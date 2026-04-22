@@ -582,11 +582,11 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
         return response, False
     return repaired, True
 
-def _apply_llm_response_move(response, current):
+def _apply_llm_response_move(response, current, source="llm"):
     target = _target_from_llm_response_move(response, current)
     if not _target_has_motion_effect(current, target):
         return None
-    motion.apply_generated_target(target)
+    motion.apply_generated_target(target, source=source)
     return target
 
 def _record_motion_pattern_feedback(pattern_id, rating):
@@ -666,7 +666,11 @@ def _run_motion_training_pattern(record, *, preview=False):
             message=f"Playing {'edited preview' if preview else record.name}.",
             preview=preview,
         )
-        completed = motion.apply_position_frames(frames, stop_after=True)
+        completed = motion.apply_position_frames(
+            frames,
+            stop_after=True,
+            source="motion training preview" if preview else "motion training",
+        )
         if motion_training_stop_event.is_set():
             _set_motion_training_state(
                 state="stopped",
@@ -880,7 +884,7 @@ def send_static(path):
 
 def _konami_code_action():
     def pattern_thread():
-        motion.apply_target(MotionTarget(speed=100, depth=50, stroke_range=100, label="konami"))
+        motion.apply_target(MotionTarget(speed=100, depth=50, stroke_range=100, label="konami"), source="konami")
         time.sleep(5)
         motion.stop()
     threading.Thread(target=pattern_thread, daemon=True).start()
@@ -912,7 +916,7 @@ def _handle_chat_commands(text, allow_motion=True):
     if intent.kind == "move" and intent.target:
         if not allow_motion:
             return False, None
-        motion.apply_generated_target(intent.target)
+        motion.apply_generated_target(intent.target, source=f"chat command: {intent.matched or 'move'}")
         _remember_motion_pattern_from_target(intent.target)
         add_message_to_queue("Adjusting.", add_to_history=False)
         return True, jsonify({"status": "move_applied", "matched": intent.matched})
@@ -990,7 +994,11 @@ def handle_user_message():
     if new_mood := llm_response.get("new_mood"): global current_mood; current_mood = new_mood
     motion_applied = False
     if not auto_mode_active_task:
-        target = _apply_llm_response_move(llm_response, current_before_llm)
+        target = _apply_llm_response_move(
+            llm_response,
+            current_before_llm,
+            source="llm repair" if motion_repaired else "llm",
+        )
         motion_applied = target is not None
         _remember_motion_pattern_from_target(target)
     return jsonify({
@@ -1491,12 +1499,15 @@ def get_audio_route():
 
 @app.route('/get_status')
 def get_status_route():
+    diagnostics = handy.diagnostics()
     return jsonify({
         "mood": current_mood,
-        "speed": handy.last_stroke_speed,
-        "depth": handy.last_depth_pos,
-        "range": handy.last_stroke_range,
+        "speed": diagnostics["physical_speed"],
+        "relative_speed": diagnostics["relative_speed"],
+        "depth": diagnostics["depth"],
+        "range": diagnostics["range"],
         "motion_training": _motion_training_snapshot(),
+        "motion_observability": motion.observability_snapshot(diagnostics),
     })
 
 @app.route('/set_depth_limits', methods=['POST'])

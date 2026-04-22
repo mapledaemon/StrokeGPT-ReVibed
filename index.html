@@ -32,9 +32,26 @@
             </div>
         </div>
         <div id="bottom-input-area">
-            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
-            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
-            <div id="visualizer-box"><canvas id="rhythm-canvas"></canvas></div>
+            <div id="visualizer-box">
+                <div id="motion-quick-status-row">
+                    <div id="motion-meter-panel">
+                        <div class="motion-meter-row">
+                            <span class="motion-meter-label">Speed</span>
+                            <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
+                            <span id="motion-speed-meter-value" class="motion-meter-value">0%</span>
+                        </div>
+                        <div class="motion-meter-row">
+                            <span class="motion-meter-label">Depth</span>
+                            <div class="motion-meter-track"><div id="motion-depth-meter-fill" class="motion-meter-fill depth"></div></div>
+                            <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
+                        </div>
+                    </div>
+                    <div id="motion-feedback-buttons">
+                        <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
+                        <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
+                    </div>
+                </div>
+            </div>
             <div id="message-input-line">
                 <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command...">
                 <button id="send-chat-btn" class="my-button">Send</button>
@@ -58,6 +75,16 @@
             <div class="preset-mode-stack">
                 <button id="edging-mode-btn" class="my-button sidebar-button edging">Edge Me</button>
                 <button id="milking-mode-btn" class="my-button sidebar-button milking">Milk Me</button>
+            </div>
+        </div>
+        <div id="sidebar-motion-indicator">
+            <div id="handy-cylinder-indicator" aria-hidden="true">
+                <div class="handy-cylinder-cap handy-cylinder-cap-top"></div>
+                <div class="handy-cylinder-track">
+                    <div id="handy-cylinder-range"></div>
+                    <div id="handy-cylinder-position"></div>
+                </div>
+                <div class="handy-cylinder-cap handy-cylinder-cap-bottom"></div>
             </div>
         </div>
         <div class="sidebar-stop-section">

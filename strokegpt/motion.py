@@ -2,6 +2,7 @@ import math
 import re
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional
 
@@ -533,9 +534,20 @@ class MotionController:
         self.backend = "hamp"
         self._lock = threading.Lock()
         self._generation = 0
+        self._observability_lock = threading.Lock()
+        self._trace = deque(maxlen=180)
+        self._last_source = "idle"
+        self._last_label = "idle"
+        self._last_command_time = None
+        self._frame_playback_active = False
 
     def set_backend(self, backend: str) -> None:
-        self.backend = "position" if str(backend or "").lower() == "position" else "hamp"
+        normalized = "position" if str(backend or "").lower() == "position" else "hamp"
+        if normalized != self.backend:
+            self.backend = normalized
+            self._record_current_state(source="settings", label=f"{self.backend} backend")
+        else:
+            self.backend = normalized
 
     def current_target(self) -> MotionTarget:
         return MotionTarget(
@@ -545,7 +557,7 @@ class MotionController:
             label="current",
         ).clamped()
 
-    def apply_target(self, target: MotionTarget, smooth: bool = True) -> None:
+    def apply_target(self, target: MotionTarget, smooth: bool = True, source: str = "target") -> None:
         if target.speed <= 0:
             self.stop()
             return
@@ -556,40 +568,43 @@ class MotionController:
             current = self.current_target()
 
         if not smooth:
-            self._apply_step(target)
+            self._apply_step(target, source=source)
             return
 
         for step in self.sanitizer.transition_path(current, target):
             with self._lock:
                 if generation != self._generation:
                     return
-            self._apply_step(step)
+            self._apply_step(step, source=source)
             time.sleep(self.step_delay)
 
     def apply_llm_move(self, move: Any) -> Optional[MotionTarget]:
         target = self.sanitizer.from_llm_move(move, self.current_target())
         if target:
-            self.apply_generated_target(target)
+            self.apply_generated_target(target, source="llm")
         return target
 
-    def apply_generated_target(self, target: MotionTarget) -> None:
+    def apply_generated_target(self, target: MotionTarget, source: str = "generated") -> None:
         frames = self._expanded_frames(target)
         if frames:
             if self.backend == "position":
-                self.apply_position_frames(frames)
+                self.apply_position_frames(frames, source=source)
             else:
-                self.apply_frames(frames)
+                self.apply_frames(frames, source=source)
         else:
-            self.apply_target(target)
+            self.apply_target(target, source=source)
 
     def stop(self) -> None:
         with self._lock:
             self._generation += 1
+        self._set_frame_playback_active(False)
         self.handy.stop()
+        self._record_current_state(source="stop", label="stopped")
 
-    def _apply_step(self, target: MotionTarget) -> None:
+    def _apply_step(self, target: MotionTarget, source: str = "target") -> None:
         target = target.rounded()
         self.handy.move(target.speed, target.depth, target.stroke_range)
+        self._record_target(target, source=source)
 
     def _position_velocity(self, start: MotionTarget, target: MotionTarget, duration_seconds: float) -> int | None:
         if hasattr(self.handy, "velocity_for_depth_interval"):
@@ -607,6 +622,7 @@ class MotionController:
         *,
         stop_on_target: bool = True,
         velocity: int | None = None,
+        source: str = "position",
     ) -> None:
         target = target.rounded()
         if hasattr(self.handy, "move_to_depth"):
@@ -618,71 +634,136 @@ class MotionController:
             )
         else:
             self.handy.move(target.speed, target.depth, target.stroke_range)
+        self._record_target(target, source=source)
 
-    def apply_frames(self, frames: list[Any], *, stop_after: bool = False) -> bool:
+    def apply_frames(self, frames: list[Any], *, stop_after: bool = False, source: str = "pattern") -> bool:
         if not frames:
             return False
 
         with self._lock:
             self._generation += 1
             generation = self._generation
+        self._set_frame_playback_active(True)
 
-        for frame in frames:
-            with self._lock:
-                if generation != self._generation:
-                    return False
-
-            for step in self.sanitizer.transition_path(self.current_target(), frame.target):
+        try:
+            for frame in frames:
                 with self._lock:
                     if generation != self._generation:
                         return False
-                self._apply_step(step)
-                time.sleep(self.step_delay)
 
-            if self.step_delay > 0:
-                time.sleep(self.step_delay * frame.delay_factor)
+                for step in self.sanitizer.transition_path(self.current_target(), frame.target):
+                    with self._lock:
+                        if generation != self._generation:
+                            return False
+                    self._apply_step(step, source=source)
+                    time.sleep(self.step_delay)
 
-        if stop_after:
-            with self._lock:
-                if generation != self._generation:
-                    return False
-                self._generation += 1
-            self.handy.stop()
-        return True
+                if self.step_delay > 0:
+                    time.sleep(self.step_delay * frame.delay_factor)
 
-    def apply_position_frames(self, frames: list[Any], *, stop_after: bool = False) -> bool:
+            if stop_after:
+                with self._lock:
+                    if generation != self._generation:
+                        return False
+                    self._generation += 1
+                self.handy.stop()
+                self._record_current_state(source=source, label="preview stopped")
+            return True
+        finally:
+            self._set_frame_playback_active(False)
+
+    def apply_position_frames(self, frames: list[Any], *, stop_after: bool = False, source: str = "pattern preview") -> bool:
         if not frames:
             return False
 
         with self._lock:
             self._generation += 1
             generation = self._generation
+        self._set_frame_playback_active(True)
 
-        previous_target = self.current_target()
-        frame_count = len(frames)
-        for index, frame in enumerate(frames):
-            with self._lock:
-                if generation != self._generation:
-                    return False
-            delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
-            is_last_frame = index == frame_count - 1
-            velocity = self._position_velocity(previous_target, frame.target, delay_seconds)
-            self._apply_position_step(
-                frame.target,
-                stop_on_target=is_last_frame and not stop_after,
-                velocity=velocity,
-            )
-            previous_target = frame.target
-            if self.step_delay > 0:
-                time.sleep(delay_seconds)
+        try:
+            previous_target = self.current_target()
+            frame_count = len(frames)
+            for index, frame in enumerate(frames):
+                with self._lock:
+                    if generation != self._generation:
+                        return False
+                delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
+                is_last_frame = index == frame_count - 1
+                velocity = self._position_velocity(previous_target, frame.target, delay_seconds)
+                self._apply_position_step(
+                    frame.target,
+                    stop_on_target=is_last_frame and not stop_after,
+                    velocity=velocity,
+                    source=source,
+                )
+                previous_target = frame.target
+                if self.step_delay > 0:
+                    time.sleep(delay_seconds)
 
-        if stop_after:
-            with self._lock:
-                if generation != self._generation:
-                    return False
-                self._generation += 1
-            self.handy.stop()
-        return True
+            if stop_after:
+                with self._lock:
+                    if generation != self._generation:
+                        return False
+                    self._generation += 1
+                self.handy.stop()
+                self._record_current_state(source=source, label="preview stopped")
+            return True
+        finally:
+            self._set_frame_playback_active(False)
+
+    def observability_snapshot(self, handy_diagnostics: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        if handy_diagnostics is None:
+            if hasattr(self.handy, "diagnostics"):
+                handy_diagnostics = self.handy.diagnostics()
+            else:
+                handy_diagnostics = {
+                    "relative_speed": getattr(self.handy, "last_relative_speed", 0),
+                    "physical_speed": getattr(self.handy, "last_stroke_speed", 0),
+                    "depth": getattr(self.handy, "last_depth_pos", 50),
+                    "range": getattr(self.handy, "last_stroke_range", 50),
+                }
+        with self._observability_lock:
+            trace = list(self._trace)
+            source = self._last_source
+            label = self._last_label
+            last_command_time = self._last_command_time
+            playback_active = self._frame_playback_active
+        return {
+            "backend": self.backend,
+            "source": source,
+            "label": label,
+            "last_command_time": last_command_time,
+            "playback_active": playback_active,
+            "diagnostics": handy_diagnostics,
+            "trace": trace,
+        }
+
+    def _set_frame_playback_active(self, active: bool) -> None:
+        with self._observability_lock:
+            self._frame_playback_active = bool(active)
+
+    def _record_target(self, target: MotionTarget, source: str = "target", label: Optional[str] = None) -> None:
+        target = target.rounded()
+        now = time.time()
+        point = {
+            "t": now,
+            "speed": int(round(target.speed)),
+            "physical_speed": int(round(getattr(self.handy, "last_stroke_speed", target.speed))),
+            "depth": int(round(target.depth)),
+            "range": int(round(target.stroke_range)),
+            "backend": self.backend,
+            "source": source,
+            "label": label or target.label or source,
+        }
+        with self._observability_lock:
+            self._trace.append(point)
+            self._last_source = source
+            self._last_label = point["label"]
+            self._last_command_time = now
+
+    def _record_current_state(self, source: str = "status", label: str = "current") -> None:
+        self._record_target(self.current_target(), source=source, label=label)
 
     def _expanded_frames(self, target: MotionTarget) -> list[Any]:
         current = self.current_target()

@@ -77,10 +77,13 @@ class HandyController:
         return int(round(velocity))
 
     def _relative_depth_to_mm(self, depth):
+        absolute_pos_pct = self._relative_depth_to_physical_percent(depth)
+        return self.FULL_TRAVEL_MM * (absolute_pos_pct / 100.0)
+
+    def _relative_depth_to_physical_percent(self, depth):
         relative_pos_pct = self._safe_percent(depth)
         calibrated_width = self.max_handy_depth - self.min_handy_depth
-        absolute_pos_pct = self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
-        return self.FULL_TRAVEL_MM * (absolute_pos_pct / 100.0)
+        return self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
 
     def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
         max_velocity = self._relative_speed_to_velocity(speed)
@@ -226,6 +229,49 @@ class HandyController:
         self.last_relative_speed = 0
         self._hamp_started = False
         self._reset_motion_cache()
+
+    def diagnostics(self):
+        slide_bounds = None
+        stroke_zone = None
+        if self._last_slide_bounds:
+            slide_bounds = {
+                "min": self._last_slide_bounds[0],
+                "max": self._last_slide_bounds[1],
+            }
+            stroke_zone = {
+                "min": max(0, min(100, int(round(100 - self._last_slide_bounds[1])))),
+                "max": max(0, min(100, int(round(100 - self._last_slide_bounds[0])))),
+            }
+        if stroke_zone is None:
+            physical_depth = self._relative_depth_to_physical_percent(self.last_depth_pos)
+            calibrated_range_width = self.max_handy_depth - self.min_handy_depth
+            span = (calibrated_range_width * (self._safe_percent(self.last_stroke_range) / 100.0)) / 2.0
+            stroke_zone = {
+                "min": int(round(max(self.min_handy_depth, physical_depth - span))),
+                "max": int(round(min(self.max_handy_depth, physical_depth + span))),
+            }
+        physical_depth = self._relative_depth_to_physical_percent(self.last_depth_pos)
+        calibrated_min = max(0, min(100, int(round(min(self.min_handy_depth, self.max_handy_depth)))))
+        calibrated_max = max(0, min(100, int(round(max(self.min_handy_depth, self.max_handy_depth)))))
+        return {
+            "relative_speed": int(round(self.last_relative_speed)),
+            "physical_speed": int(round(self.last_stroke_speed)),
+            "depth": int(round(self.last_depth_pos)),
+            "physical_depth": int(round(max(0, min(100, physical_depth)))),
+            "position_mm": round(self.FULL_TRAVEL_MM * (max(0.0, min(100.0, physical_depth)) / 100.0), 2),
+            "range": int(round(self.last_stroke_range)),
+            "min_speed": int(round(self.min_user_speed)),
+            "max_speed": int(round(self.max_user_speed)),
+            "min_depth": int(round(self.min_handy_depth)),
+            "max_depth": int(round(self.max_handy_depth)),
+            "calibrated_range": {"min": calibrated_min, "max": calibrated_max},
+            "stroke_zone": stroke_zone,
+            "full_travel_mm": self.FULL_TRAVEL_MM,
+            "slide_bounds": slide_bounds,
+            "velocity": self._last_velocity,
+            "mode": self._current_mode,
+            "hamp_started": self._hamp_started,
+        }
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):
         JOG_STEP_MM = 2.0

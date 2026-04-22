@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, ctx, el, setSliderValue, state } from './context.js';
+import { D, apiCall, clampNumber, el, setSliderValue, state } from './context.js';
 
 function normalizeMotionSpeedLimits() {
     const a = parseInt(el.motionSpeedMinSlider.value, 10);
@@ -944,31 +944,151 @@ function drawOpenMotionTrainingPreview() {
 }
 
 export function resizeCanvas() {
-    const bounds = el.rhythmCanvas.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    el.rhythmCanvas.width = Math.round(bounds.width);
-    el.rhythmCanvas.height = Math.round(bounds.height);
+    updateMotionObservability(state.motionObservability);
 }
 
-export function drawHandyVisualizer(speed, depth) {
-    const width = el.rhythmCanvas.width;
-    const height = el.rhythmCanvas.height;
-    if (width === 0 || height === 0) return;
-    const barHeight = (height / 2) - 4;
-    ctx.clearRect(0, 0, width, height);
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = 'rgba(193, 18, 31, 0.28)';
-    ctx.fillRect(0, 0, width, barHeight);
-    ctx.fillStyle = '#e01b2f';
-    ctx.fillRect(0, 0, (speed / 100) * width, barHeight);
-    ctx.fillStyle = 'white';
-    ctx.fillText(`Speed: ${speed}%`, 5, barHeight / 2 + 5);
-    ctx.fillStyle = 'rgba(127, 183, 163, 0.25)';
-    ctx.fillRect(0, height / 2 + 4, width, barHeight);
-    ctx.fillStyle = '#7fb7a3';
-    ctx.fillRect(0, height / 2 + 4, (depth / 100) * width, barHeight);
-    ctx.fillStyle = 'white';
-    ctx.fillText(`Depth: ${depth}%`, 5, height - (barHeight / 2) + 5);
+function observationNumber(value, fallback = 0) {
+    if (value === null || value === undefined || value === '') return fallback;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampPercent(value, fallback = 0) {
+    return Math.max(0, Math.min(100, observationNumber(value, fallback)));
+}
+
+function updateMotionMeters(diagnostics = {}) {
+    const relativeSpeed = Math.round(clampPercent(diagnostics.relative_speed, 0));
+    const depth = Math.round(clampPercent(diagnostics.depth, 50));
+    if (el.motionSpeedMeterFill) el.motionSpeedMeterFill.style.width = `${relativeSpeed}%`;
+    if (el.motionSpeedMeterValue) el.motionSpeedMeterValue.textContent = `${relativeSpeed}%`;
+    if (el.motionDepthMeterFill) el.motionDepthMeterFill.style.width = `${depth}%`;
+    if (el.motionDepthMeterValue) el.motionDepthMeterValue.textContent = `${depth}%`;
+}
+
+function normalizedPercentRange(minValue, maxValue, fallbackMin = 0, fallbackMax = 100) {
+    const min = clampPercent(minValue, fallbackMin);
+    const max = clampPercent(maxValue, fallbackMax);
+    return {
+        min: Math.min(min, max),
+        max: Math.max(min, max),
+    };
+}
+
+function calibratedCylinderRange(diagnostics = {}) {
+    const range = diagnostics.calibrated_range || {};
+    const minValue = range.min ?? diagnostics.min_depth;
+    const maxValue = range.max ?? diagnostics.max_depth;
+    const calibrated = normalizedPercentRange(minValue, maxValue, 0, 100);
+    if (calibrated.max - calibrated.min < 1) return {min: 0, max: 100, width: 100};
+    return {...calibrated, width: calibrated.max - calibrated.min};
+}
+
+function physicalDepthPercent(depth, diagnostics = {}) {
+    if (depth === null || depth === undefined) {
+        return clampPercent(diagnostics.physical_depth, 50);
+    }
+    const calibrated = calibratedCylinderRange(diagnostics);
+    return clampPercent(calibrated.min + (calibrated.width * clampPercent(depth, 50) / 100), 50);
+}
+
+function activeStrokeZone(diagnostics = {}) {
+    const zone = diagnostics.stroke_zone || {};
+    if (zone.min !== undefined && zone.max !== undefined) {
+        const active = normalizedPercentRange(zone.min, zone.max, 0, 100);
+        return {...active, width: Math.max(0, active.max - active.min)};
+    }
+
+    const slide = diagnostics.slide_bounds || {};
+    if (slide.min !== undefined && slide.max !== undefined) {
+        const active = normalizedPercentRange(100 - slide.max, 100 - slide.min, 0, 100);
+        return {...active, width: Math.max(0, active.max - active.min)};
+    }
+
+    const center = physicalDepthPercent(diagnostics.depth, diagnostics);
+    const calibrated = calibratedCylinderRange(diagnostics);
+    const rangeWidth = calibrated.width * clampPercent(diagnostics.range, 50) / 100;
+    const active = normalizedPercentRange(center - rangeWidth / 2, center + rangeWidth / 2, calibrated.min, calibrated.max);
+    return {
+        min: Math.max(calibrated.min, active.min),
+        max: Math.min(calibrated.max, active.max),
+        width: Math.max(0, Math.min(calibrated.max, active.max) - Math.max(calibrated.min, active.min)),
+    };
+}
+
+function fullTravelMm(diagnostics = {}) {
+    return Math.max(1, observationNumber(diagnostics.full_travel_mm, 110));
+}
+
+function setHandyCylinderPosition(depth) {
+    if (el.handyCylinderPosition) {
+        el.handyCylinderPosition.style.top = `${clampPercent(depth, 50)}%`;
+    }
+}
+
+function positionBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
+    const trace = Array.isArray(payload.trace) ? payload.trace : [];
+    if (trace.length < 2) return physicalDepthPercent(diagnostics.depth, diagnostics);
+
+    const latest = trace[trace.length - 1] || {};
+    if (observationNumber(latest.speed, diagnostics.relative_speed) <= 0 || String(latest.label || '').includes('stopped')) {
+        return physicalDepthPercent(latest.depth ?? diagnostics.depth, diagnostics);
+    }
+
+    const previous = trace[trace.length - 2] || {};
+    const startDepth = physicalDepthPercent(previous.depth, diagnostics);
+    const endDepth = physicalDepthPercent(latest.depth, diagnostics);
+    const distanceMm = fullTravelMm(diagnostics) * Math.abs(endDepth - startDepth) / 100;
+    const velocity = Math.max(1, observationNumber(latest.physical_speed, diagnostics.physical_speed || 1));
+    const duration = Math.max(0.08, distanceMm / velocity);
+    const startTime = observationNumber(latest.t, nowSeconds);
+    const progress = Math.max(0, Math.min(1, (nowSeconds - startTime) / duration));
+    return startDepth + (endDepth - startDepth) * progress;
+}
+
+function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
+    const diagnostics = payload.diagnostics || {};
+    const restingPosition = physicalDepthPercent(diagnostics.depth, diagnostics);
+    const physicalSpeed = Math.max(0, observationNumber(diagnostics.physical_speed, 0));
+    const isPositionBackend = payload.backend === 'position';
+    if (isPositionBackend) return positionBackendAnimatedDepth(payload, diagnostics, nowSeconds);
+    if (physicalSpeed <= 0 || !diagnostics.hamp_started) return restingPosition;
+
+    const active = activeStrokeZone(diagnostics);
+    if (active.width < 2) return restingPosition;
+
+    const travelMm = Math.max(1, fullTravelMm(diagnostics) * (active.width / 100));
+    const lastCommandTime = observationNumber(payload.last_command_time, nowSeconds);
+    const percentPerCycle = active.width * 2;
+    const percentPerSecond = physicalSpeed / fullTravelMm(diagnostics) * 100;
+    const startingPosition = Math.max(active.min, Math.min(active.max, restingPosition));
+    const startingOffset = startingPosition - active.min;
+    const travelled = (startingOffset + Math.max(0, nowSeconds - lastCommandTime) * percentPerSecond) % percentPerCycle;
+    const phase = travelled <= active.width ? travelled : percentPerCycle - travelled;
+    return active.min + phase;
+}
+
+function updateHandyCylinder(payload = {}) {
+    setHandyCylinderPosition(cylinderAnimatedDepth(payload));
+}
+
+export function updateMotionObservability(payload = {}) {
+    payload = payload || {};
+    const diagnostics = payload.diagnostics || {};
+    updateMotionMeters(diagnostics);
+    updateHandyCylinder(payload);
+}
+
+function startHandyCylinderAnimation() {
+    if (state.motionCylinderAnimationStarted) return;
+    state.motionCylinderAnimationStarted = true;
+    const tick = () => {
+        if (state.motionObservability) {
+            setHandyCylinderPosition(cylinderAnimatedDepth(state.motionObservability, Date.now() / 1000));
+        }
+        window.requestAnimationFrame(tick);
+    };
+    window.requestAnimationFrame(tick);
 }
 
 export function startEdgingTimer() {
@@ -1012,7 +1132,18 @@ export async function pollMotionStatus() {
         Afterglow: '\u{1F60C}',
     }[data.mood] || '';
     el.moodDisplay.textContent = `Mood: ${data.mood} ${emoji}`;
-    drawHandyVisualizer(data.speed || 0, data.depth || 0);
+    state.motionObservability = data.motion_observability || {
+        backend: state.motionBackend,
+        source: 'status',
+        diagnostics: {
+            relative_speed: data.relative_speed || 0,
+            physical_speed: data.speed || 0,
+            depth: data.depth || 50,
+            range: data.range || 50,
+        },
+        trace: [],
+    };
+    updateMotionObservability(state.motionObservability);
     if (data.motion_training) updateMotionTrainingStatus(data.motion_training);
 }
 
@@ -1115,5 +1246,6 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('milking-mode-btn').addEventListener('click', startMilkingMode);
     updateMotionTrainingStatus();
     updateMotionTrainingEditButtons();
+    startHandyCylinderAnimation();
     refreshMotionPatterns();
 }

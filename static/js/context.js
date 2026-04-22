@@ -104,7 +104,12 @@ export const el = {
     resetSettingsBtn: D.getElementById('reset-settings-btn'),
     resetSettingsStatus: D.getElementById('reset-settings-status'),
     moodDisplay: D.getElementById('mood-display'),
-    rhythmCanvas: D.getElementById('rhythm-canvas'),
+    handyCylinderRange: D.getElementById('handy-cylinder-range'),
+    handyCylinderPosition: D.getElementById('handy-cylinder-position'),
+    motionSpeedMeterFill: D.getElementById('motion-speed-meter-fill'),
+    motionSpeedMeterValue: D.getElementById('motion-speed-meter-value'),
+    motionDepthMeterFill: D.getElementById('motion-depth-meter-fill'),
+    motionDepthMeterValue: D.getElementById('motion-depth-meter-value'),
     typingIndicator: D.getElementById('typing-indicator'),
     chatView: D.getElementById('chat-view'),
     chatMessagesContainer: D.getElementById('chat-messages-container'),
@@ -141,9 +146,9 @@ export const state = {
     motionTrainingOriginalPattern: null,
     motionTrainingEditedPattern: null,
     motionTrainingDirty: false,
+    motionObservability: null,
+    motionCylinderAnimationStarted: false,
 };
-
-export const ctx = el.rhythmCanvas.getContext('2d');
 
 export async function apiCall(endpoint, options = {}) {
     try {

@@ -109,6 +109,8 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 
 ## Known Rough Edges
 
+- See `KNOWN_PROBLEMS.md` for current user-visible rough edges that should stay
+  tracked across branches.
 - UI needs browser visual testing after layout changes.
 - Some strings and old easter egg content are legacy and could be cleaned up.
 - README is better than before but still needs release-quality polish.
@@ -145,13 +147,12 @@ branch, remove any roadmap item that has already landed and is covered in
 
 Good next targets are:
 
-1. Motion observability and Handy position visualization.
-2. Motion training editor depth, especially point dragging and original versus
+1. Motion training editor depth, especially point dragging and original versus
    edited preview.
-3. Soft-anchor pattern authoring with visible trajectory controls.
-4. Runtime/setup diagnostics for Ollama, Torch/CUDA, voice, port, and Handy
+2. Soft-anchor pattern authoring with visible trajectory controls.
+3. Runtime/setup diagnostics for Ollama, Torch/CUDA, voice, port, and Handy
    state.
-5. Local push-to-talk voice control MVP.
+4. Local push-to-talk voice control MVP.
 
 ## Continuation Prompts
 

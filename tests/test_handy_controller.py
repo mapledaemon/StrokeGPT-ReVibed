@@ -76,6 +76,25 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual([path for path, _body in handy.commands].count("slide"), 2)
         self.assertEqual([path for path, _body in handy.commands].count("hamp/velocity"), 2)
 
+    def test_diagnostics_report_cached_motion_state(self):
+        handy = RecordingHandyController()
+
+        handy.move(50, 60, 70)
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["relative_speed"], 50)
+        self.assertEqual(diagnostics["physical_speed"], 45)
+        self.assertEqual(diagnostics["depth"], 60)
+        self.assertEqual(diagnostics["physical_depth"], 60)
+        self.assertEqual(diagnostics["position_mm"], 66.0)
+        self.assertEqual(diagnostics["range"], 70)
+        self.assertEqual(diagnostics["calibrated_range"], {"min": 0, "max": 100})
+        self.assertEqual(diagnostics["stroke_zone"], {"min": 25, "max": 95})
+        self.assertEqual(diagnostics["full_travel_mm"], handy.FULL_TRAVEL_MM)
+        self.assertEqual(diagnostics["slide_bounds"], {"min": 5, "max": 75})
+        self.assertEqual(diagnostics["velocity"], 45)
+        self.assertTrue(diagnostics["hamp_started"])
+
     def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
         handy = RecordingHandyController()
         handy.update_settings(10, 80, 0, 0)

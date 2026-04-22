@@ -106,7 +106,7 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None):
         if step.message:
             send_message(step.message)
         update_mood(step.mood)
-        motion_controller.apply_target(step.target)
+        motion_controller.apply_target(step.target, source=f"{mode} mode")
         step_count += 1
         _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event)
 
@@ -150,7 +150,7 @@ def edging_mode_logic(stop_event, services, callbacks):
         if step.message:
             send_message(step.message)
         update_mood(step.mood)
-        motion_controller.apply_target(step.target)
+        motion_controller.apply_target(step.target, source="edging mode")
         _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event)
 
     if not stop_event.is_set():
