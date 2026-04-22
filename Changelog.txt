@@ -8,10 +8,13 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Chat Response Delivery Fix
----------------------------------------
+2026-04-22 - PR #18 - Fix Direct Chat Response Delivery
+--------------------------------------------------------
 
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/18
 Branch: codex-chat-response-hang-fix
+Head commit: d155d56
+Merge commit: 3a18d17
 
 - Changed direct `/send_message` chat replies to return text to the sending
   browser tab immediately instead of relying only on the shared `/get_updates`
