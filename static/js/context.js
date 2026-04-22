@@ -66,6 +66,11 @@ export const el = {
     refreshMotionPatternsBtn: D.getElementById('refresh-motion-patterns-btn'),
     importMotionPatternBtn: D.getElementById('import-motion-pattern-btn'),
     motionPatternImportInput: D.getElementById('motion-pattern-import-input'),
+    motionTrainingStatus: D.getElementById('motion-training-status'),
+    stopMotionTrainingBtn: D.getElementById('stop-motion-training-btn'),
+    motionTrainingFeedbackUp: D.getElementById('motion-training-feedback-up'),
+    motionTrainingFeedbackNeutral: D.getElementById('motion-training-feedback-neutral'),
+    motionTrainingFeedbackDown: D.getElementById('motion-training-feedback-down'),
     setupOverlay: D.getElementById('setup-overlay'),
     setupBox: D.getElementById('setup-box'),
     statusText: D.getElementById('status-text'),
@@ -101,6 +106,7 @@ export const state = {
     ollamaDownloadPolling: false,
     localTtsStatusPolling: false,
     motionPatterns: [],
+    motionTraining: {state: 'idle', pattern_id: '', pattern_name: ''},
 };
 
 export const ctx = el.rhythmCanvas.getContext('2d');

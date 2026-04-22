@@ -4,8 +4,10 @@ import unittest
 from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import (
     PATTERNS,
+    MotionPattern,
     PatternAction,
     expand_anchor_program,
+    expand_motion_pattern,
     expand_pattern,
     inject_intermediate_actions,
     limit_action_delta,
@@ -63,6 +65,29 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreaterEqual(len(frames), 4)
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.stroke_range <= 18 for frame in frames))
+
+    def test_arbitrary_motion_pattern_expands_to_frames(self):
+        pattern = MotionPattern(
+            "custom-loop",
+            (
+                PatternAction(0, 10),
+                PatternAction(200, 90),
+                PatternAction(400, 10),
+            ),
+            window_scale=0.3,
+            interpolation_ms=120,
+        )
+
+        frames = expand_motion_pattern(
+            pattern,
+            MotionTarget(20, 50, 40),
+            MotionTarget(45, 50, 60, "training custom-loop"),
+            rng=random.Random(15),
+        )
+
+        self.assertGreater(len(frames), 3)
+        self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
+        self.assertTrue(all(frame.target.motion_program is None for frame in frames))
 
     def test_pattern_action_normalizer_sorts_dedupes_and_preserves_endpoint(self):
         actions = normalize_actions(

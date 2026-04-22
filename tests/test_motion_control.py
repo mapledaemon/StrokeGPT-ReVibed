@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 from strokegpt.motion import IntentMatcher, MotionController, MotionSanitizer, MotionTarget
 
@@ -9,6 +10,7 @@ class FakeHandy:
         self.last_depth_pos = 30
         self.last_stroke_range = 40
         self.moves = []
+        self.position_moves = []
         self.stopped = False
 
     def move(self, speed, depth, stroke_range):
@@ -16,6 +18,15 @@ class FakeHandy:
         self.last_relative_speed = speed
         self.last_depth_pos = depth
         self.last_stroke_range = stroke_range
+
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None):
+        self.position_moves.append((speed, depth, stop_on_target, velocity))
+        self.last_relative_speed = speed
+        self.last_depth_pos = depth
+        return True
+
+    def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
+        return int(round(speed + abs(end_depth - start_depth) + duration_seconds * 10))
 
     def stop(self):
         self.stopped = True
@@ -201,6 +212,52 @@ class MotionControllerTests(unittest.TestCase):
         controller = MotionController(handy, step_delay=0)
         controller.stop()
         self.assertTrue(handy.stopped)
+
+    def test_apply_frames_can_stop_handy_after_preview_completion(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        frames = [
+            SimpleNamespace(target=MotionTarget(45, 55, 65), delay_factor=0),
+            SimpleNamespace(target=MotionTarget(35, 25, 30), delay_factor=0),
+        ]
+
+        completed = controller.apply_frames(frames, stop_after=True)
+
+        self.assertTrue(completed)
+        self.assertEqual(handy.moves[-1], (35, 25, 30))
+        self.assertTrue(handy.stopped)
+
+    def test_apply_position_frames_uses_exact_pattern_positions(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        frames = [
+            SimpleNamespace(target=MotionTarget(45, 20, 10), delay_factor=0),
+            SimpleNamespace(target=MotionTarget(45, 80, 10), delay_factor=0),
+            SimpleNamespace(target=MotionTarget(30, 35, 10), delay_factor=0),
+        ]
+
+        completed = controller.apply_position_frames(frames, stop_after=True)
+
+        self.assertTrue(completed)
+        self.assertEqual(handy.moves, [])
+        self.assertEqual([move[:3] for move in handy.position_moves], [(45, 20, False), (45, 80, False), (30, 35, False)])
+        self.assertTrue(all(move[3] is not None for move in handy.position_moves))
+        self.assertEqual(handy.last_stroke_range, 40)
+        self.assertTrue(handy.stopped)
+
+    def test_apply_position_frames_uses_final_stop_on_target_without_stop_after(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.1)
+        frames = [
+            SimpleNamespace(target=MotionTarget(40, 25, 10), delay_factor=0),
+            SimpleNamespace(target=MotionTarget(40, 75, 10), delay_factor=0),
+        ]
+
+        completed = controller.apply_position_frames(frames, stop_after=False)
+
+        self.assertTrue(completed)
+        self.assertEqual([move[2] for move in handy.position_moves], [False, True])
+        self.assertFalse(handy.stopped)
 
 
 if __name__ == "__main__":

@@ -57,6 +57,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["motion_pattern_enabled"], {})
+        self.assertEqual(saved["motion_pattern_feedback"], {})
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -72,6 +73,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.local_tts_top_p, 1.0)
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(settings.motion_pattern_enabled, {})
+        self.assertEqual(settings.motion_pattern_feedback, {})
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -88,6 +90,21 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_enabled, {
             "soft-wave": True,
             "bad-id": False,
+        })
+
+    def test_motion_pattern_feedback_map_is_normalized(self):
+        fake_path = FakePath(json.dumps({
+            "motion_pattern_feedback": {
+                " Soft Wave ": {"thumbs_up": "3", "neutral": "bad", "thumbs_down": -1},
+                "ignored": "not a map",
+            },
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertEqual(settings.motion_pattern_feedback, {
+            "soft-wave": {"thumbs_up": 3, "neutral": 0, "thumbs_down": 0},
         })
 
     def test_legacy_model_migrates_to_new_default(self):

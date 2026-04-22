@@ -62,6 +62,48 @@ class HandyControllerTests(unittest.TestCase):
         self.assertLess(slide["min"], slide["max"])
         self.assertEqual(slide, {"min": 98, "max": 100})
 
+    def test_move_to_depth_uses_xava_with_calibrated_position_and_velocity(self):
+        handy = RecordingHandyController()
+        handy.update_settings(20, 80, 10, 90)
+
+        result = handy.move_to_depth(50, 25)
+
+        self.assertTrue(result)
+        self.assertEqual([path for path, _body in handy.commands], ["hdsp/xava"])
+        body = handy.commands[0][1]
+        self.assertEqual(body["velocity"], 50)
+        self.assertAlmostEqual(body["position"], handy.FULL_TRAVEL_MM * 0.3)
+        self.assertTrue(body["stopOnTarget"])
+        self.assertEqual(handy.last_stroke_range, 50)
+
+    def test_move_to_depth_can_keep_intermediate_targets_moving(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 70, 0, 100)
+
+        handy.move_to_depth(50, 75, stop_on_target=False, velocity=18)
+
+        body = handy.commands[0][1]
+        self.assertEqual(body["velocity"], 18)
+        self.assertFalse(body["stopOnTarget"])
+
+    def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 70, 0, 100)
+
+        velocity = handy.velocity_for_depth_interval(50, 0, 100, 0.1)
+
+        self.assertEqual(velocity, 40)
+
+    def test_move_to_depth_stops_hamp_before_position_preview(self):
+        handy = RecordingHandyController()
+        handy.move(50, 50, 50)
+        handy.commands.clear()
+
+        handy.move_to_depth(40, 20)
+
+        self.assertEqual([path for path, _body in handy.commands], ["hamp/stop", "hdsp/xava"])
+        self.assertFalse(handy._hamp_started)
+
     def test_depth_range_runs_low_high_low_once(self):
         handy = RecordingHandyController()
 

@@ -70,6 +70,32 @@ class HandyController:
             return 0.0
         return max(0.0, min(100.0, p))
 
+    def _relative_speed_to_velocity(self, speed):
+        relative_speed_pct = self._safe_percent(speed)
+        speed_range_width = self.max_user_speed - self.min_user_speed
+        velocity = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
+        return int(round(velocity))
+
+    def _relative_depth_to_mm(self, depth):
+        relative_pos_pct = self._safe_percent(depth)
+        calibrated_width = self.max_handy_depth - self.min_handy_depth
+        absolute_pos_pct = self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
+        return self.FULL_TRAVEL_MM * (absolute_pos_pct / 100.0)
+
+    def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
+        max_velocity = self._relative_speed_to_velocity(speed)
+        try:
+            duration_seconds = float(duration_seconds)
+        except (TypeError, ValueError):
+            duration_seconds = 0.0
+        if duration_seconds <= 0:
+            return max_velocity
+
+        distance_mm = abs(self._relative_depth_to_mm(end_depth) - self._relative_depth_to_mm(start_depth))
+        planned_velocity = int(round(distance_mm / duration_seconds))
+        planned_velocity = max(self.min_user_speed, planned_velocity)
+        return min(max_velocity, planned_velocity)
+
     def move(self, speed, depth, stroke_range):
         """
         A simpler move function that expects complete instructions from the AI.
@@ -115,9 +141,7 @@ class HandyController:
         
         # Calculate and set the final velocity
         relative_speed_pct = self._safe_percent(speed)
-        speed_range_width = self.max_user_speed - self.min_user_speed
-        final_physical_speed = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
-        final_physical_speed = int(round(final_physical_speed))
+        final_physical_speed = self._relative_speed_to_velocity(relative_speed_pct)
         
         if not self._send_velocity(final_physical_speed):
             return
@@ -127,6 +151,40 @@ class HandyController:
         self.last_relative_speed = relative_speed_pct
         self.last_depth_pos = int(round(relative_pos_pct))
         self.last_stroke_range = int(round(relative_range_pct))
+
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None):
+        """Move to a single calibrated depth target for pattern previews."""
+        if not self.handy_key:
+            return False
+        if speed is not None and speed == 0:
+            self.stop()
+            return True
+        if speed is None or depth is None:
+            print("[WARN] Incomplete position move received, ignoring.")
+            return False
+
+        if self._hamp_started:
+            if not self._send_command("hamp/stop"):
+                return False
+            self._hamp_started = False
+            self._reset_motion_cache()
+
+        relative_speed_pct = self._safe_percent(speed)
+        relative_pos_pct = self._safe_percent(depth)
+        if velocity is None:
+            velocity = self._relative_speed_to_velocity(relative_speed_pct)
+        else:
+            velocity = max(self.min_user_speed, min(self._relative_speed_to_velocity(relative_speed_pct), int(round(velocity))))
+        position = self._relative_depth_to_mm(relative_pos_pct)
+        body = {"position": position, "velocity": velocity, "stopOnTarget": bool(stop_on_target)}
+        if not self._send_command("hdsp/xava", body):
+            return False
+
+        self._current_mode = None
+        self.last_stroke_speed = velocity
+        self.last_relative_speed = relative_speed_pct
+        self.last_depth_pos = int(round(relative_pos_pct))
+        return True
 
     def _normalize_slide_bounds(self, slide_min, slide_max):
         slide_min = max(0, min(100, int(round(slide_min))))

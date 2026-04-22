@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -131,10 +132,14 @@ class PatternLibraryTests(unittest.TestCase):
         with temporary_pattern_dir() as temp_dir:
             library = PatternLibrary(temp_dir)
 
-            catalog = library.catalog({"stroke": False})
+            catalog = library.catalog(
+                {"stroke": False},
+                {"stroke": {"thumbs_up": 4, "neutral": 1, "thumbs_down": 2}},
+            )
             stroke = next(pattern for pattern in catalog["patterns"] if pattern["id"] == "stroke")
 
             self.assertFalse(stroke["enabled"])
+            self.assertEqual(stroke["feedback"], {"thumbs_up": 4, "neutral": 1, "thumbs_down": 2})
 
 
 @unittest.skipIf(MISSING_WEB_MODULES, f"missing app dependencies: {', '.join(MISSING_WEB_MODULES)}")
@@ -151,15 +156,49 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.temp_dir = temporary_pattern_dir()
         self.original_library = self.web.motion_pattern_library
         self.original_pattern_enabled = dict(self.web.settings.motion_pattern_enabled)
+        self.original_pattern_feedback = dict(self.web.settings.motion_pattern_feedback)
         self.original_settings_save = self.web.settings.save
+        self.original_handy_key = self.web.handy.handy_key
+        self.original_handy_state = (
+            self.web.handy.last_stroke_speed,
+            self.web.handy.last_relative_speed,
+            self.web.handy.last_depth_pos,
+            self.web.handy.last_stroke_range,
+        )
+        self.original_apply_frames = self.web.motion.apply_frames
+        self.original_apply_position_frames = self.web.motion.apply_position_frames
+        self.original_motion_stop = self.web.motion.stop
+        self.stop_calls = []
         self.web.motion_pattern_library = PatternLibrary(self.temp_dir.name)
         self.web.settings.motion_pattern_enabled = {}
+        self.web.settings.motion_pattern_feedback = {}
         self.web.settings.save = lambda *args, **kwargs: None
+        self.web.motion.stop = lambda: self.stop_calls.append("stopped")
+        self.web._set_motion_training_state(
+            state="idle",
+            pattern_id="",
+            pattern_name="",
+            message="Motion training idle.",
+            last_feedback="",
+        )
+        self.web.motion_training_stop_event.clear()
 
     def tearDown(self):
+        self.web._stop_motion_training()
         self.web.motion_pattern_library = self.original_library
         self.web.settings.motion_pattern_enabled = self.original_pattern_enabled
+        self.web.settings.motion_pattern_feedback = self.original_pattern_feedback
         self.web.settings.save = self.original_settings_save
+        self.web.handy.handy_key = self.original_handy_key
+        (
+            self.web.handy.last_stroke_speed,
+            self.web.handy.last_relative_speed,
+            self.web.handy.last_depth_pos,
+            self.web.handy.last_stroke_range,
+        ) = self.original_handy_state
+        self.web.motion.apply_frames = self.original_apply_frames
+        self.web.motion.apply_position_frames = self.original_apply_position_frames
+        self.web.motion.stop = self.original_motion_stop
         self.temp_dir.cleanup()
 
     def test_catalog_and_detail_routes_expose_builtin_patterns(self):
@@ -221,6 +260,89 @@ class MotionPatternRouteTests(unittest.TestCase):
 
         catalog_stroke = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "stroke")
         self.assertFalse(catalog_stroke["enabled"])
+
+    def test_training_start_routes_pattern_through_motion_controller(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+
+        def fake_apply_position_frames(frames, *, stop_after=False):
+            calls.append({"frames": frames, "stop_after": stop_after})
+            if stop_after:
+                self.web.motion.stop()
+            return True
+
+        self.web.motion.apply_position_frames = fake_apply_position_frames
+
+        response = self.client.post("/motion_training/start", json={"pattern_id": "stroke"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "started")
+        self.assertEqual(data["motion_training"]["pattern_id"], "stroke")
+        for _ in range(10):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        self.assertTrue(calls[0]["stop_after"])
+        self.assertGreater(len(calls[0]["frames"]), 1)
+        self.assertEqual(self.stop_calls, ["stopped"])
+
+    def test_training_start_uses_selected_pattern_shape(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+
+        def fake_apply_position_frames(frames, *, stop_after=False):
+            calls.append(tuple(round(frame.target.depth) for frame in frames))
+            if stop_after:
+                self.web.motion.stop()
+            return True
+
+        self.web.motion.apply_position_frames = fake_apply_position_frames
+
+        for pattern_id in ("stroke", "tease"):
+            response = self.client.post("/motion_training/start", json={"pattern_id": pattern_id})
+            self.assertEqual(response.status_code, 200)
+            for _ in range(20):
+                if len(calls) > (1 if pattern_id == "tease" else 0):
+                    break
+                time.sleep(0.02)
+            for _ in range(20):
+                thread = self.web.motion_training_thread
+                if not thread or not thread.is_alive():
+                    break
+                time.sleep(0.02)
+
+        self.assertEqual(len(calls), 2)
+        self.assertNotEqual(calls[0], calls[1])
+
+    def test_training_target_does_not_collapse_after_position_preview(self):
+        record = self.web.motion_pattern_library.get_record("stroke")
+        self.web.handy.last_relative_speed = 0
+        self.web.handy.last_depth_pos = 50
+        self.web.handy.last_stroke_range = 5
+
+        target = self.web._training_target_for_record(record)
+
+        self.assertEqual(target.speed, 35)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 50)
+
+    def test_training_stop_calls_motion_stop(self):
+        response = self.client.post("/motion_training/stop")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "stopped")
+        self.assertEqual(self.stop_calls, ["stopped"])
+
+    def test_training_feedback_persists_without_llm_changes(self):
+        response = self.client.post("/motion_training/stroke/feedback", json={"rating": "thumbs_up"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["feedback"]["thumbs_up"], 1)
+        self.assertEqual(self.web.settings.motion_pattern_feedback["stroke"]["thumbs_up"], 1)
 
 
 if __name__ == "__main__":
