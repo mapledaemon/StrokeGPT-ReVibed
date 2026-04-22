@@ -14,39 +14,20 @@ Complexity key:
 
 ## Best Next Targets
 
-### 1. Diagnostics And Verbosity Controls (S/M)
-
-Why next: recent motion observability work already exposes useful data, so the
-app can make runtime state more visible without changing motion behavior.
-
-- Add user-visible verbosity levels for motion diagnostics and Ollama
-  diagnostics.
-- Keep the default compact, with higher motion verbosity showing the active
-  motion source, pattern/name, backend, Handy timing, latency, connection state,
-  and available position diagnostics.
-- Let higher Ollama verbosity expose the latest local provider status and raw
-  returned content where available, including model-emitted thinking text if the
-  local model returns it in the response body.
-- Keep debug output local and inspectable; do not treat raw diagnostics as
-  hidden memory or prompt context.
-- Reuse the existing `/get_status` motion observability payload before adding
-  another polling path.
-
-### 2. Feedback Governance And Pattern Library (M)
+### 1. Feedback Reset And Pattern History (S/M)
 
 Why next: feedback currently affects model-visible pattern weights, so users
-need full control over any automatic changes.
+need full control over history, reset, and recovery paths.
 
-- Make feedback changes visible in Settings, including numeric weights,
-  enablement, and feedback counts.
 - Add clearer feedback-history indicators for fixed and trained patterns.
 - Add a reset path for individual pattern feedback without clearing the whole
   motion preference set.
-- Keep disabled motion patterns out of LLM-visible pattern preferences.
-- Keep fixed/generated pattern files importable, exportable, and shareable from
-  the larger Motion Training workspace rather than crowding compact Settings.
+- Add a small audit surface for recent pattern feedback changes so users can
+  see which pattern a chat thumbs-up/down affected.
+- Keep compact Motion settings focused on management: enablement, weights,
+  feedback history/reset, import/export, and status.
 
-### 3. Motion Vocabulary And Preset Semantics (S/M)
+### 2. Motion Vocabulary And Preset Semantics (S/M)
 
 Why next: consistent terms make both deterministic commands and LLM outputs less
 surprising before deeper pattern generation work.
@@ -67,6 +48,28 @@ surprising before deeper pattern generation work.
   context.
 - Let preset modes speak occasionally without turning mode timers into repeated
   narration.
+
+### 3. Tip And Base Calibration Restoration (M/L)
+
+Why next: scripted and preset motion feel depends on where the device's user
+specific tip and base positions actually are; the current stroke range control
+is still useful, but it should not be the only calibration mechanism.
+
+- Restore user-facing tip and base calibration points as settings separate
+  from global stroke range and speed limits.
+- Use calibrated tip/base anchors when translating zones, fixed patterns,
+  Edge/Milk scripts, imported patterns, trained patterns, and LLM motion
+  targets into Handy motion.
+- Preserve stroke range as a safety/comfort envelope: calibration defines the
+  physical tip/base mapping, while range controls how much of that calibrated
+  space a move is allowed to use.
+- Add a setup/recalibration flow with preview/test moves, clear labels, and a
+  reset path back to conservative defaults.
+- Migrate existing settings conservatively so current users keep equivalent
+  motion until they intentionally recalibrate.
+- Keep HAMP continuous and experimental position/script playback honoring the
+  same calibration mapping without bypassing smoothing, stop behavior, or user
+  speed limits.
 
 ### 4. Motion Style Preferences (M)
 
@@ -146,8 +149,8 @@ context, so it should follow runtime diagnostics and motion vocabulary cleanup.
 
 ### 9. Runtime And Setup Diagnostics (M)
 
-Why later: broader setup checks should follow the first diagnostics verbosity
-slice.
+Why later: broader setup checks should build on the completed diagnostics
+verbosity slice without turning the compact status UI into a setup console.
 
 - Add a diagnostics tab for Ollama status, selected model install state, local
   voice model state, Torch/CUDA status, Handy key presence, active port, and

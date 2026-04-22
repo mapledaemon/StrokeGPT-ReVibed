@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #34 - Clean Completed Roadmap Items
+----------------------------------------------------
+
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/34
+
+Branch: codex-roadmap-completed-cleanup
+
+- Removed the completed diagnostics verbosity target from `ROADMAP.md` after
+  PR #33 shipped the motion/Ollama verbosity controls and status output.
+- Narrowed the feedback and pattern-library roadmap entry to the remaining
+  future work: feedback history indicators, per-pattern reset, and audit
+  visibility.
+- Kept the tip/base calibration restoration entry as future work and preserved
+  the roadmap as a future-work-only backlog.
+
+
 2026-04-22 - PR #33 - Add Diagnostics Verbosity Controls
 ---------------------------------------------------------
 
