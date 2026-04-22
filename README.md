@@ -366,19 +366,14 @@ This project is free and open source, developed and maintained in my spare time 
 
 Your donation mainly helps cover token cost, which heavily limits development speed at the moment given the compute shortage. It also helps me afford hardware replacements in this challenging environment.
 
-<table>
-  <tr>
-    <th>Ethereum</th>
-    <th>Bitcoin</th>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="./static/ethereum-qr.svg" alt="Ethereum donation QR code" width="150" height="150"><br>
-      <code>0x1319841646b196F81283<br>a1bf08d8a0256Cdd414B</code>
-    </td>
-    <td align="center">
-      <img src="./static/bitcoin-qr.svg" alt="Bitcoin donation QR code" width="150" height="150"><br>
-      <code>bc1pwqvmmzhdnmgp3px7l0<br>ltsrrjk7hzlppnhhk6fm3e2l24<br>xdvgpd7srm5zg6</code>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <strong>Ethereum</strong><br>
+  <img src="./static/ethereum-qr.svg" alt="Ethereum donation QR code" width="132" height="132"><br>
+  <code>0x1319841646b196F81283<br>a1bf08d8a0256Cdd414B</code>
+</p>
+
+<p align="center">
+  <strong>Bitcoin</strong><br>
+  <img src="./static/bitcoin-qr.svg" alt="Bitcoin donation QR code" width="132" height="132"><br>
+  <code>bc1pwqvmmzhdnmgp3px7l0<br>ltsrrjk7hzlppnhhk6fm3e2l24<br>xdvgpd7srm5zg6</code>
+</p>
