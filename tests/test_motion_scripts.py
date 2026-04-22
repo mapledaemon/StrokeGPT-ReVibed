@@ -89,6 +89,41 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.motion_program is None for frame in frames))
 
+    def test_motion_pattern_tempo_scale_changes_frame_cadence(self):
+        actions = (
+            PatternAction(0, 10),
+            PatternAction(200, 90),
+            PatternAction(400, 10),
+        )
+        target = MotionTarget(45, 50, 60, "training tempo")
+
+        normal_frames = expand_motion_pattern(
+            MotionPattern("normal", actions, tempo_scale=1.0),
+            MotionTarget(20, 50, 40),
+            target,
+            rng=random.Random(16),
+        )
+        faster_frames = expand_motion_pattern(
+            MotionPattern("faster", actions, tempo_scale=2.0),
+            MotionTarget(20, 50, 40),
+            target,
+            rng=random.Random(16),
+        )
+        slower_frames = expand_motion_pattern(
+            MotionPattern("slower", actions, tempo_scale=0.5),
+            MotionTarget(20, 50, 40),
+            target,
+            rng=random.Random(16),
+        )
+
+        self.assertEqual(
+            [round(frame.target.depth, 2) for frame in faster_frames],
+            [round(frame.target.depth, 2) for frame in normal_frames],
+        )
+        normal_delay = sum(frame.delay_factor for frame in normal_frames)
+        self.assertLess(sum(frame.delay_factor for frame in faster_frames), normal_delay)
+        self.assertGreater(sum(frame.delay_factor for frame in slower_frames), normal_delay)
+
     def test_pattern_action_normalizer_sorts_dedupes_and_preserves_endpoint(self):
         actions = normalize_actions(
             (

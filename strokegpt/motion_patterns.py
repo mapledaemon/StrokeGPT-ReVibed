@@ -23,6 +23,7 @@ class MotionPattern:
     actions: tuple[PatternAction, ...]
     window_scale: float = 0.3
     speed_scale: float = 1.0
+    tempo_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
     repeat: int = 1
@@ -50,6 +51,7 @@ class FrameStyle:
     name: str
     window_scale: float = 0.3
     speed_scale: float = 1.0
+    tempo_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
 
@@ -517,6 +519,7 @@ def _actions_to_frames(
     frames = []
     duration_ms = _duration_ms(actions)
     previous_at = actions[0].at
+    tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
     for index, action in enumerate(actions):
         if index == 0:
             delay_factor = 0.4
@@ -524,6 +527,7 @@ def _actions_to_frames(
             interval_ratio = max(0.05, (action.at - previous_at) / duration_ms)
             delay_factor = _clamp(interval_ratio * 3.0, 0.15, 1.1)
         previous_at = action.at
+        delay_factor = _clamp(delay_factor / tempo_scale, 0.08, 1.8)
 
         normalized_pos = _clamp(action.pos) / 100.0
         depth = shallow + (deep - shallow) * normalized_pos
@@ -579,6 +583,7 @@ def expand_motion_pattern(
             name=pattern.name,
             window_scale=pattern.window_scale,
             speed_scale=pattern.speed_scale,
+            tempo_scale=pattern.tempo_scale,
             depth_jitter=pattern.depth_jitter,
             range_jitter=pattern.range_jitter,
         ),

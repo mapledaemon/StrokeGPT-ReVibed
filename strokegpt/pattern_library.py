@@ -112,6 +112,7 @@ class PatternRecord:
     actions: tuple[PatternAction, ...]
     window_scale: float = 0.3
     speed_scale: float = 1.0
+    tempo_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
     repeat: int = 1
@@ -136,6 +137,7 @@ class PatternRecord:
             self.actions,
             window_scale=self.window_scale,
             speed_scale=self.speed_scale,
+            tempo_scale=self.tempo_scale,
             depth_jitter=self.depth_jitter,
             range_jitter=self.range_jitter,
             repeat=self.repeat,
@@ -157,6 +159,7 @@ class PatternRecord:
             "style": {
                 "window_scale": self.window_scale,
                 "speed_scale": self.speed_scale,
+                "tempo_scale": self.tempo_scale,
                 "depth_jitter": self.depth_jitter,
                 "range_jitter": self.range_jitter,
                 "repeat": self.repeat,
@@ -207,6 +210,7 @@ def _style_from_payload(payload):
     return {
         "window_scale": _clamp_float(style.get("window_scale", payload.get("window_scale")), 0.05, 1.0, 0.3),
         "speed_scale": _clamp_float(style.get("speed_scale", payload.get("speed_scale")), 0.1, 2.0, 1.0),
+        "tempo_scale": _clamp_float(style.get("tempo_scale", payload.get("tempo_scale")), 0.25, 4.0, 1.0),
         "depth_jitter": _clamp_float(style.get("depth_jitter", payload.get("depth_jitter")), 0.0, 30.0, 0.0),
         "range_jitter": _clamp_float(style.get("range_jitter", payload.get("range_jitter")), 0.0, 30.0, 0.0),
         "repeat": _clamp_int(style.get("repeat", payload.get("repeat")), 1, 20, 1),
@@ -233,6 +237,7 @@ def record_from_motion_pattern(pattern_id, pattern):
         actions=tuple(pattern.actions),
         window_scale=pattern.window_scale,
         speed_scale=pattern.speed_scale,
+        tempo_scale=pattern.tempo_scale,
         depth_jitter=pattern.depth_jitter,
         range_jitter=pattern.range_jitter,
         repeat=pattern.repeat,
@@ -367,13 +372,13 @@ class PatternLibrary:
             raise PatternValidationError(f"Could not save pattern file: {exc}") from exc
         return path
 
-    def import_payload(self, payload, *, filename="pattern.json"):
+    def import_payload(self, payload, *, filename="pattern.json", source_override="imported"):
         fallback = slugify_pattern_id(Path(filename or "pattern").stem, fallback="pattern")
-        record = record_from_payload(payload, fallback_id=fallback, source_override="imported", readonly=False)
+        record = record_from_payload(payload, fallback_id=fallback, source_override=source_override, readonly=False)
         unique_id = self._unique_id(record.pattern_id)
         if unique_id != record.pattern_id:
             export = record.to_export_dict()
             export["id"] = unique_id
-            record = record_from_payload(export, fallback_id=unique_id, source_override="imported", readonly=False)
+            record = record_from_payload(export, fallback_id=unique_id, source_override=source_override, readonly=False)
         self.save_user_pattern(record)
         return record

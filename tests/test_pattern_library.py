@@ -43,6 +43,7 @@ class PatternLibraryTests(unittest.TestCase):
             "style": {
                 "window_scale": 2.0,
                 "speed_scale": 0.01,
+                "tempo_scale": 9.0,
                 "repeat": 30,
                 "interpolation": "unknown",
                 "max_step_delta": 200,
@@ -63,9 +64,11 @@ class PatternLibraryTests(unittest.TestCase):
         self.assertEqual([action.pos for action in record.actions], [0, 60.0, 100])
         self.assertEqual(record.window_scale, 1.0)
         self.assertEqual(record.speed_scale, 0.1)
+        self.assertEqual(record.tempo_scale, 4.0)
         self.assertEqual(record.repeat, 20)
         self.assertEqual(record.interpolation, "cosine")
         self.assertEqual(record.max_step_delta, 100.0)
+        self.assertEqual(record.to_export_dict()["style"]["tempo_scale"], 4.0)
         self.assertEqual(record.tags, ("smooth", "training"))
         self.assertEqual(record.feedback["thumbs_up"], 2)
         self.assertEqual(record.feedback["neutral"], 0)
@@ -117,6 +120,25 @@ class PatternLibraryTests(unittest.TestCase):
 
             self.assertEqual(first.pattern_id, "repeat-me")
             self.assertEqual(second.pattern_id, "repeat-me-2")
+
+    def test_library_can_save_trained_pattern_source(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+            record = library.import_payload(
+                {
+                    "id": "trained-loop",
+                    "name": "Trained Loop",
+                    "style": {"tempo_scale": 1.7},
+                    "actions": [{"at": 0, "pos": 20}, {"at": 240, "pos": 80}],
+                },
+                filename="trained-loop.json",
+                source_override="trained",
+            )
+
+            self.assertEqual(record.source, "trained")
+            exported = json.loads((Path(temp_dir) / f"trained-loop{PATTERN_FILE_SUFFIX}").read_text(encoding="utf-8"))
+            self.assertEqual(exported["source"], "trained")
+            self.assertEqual(exported["style"]["tempo_scale"], 1.7)
 
     def test_library_reports_invalid_user_pattern_files_without_breaking_catalog(self):
         with temporary_pattern_dir() as temp_dir:
@@ -287,6 +309,55 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertTrue(calls[0]["stop_after"])
         self.assertGreater(len(calls[0]["frames"]), 1)
         self.assertEqual(self.stop_calls, ["stopped"])
+
+    def test_training_preview_routes_unsaved_pattern_without_writing_file(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+
+        def fake_apply_position_frames(frames, *, stop_after=False):
+            calls.append({"frames": frames, "stop_after": stop_after})
+            if stop_after:
+                self.web.motion.stop()
+            return True
+
+        self.web.motion.apply_position_frames = fake_apply_position_frames
+        response = self.client.post("/motion_training/preview", json={
+            "pattern": {
+                "id": "edited-preview",
+                "name": "Edited Preview",
+                "actions": [{"at": 0, "pos": 15}, {"at": 180, "pos": 85}, {"at": 360, "pos": 25}],
+            }
+        })
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "started")
+        self.assertTrue(data["motion_training"]["preview"])
+        self.assertEqual(data["motion_training"]["pattern_id"], "edited-preview")
+        for _ in range(10):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        self.assertTrue(calls[0]["stop_after"])
+        self.assertEqual(tuple(Path(self.temp_dir.name).iterdir()), ())
+
+    def test_save_generated_pattern_writes_trained_pattern_file(self):
+        response = self.client.post("/motion_patterns/save_generated", json={
+            "pattern": {
+                "id": "edited-copy",
+                "name": "Edited Copy",
+                "actions": [{"at": 0, "pos": 10}, {"at": 250, "pos": 90}, {"at": 500, "pos": 30}],
+            }
+        })
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["id"], "edited-copy")
+        self.assertEqual(data["pattern"]["source"], "trained")
+        self.assertTrue((Path(self.temp_dir.name) / f"edited-copy{PATTERN_FILE_SUFFIX}").exists())
+        self.assertIn("edited-copy", {pattern["id"] for pattern in data["motion_patterns"]["patterns"]})
 
     def test_training_start_uses_selected_pattern_shape(self):
         calls = []
