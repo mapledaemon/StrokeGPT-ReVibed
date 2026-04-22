@@ -8,10 +8,14 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Motion Observability
----------------------------------
+2026-04-22 - PR #29 - Add Motion Observability UI
+--------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/29
 
 Branch: codex-motion-observability
+Head commit: e5032cd
+Merge commit: ee05961
 
 - Added a live motion observability payload to `/get_status` with active
   backend, command source, label, recent command trace, playback state, and
