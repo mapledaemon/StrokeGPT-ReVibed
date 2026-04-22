@@ -128,6 +128,42 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             audio_response.close()
 
+    def test_send_message_returns_fallback_when_llm_omits_chat(self):
+        from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        messages_for_ui.clear()
+        chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with mock.patch.object(llm, "get_chat_response", return_value={"move": None, "new_mood": None}), \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["chat_queued"])
+            self.assertIn("no chat text", data["chat"])
+
+            updates = self.client.get("/get_updates")
+            try:
+                queued = updates.get_json()["messages"]
+            finally:
+                updates.close()
+            self.assertEqual(queued, [])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            messages_for_ui.clear()
+            chat_history.clear()
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:
@@ -198,6 +234,16 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function appendMessageText", script)
         self.assertIn("D.createTextNode", script)
         self.assertNotIn('message-bubble">${text}', script)
+
+    def test_send_message_clears_typing_indicator_on_non_chat_statuses(self):
+        script = self.frontend_scripts()
+
+        self.assertIn("function clearTypingIndicator", script)
+        self.assertIn("no_key_set", script)
+        self.assertIn("message_relayed_to_active_mode", script)
+        self.assertIn("addChatMessage('BOT', data.chat)", script)
+        self.assertIn("data.chat_queued === false", script)
+        self.assertIn("await pollChatUpdates()", script)
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")

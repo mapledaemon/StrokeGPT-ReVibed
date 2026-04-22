@@ -451,8 +451,9 @@ def get_current_context():
             context['edging_elapsed_time'] = f"{minutes}m {seconds}s"
     return context
 
-def add_message_to_queue(text, add_to_history=True):
-    messages_for_ui.append(text)
+def add_message_to_queue(text, add_to_history=True, queue_message=True):
+    if queue_message:
+        messages_for_ui.append(text)
     if add_to_history:
         clean_text = re.sub(r'<[^>]+>', '', text).strip()
         if clean_text: chat_history.append({"role": "assistant", "content": clean_text})
@@ -562,7 +563,22 @@ def handle_user_message():
         mode_message_queue.append(user_input)
         return jsonify({"status": "message_relayed_to_active_mode"})
     
-    llm_response = llm.get_chat_response(chat_history, get_current_context())
+    try:
+        llm_response = llm.get_chat_response(chat_history, get_current_context())
+    except Exception as exc:
+        print(f"[ERROR] LLM request failed: {exc}")
+        llm_response = {
+            "chat": f"LLM request failed: {exc}",
+            "move": None,
+            "new_mood": None,
+        }
+    if not isinstance(llm_response, dict):
+        print(f"[WARN] LLM returned non-dict response: {llm_response!r}")
+        llm_response = {
+            "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
+            "move": None,
+            "new_mood": None,
+        }
     
     if special_persona_mode is not None:
         special_persona_interactions_left -= 1
@@ -570,11 +586,20 @@ def handle_user_message():
             special_persona_mode = None
             add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
 
-    if chat_text := llm_response.get("chat"): add_message_to_queue(chat_text)
+    raw_chat_text = llm_response.get("chat")
+    chat_text = str(raw_chat_text or "").strip()
+    if not chat_text:
+        print(f"[WARN] LLM response did not include chat text: {llm_response!r}")
+        chat_text = "The local model returned movement data but no chat text. Check Ollama model status and try again."
+    add_message_to_queue(
+        chat_text,
+        add_to_history=bool(str(raw_chat_text or "").strip()),
+        queue_message=False,
+    )
     if new_mood := llm_response.get("new_mood"): global current_mood; current_mood = new_mood
     if not auto_mode_active_task and (move := llm_response.get("move")):
         motion.apply_llm_move(move)
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "chat": chat_text, "chat_queued": False})
 
 @app.route('/check_settings')
 def check_settings_route():
