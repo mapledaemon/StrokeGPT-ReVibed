@@ -2,7 +2,17 @@ import random
 import unittest
 
 from strokegpt.motion import MotionTarget
-from strokegpt.motion_patterns import expand_pattern, pattern_names
+from strokegpt.motion_patterns import (
+    PATTERNS,
+    PatternAction,
+    expand_pattern,
+    inject_intermediate_actions,
+    limit_action_delta,
+    normalize_actions,
+    pattern_names,
+    prepare_pattern_actions,
+    repeat_actions,
+)
 from strokegpt.motion_scripts import MotionScriptPlanner
 
 
@@ -51,6 +61,60 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.stroke_range <= 18 for frame in frames))
 
+    def test_pattern_action_normalizer_sorts_dedupes_and_preserves_endpoint(self):
+        actions = normalize_actions(
+            (
+                {"at": 100, "pos": 10},
+                {"at": 0, "pos": -20},
+                {"at": 100, "pos": 20},
+                {"at": 130, "pos": 30},
+                {"at": 250, "pos": 120},
+            ),
+            min_interval_ms=80,
+        )
+
+        self.assertEqual(actions, (PatternAction(0, 0), PatternAction(100, 20), PatternAction(250, 100)))
+
+    def test_dynamic_injection_adds_eased_intermediate_actions(self):
+        actions = inject_intermediate_actions(
+            (PatternAction(0, 100), PatternAction(400, 0)),
+            target_interval_ms=100,
+            interpolation="cosine",
+            speed_adaptive=False,
+        )
+
+        self.assertEqual(actions[0], PatternAction(0, 100))
+        self.assertEqual(actions[-1], PatternAction(400, 0))
+        self.assertEqual([action.at for action in actions], [0, 100, 200, 300, 400])
+        self.assertLess(actions[1].pos, 100)
+        self.assertGreater(actions[1].pos, actions[2].pos)
+
+    def test_repeat_actions_extends_shape_without_duplicate_seam(self):
+        actions = repeat_actions(
+            (PatternAction(0, 10), PatternAction(50, 80), PatternAction(100, 10)),
+            repeats=2,
+        )
+
+        self.assertEqual([action.at for action in actions], [0, 50, 100, 150, 200])
+        self.assertEqual([action.pos for action in actions], [10, 80, 10, 80, 10])
+
+    def test_action_delta_limiter_softens_large_jumps(self):
+        actions = limit_action_delta((PatternAction(0, 0), PatternAction(100, 100)), max_step_delta=25)
+
+        deltas = [abs(end.pos - start.pos) for start, end in zip(actions, actions[1:])]
+        self.assertGreater(len(actions), 2)
+        self.assertTrue(all(delta <= 25 for delta in deltas))
+
+    def test_prepared_patterns_keep_large_step_limiter_points(self):
+        for name in ("flutter", "ladder", "surge"):
+            with self.subTest(name=name):
+                pattern = PATTERNS[name]
+                actions = prepare_pattern_actions(pattern)
+                deltas = [abs(end.pos - start.pos) for start, end in zip(actions, actions[1:])]
+
+                self.assertTrue(deltas)
+                self.assertTrue(all(delta <= pattern.max_step_delta for delta in deltas))
+
     def test_hold_pattern_still_alternates_position(self):
         frames = expand_pattern(
             "hold",
@@ -61,6 +125,20 @@ class MotionScriptPlannerTests(unittest.TestCase):
 
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.speed > 0 for frame in frames))
+
+    def test_new_smooth_patterns_expand_to_multi_frame_sequences(self):
+        for name in ("flutter", "ladder", "surge", "sway"):
+            with self.subTest(name=name):
+                self.assertIn(name, pattern_names())
+                frames = expand_pattern(
+                    name,
+                    MotionTarget(30, 40, 50),
+                    MotionTarget(50, 50, 60, name),
+                    rng=random.Random(11),
+                )
+                self.assertGreater(len(frames), 4)
+                self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
+                self.assertLessEqual(sum(frame.delay_factor for frame in frames), 3.75)
 
     def test_feedback_pattern_expands_to_smooth_sequence(self):
         planner = MotionScriptPlanner("auto", rng=random.Random(8))

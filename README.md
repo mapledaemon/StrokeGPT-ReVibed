@@ -244,7 +244,9 @@ You can adjust:
 - Edging mode timing
 - Milking mode timing
 
-The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, pulse, wave, ramp, and tease. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
+The motion connector accepts direct numeric movement requests from the model and named cues such as tip, base, full, flick, flutter, pulse, wave, ramp, ladder, surge, sway, and tease. Those cues are translated into Handy movement targets while preserving the configured speed limits and stop behavior.
+
+Named motion patterns are prepared through a small funscript-style action pipeline before they are sent to the motion controller. The app sorts and deduplicates action points, smooths sparse patterns with eased intermediate points, repeats reusable shapes without stopping at the seam, limits large position jumps, and removes redundant straight-line points.
 
 Start conservatively. The Handy can be intense even at low speed values.
 

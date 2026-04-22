@@ -55,6 +55,23 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertLessEqual(intent.target.stroke_range, 18)
         self.assertGreaterEqual(intent.target.speed, 55)
 
+    def test_tip_flutter_maps_to_tight_fast_variation(self):
+        intent = self.matcher.parse("flutter at the tip", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("flutter", intent.matched)
+        self.assertLessEqual(intent.target.depth, 12)
+        self.assertLessEqual(intent.target.stroke_range, 16)
+        self.assertGreaterEqual(intent.target.speed, 58)
+
+    def test_smooth_alternation_maps_to_wide_sway(self):
+        intent = self.matcher.parse("smoothly alternate across the middle", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("sway", intent.matched)
+        self.assertEqual(intent.target.depth, 50)
+        self.assertGreaterEqual(intent.target.stroke_range, 55)
+
     def test_base_half_maps_to_deep_half_length(self):
         intent = self.matcher.parse("use the base half", self.current)
 

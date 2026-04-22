@@ -57,8 +57,11 @@ Candidate local ASR providers:
 ## Motion, Patterns, And Visualization
 
 - Add a small pattern browser/editor for reusable motion shapes.
-- Import and normalize useful funscript-style patterns into internal movement
-  targets.
+- Build on the internal funscript-style action pipeline with user-visible
+  controls for smoothing, repeat count, large-step limiting, and point
+  simplification.
+- Import user-provided `.funscript` snippets into internal movement targets
+  after license/attribution and preview concerns are resolved.
 - Add a pattern evaluation view that visualizes speed, depth, range, and zone
   changes before sending anything to The Handy.
 - Add Handy position visualization that shows current reported position, target
@@ -69,6 +72,9 @@ Candidate local ASR providers:
   base, full length, short stroke, half length, and smooth alternation.
 - Keep range changes continuous. A single range should not become a static
   pattern unless the user explicitly asks to edge, hold, or pause.
+- Add pattern transform presets inspired by funscript tooling: remap range,
+  halve/double timing, smooth sparse actions, repeat a stroke shape, and apply
+  subtle randomized variation with a preview before playback.
 - Add command-focused tests for stop, faster, slower, tip, base, full stroke,
   edge, hold, and ambiguous motion requests.
 

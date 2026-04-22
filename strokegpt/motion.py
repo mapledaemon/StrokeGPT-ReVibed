@@ -110,11 +110,15 @@ LENGTH_PATTERNS = (
 )
 
 PATTERN_PATTERNS = (
-    ("flick", (r"\bflicks?\b", r"\bflutter\b", r"\bsnap\b")),
+    ("flutter", (r"\bflutter\b", r"\bstutter\b", r"\bquick\s+little\s+pulses?\b")),
+    ("flick", (r"\bflicks?\b", r"\bsnap\b")),
     ("pulse", (r"\bpuls(?:e|ing)\b", r"\bpump(?:ing)?\b")),
     ("hold", (r"\bhold\b", r"\bpress\b", r"\bgrind\b")),
     ("wave", (r"\bwave\b", r"\brolling\b", r"\boscillat(?:e|ing)\b")),
     ("ramp", (r"\bramp\b", r"\bclimb\b", r"\bbuild\b")),
+    ("ladder", (r"\bladder\b", r"\bstep(?:ped|s)?\b")),
+    ("surge", (r"\bsurge\b", r"\bswell\b", r"\bcrescendo\b")),
+    ("sway", (r"\bsway\b", r"\balternat(?:e|ing)\b", r"\bsmooth\s+alternation\b")),
     ("tease", (r"\btease\b", r"\bedge\b")),
     ("stroke", (r"\bstroke\b", r"\bstroking\b")),
 )
@@ -197,7 +201,10 @@ def _target_from_cues(
     if cues.speed_hint:
         next_speed = SPEED_DEFAULTS[cues.speed_hint]
 
-    if cues.pattern == "flick":
+    if cues.pattern == "flutter":
+        next_speed = max(next_speed, 58.0)
+        next_range = min(next_range, 16.0)
+    elif cues.pattern == "flick":
         next_speed = max(next_speed, 55.0)
         next_range = min(next_range, 18.0)
     elif cues.pattern == "pulse":
@@ -211,6 +218,15 @@ def _target_from_cues(
     elif cues.pattern == "ramp":
         next_speed = max(next_speed, 38.0)
         next_range = max(next_range, 50.0)
+    elif cues.pattern == "ladder":
+        next_speed = max(next_speed, 40.0)
+        next_range = max(next_range, 45.0)
+    elif cues.pattern == "surge":
+        next_speed = max(next_speed, 46.0)
+        next_range = max(next_range, 60.0)
+    elif cues.pattern == "sway":
+        next_speed = max(next_speed, 34.0)
+        next_range = max(next_range, 55.0)
     elif cues.pattern == "tease":
         next_speed = min(max(next_speed, 22.0), 38.0)
         next_range = min(next_range, 28.0)
