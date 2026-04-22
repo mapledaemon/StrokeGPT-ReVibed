@@ -116,8 +116,9 @@ Candidate local ASR providers:
 
 ## Frontend And Test Maintainability
 
-- Split `static/app.js` into smaller modules for settings, chat, audio, device
-  control, motion control, and setup.
+- Keep the browser frontend module boundaries small and behavior-oriented:
+  settings, chat, audio, device control, motion control, setup, and shared
+  context.
 - Add browser-level tests for the settings modal, model download controls,
   local voice controls, Handy position visualization, microphone capture, and
   story mode flow.

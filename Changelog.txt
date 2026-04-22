@@ -8,10 +8,29 @@ the fork baseline and records the project work that has landed through PRs in
 this repository.
 
 
-Unreleased - Soft Anchor Motion Programs
-----------------------------------------
+Unreleased - Frontend Module Split And PR #15 Changelog Record
+--------------------------------------------------------------
 
+Branch: changelog-pr15-history
+
+- Converted `static/app.js` into a small browser-module orchestrator.
+- Added focused frontend modules for shared context, settings/model/persona,
+  chat, audio, device controls, motion controls, and setup.
+- Updated `index.html` to load the frontend as a native ES module without
+  adding a bundler or new JavaScript dependency.
+- Updated static asset tests so they verify the module set, module serving,
+  and behavior markers across all frontend source files.
+- Converted the prior soft-anchor changelog entry from `Unreleased` to the
+  merged PR #15 record with PR URL, head commit, and merge commit.
+
+
+2026-04-21 - PR #15 - Add Soft Anchor Motion Programs
+------------------------------------------------------
+
+Merged: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/15
 Branch: codex-soft-anchor-motion
+Head commit: 15efd26
+Merge commit: 4579273
 
 - Added robotics-inspired soft anchor-loop motion programs that let the model
   select 2-6 waypoint labels such as tip, middle, and base while the backend
