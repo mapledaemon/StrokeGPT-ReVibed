@@ -60,6 +60,9 @@ Candidate local ASR providers:
 - Add a motion training module in staged PRs: pattern file registry first,
   settings enable/disable list second, device playback and feedback third, then
   transform buttons and LLM preference integration.
+- The settings pattern list should remain a management surface until playback
+  controls are added in a later PR; checking or unchecking a pattern should not
+  send movement to the device.
 - Build on the internal funscript-style action and soft-anchor pipelines with
   user-visible controls for smoothing, repeat count, tempo, softness,
   large-step limiting, and point simplification.

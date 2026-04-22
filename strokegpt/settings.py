@@ -55,6 +55,7 @@ def default_settings_dict():
         "local_tts_repetition_penalty": 1.2,
         "patterns": [],
         "milking_patterns": [],
+        "motion_pattern_enabled": {},
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -142,6 +143,7 @@ class SettingsManager:
         self.profile_picture_b64 = str(data.get("profile_picture_b64", "") or "")
         self.patterns = _as_list(data.get("patterns", []))
         self.milking_patterns = _as_list(data.get("milking_patterns", []))
+        self.motion_pattern_enabled = self._normalize_bool_map(data.get("motion_pattern_enabled", {}))
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
@@ -223,6 +225,7 @@ class SettingsManager:
             "local_tts_repetition_penalty": self.local_tts_repetition_penalty,
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
+            "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,
@@ -282,6 +285,16 @@ class SettingsManager:
             if current and current not in ordered:
                 ordered.insert(0, current)
         return ordered
+
+    def _normalize_bool_map(self, values):
+        if not isinstance(values, dict):
+            return {}
+        normalized = {}
+        for key, value in values.items():
+            cleaned = re.sub(r"[^a-z0-9_-]+", "-", str(key or "").strip().lower()).strip("-_")
+            if cleaned:
+                normalized[cleaned[:64]] = bool(value)
+        return normalized
 
     def _timing_pair(self, first, second, default_first, default_second):
         first = _clamp_float(first, 1.0, 60.0, default_first)

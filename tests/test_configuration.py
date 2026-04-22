@@ -56,6 +56,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_style"], "expressive")
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
+        self.assertEqual(saved["motion_pattern_enabled"], {})
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -70,6 +71,24 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.local_tts_style, "expressive")
         self.assertEqual(settings.local_tts_top_p, 1.0)
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
+        self.assertEqual(settings.motion_pattern_enabled, {})
+
+    def test_motion_pattern_enabled_map_is_normalized(self):
+        fake_path = FakePath(json.dumps({
+            "motion_pattern_enabled": {
+                " Soft Wave ": True,
+                "bad id!!": False,
+                "": True,
+            },
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertEqual(settings.motion_pattern_enabled, {
+            "soft-wave": True,
+            "bad-id": False,
+        })
 
     def test_legacy_model_migrates_to_new_default(self):
         fake_path = FakePath(json.dumps({"ollama_model": LEGACY_OLLAMA_MODEL}))

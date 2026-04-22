@@ -155,6 +155,16 @@
                     <div class="timing-row"><label for="milking-min-time">Milking:</label><input type="number" id="milking-min-time" min="1" max="60" step="1" value="2"><span>-</span><input type="number" id="milking-max-time" min="1" max="60" step="1" value="5"></div>
                     <button id="save-timings-btn" class="my-button">Save Timings</button>
                 </div>
+                <div class="settings-subsection motion-panel">
+                    <h4>Motion Patterns</h4>
+                    <div class="motion-pattern-actions">
+                        <button id="refresh-motion-patterns-btn" class="my-button">Refresh Patterns</button>
+                        <button id="import-motion-pattern-btn" class="my-button">Import Pattern</button>
+                    </div>
+                    <input type="file" id="motion-pattern-import-input" accept=".json,.funscript,application/json" style="display: none;">
+                    <div id="motion-pattern-status" style="font-size: 0.85em; color: var(--comment);">Pattern list not loaded yet.</div>
+                    <div id="motion-pattern-list" class="motion-pattern-list"></div>
+                </div>
             </div>
             <div id="settings-tab-device" class="settings-panel">
                 <div class="settings-subsection device-panel">

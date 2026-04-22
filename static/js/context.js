@@ -61,6 +61,11 @@ export const el = {
     edgingMaxTimeInput: D.getElementById('edging-max-time'),
     milkingMinTimeInput: D.getElementById('milking-min-time'),
     milkingMaxTimeInput: D.getElementById('milking-max-time'),
+    motionPatternList: D.getElementById('motion-pattern-list'),
+    motionPatternStatus: D.getElementById('motion-pattern-status'),
+    refreshMotionPatternsBtn: D.getElementById('refresh-motion-patterns-btn'),
+    importMotionPatternBtn: D.getElementById('import-motion-pattern-btn'),
+    motionPatternImportInput: D.getElementById('motion-pattern-import-input'),
     setupOverlay: D.getElementById('setup-overlay'),
     setupBox: D.getElementById('setup-box'),
     statusText: D.getElementById('status-text'),
@@ -95,6 +100,7 @@ export const state = {
     motionMaxSpeed: 80,
     ollamaDownloadPolling: false,
     localTtsStatusPolling: false,
+    motionPatterns: [],
 };
 
 export const ctx = el.rhythmCanvas.getContext('2d');

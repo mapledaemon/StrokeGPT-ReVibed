@@ -127,6 +127,15 @@ class PatternLibraryTests(unittest.TestCase):
             self.assertGreaterEqual(len(catalog["patterns"]), len(PATTERNS))
             self.assertEqual(catalog["errors"][0]["file"], "broken.strokegpt-pattern.json")
 
+    def test_catalog_applies_local_enabled_overrides(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+
+            catalog = library.catalog({"stroke": False})
+            stroke = next(pattern for pattern in catalog["patterns"] if pattern["id"] == "stroke")
+
+            self.assertFalse(stroke["enabled"])
+
 
 @unittest.skipIf(MISSING_WEB_MODULES, f"missing app dependencies: {', '.join(MISSING_WEB_MODULES)}")
 class MotionPatternRouteTests(unittest.TestCase):
@@ -141,10 +150,16 @@ class MotionPatternRouteTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = temporary_pattern_dir()
         self.original_library = self.web.motion_pattern_library
+        self.original_pattern_enabled = dict(self.web.settings.motion_pattern_enabled)
+        self.original_settings_save = self.web.settings.save
         self.web.motion_pattern_library = PatternLibrary(self.temp_dir.name)
+        self.web.settings.motion_pattern_enabled = {}
+        self.web.settings.save = lambda *args, **kwargs: None
 
     def tearDown(self):
         self.web.motion_pattern_library = self.original_library
+        self.web.settings.motion_pattern_enabled = self.original_pattern_enabled
+        self.web.settings.save = self.original_settings_save
         self.temp_dir.cleanup()
 
     def test_catalog_and_detail_routes_expose_builtin_patterns(self):
@@ -194,6 +209,18 @@ class MotionPatternRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn(".json or .funscript", response.get_json()["message"])
+
+    def test_enabled_route_persists_local_pattern_state(self):
+        response = self.client.post("/motion_patterns/stroke/enabled", json={"enabled": False})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertFalse(data["pattern"]["enabled"])
+        self.assertFalse(self.web.settings.motion_pattern_enabled["stroke"])
+
+        catalog_stroke = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "stroke")
+        self.assertFalse(catalog_stroke["enabled"])
 
 
 if __name__ == "__main__":
