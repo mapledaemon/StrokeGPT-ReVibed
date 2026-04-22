@@ -19,12 +19,34 @@ MISSING_MODULES = [name for name in REQUIRED_MODULES if not module_available(nam
 
 @unittest.skipIf(MISSING_MODULES, f"missing app dependencies: {', '.join(MISSING_MODULES)}")
 class WebStaticAssetTests(unittest.TestCase):
+    FRONTEND_SCRIPT_PATHS = (
+        "/static/app.js",
+        "/static/js/context.js",
+        "/static/js/settings.js",
+        "/static/js/chat.js",
+        "/static/js/audio.js",
+        "/static/js/device-control.js",
+        "/static/js/motion-control.js",
+        "/static/js/setup.js",
+    )
+
     @classmethod
     def setUpClass(cls):
         from strokegpt.web import app
 
         cls.app = app
         cls.client = app.test_client()
+
+    def frontend_scripts(self):
+        scripts = []
+        for path in self.FRONTEND_SCRIPT_PATHS:
+            response = self.client.get(path)
+            try:
+                self.assertEqual(response.status_code, 200, path)
+                scripts.append(response.get_data(as_text=True))
+            finally:
+                response.close()
+        return "\n".join(scripts)
 
     def test_flask_default_static_route_is_disabled(self):
         endpoints = {rule.endpoint for rule in self.app.url_map.iter_rules()}
@@ -50,6 +72,13 @@ class WebStaticAssetTests(unittest.TestCase):
             "/static/default-pfp.png": "image/png",
             "/static/app.css": "text/css",
             "/static/app.js": "text/javascript",
+            "/static/js/context.js": "text/javascript",
+            "/static/js/settings.js": "text/javascript",
+            "/static/js/chat.js": "text/javascript",
+            "/static/js/audio.js": "text/javascript",
+            "/static/js/device-control.js": "text/javascript",
+            "/static/js/motion-control.js": "text/javascript",
+            "/static/js/setup.js": "text/javascript",
         }
 
         for path, mimetype in expected.items():
@@ -69,6 +98,7 @@ class WebStaticAssetTests(unittest.TestCase):
 
             self.assertIn('href="/static/app.css"', page)
             self.assertIn('src="/static/app.js"', page)
+            self.assertIn('type="module"', page)
             self.assertNotIn("<style>", page)
             self.assertNotIn("<script>", page)
         finally:
@@ -145,41 +175,43 @@ class WebStaticAssetTests(unittest.TestCase):
             response.close()
 
     def test_frontend_js_avoids_incremental_inner_html_for_options(self):
-        response = self.client.get("/static/app.js")
-        try:
-            script = response.get_data(as_text=True)
+        script = self.frontend_scripts()
 
-            self.assertNotIn("innerHTML +=", script)
-            self.assertIn("elevenLabsVoiceSelect.replaceChildren", script)
-            self.assertIn("rhythmCanvas.getBoundingClientRect", script)
-            self.assertIn("slider-container setup-slider", script)
-        finally:
-            response.close()
+        self.assertNotIn("innerHTML +=", script)
+        self.assertIn("elevenLabsVoiceSelect.replaceChildren", script)
+        self.assertIn("rhythmCanvas.getBoundingClientRect", script)
+        self.assertIn("slider-container setup-slider", script)
 
     def test_frontend_js_polls_local_voice_status_and_serializes_playback(self):
-        response = self.client.get("/static/app.js")
-        try:
-            script = response.get_data(as_text=True)
+        script = self.frontend_scripts()
 
-            self.assertIn("let localTtsStatusPolling = false", script)
-            self.assertIn("async function refreshLocalTtsStatus", script)
-            self.assertIn("preload_elapsed_seconds", script)
-            self.assertIn("generation_elapsed_seconds", script)
-            self.assertIn("audio.onended", script)
-            self.assertIn("new Promise", script)
-        finally:
-            response.close()
+        self.assertIn("localTtsStatusPolling: false", script)
+        self.assertIn("async function refreshLocalTtsStatus", script)
+        self.assertIn("preload_elapsed_seconds", script)
+        self.assertIn("generation_elapsed_seconds", script)
+        self.assertIn("audio.onended", script)
+        self.assertIn("new Promise", script)
 
     def test_chat_messages_are_rendered_as_text_nodes(self):
+        script = self.frontend_scripts()
+
+        self.assertIn("function appendMessageText", script)
+        self.assertIn("D.createTextNode", script)
+        self.assertNotIn('message-bubble">${text}', script)
+
+    def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
         try:
-            script = response.get_data(as_text=True)
-
-            self.assertIn("function appendMessageText", script)
-            self.assertIn("D.createTextNode", script)
-            self.assertNotIn('message-bubble">${text}', script)
+            app_script = response.get_data(as_text=True)
         finally:
             response.close()
+
+        self.assertIn("./js/settings.js", app_script)
+        self.assertIn("./js/chat.js", app_script)
+        self.assertIn("./js/audio.js", app_script)
+        self.assertIn("./js/device-control.js", app_script)
+        self.assertIn("./js/motion-control.js", app_script)
+        self.assertIn("./js/setup.js", app_script)
 
     def test_persona_prompt_can_be_selected_and_saved(self):
         from strokegpt.web import settings

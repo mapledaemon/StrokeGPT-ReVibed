@@ -13,7 +13,9 @@ The current goal is not feature expansion. The current goal is stabilization, si
 - `app.py`: thin launcher that imports `strokegpt.web.main`.
 - `index.html`: single-page browser UI markup.
 - `static/app.css`: browser UI styles.
-- `static/app.js`: browser UI behavior.
+- `static/app.js`: browser UI entrypoint and polling orchestration.
+- `static/js/`: focused browser modules for shared context, settings, chat,
+  audio, device controls, motion controls, and setup.
 - `strokegpt/web.py`: Flask routes, global app state, settings wiring, UI update polling.
 - `strokegpt/settings.py`: JSON-backed user/app settings.
 - `strokegpt/handy.py`: The Handy API wrapper.
@@ -65,6 +67,8 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. Treat anchors as soft waypoints, not hard stops.
 - Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
+- Browser UI code is split by behavior under `static/js/`. Keep new frontend
+  work inside the relevant module instead of growing `static/app.js` again.
 - Local Chatterbox sample browsing uploads/copies the selected file into `voice_samples/`; do not rely on browser-local file paths.
 - `voice_samples/`, `.venv/`, `my_settings.json`, and bytecode/cache folders should stay ignored.
 - Flask's default static route is disabled; static files are served explicitly from the project `static/` folder.
@@ -75,7 +79,6 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 
 ## Known Rough Edges
 
-- `static/app.js` is still large and should eventually be split into maintainable modules.
 - UI needs browser visual testing after layout changes.
 - Some strings and old easter egg content are legacy and could be cleaned up.
 - README is better than before but still needs release-quality polish.
@@ -106,14 +109,13 @@ python app.py
 
 ## Suggested Next Tasks
 
-1. Split `static/app.js` into smaller behavior modules without changing behavior.
-2. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
-3. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
-4. Improve local Chatterbox setup documentation and failure messages.
-5. Add an explicit stop/safety state indicator in the UI.
-6. Review the LLM prompt for reliability and reduce prompt bloat.
-7. Review and clean legacy easter egg content.
-8. Add release notes that clearly mark the app as experimental.
+1. Add Playwright or another browser test for the settings modal, chat polling, and key buttons.
+2. Add a clear runtime diagnostics panel for Ollama, Handy API, ElevenLabs, and Chatterbox.
+3. Improve local Chatterbox setup documentation and failure messages.
+4. Add an explicit stop/safety state indicator in the UI.
+5. Review the LLM prompt for reliability and reduce prompt bloat.
+6. Review and clean legacy easter egg content.
+7. Add release notes that clearly mark the app as experimental.
 
 ## Continuation Prompts
 
@@ -124,7 +126,7 @@ Continue stabilizing StrokeGPT-ReVibed. First read Codex.md, README.md, and the 
 ```
 
 ```text
-Refactor the frontend of StrokeGPT-ReVibed. Split static/app.js into smaller behavior modules while preserving behavior. Verify Flask static serving still works and add/adjust tests where practical.
+Continue frontend maintainability work in StrokeGPT-ReVibed. The browser code is split into static/app.js plus static/js modules; keep new behavior in the relevant module. Verify Flask static serving still works and add/adjust tests where practical.
 ```
 
 ```text

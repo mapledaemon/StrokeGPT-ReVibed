@@ -313,7 +313,8 @@ strokegpt/motion_patterns.py
                         Normalized reusable motion pattern shapes
 tests/                  Regression tests
 static/app.css          Web UI styles
-static/app.js           Web UI behavior
+static/app.js           Web UI entrypoint
+static/js/              Web UI behavior modules
 static/                 Static images
 scripts/                Utility scripts
 ```
