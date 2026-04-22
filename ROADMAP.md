@@ -46,32 +46,12 @@ surprising before deeper pattern generation work.
   bounded duration, intensity, and action such as hold-then-resume, pull back,
   switch to Milk, or stop, using chat history and edge count as visible
   context.
+- Allow users to replace or import Edge/Milk mode scripts through the same
+  visible pattern-management surface used for fixed and trained patterns.
 - Let preset modes speak occasionally without turning mode timers into repeated
   narration.
 
-### 3. Tip And Base Calibration Restoration (M/L)
-
-Why next: scripted and preset motion feel depends on where the device's user
-specific tip and base positions actually are; the current stroke range control
-is still useful, but it should not be the only calibration mechanism.
-
-- Restore user-facing tip and base calibration points as settings separate
-  from global stroke range and speed limits.
-- Use calibrated tip/base anchors when translating zones, fixed patterns,
-  Edge/Milk scripts, imported patterns, trained patterns, and LLM motion
-  targets into Handy motion.
-- Preserve stroke range as a safety/comfort envelope: calibration defines the
-  physical tip/base mapping, while range controls how much of that calibrated
-  space a move is allowed to use.
-- Add a setup/recalibration flow with preview/test moves, clear labels, and a
-  reset path back to conservative defaults.
-- Migrate existing settings conservatively so current users keep equivalent
-  motion until they intentionally recalibrate.
-- Keep HAMP continuous and experimental position/script playback honoring the
-  same calibration mapping without bypassing smoothing, stop behavior, or user
-  speed limits.
-
-### 4. Motion Style Preferences (M)
+### 3. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift.
@@ -86,7 +66,7 @@ drift.
 - Let users reset learned motion feedback and style preferences without a full
   settings reset.
 
-### 5. Soft-Anchor Pattern Authoring (M/L)
+### 4. Soft-Anchor Pattern Authoring (M/L)
 
 Why next: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable.
@@ -104,7 +84,7 @@ control while staying inspectable.
   targets smoothly, may slow down to hit a target, and should not snap or stop
   just because a target was reached.
 
-### 6. Architecture Audit And Refactor Targets (M)
+### 5. Architecture Audit And Refactor Targets (M)
 
 Why next: the app has accumulated adapters and translation layers while motion
 control stabilized; targeted cleanup should happen before larger feature work.
@@ -119,7 +99,7 @@ control stabilized; targeted cleanup should happen before larger feature work.
 - Prefer practical maintainability refactors when they improve editability,
   recoverability, or safety.
 
-### 7. Motion Training Editor Depth (M)
+### 6. Motion Training Editor Depth (M)
 
 Why next: the training workspace already exists, so richer editing can build on
 the current surface without crowding Settings.
@@ -129,12 +109,16 @@ the current surface without crowding Settings.
 - Add transform history with per-step undo/redo.
 - Add remaining pattern transforms: repeat a stroke shape, simplify noisy
   points, mirror timing, and apply subtle randomized variation.
+- Add a funscript import workflow that graphs the source actions before saving
+  and lets users cut the timeline down to the useful section so imported
+  patterns do not keep unwanted video-synchronization lead-in, dead space, or
+  unrelated motion.
 - Add pattern sequencing: alternate multiple patterns in order with small
   blends between segments to avoid stutter.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 8. User Profile And Preference Setup (M)
+### 7. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics and motion vocabulary cleanup.
@@ -147,7 +131,7 @@ context, so it should follow runtime diagnostics and motion vocabulary cleanup.
 - Keep identity/preferences inspectable and resettable; do not bury them inside
   natural-language memory.
 
-### 9. Runtime And Setup Diagnostics (M)
+### 8. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice without turning the compact status UI into a setup console.
@@ -155,9 +139,16 @@ verbosity slice without turning the compact status UI into a setup console.
 - Add a diagnostics tab for Ollama status, selected model install state, local
   voice model state, Torch/CUDA status, Handy key presence, active port, and
   current motion backend.
+- Add a visible Handy connection indicator and reconnect button below the
+  sidebar visualizer, using the same connection state as diagnostics rather
+  than a separate hidden device path.
 - Add optional live Handy position polling where it is useful and does not
   create excessive device/API traffic, so the sidebar position indicator can
   compare reported position against commanded targets.
+- Write backend logs to a file and keep the command-line window mostly static
+  during normal app use.
+- Make the local network address easy to open from the command-line output
+  where the terminal supports clickable links.
 - Add a setup verifier command that checks Python, dependencies, Ollama,
   Chatterbox availability, Torch/CUDA, port availability, and writable
   user-data folders.
@@ -166,6 +157,31 @@ verbosity slice without turning the compact status UI into a setup console.
 - Add startup checks that warn without blocking when optional dependencies are
   missing.
 - Keep optional model downloads as explicit UI actions with visible status.
+
+### 9. Tip And Base Calibration Research And Restoration (M/L)
+
+Why later: calibrated tip/base anchors may solve feel issues, but the benefit
+should be confirmed against current stroke-range behavior before adding another
+setup surface.
+
+- Confirm whether the original app used separate tip/base calibration beyond
+  stroke range, and identify which feel problems the restoration should solve.
+- Restore user-facing tip and base calibration points as settings separate
+  from global stroke range and speed limits if the calibration pass proves
+  useful.
+- Use calibrated tip/base anchors when translating zones, fixed patterns,
+  Edge/Milk scripts, imported patterns, trained patterns, and LLM motion
+  targets into Handy motion.
+- Preserve stroke range as a safety/comfort envelope: calibration defines the
+  physical tip/base mapping, while range controls how much of that calibrated
+  space a move is allowed to use.
+- Add a setup/recalibration flow with preview/test moves, clear labels, and a
+  reset path back to conservative defaults.
+- Migrate existing settings conservatively so current users keep equivalent
+  motion until they intentionally recalibrate.
+- Keep HAMP continuous and experimental position/script playback honoring the
+  same calibration mapping without bypassing smoothing, stop behavior, or user
+  speed limits.
 
 ### 10. Reference Research Backlog (S/M)
 
@@ -193,9 +209,13 @@ scope, and architecture review before implementation.
   https://github.com/FredTungsten/Scripts/tree/master,
   https://github.com/Aguy1724/thehandy_resources, and
   https://github.com/Amethyst-Sysadmin/Howl.
+- Evaluate whether longer example funscript libraries can help remap existing
+  patterns or train pattern-generation heuristics, filtering out long inactive
+  gaps that were video-synchronization artifacts rather than pattern intent.
 - Review device-abstraction references:
   https://github.com/ConAcademy/buttplug-mcp,
-  https://github.com/ofs69/syncopathy, and
+  https://github.com/ofs69/syncopathy,
+  https://github.com/Karasukaigan/OSRChat, and
   https://github.com/buttplugio/awesome-buttplug.
 
 ### 11. Local Voice Control MVP (L)
@@ -258,6 +278,11 @@ runtime shows a clear app-level benefit.
   after failed requests.
 - Consider a packaged Windows launcher only after runtime diagnostics, model
   downloads, voice setup, and device state handling are stable.
+- Rework phone-scale control only after the local app is stable, either as a
+  LAN-hosted mobile layout or a native Android application.
+- Review Android-side local ML options, such as XTTS-v2, Gemini Nano on Pixel
+  devices, and open-source PAIOS-style apps, only after the desktop voice and
+  motion flows are reliable enough to port.
 
 ## Guardrails
 

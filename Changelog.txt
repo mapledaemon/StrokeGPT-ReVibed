@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #37 - Add Pattern Feedback History And Reset
+--------------------------------------------------------------
+
+Branch: codex-feedback-history-reset
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/37
+
+- Reconciled the desktop planning notes into `ROADMAP.md`, keeping completed
+  tasks out of the future backlog and moving tip/base calibration into a later
+  research/restoration slot.
+- Added the future funscript import workflow to the roadmap, including graphing
+  imported actions and cutting the timeline down to the wanted pattern section.
+- Added persisted recent motion-pattern feedback history so users can see
+  which pattern was affected by chat or motion-training feedback.
+- Added per-pattern feedback reset controls that clear that pattern's feedback
+  counts and fixed-pattern feedback weight without clearing all motion
+  preferences.
+- Updated the Motion Patterns UI to show clearer feedback counts and compact
+  recent-feedback audit entries.
+
+
 2026-04-22 - PR #36 - Tighten Donation QR Layout
 -------------------------------------------------
 

@@ -189,6 +189,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_library = self.web.motion_pattern_library
         self.original_pattern_enabled = dict(self.web.settings.motion_pattern_enabled)
         self.original_pattern_feedback = dict(self.web.settings.motion_pattern_feedback)
+        self.original_pattern_feedback_history = list(self.web.settings.motion_pattern_feedback_history)
         self.original_pattern_weights = dict(self.web.settings.motion_pattern_weights)
         self.original_feedback_auto_disable = self.web.settings.motion_feedback_auto_disable
         self.original_settings_save = self.web.settings.save
@@ -208,6 +209,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.motion_pattern_library = PatternLibrary(self.temp_dir.name)
         self.web.settings.motion_pattern_enabled = {}
         self.web.settings.motion_pattern_feedback = {}
+        self.web.settings.motion_pattern_feedback_history = []
         self.web.settings.motion_pattern_weights = {}
         self.web.settings.motion_feedback_auto_disable = False
         self.web.settings.save = lambda *args, **kwargs: None
@@ -228,6 +230,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.motion_pattern_library = self.original_library
         self.web.settings.motion_pattern_enabled = self.original_pattern_enabled
         self.web.settings.motion_pattern_feedback = self.original_pattern_feedback
+        self.web.settings.motion_pattern_feedback_history = self.original_pattern_feedback_history
         self.web.settings.motion_pattern_weights = self.original_pattern_weights
         self.web.settings.motion_feedback_auto_disable = self.original_feedback_auto_disable
         self.web.settings.save = self.original_settings_save
@@ -441,7 +444,33 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(data["pattern"]["weight"], 60)
         self.assertEqual(self.web.settings.motion_pattern_feedback["stroke"]["thumbs_up"], 1)
         self.assertEqual(self.web.settings.motion_pattern_weights["stroke"], 60)
+        self.assertEqual(self.web.settings.motion_pattern_feedback_history[0]["pattern_id"], "stroke")
+        self.assertEqual(self.web.settings.motion_pattern_feedback_history[0]["rating"], "thumbs_up")
+        self.assertEqual(self.web.settings.motion_pattern_feedback_history[0]["source"], "motion training")
+        self.assertEqual(data["motion_patterns"]["feedback_history"][0]["pattern_id"], "stroke")
         self.assertIn("motion_preferences", data)
+
+    def test_pattern_feedback_can_be_reset_individually(self):
+        self.web.settings.motion_pattern_feedback = {
+            "stroke": {"thumbs_up": 2, "neutral": 1, "thumbs_down": 0},
+            "sway": {"thumbs_up": 0, "neutral": 0, "thumbs_down": 1},
+        }
+        self.web.settings.motion_pattern_weights = {"stroke": 84, "sway": 32}
+
+        response = self.client.post("/motion_patterns/stroke/feedback/reset", json={})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["id"], "stroke")
+        self.assertEqual(data["pattern"]["feedback"], {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0})
+        self.assertEqual(data["pattern"]["weight"], 50)
+        self.assertNotIn("stroke", self.web.settings.motion_pattern_feedback)
+        self.assertNotIn("stroke", self.web.settings.motion_pattern_weights)
+        self.assertIn("sway", self.web.settings.motion_pattern_feedback)
+        self.assertEqual(self.web.settings.motion_pattern_weights["sway"], 32)
+        self.assertEqual(self.web.settings.motion_pattern_feedback_history[0]["rating"], "reset")
+        self.assertEqual(data["motion_patterns"]["feedback_history"][0]["rating"], "reset")
 
     def test_three_thumbs_down_does_not_auto_disable_by_default(self):
         for _ in range(3):
