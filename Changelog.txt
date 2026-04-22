@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #35 - Fix Donation QR Formatting
+-------------------------------------------------
+
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/35
+
+Branch: codex-readme-donation-formatting
+
+- Replaced the copied donation table in `README.md` with a stable HTML table
+  so the wallet box keeps its formatting on GitHub.
+- Added repo-local Bitcoin and Ethereum QR-code SVGs generated from the
+  displayed donation addresses.
+- Replaced missing `public/img` logo paths with the new QR assets under
+  `static/`.
+
+
 2026-04-22 - PR #34 - Clean Completed Roadmap Items
 ----------------------------------------------------
 
