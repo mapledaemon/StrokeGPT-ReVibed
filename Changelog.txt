@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #39 - Add Experimental Modes Sidebar
+-----------------------------------------------------
+
+Branch: codex-experimental-freestyle-modes
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/39
+
+- Added a separate Experimental Modes box below Preset Modes in the sidebar.
+- Added Freestyle as a disabled experimental control so it is visibly gated for
+  future neural-style motion mapping work.
+- Kept Freestyle unwired from HAMP and the current scripted Auto framework.
+- Updated roadmap guidance and static asset tests for the gated experimental
+  mode surface.
+
+
 2026-04-22 - PR #38 - Add Milk Motion Vocabulary
 -------------------------------------------------
 
