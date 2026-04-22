@@ -117,6 +117,7 @@ LENGTH_PATTERNS = (
 
 PATTERN_PATTERNS = (
     ("anchor_loop", (r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b")),
+    ("milk", (r"\bmilk(?:ing)?\b",)),
     ("flutter", (r"\bflutter\b", r"\bstutter\b", r"\bquick\s+little\s+pulses?\b")),
     ("flick", (r"\bflicks?\b", r"\bsnap\b")),
     ("pulse", (r"\bpuls(?:e|ing)\b", r"\bpump(?:ing)?\b")),
@@ -267,6 +268,12 @@ def _target_from_cues(
     elif cues.pattern == "flick":
         next_speed = max(next_speed, 55.0)
         next_range = min(next_range, 18.0)
+    elif cues.pattern == "milk":
+        next_speed = max(next_speed, 52.0)
+        if not cues.zone or cues.zone == "full":
+            next_depth = 50.0
+        if (not cues.zone or cues.zone == "full") and cues.length not in {"tiny", "short", "half"}:
+            next_range = max(next_range, 92.0)
     elif cues.pattern == "pulse":
         next_speed = max(next_speed, 44.0)
         next_range = min(next_range, 34.0)

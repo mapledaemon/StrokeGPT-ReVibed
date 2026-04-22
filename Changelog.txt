@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #38 - Add Milk Motion Vocabulary
+-------------------------------------------------
+
+Branch: codex-motion-vocabulary-milk-flick
+Pull request: https://github.com/mapledaemon/StrokeGPT-ReVibed/pull/38
+
+- Removed the completed feedback-history target from `ROADMAP.md` after PR
+  #37 merged and moved Motion Vocabulary to the top of the future backlog.
+- Added `milk` as a named deterministic and LLM-selectable motion pattern that
+  defaults to most of the safe stroke range unless the user explicitly
+  constrains the area or stroke length.
+- Tuned the existing `flick` pattern shape to a quick outward move followed by
+  a slower return without adding broader flick-specific semantics.
+- Updated tests for deterministic milk requests, LLM milk pattern selection,
+  and the new flick/milk pattern shapes.
+
+
 2026-04-22 - PR #37 - Add Pattern Feedback History And Reset
 --------------------------------------------------------------
 

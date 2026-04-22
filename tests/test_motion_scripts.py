@@ -146,6 +146,27 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.stroke_range <= 18 for frame in frames))
 
+    def test_flick_pattern_is_quick_out_then_slower_return(self):
+        actions = PATTERNS["flick"].actions
+
+        self.assertGreaterEqual(len(actions), 3)
+        start, outward, returned = actions[:3]
+        self.assertLess(outward.pos, start.pos)
+        self.assertGreater(returned.pos, outward.pos)
+        self.assertLessEqual(outward.at - start.at, 110)
+        self.assertGreater(returned.at - outward.at, outward.at - start.at)
+
+    def test_milk_pattern_is_available_and_full_range(self):
+        self.assertIn("milk", pattern_names())
+
+        pattern = PATTERNS["milk"]
+        actions = prepare_pattern_actions(pattern)
+        positions = [action.pos for action in actions]
+
+        self.assertGreaterEqual(pattern.window_scale, 0.9)
+        self.assertLessEqual(min(positions), 8)
+        self.assertGreaterEqual(max(positions), 94)
+
     def test_arbitrary_motion_pattern_expands_to_frames(self):
         pattern = MotionPattern(
             "custom-loop",

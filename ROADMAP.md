@@ -14,30 +14,13 @@ Complexity key:
 
 ## Best Next Targets
 
-### 1. Feedback Reset And Pattern History (S/M)
-
-Why next: feedback currently affects model-visible pattern weights, so users
-need full control over history, reset, and recovery paths.
-
-- Add clearer feedback-history indicators for fixed and trained patterns.
-- Add a reset path for individual pattern feedback without clearing the whole
-  motion preference set.
-- Add a small audit surface for recent pattern feedback changes so users can
-  see which pattern a chat thumbs-up/down affected.
-- Keep compact Motion settings focused on management: enablement, weights,
-  feedback history/reset, import/export, and status.
-
-### 2. Motion Vocabulary And Preset Semantics (S/M)
+### 1. Motion Vocabulary And Preset Semantics (S/M)
 
 Why next: consistent terms make both deterministic commands and LLM outputs less
 surprising before deeper pattern generation work.
 
-- Define named motion semantics for `milk`, `flick`, `freestyle`,
-  deterministic speed ranges, full-range behavior, and optional LLM-controlled
-  auto timing.
-- Make `milk` use most or all of the configured safe stroke range unless the
-  user has constrained it.
-- Make `flick` a quick upward/outward move followed by a slower return.
+- Define remaining named motion semantics for `freestyle`, deterministic speed
+  ranges, full-range behavior, and optional LLM-controlled auto timing.
 - If freestyle or LLM-controlled auto timing is added, gate it behind explicit
   experimental controls and keep stop handling, speed limits, and smoothing
   intact.
@@ -51,7 +34,7 @@ surprising before deeper pattern generation work.
 - Let preset modes speak occasionally without turning mode timers into repeated
   narration.
 
-### 3. Motion Style Preferences (M)
+### 2. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift.
@@ -66,7 +49,7 @@ drift.
 - Let users reset learned motion feedback and style preferences without a full
   settings reset.
 
-### 4. Soft-Anchor Pattern Authoring (M/L)
+### 3. Soft-Anchor Pattern Authoring (M/L)
 
 Why next: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable.
@@ -84,7 +67,7 @@ control while staying inspectable.
   targets smoothly, may slow down to hit a target, and should not snap or stop
   just because a target was reached.
 
-### 5. Architecture Audit And Refactor Targets (M)
+### 4. Architecture Audit And Refactor Targets (M)
 
 Why next: the app has accumulated adapters and translation layers while motion
 control stabilized; targeted cleanup should happen before larger feature work.
@@ -99,7 +82,7 @@ control stabilized; targeted cleanup should happen before larger feature work.
 - Prefer practical maintainability refactors when they improve editability,
   recoverability, or safety.
 
-### 6. Motion Training Editor Depth (M)
+### 5. Motion Training Editor Depth (M)
 
 Why next: the training workspace already exists, so richer editing can build on
 the current surface without crowding Settings.
@@ -118,7 +101,7 @@ the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 7. User Profile And Preference Setup (M)
+### 6. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics and motion vocabulary cleanup.
@@ -131,7 +114,7 @@ context, so it should follow runtime diagnostics and motion vocabulary cleanup.
 - Keep identity/preferences inspectable and resettable; do not bury them inside
   natural-language memory.
 
-### 8. Runtime And Setup Diagnostics (M)
+### 7. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice without turning the compact status UI into a setup console.
@@ -158,7 +141,7 @@ verbosity slice without turning the compact status UI into a setup console.
   missing.
 - Keep optional model downloads as explicit UI actions with visible status.
 
-### 9. Tip And Base Calibration Research And Restoration (M/L)
+### 8. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the benefit
 should be confirmed against current stroke-range behavior before adding another
@@ -183,7 +166,7 @@ setup surface.
   same calibration mapping without bypassing smoothing, stop behavior, or user
   speed limits.
 
-### 10. Reference Research Backlog (S/M)
+### 9. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs licensing,
 scope, and architecture review before implementation.
@@ -218,7 +201,7 @@ scope, and architecture review before implementation.
   https://github.com/Karasukaigan/OSRChat, and
   https://github.com/buttplugio/awesome-buttplug.
 
-### 11. Local Voice Control MVP (L)
+### 10. Local Voice Control MVP (L)
 
 Why next: voice control is the largest user-facing feature, but it should ship
 as push-to-talk before always-on listening.
@@ -251,7 +234,7 @@ Candidate local ASR providers:
   4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 12. Story Mode (L/XL)
+### 11. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -265,7 +248,7 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
-### 13. Optional Runtime And Packaging Work (XL)
+### 12. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.

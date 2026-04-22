@@ -58,6 +58,22 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.target.depth, 50)
         self.assertEqual(intent.target.stroke_range, 95)
 
+    def test_milk_uses_full_safe_range_by_default(self):
+        intent = self.matcher.parse("milk me", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("milk", intent.matched)
+        self.assertEqual(intent.target.depth, 50)
+        self.assertGreaterEqual(intent.target.stroke_range, 92)
+        self.assertGreaterEqual(intent.target.speed, 52)
+
+    def test_milk_honors_explicit_short_constraint(self):
+        intent = self.matcher.parse("short milk strokes", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("milk", intent.matched)
+        self.assertLessEqual(intent.target.stroke_range, 24)
+
     def test_tip_only_maps_to_shallow_short_motion(self):
         intent = self.matcher.parse("stay on the tip with short flicks", self.current)
 
@@ -225,6 +241,16 @@ class MotionSanitizerTests(unittest.TestCase):
 
         self.assertIsNotNone(target)
         self.assertIn("milking-pressure-build", target.label)
+
+    def test_llm_move_accepts_milk_pattern_as_full_range(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        target = sanitizer.from_llm_move({"pattern": "milk"}, current)
+
+        self.assertIsNotNone(target)
+        self.assertIn("milk", target.label)
+        self.assertEqual(target.depth, 50)
+        self.assertGreaterEqual(target.stroke_range, 92)
 
     def test_llm_bare_endpoint_cues_keep_more_range(self):
         sanitizer = MotionSanitizer()
