@@ -40,9 +40,13 @@ mode controls still have rough edges that block daily use.
   recent-sequence log across Auto, Edge, Milk, Freestyle, and mode
   transitions, and tune the displayed timing/label detail if on-device
   testing shows noisy or misleading output.
-- Add hotkeys for `I'm Close` and Stop, plus a Pause/Resume button that
-  pauses the active mode or current LLM-driven motion (including chat-driven
-  motion) without resetting the mode plan.
+- Add a Pause/Resume control that pauses the active mode or current
+  LLM-driven motion (including chat-driven motion) without resetting the
+  mode plan, and that resumes from the same point. Pause should leave the
+  current sequence/log entry intact and visible instead of replacing it
+  with a stop marker.
+- Add hotkeys for `I'm Close`, Stop, and Pause/Resume so the same controls
+  are reachable without leaving the keyboard.
 - Review whether the current Milking/Freestyle start-decision `stop` guard
   should remain in the final mode framework. The framework should eventually
   be smart enough to allow deliberate stops at any event without losing the
@@ -163,9 +167,37 @@ persona prompts stay separable.
 - Let users reset learned motion feedback and style preferences without a
   full settings reset.
 
+### 6. Chat Interface Refactor (M)
+
+Why next: the chat panel and its surrounding toolbars/indicators are
+largely unchanged from the pre-fork code, and the recent diagnostics work
+(PR #43) keeps adding compact indicators around a chat surface that was
+not designed for them. Refactoring the chat shell now keeps later
+indicator, hotkey, pause/resume, and profile work from being layered on
+top of an outdated structure.
+
+- Audit the existing chat panel against modern local-LLM front-ends
+  (Ollama UI, Open WebUI, LM Studio, etc.) for layout, message styling,
+  scroll/auto-scroll behavior, streaming render, and accessible focus
+  handling. Use them as references for ergonomics, not as templates to
+  copy whole-cloth.
+- Redo the chat toolbar and indicator strip so the speed/depth meter,
+  motion sequence log, feedback buttons, mode/timer indicators, and
+  Pause/Resume/Stop controls share one consistent layout grammar instead
+  of being individually retrofitted around the legacy chat panel.
+- Make message rendering robust to streamed and non-streamed Ollama
+  responses, so the chat-emit path stays in lockstep with the TTS-enqueue
+  path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
+  Voice Plays").
+- Keep markdown/code rendering opt-in and predictable; do not regress
+  copy/paste, scrollback, or screen-reader behavior while restyling.
+- Preserve the existing chat-driven motion contract (chat-driven
+  Pause/Resume, chat edge-blocking, motion-target language) while moving
+  the visible surface into the new layout.
+
 ## Queued
 
-### 6. Soft-Anchor Pattern Authoring (M/L)
+### 7. Soft-Anchor Pattern Authoring (M/L)
 
 Why later: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable, but should follow the code reorg so it
@@ -187,11 +219,11 @@ can land cleanly inside the new motion blueprints/modules.
   through targets smoothly, may slow down to hit a target, and should not
   snap or stop just because a target was reached.
 
-### 7. Architecture Audit And Strategic Refactor (M)
+### 8. Architecture Audit And Strategic Refactor (M)
 
-Why later: the immediate code reorg in Up Next #2 covers the obvious
-splits. This entry is for the deeper, design-level audits that need a
-clean tree first.
+Why later: the immediate code reorg in Up Next #2 and the chat shell
+refactor in Up Next #6 cover the obvious splits. This entry is for the
+deeper, design-level audits that need a clean tree first.
 
 - Before changing the default motion backend, audit the flexible
   position/script path against chat control, Freestyle, motion training,
@@ -209,7 +241,7 @@ clean tree first.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 
-### 8. Motion Training Editor Depth (M)
+### 9. Motion Training Editor Depth (M)
 
 Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
@@ -228,7 +260,7 @@ build on the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 9. User Profile And Preference Setup (M)
+### 10. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics, motion vocabulary
@@ -237,6 +269,11 @@ cleanup, and the persona naming audit.
 - Add a user profile picture and custom user display name.
 - Use the user profile control as the settings entry point in the
   upper-right area.
+- Drive the splash screen and the default profile image from the profile
+  wizard selections (identity, interested-in, custom values) so the first
+  visible app surface reflects the user's chosen preferences instead of a
+  generic default. Keep a neutral fallback for users who skip the wizard
+  and a Settings control to change the splash/profile image after setup.
 - Add startup and Settings selectors for user identity and interested-in
   preferences, with custom values.
 - Include initial identity options for Cis Male, Cis Female, Trans Man,
@@ -249,7 +286,7 @@ cleanup, and the persona naming audit.
 - Keep identity/preferences inspectable and resettable; do not bury them
   inside natural-language memory.
 
-### 10. Runtime And Setup Diagnostics (M)
+### 11. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice (PR #43) without turning the compact status UI into a
@@ -286,7 +323,7 @@ setup console.
 
 ## Backlog
 
-### 11. Tip And Base Calibration Research And Restoration (M/L)
+### 12. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the
 benefit should be confirmed against current stroke-range behavior before
@@ -312,7 +349,7 @@ adding another setup surface.
   the same calibration mapping without bypassing smoothing, stop behavior,
   or user speed limits.
 
-### 12. Reference Research Backlog (S/M)
+### 13. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs
 licensing, scope, and architecture review before implementation.
@@ -352,7 +389,7 @@ licensing, scope, and architecture review before implementation.
   device behavior, but avoid importing designs that add unnecessary
   pauses, stops, or other counterproductive playback behavior.
 
-### 13. Local Voice Control MVP (L)
+### 14. Local Voice Control MVP (L)
 
 Why later: voice control is the largest user-facing feature, but it should
 ship as push-to-talk before always-on listening.
@@ -387,7 +424,7 @@ Candidate local ASR providers:
   timestamps, and CC BY 4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 14. Story Mode (L/XL)
+### 15. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -404,7 +441,7 @@ editing.
 
 ## Long-Horizon
 
-### 15. Optional Runtime And Packaging Work (XL)
+### 16. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.

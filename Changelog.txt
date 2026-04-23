@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #45 - Chat Interface Planning And Motion Log Regression
+-------------------------------------------------------------------------
+
+Branch: codex-chat-interface-planning
+
+- Added a Chat Interface Refactor (M) entry to Up Next so the legacy chat
+  panel and its surrounding toolbars/indicators can be redone with modern
+  local-LLM front-ends as references, and renumbered the Queued / Backlog /
+  Long-Horizon entries from 6-15 to 7-16 to make room.
+- Lifted Pause/Resume out of the hotkeys bullet in Up Next #1 into its own
+  bullet so the pause-without-reset requirement is not buried, and added a
+  matching Pause/Resume hotkey alongside `I'm Close` and Stop.
+- Added a profile-driven splash and default-profile-image bullet to the User
+  Profile And Preference Setup entry so the first visible app surface
+  reflects the wizard selections instead of a generic default.
+- Added a new KNOWN_PROBLEMS.md entry, "Motion Status Log Timecode Resets On
+  Stop Instead Of Mode Start", capturing the regression where the last log
+  action is rewritten to `00:00` on stop instead of keeping its real elapsed
+  timestamp until a new mode starts.
+
+
 2026-04-23 - PR #44 - Roadmap Tier Rework And Notes Merge
 -----------------------------------------------------------
 
