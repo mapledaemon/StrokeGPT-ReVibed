@@ -8,10 +8,10 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-04-23 - Unreleased - Add Tool-Neutral Agent Handoff
---------------------------------------------------------
+2026-04-23 - PR #46 - Add Tool-Neutral Agent Handoff
+----------------------------------------------------
 
-Branch: TBD
+Branch: codex-agent-handoff-docs
 
 - Renamed the canonical coding-agent handoff from `Codex.md` to
   `AGENTS.md` so Codex and Claude can share one source of truth.
