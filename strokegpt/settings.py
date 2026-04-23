@@ -67,6 +67,8 @@ def default_settings_dict():
         "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "ollama_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "motion_feedback_auto_disable": False,
+        "allow_llm_edge_in_freestyle": True,
+        "allow_llm_edge_in_chat": True,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -170,6 +172,12 @@ class SettingsManager:
         self.motion_feedback_auto_disable = bool(
             data.get("motion_feedback_auto_disable", defaults["motion_feedback_auto_disable"])
         )
+        self.allow_llm_edge_in_freestyle = bool(
+            data.get("allow_llm_edge_in_freestyle", defaults["allow_llm_edge_in_freestyle"])
+        )
+        self.allow_llm_edge_in_chat = bool(
+            data.get("allow_llm_edge_in_chat", defaults["allow_llm_edge_in_chat"])
+        )
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
@@ -261,6 +269,8 @@ class SettingsManager:
             "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
             "ollama_diagnostics_level": self._normalize_diagnostics_level(self.ollama_diagnostics_level),
             "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
+            "allow_llm_edge_in_freestyle": bool(self.allow_llm_edge_in_freestyle),
+            "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,

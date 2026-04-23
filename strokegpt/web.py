@@ -17,7 +17,7 @@ from .settings import DIAGNOSTICS_LEVELS, SettingsManager, normalize_ollama_mode
 from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
-from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic
+from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .motion import IntentMatcher, MotionController, MotionTarget
 from .motion_patterns import PATTERNS, expand_motion_pattern
 from .motion_preferences import (
@@ -403,6 +403,8 @@ def settings_payload():
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "ollama_diagnostics_level": settings.ollama_diagnostics_level,
         "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
+        "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
+        "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
         "use_long_term_memory": use_long_term_memory,
         "diagnostics_levels": _diagnostics_level_options(),
         "motion_backends": [
@@ -472,8 +474,14 @@ def _motion_pattern_catalog_payload():
     payload["feedback_history"] = list(settings.motion_pattern_feedback_history[:MOTION_FEEDBACK_HISTORY_LIMIT])
     return payload
 
+def _edge_pattern_ids():
+    return {pattern_id for pattern_id in PATTERNS if pattern_id.startswith("edge-")}
+
 def _motion_preference_payload():
-    return build_motion_preference_payload(_motion_pattern_catalog_payload())
+    excluded = set()
+    if not settings.allow_llm_edge_in_chat:
+        excluded.update(_edge_pattern_ids())
+    return build_motion_preference_payload(_motion_pattern_catalog_payload(), excluded)
 
 def _motion_pattern_record(pattern_id):
     return motion_pattern_library.get_record(
@@ -513,8 +521,40 @@ def _remember_motion_pattern_from_target(target):
         last_live_motion_pattern_id = pattern_id
     return pattern_id
 
+def _remember_live_motion_pattern_id(pattern_id):
+    global last_live_motion_pattern_id
+    record = _motion_pattern_record(pattern_id)
+    if record:
+        last_live_motion_pattern_id = record.pattern_id
+        return record.pattern_id
+    return ""
+
+def _freestyle_candidate_patterns():
+    catalog = _motion_pattern_catalog_payload()
+    candidates = []
+    for summary in catalog.get("patterns", []):
+        if not summary.get("enabled", True):
+            continue
+        if summary.get("source") == "fixed" and int(summary.get("weight") or 0) <= 0:
+            continue
+        record = _motion_pattern_record(summary.get("id", ""))
+        if not record:
+            continue
+        candidates.append({
+            "id": record.pattern_id,
+            "name": record.name,
+            "source": record.source,
+            "enabled": record.enabled,
+            "weight": summary.get("weight"),
+            "feedback": summary.get("feedback", {}),
+            "record": record,
+        })
+    return candidates
+
 def _llm_visible_fixed_pattern(pattern_id):
     catalog = _motion_pattern_catalog_payload()
+    if not settings.allow_llm_edge_in_chat and pattern_id in _edge_pattern_ids():
+        return False
     return any(
         pattern.get("id") == pattern_id
         and pattern.get("source") == "fixed"
@@ -864,6 +904,8 @@ def get_current_context():
         'last_depth_pos': handy.last_depth_pos, 'last_stroke_range': handy.last_stroke_range,
         'min_speed': settings.min_speed, 'max_speed': settings.max_speed,
         'use_long_term_memory': use_long_term_memory,
+        'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,
+        'allow_llm_edge_in_freestyle': settings.allow_llm_edge_in_freestyle,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
     if edging_start_time:
@@ -906,6 +948,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
     def get_timings(n):
         return {
             'auto': (settings.auto_min_time, settings.auto_max_time),
+            'freestyle': (settings.auto_min_time, settings.auto_max_time),
             'milking': (settings.milking_min_time, settings.milking_max_time),
             'edging': (settings.edging_min_time, settings.edging_max_time)
         }.get(n, (3, 5))
@@ -942,6 +985,9 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         'message_event': mode_message_event,
         'message_queue': mode_message_queue,
         'remember_pattern': _remember_motion_pattern_from_target,
+        'remember_pattern_id': _remember_live_motion_pattern_id,
+        'freestyle_candidates': _freestyle_candidate_patterns,
+        'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
         'set_mode_name': set_mode_name,
         'mode_decision': mode_decision,
     }
@@ -980,6 +1026,9 @@ def _handle_chat_commands(text, allow_motion=True):
     if intent.kind == "auto_on" and not auto_mode_active_task:
         start_background_mode(auto_mode_logic, "Okay, I'll take over...", mode_name='auto')
         return True, jsonify({"status": "auto_started"})
+    if intent.kind == "freestyle" and not auto_mode_active_task:
+        start_background_mode(freestyle_mode_logic, "Starting adaptive Freestyle.", mode_name='freestyle')
+        return True, jsonify({"status": "freestyle_started"})
     if intent.kind == "auto_off" and auto_mode_active_task:
         auto_mode_active_task.stop()
         return True, jsonify({"status": "auto_stopped"})
@@ -1422,11 +1471,11 @@ def toggle_memory_route():
 
 @app.route('/signal_edge', methods=['POST'])
 def signal_edge_route():
-    if auto_mode_active_task and auto_mode_active_task.name in {'edging', 'milking'}:
+    if auto_mode_active_task and auto_mode_active_task.name in {'edging', 'milking', 'freestyle'}:
         user_signal_event.set()
         mode_message_event.set()
         return jsonify({"status": "signaled", "mode": auto_mode_active_task.name})
-    return jsonify({"status": "ignored", "message": "Edge or milking mode not active."}), 400
+    return jsonify({"status": "ignored", "message": "Edge, milking, or Freestyle mode not active."}), 400
 
 @app.route('/set_profile_picture', methods=['POST'])
 def set_pfp_route():
@@ -1692,6 +1741,33 @@ def set_motion_backend_route():
         "motion_backend": settings.motion_backend,
     })
 
+def _request_bool_value(data, key, default):
+    if key not in data:
+        return bool(default)
+    value = data.get(key)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+@app.route('/set_llm_edge_permissions', methods=['POST'])
+def set_llm_edge_permissions_route():
+    data = _request_json()
+    settings.allow_llm_edge_in_freestyle = _request_bool_value(data,
+        "allow_llm_edge_in_freestyle",
+        settings.allow_llm_edge_in_freestyle,
+    )
+    settings.allow_llm_edge_in_chat = _request_bool_value(data,
+        "allow_llm_edge_in_chat",
+        settings.allow_llm_edge_in_chat,
+    )
+    settings.save()
+    return jsonify({
+        "status": "success",
+        "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
+        "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
+        "motion_preferences": _motion_preference_payload(),
+    })
+
 def _timing_pair(data, min_key, max_key, default_min, default_max):
     try:
         first = float(data.get(min_key, default_min))
@@ -1794,6 +1870,11 @@ def start_edging_route():
 def start_milking_route():
     start_background_mode(milking_mode_logic, "You're so close... I'm taking over completely now.", mode_name='milking')
     return jsonify({"status": "milking_started"})
+
+@app.route('/start_freestyle_mode', methods=['POST'])
+def start_freestyle_route():
+    start_background_mode(freestyle_mode_logic, "Starting adaptive Freestyle.", mode_name='freestyle')
+    return jsonify({"status": "freestyle_started"})
 
 @app.route('/stop_auto_mode', methods=['POST'])
 def stop_auto_route():

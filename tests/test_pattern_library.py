@@ -192,6 +192,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_pattern_feedback_history = list(self.web.settings.motion_pattern_feedback_history)
         self.original_pattern_weights = dict(self.web.settings.motion_pattern_weights)
         self.original_feedback_auto_disable = self.web.settings.motion_feedback_auto_disable
+        self.original_allow_llm_edge_in_chat = self.web.settings.allow_llm_edge_in_chat
         self.original_settings_save = self.web.settings.save
         self.original_audio_generate = self.web.audio.generate_audio_for_text
         self.original_last_live_pattern = self.web.last_live_motion_pattern_id
@@ -212,6 +213,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_feedback_history = []
         self.web.settings.motion_pattern_weights = {}
         self.web.settings.motion_feedback_auto_disable = False
+        self.web.settings.allow_llm_edge_in_chat = True
         self.web.settings.save = lambda *args, **kwargs: None
         self.web.audio.generate_audio_for_text = lambda *args, **kwargs: None
         self.web.last_live_motion_pattern_id = ""
@@ -233,6 +235,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_feedback_history = self.original_pattern_feedback_history
         self.web.settings.motion_pattern_weights = self.original_pattern_weights
         self.web.settings.motion_feedback_auto_disable = self.original_feedback_auto_disable
+        self.web.settings.allow_llm_edge_in_chat = self.original_allow_llm_edge_in_chat
         self.web.settings.save = self.original_settings_save
         self.web.audio.generate_audio_for_text = self.original_audio_generate
         self.web.last_live_motion_pattern_id = self.original_last_live_pattern
@@ -513,6 +516,18 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertNotIn("flutter", data["prompt"])
         self.assertIn("Disabled fixed patterns: flutter.", data["summary"])
         self.assertIn("Only choose listed pattern names", data["prompt"])
+
+    def test_motion_preferences_route_hides_edge_patterns_when_chat_edge_disabled(self):
+        self.web.settings.allow_llm_edge_in_chat = False
+        self.web.settings.motion_pattern_weights = {"edge-hold": 88, "sway": 74}
+
+        response = self.client.get("/motion_preferences")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertIn("sway=74", data["prompt"])
+        self.assertNotIn("edge-hold", data["prompt"])
+        self.assertIn("edge-hold=88", data["summary"])
 
     def test_weight_route_persists_fixed_pattern_weight(self):
         response = self.client.post("/motion_patterns/sway/weight", json={"weight": 88})

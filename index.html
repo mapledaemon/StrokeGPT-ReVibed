@@ -82,7 +82,7 @@
         <div class="setting-section experimental-mode-section">
             <h3>Experimental Modes</h3>
             <div class="experimental-mode-stack">
-                <button id="freestyle-mode-btn" class="my-button sidebar-button experimental" disabled title="Neural freestyle motion is not wired yet.">Freestyle</button>
+                <button id="freestyle-mode-btn" class="my-button sidebar-button experimental" title="Adaptive pattern selection using enabled motion patterns.">Freestyle</button>
             </div>
         </div>
         <div id="sidebar-motion-indicator">
@@ -222,6 +222,13 @@
                     <div class="timing-row"><label for="edging-min-time">Edging:</label><input type="number" id="edging-min-time" min="1" max="60" step="1" value="5"><span>-</span><input type="number" id="edging-max-time" min="1" max="60" step="1" value="8"></div>
                     <div class="timing-row"><label for="milking-min-time">Milking:</label><input type="number" id="milking-min-time" min="1" max="60" step="1" value="2"><span>-</span><input type="number" id="milking-max-time" min="1" max="60" step="1" value="5"></div>
                     <button id="save-timings-btn" class="my-button">Save Timings</button>
+                </div>
+                <div class="settings-subsection motion-panel">
+                    <h4>LLM Edge Permissions</h4>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-freestyle-checkbox" checked> Allow LLM to edge in freestyle</label>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
+                    <button id="save-llm-edge-permissions-btn" class="my-button">Save LLM Edge Permissions</button>
+                    <div id="llm-edge-permissions-status" class="settings-help">LLM edge permissions not saved yet.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Patterns</h4>

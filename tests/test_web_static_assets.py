@@ -120,7 +120,8 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn("Experimental Modes", page)
             self.assertIn('class="experimental-mode-stack"', page)
             self.assertIn('id="freestyle-mode-btn"', page)
-            self.assertIn('id="freestyle-mode-btn" class="my-button sidebar-button experimental" disabled', page)
+            self.assertIn('Adaptive pattern selection using enabled motion patterns.', page)
+            self.assertNotIn('id="freestyle-mode-btn" class="my-button sidebar-button experimental" disabled', page)
             self.assertIn('class="sidebar-stop-section"', page)
             self.assertNotIn("DANGER ZONE", page)
             self.assertNotIn("<style>", page)
@@ -421,7 +422,7 @@ class WebStaticAssetTests(unittest.TestCase):
             messages_for_ui.clear()
             chat_history.clear()
 
-    def test_close_signal_wakes_edging_or_milking_mode(self):
+    def test_close_signal_wakes_edging_milking_or_freestyle_mode(self):
         from strokegpt.web import auto_mode_active_task, mode_message_event, user_signal_event
         import strokegpt.web as web
 
@@ -429,7 +430,7 @@ class WebStaticAssetTests(unittest.TestCase):
         user_signal_event.clear()
         mode_message_event.clear()
         try:
-            for mode_name in ("edging", "milking"):
+            for mode_name in ("edging", "milking", "freestyle"):
                 with self.subTest(mode_name=mode_name):
                     user_signal_event.clear()
                     mode_message_event.clear()
@@ -472,6 +473,20 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             web.use_long_term_memory = original
 
+    def test_start_freestyle_route_uses_adaptive_mode(self):
+        import strokegpt.web as web
+
+        with mock.patch.object(web, "start_background_mode") as start_background_mode:
+            response = self.client.post("/start_freestyle_mode")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "freestyle_started")
+        start_background_mode.assert_called_once_with(
+            web.freestyle_mode_logic,
+            "Starting adaptive Freestyle.",
+            mode_name='freestyle',
+        )
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:
@@ -491,6 +506,9 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="save-motion-backend-btn"', page)
             self.assertIn('id="motion-backend-status"', page)
             self.assertIn('Flexible position/script (experimental)', page)
+            self.assertIn('id="allow-llm-edge-freestyle-checkbox"', page)
+            self.assertIn('id="allow-llm-edge-chat-checkbox"', page)
+            self.assertIn('id="save-llm-edge-permissions-btn"', page)
             self.assertIn('id="motion-pattern-list"', page)
             self.assertIn('id="motion-feedback-history"', page)
             self.assertIn('id="refresh-motion-patterns-btn"', page)
@@ -692,6 +710,7 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function updateHandyCylinder", script)
         self.assertIn("handyCylinderPosition", script)
         self.assertIn("/set_motion_backend", script)
+        self.assertIn("/set_llm_edge_permissions", script)
         self.assertIn("Flexible position/script", script)
         self.assertIn("refreshMotionPatterns", script)
         self.assertIn("/motion_patterns", script)
@@ -731,6 +750,9 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function dislikeLastMove", script)
         self.assertIn("/dislike_last_move", script)
         self.assertIn("/signal_edge", script)
+        self.assertIn("async function startFreestyleMode", script)
+        self.assertIn("/start_freestyle_mode", script)
+        self.assertIn("freestyle_started", script)
         self.assertIn("Milking mode extended", script)
         self.assertIn("data.active_mode", script)
         self.assertIn("weight ${pattern.weight", script)
@@ -965,6 +987,38 @@ class WebStaticAssetTests(unittest.TestCase):
         finally:
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)
+
+    def test_llm_edge_permissions_can_be_selected_and_saved(self):
+        from strokegpt.web import settings
+
+        original = (
+            settings.allow_llm_edge_in_freestyle,
+            settings.allow_llm_edge_in_chat,
+        )
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_llm_edge_permissions", json={
+                    "allow_llm_edge_in_freestyle": False,
+                    "allow_llm_edge_in_chat": False,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertFalse(data["allow_llm_edge_in_freestyle"])
+            self.assertFalse(data["allow_llm_edge_in_chat"])
+            self.assertFalse(settings.allow_llm_edge_in_freestyle)
+            self.assertFalse(settings.allow_llm_edge_in_chat)
+            self.assertIn("motion_preferences", data)
+
+            response = self.client.get("/check_settings")
+            payload = response.get_json()
+            self.assertFalse(payload["allow_llm_edge_in_freestyle"])
+            self.assertFalse(payload["allow_llm_edge_in_chat"])
+        finally:
+            (
+                settings.allow_llm_edge_in_freestyle,
+                settings.allow_llm_edge_in_chat,
+            ) = original
 
     def test_diagnostics_levels_can_be_selected_and_saved(self):
         from strokegpt.web import settings

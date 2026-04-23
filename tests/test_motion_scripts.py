@@ -46,14 +46,18 @@ class MotionScriptPlannerTests(unittest.TestCase):
 
     def test_edge_reaction_builds_pullback_sequence(self):
         planner = MotionScriptPlanner("edging", rng=random.Random(5))
-        step = planner.next_step(MotionTarget(50, 80, 40), edge_count=2)
+        current = MotionTarget(50, 80, 40)
+        step = planner.next_step(current, edge_count=2)
+        steps = [step]
+        steps.extend(planner.next_step(current) for _ in range(5))
 
         self.assertEqual(step.mood, "Dominant")
         self.assertIn("Edge count: 2", step.message)
         self.assertLessEqual(step.target.speed, 10)
-        self.assertGreaterEqual(step.target.depth, 84)
-        self.assertLessEqual(step.target.stroke_range, 20)
         self.assertIn("Edge Pull Back", step.target.label)
+        pullback_steps = [item for item in steps if item.target.label.startswith("Edge Pull Back")]
+        self.assertTrue(any(item.target.depth >= 84 for item in pullback_steps))
+        self.assertTrue(any(item.target.stroke_range <= 20 for item in pullback_steps))
 
     def test_mode_specific_patterns_are_cataloged(self):
         names = pattern_names()
@@ -78,7 +82,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         current = MotionTarget(50, 80, 40)
 
         steps = [planner.next_step(current, edge_count=3)]
-        steps.extend(planner.next_step(current) for _ in range(10))
+        steps.extend(planner.next_step(current) for _ in range(24))
         reaction_labels = [step.target.label for step in steps]
 
         pullback_index = next(
@@ -118,17 +122,17 @@ class MotionScriptPlannerTests(unittest.TestCase):
         )
 
         self.assertTrue(hold_frames)
-        hold_depths = [frame.target.depth for frame in hold_frames]
+        hold_depths = [frame.target.depth for frame in hold_frames if frame.phase == "pattern"]
         self.assertTrue(all(depth <= 55 for depth in hold_depths))
         self.assertGreater(max(hold_depths), 35)
 
         self.assertTrue(recover_frames)
-        recover_depths = [frame.target.depth for frame in recover_frames]
+        recover_depths = [frame.target.depth for frame in recover_frames if frame.phase == "pattern"]
         self.assertTrue(all(60 <= depth <= 88 for depth in recover_depths))
         self.assertGreater(max(recover_depths), 80)
 
         self.assertTrue(pullback_frames)
-        pullback_depths = [frame.target.depth for frame in pullback_frames]
+        pullback_depths = [frame.target.depth for frame in pullback_frames if frame.phase == "pattern"]
         self.assertTrue(all(depth >= 88 for depth in pullback_depths))
         self.assertGreater(max(pullback_depths), 94)
 
@@ -143,8 +147,54 @@ class MotionScriptPlannerTests(unittest.TestCase):
         )
 
         self.assertGreaterEqual(len(frames), 4)
-        self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
-        self.assertTrue(all(frame.target.stroke_range <= 18 for frame in frames))
+        pattern_frames = [frame for frame in frames if frame.phase == "pattern"]
+        self.assertGreater(len({round(frame.target.depth) for frame in pattern_frames}), 2)
+        self.assertTrue(all(frame.target.stroke_range <= 18 for frame in pattern_frames))
+
+    def test_pattern_expansion_blends_from_previous_motion_state(self):
+        current = MotionTarget(70, 92, 85, "previous")
+        frames = expand_pattern(
+            "flick",
+            current,
+            MotionTarget(36, 12, 18, "tip+flick"),
+            rng=random.Random(21),
+        )
+
+        self.assertEqual([frame.phase for frame in frames[:2]], ["blend", "blend"])
+        self.assertEqual(frames[-1].phase, "pattern")
+        depth_steps = [current.depth] + [frame.target.depth for frame in frames[:3]]
+        self.assertTrue(
+            all(abs(a - b) <= 25 for a, b in zip(depth_steps, depth_steps[1:])),
+            depth_steps,
+        )
+        self.assertIn("blend", frames[0].target.label)
+
+    def test_pattern_expansion_blends_direction_changes(self):
+        pattern = MotionPattern(
+            "Turn Test",
+            (
+                PatternAction(0, 20),
+                PatternAction(220, 82),
+                PatternAction(440, 18),
+            ),
+            window_scale=1.0,
+            speed_scale=1.0,
+        )
+
+        frames = expand_motion_pattern(
+            pattern,
+            MotionTarget(40, 32, 60, "current"),
+            MotionTarget(40, 50, 60, "turn test"),
+            rng=random.Random(11),
+        )
+
+        turn_frames = [frame for frame in frames if "turn" in frame.target.label]
+        self.assertGreaterEqual(len(turn_frames), 2)
+        turn_apex = next(frame for frame in turn_frames if "apex" in frame.target.label)
+        self.assertEqual(turn_apex.phase, "pattern")
+        self.assertLess(turn_apex.target.speed, 22)
+        pattern_depths = [round(frame.target.depth) for frame in frames if frame.phase == "pattern"]
+        self.assertEqual(pattern_depths[:3], [32, 69, 31])
 
     def test_flick_pattern_is_quick_out_then_slower_return(self):
         actions = PATTERNS["flick"].actions
@@ -326,7 +376,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
                 )
                 self.assertGreater(len(frames), 4)
                 self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
-                self.assertLessEqual(sum(frame.delay_factor for frame in frames), 3.75)
+                self.assertLessEqual(sum(frame.delay_factor for frame in frames), 5.5)
 
     def test_anchor_program_expands_to_motion_frames(self):
         frames = expand_anchor_program(
@@ -361,7 +411,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len(frames), 8)
         self.assertTrue(all(frame.target.motion_program is None for frame in frames))
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 3)
-        self.assertLessEqual(sum(frame.delay_factor for frame in frames), 4.0)
+        self.assertLessEqual(sum(frame.delay_factor for frame in frames), 4.5)
 
     def test_feedback_pattern_expands_to_smooth_sequence(self):
         planner = MotionScriptPlanner("auto", rng=random.Random(8))

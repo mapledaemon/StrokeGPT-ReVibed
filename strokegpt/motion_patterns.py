@@ -48,6 +48,7 @@ class MotionPattern:
 class PatternFrame:
     target: MotionTarget
     delay_factor: float
+    phase: str = "pattern"
 
 
 @dataclass(frozen=True)
@@ -818,6 +819,7 @@ def pattern_names() -> tuple[str, ...]:
 
 def _actions_to_frames(
     actions: tuple[PatternAction, ...],
+    current: MotionTarget,
     target: MotionTarget,
     style: FrameStyle,
     *,
@@ -871,9 +873,165 @@ def _actions_to_frames(
                     label=f"{base_label} {index + 1}",
                 ).clamped(),
                 delay_factor=delay_factor,
+                phase="pattern",
+            )
+        )
+    frames = _blend_from_current(current, frames, style.name)
+    return _blend_direction_changes(frames, style.name)
+
+
+def _blend_from_current(
+    current: MotionTarget,
+    frames: list[PatternFrame],
+    label: str,
+) -> list[PatternFrame]:
+    if not frames:
+        return frames
+
+    current = current.clamped()
+    first = frames[0].target.clamped()
+    blend_frames = []
+    start = current
+    blend_label = label or first.label
+
+    if abs(first.depth - current.depth) > 14.0 and first.speed > 8.0:
+        start = MotionTarget(
+            max(8.0, min(first.speed, current.speed) * 0.62),
+            current.depth,
+            current.stroke_range,
+            label=f"{blend_label} blend settle",
+        ).clamped()
+        blend_frames.append(PatternFrame(start, delay_factor=0.14, phase="blend"))
+
+    if first.speed + 10.0 < current.speed:
+        start = MotionTarget(
+            first.speed,
+            start.depth,
+            start.stroke_range,
+            label=f"{blend_label} blend speed",
+        ).clamped()
+        blend_frames.append(PatternFrame(start, delay_factor=0.1, phase="blend"))
+
+    speed_delta = abs(first.speed - start.speed)
+    depth_delta = abs(first.depth - start.depth)
+    range_delta = abs(first.stroke_range - start.stroke_range)
+    steps = max(
+        math.ceil(speed_delta / 12.0),
+        math.ceil(depth_delta / 8.0),
+        math.ceil(range_delta / 16.0),
+    )
+    steps = max(0, min(10, steps))
+    if steps <= 1 and speed_delta < 10 and depth_delta < 10 and range_delta < 12:
+        return blend_frames + frames
+
+    for index in range(1, steps + 1):
+        amount = minimum_jerk(index / (steps + 1))
+        blend_frames.append(
+            PatternFrame(
+                MotionTarget(
+                    speed=_interpolate(start.speed, first.speed, amount, "linear"),
+                    depth=_interpolate(start.depth, first.depth, amount, "linear"),
+                    stroke_range=_interpolate(start.stroke_range, first.stroke_range, amount, "linear"),
+                    label=f"{blend_label} blend {index}",
+                ).clamped(),
+                delay_factor=0.16,
+                phase="blend",
+            )
+        )
+    return blend_frames + frames
+
+
+def _depth_direction(start: MotionTarget, end: MotionTarget, threshold: float = 7.0) -> int:
+    delta = end.depth - start.depth
+    if abs(delta) < threshold:
+        return 0
+    return 1 if delta > 0 else -1
+
+
+def _turn_speed(previous: MotionTarget, target: MotionTarget) -> float:
+    base_speed = min(previous.speed, target.speed)
+    if base_speed <= 8.0:
+        return base_speed
+    return max(8.0, base_speed * 0.45)
+
+
+def _is_turn_apex(frames: list[PatternFrame], index: int) -> bool:
+    if index <= 0 or index >= len(frames) - 1:
+        return False
+    previous = frames[index - 1]
+    current = frames[index]
+    following = frames[index + 1]
+    if previous.phase != "pattern" or current.phase != "pattern" or following.phase != "pattern":
+        return False
+    into_turn = _depth_direction(previous.target, current.target, threshold=5.0)
+    out_of_turn = _depth_direction(current.target, following.target, threshold=5.0)
+    return bool(into_turn and out_of_turn and into_turn != out_of_turn)
+
+
+def _turn_apex_frame(frames: list[PatternFrame], index: int) -> PatternFrame:
+    previous = frames[index - 1].target.clamped()
+    current = frames[index].target.clamped()
+    following = frames[index + 1].target.clamped()
+    turn_speed = min(_turn_speed(previous, current), _turn_speed(current, following))
+    return PatternFrame(
+        MotionTarget(
+            turn_speed,
+            current.depth,
+            current.stroke_range,
+            label=f"{current.label or 'pattern'} turn apex",
+        ).clamped(),
+        delay_factor=max(frames[index].delay_factor, 0.2),
+        phase="pattern",
+    )
+
+
+def _turn_exit_frames(apex: PatternFrame, following: PatternFrame, label: str) -> list[PatternFrame]:
+    apex_target = apex.target.clamped()
+    following_target = following.target.clamped()
+    depth_delta = following_target.depth - apex_target.depth
+    if abs(depth_delta) < 6.0:
+        return []
+    blend_label = label or following_target.label or "pattern"
+    frames = [
+        PatternFrame(
+            MotionTarget(
+                _interpolate(apex_target.speed, following_target.speed, 0.35, "linear"),
+                apex_target.depth + depth_delta * 0.18,
+                _interpolate(apex_target.stroke_range, following_target.stroke_range, 0.25, "linear"),
+                label=f"{blend_label} turn exit",
+            ).clamped(),
+            delay_factor=0.14,
+            phase="blend",
+        )
+    ]
+    if abs(depth_delta) >= 18.0:
+        frames.append(
+            PatternFrame(
+                MotionTarget(
+                    _interpolate(apex_target.speed, following_target.speed, 0.55, "linear"),
+                    apex_target.depth + depth_delta * 0.38,
+                    _interpolate(apex_target.stroke_range, following_target.stroke_range, 0.45, "linear"),
+                    label=f"{blend_label} turn recover",
+                ).clamped(),
+                delay_factor=0.14,
+                phase="blend",
             )
         )
     return frames
+
+
+def _blend_direction_changes(frames: list[PatternFrame], label: str) -> list[PatternFrame]:
+    if len(frames) < 3:
+        return frames
+
+    result = []
+    for index, frame in enumerate(frames):
+        if _is_turn_apex(frames, index):
+            frame = _turn_apex_frame(frames, index)
+        result.append(frame)
+        if _is_turn_apex(frames, index):
+            result.extend(_turn_exit_frames(frame, frames[index + 1], label))
+    return result
 
 
 def expand_pattern(
@@ -901,6 +1059,7 @@ def expand_motion_pattern(
 
     return _actions_to_frames(
         actions,
+        current,
         target,
         FrameStyle(
             name=pattern.name,
@@ -932,6 +1091,7 @@ def expand_anchor_program(
     speed_scale = 0.85 + anchor_program.tempo * 0.18
     return _actions_to_frames(
         actions,
+        current,
         target,
         FrameStyle(
             name="anchor_loop",

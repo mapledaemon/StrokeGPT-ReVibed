@@ -19,13 +19,13 @@ Complexity key:
 Why next: consistent terms make both deterministic commands and LLM outputs less
 surprising before deeper pattern generation work.
 
-- Define remaining named motion semantics for `freestyle`, deterministic speed
-  ranges, full-range behavior, and optional LLM-controlled auto timing.
-- If freestyle or LLM-controlled auto timing is added, gate it behind explicit
-  experimental controls and keep stop handling, speed limits, and smoothing
-  intact.
-- Treat the Freestyle experimental control as a future neural-style mapping
-  entry point; do not wire it to HAMP or the current scripted Auto framework.
+- Define remaining named motion semantics for deterministic speed ranges,
+  full-range behavior, and optional LLM-controlled auto timing.
+- Add user-facing Freestyle planner controls and diagnostics for fuzzy inputs
+  such as visible weights, feedback, recent chat, and current motion context.
+- Keep Freestyle off HAMP/current scripted Auto arcs; it should continue using
+  the experimental pattern/script playback path until a later motion backend
+  replaces the current default.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
 - Let preset modes speak occasionally without turning mode timers into repeated
@@ -59,6 +59,8 @@ control while staying inspectable.
   controls.
 - Let the LLM choose from saved soft-anchor patterns by id and weight instead
   of inventing hidden free-form behavior.
+- Later, allow bounded on-the-fly pattern generation only after graph preview,
+  validation, smoothing, and stop/speed/range safeguards are reliable.
 - Keep anchors as soft waypoints, not hard stops.
 - Treat the anchors like pattern-matching notes: movement should slide through
   targets smoothly, may slow down to hit a target, and should not snap or stop
@@ -72,6 +74,13 @@ control stabilized; targeted cleanup should happen before larger feature work.
 - Check for code that translates between multiple overlapping schemas or
   function sets and decide whether each layer should be preserved, simplified,
   or rewritten.
+- Before changing the default motion backend, audit the flexible
+  position/script path against chat control, Freestyle, motion training,
+  Edge/Milk mode scripts, stop behavior, and real-device smoothness.
+- When the new schema becomes the only motion backend, preserve the current
+  shared backend guard rails: pass-through final targets for continuous
+  planners, user-speed-relative XAVA velocity caps, depth-jump splitting, and
+  turn-apex smoothing for all position/script callers.
 - Evaluate whether Python remains adequate for the app's runtime, UI, and local
   model-control constraints before considering any rewrite.
 - Evaluate fuzzy-logic style controllers only as an experiment with clear
@@ -274,6 +283,10 @@ runtime shows a clear app-level benefit.
 - HAMP continuous motion should remain the recommended default until flexible
   position/script playback has more real-device validation for smoothness,
   pattern fidelity, latency, and recovery behavior.
+- The current flexible backend now receives shared smoothing for pattern/script
+  playback and plain chat targets, but it should not become the default until
+  those paths are validated on the physical device without boundary stutter,
+  unexpected stops, or speed-limit escapes.
 - Voice control should use local speech-to-text models. Hosted transcription
   would change the privacy and setup assumptions of the project.
 - Always-on voice should wait until push-to-talk, transcript preview, latency,

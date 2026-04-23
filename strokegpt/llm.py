@@ -159,6 +159,12 @@ You MUST translate user commands into movement intent. Use these as a guide:
 
 If the user gives a vague command, vary the movement by changing zone, pattern, speed, and stroke length. Do not keep sending the same move unless the user asked for steady repetition.
 """
+        if not context.get("allow_llm_edge_in_chat", True):
+            prompt_text += """
+### CHAT EDGE PERMISSION
+- Do not choose edge-specific fixed `move.pattern` ids, pullback/hold edge behavior, or denial/edge pacing in normal chat output.
+- If I explicitly want Edge Me, the app handles that through the preset mode outside this chat movement JSON.
+"""
         if context.get('motion_preferences'):
             prompt_text += "\n### MOTION PATTERN PREFERENCES:\n"
             prompt_text += str(context.get('motion_preferences')).strip()
@@ -197,17 +203,29 @@ Your current mood is '{context.get('current_mood')}'. Handy is at {context.get('
     def get_mode_decision(self, chat_history, context, *, mode, event, edge_count=0, current_target=None):
         speed_min, speed_max = _context_speed_range(context)
         current_target = current_target or {}
+        freestyle_edge_rule = ""
+        if mode == "freestyle":
+            if context.get("allow_llm_edge_in_freestyle", True):
+                freestyle_edge_rule = "- In `freestyle`, an I'm Close signal must choose between edge-style and milk-style behavior. Return `hold_then_resume` or `pull_back` for edge-style, `switch_to_milk` for milk-style, and `stop` only if stopping is the deliberate decision."
+            else:
+                freestyle_edge_rule = "- In `freestyle`, edge-style behavior is disabled. Do not return `hold_then_resume` or `pull_back`; choose `switch_to_milk`, `continue`, or `stop`."
         prompt = f"""
-You are choosing a finite motion-mode decision for StrokeGPT-ReVibed.
+You are choosing a motion-mode decision for StrokeGPT-ReVibed.
 Return ONLY a JSON object with this exact shape:
 {{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <5-180>, "intensity": <0-100>, "chat": "<short optional line|null>"}}
 
 Rules:
-- This is not free-running control. Every decision must be finite and bounded.
+- `milking` and `freestyle` are continuous modes. They continue until the user
+  stops them, changes mode, or you deliberately return `stop`.
+- `duration_seconds` is a bounded timing hint for temporary holds, pullbacks,
+  intensity changes, or edge reactions. It is not permission to finish a
+  continuous mode just because the duration elapses.
 - Choose `intensity` on a 0-100 scale while respecting the user's configured speed range `{speed_min}-{speed_max}`; the app will still clamp all device output to user limits.
-- Use `switch_to_milk` only when the current mode is `edging`.
-- In `milking`, an I'm Close signal usually means continue or hold briefly and extend the bounded sequence, unless recent context says to stop.
+- Use `switch_to_milk` only when the current mode is `edging`, or when the current mode is `freestyle` and an I'm Close signal should become milk-style motion.
+- In `milking`, start and I'm Close decisions should usually keep going and may
+  adjust intensity. Return `stop` only when stopping is the deliberate decision.
 - In `edging`, an I'm Close signal can hold-then-resume, pull back, switch to Milk, or stop. Use edge count and recent chat history to decide.
+{freestyle_edge_rule}
 - Keep `chat` short. Use null if no mode narration is needed.
 
 Mode event:

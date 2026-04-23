@@ -58,7 +58,8 @@ def enrich_catalog(catalog, weight_overrides=None):
     return updated
 
 
-def build_motion_preference_payload(catalog):
+def build_motion_preference_payload(catalog, excluded_llm_pattern_ids=None):
+    excluded_llm_pattern_ids = set(excluded_llm_pattern_ids or ())
     enriched = enrich_catalog(catalog)
     fixed_patterns = [
         pattern
@@ -74,7 +75,11 @@ def build_motion_preference_payload(catalog):
         key=lambda pattern: str(pattern.get("id") or ""),
     )
     llm_visible_fixed = sorted(
-        (pattern for pattern in fixed_patterns if pattern.get("llm_visible")),
+        (
+            pattern
+            for pattern in fixed_patterns
+            if pattern.get("llm_visible") and pattern.get("id") not in excluded_llm_pattern_ids
+        ),
         key=lambda pattern: (-int(pattern.get("weight") or 0), str(pattern.get("id") or "")),
     )
     return {

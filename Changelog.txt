@@ -8,6 +8,63 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - Unreleased - Add Adaptive Freestyle Planner
+---------------------------------------------------------
+
+Branch: codex-adaptive-freestyle-planner
+
+- Wired the Experimental Freestyle control to start an adaptive planner instead
+  of leaving it disabled.
+- Added fuzzy pattern selection over enabled motion patterns using visible
+  weights, feedback, recent pattern history, current motion context, and chat
+  feedback relayed during the mode.
+- Kept Freestyle off the HAMP scripted Auto arcs by playing selected pattern
+  frames through the experimental position/script playback path.
+- Chained Freestyle pattern playback with pass-through final targets so the
+  device slides from one selected pattern into the next instead of stopping at
+  each pattern boundary.
+- Queued short Freestyle pattern chains into each playback call and removed the
+  nonzero boundary pause so adaptive mode does not stop at regular selection
+  intervals.
+- Removed the zero-duration Freestyle sleep floor that was still creating a
+  regular boundary pause between adaptive chains.
+- Made the I'm Close control visible during Freestyle and routed it to the LLM
+  mode-decision prompt so Freestyle can bias toward edge-style or milk-style
+  motion instead of stopping automatically.
+- Changed Freestyle edge-style close decisions to run the same pullback,
+  recover, and hold reaction sequence used by Edge Me before returning to
+  normal Freestyle selection.
+- Added a safe edge-motion buffer while Freestyle waits for the LLM to decide
+  after I'm Close, so local model latency does not create a motion gap.
+- Made Milk Me continuous until the user stops it or explicitly changes mode,
+  instead of ending after the LLM's initial duration hint or a fixed step cap.
+- Made Edge-to-Milk transitions enter continuous Milk Me rather than a finite
+  milk segment that can stop shortly after switching modes.
+- Updated mode-decision prompting so Milking and Freestyle are described as
+  continuous modes, with duration treated as a temporary timing hint rather
+  than a completion instruction.
+- Added Motion settings permissions for allowing LLM edge behavior in Freestyle
+  close decisions and in normal chat-generated motion.
+- Filtered chat-visible edge patterns out of the LLM motion prompt when chat
+  edge permission is disabled, while keeping deterministic Edge Me available.
+- Added shared blend frames to pattern and anchor expansion so new scripts ease
+  out of the previous motion state before entering the next pattern shape.
+- Added lookahead turn-apex smoothing for intra-pattern direction changes so
+  the controller brakes into reversal points and eases out of them instead of
+  snapping directly into the next stroke direction.
+- Added position-playback guard rails that split oversized depth jumps into
+  smaller XAVA targets and cap generated velocities against the current Handy
+  max-speed setting.
+- Slowed final pass-through XAVA targets so Freestyle batch handoffs have time
+  to retarget before the device reaches the end of a finite command sequence.
+- Routed plain chat-generated targets through the flexible position backend
+  when selected, so numeric chat control receives the same smoothing and
+  velocity guard rails as pattern/script playback.
+- Updated the roadmap so raw on-the-fly motion generation remains a later
+  guarded target behind graph preview, validation, smoothing, and safety
+  constraints.
+
+
 2026-04-22 - PR #40 - Add LLM Mode Decisions
 ---------------------------------------------
 
