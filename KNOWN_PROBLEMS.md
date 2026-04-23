@@ -77,3 +77,49 @@ Follow-up work:
 - Keep status bars and feedback controls compact without oversized bezels.
 - Prefer small layout fixes and responsive constraints over large visual
   rewrites unless the current structure blocks clean formatting.
+- Tighten right-side collapsible menu spacing so additional buttons can fit
+  without forcing a full layout rewrite.
+- Split the active-mode timer indicator and the mode-label indicator into two
+  fixed-size elements so neither resizes the surrounding strip when text
+  changes length.
+
+## Local LLM Chat Text Sometimes Missing While Voice Plays
+
+Status: Open
+
+The local LLM occasionally emits a reply that the TTS path speaks normally while
+the chat panel never displays the matching text. The voice model receives the
+message even though the user-facing transcript is missing the line, so the
+divergence appears to be between the chat-emit path and the TTS-enqueue path
+rather than a model failure.
+
+Follow-up work:
+
+- Verify the chat-emit path runs in lockstep with the TTS-enqueue path for both
+  streamed and non-streamed Ollama responses.
+- Add a diagnostic log when the chat text is empty but a TTS payload was
+  enqueued so the missing-line case is easy to reproduce and triage.
+- Confirm the front-end chat panel is not silently dropping messages when a
+  prior message is mid-render or while a mode transition is updating the
+  status strip.
+
+## Web UI Stays Functional After Backend Shutdown
+
+Status: Open
+
+When the Flask backend is stopped while a browser tab is still open, much of
+the UI continues to look responsive even though writes silently fail. Settings
+toggles, sliders, and feedback buttons can appear to save without any indicator
+that the backend never received the change, which makes it easy to lose user
+edits and hard to tell when a setting actually persisted.
+
+Follow-up work:
+
+- Surface a connection-lost banner or disabled state when `/get_status` or the
+  matching write endpoints stop responding so the UI cannot quietly accept
+  changes that will not persist.
+- Audit settings-write endpoints for explicit success/failure indicators in the
+  GUI, especially for toggles that currently rely on optimistic local state.
+- Confirm any feedback-driven change to weights or pattern enablement shows the
+  resulting numeric value in the GUI immediately so the user can see the
+  change took effect rather than guessing from device behavior.
