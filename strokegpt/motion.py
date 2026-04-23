@@ -13,6 +13,27 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
+POSITION_MAX_DEPTH_STEP = 9.0
+POSITION_BLEND_DELAY_FACTOR = 0.16
+POSITION_TURN_DELAY_FACTOR = 0.2
+TURN_BRAKE_SPEED_FACTOR = 0.45
+POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
+
+
+def _depth_direction(start: "MotionTarget", end: "MotionTarget", threshold: float = 7.0) -> int:
+    delta = end.depth - start.depth
+    if abs(delta) < threshold:
+        return 0
+    return 1 if delta > 0 else -1
+
+
+def _turn_slowdown_speed(start: "MotionTarget", end: "MotionTarget") -> float:
+    base_speed = min(start.speed, end.speed)
+    if base_speed <= 8.0:
+        return base_speed
+    return max(8.0, base_speed * TURN_BRAKE_SPEED_FACTOR)
+
+
 def _as_number(value: Any) -> Optional[float]:
     try:
         if value is None or isinstance(value, bool):
@@ -55,6 +76,13 @@ class ParsedIntent:
     kind: str
     target: Optional[MotionTarget] = None
     matched: str = ""
+
+
+@dataclass(frozen=True)
+class PositionFrame:
+    target: MotionTarget
+    delay_factor: float
+    phase: str = "pattern"
 
 
 @dataclass(frozen=True)
@@ -349,6 +377,7 @@ class IntentMatcher:
     CONTROL_PATTERNS = (
         ("auto_on", (r"\btake\s+over\b", r"\byou\s+drive\b", r"\bauto\s+mode\b")),
         ("auto_off", (r"\bstop\s+auto\b", r"\bmanual\b", r"\bmy\s+turn\b")),
+        ("freestyle", (r"\bfreestyle\b", r"\badaptive\s+motion\b", r"\bneural\s+style\b")),
         ("edging", (r"\bedge\s+me\b", r"\bstart\s+edging\b", r"\btease\s+and\s+deny\b")),
         ("milking", (r"\bi'?m\s+close\b", r"\bfinish\s+me\b")),
     )
@@ -621,6 +650,8 @@ class MotionController:
                 self.apply_position_frames(frames, source=source)
             else:
                 self.apply_frames(frames, source=source)
+        elif self.backend == "position":
+            self.apply_position_frames(self._direct_position_frames(target), source=source)
         else:
             self.apply_target(target, source=source)
 
@@ -636,15 +667,136 @@ class MotionController:
         self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
 
+    def _position_velocity_cap(self, target: MotionTarget) -> int | None:
+        if hasattr(self.handy, "max_velocity_for_relative_speed"):
+            try:
+                return int(round(self.handy.max_velocity_for_relative_speed(target.speed)))
+            except (TypeError, ValueError):
+                return None
+        if hasattr(self.handy, "_relative_speed_to_velocity"):
+            try:
+                velocity = int(round(self.handy._relative_speed_to_velocity(target.speed)))
+                max_velocity = getattr(self.handy, "max_user_speed", None)
+                if max_velocity is not None:
+                    velocity = min(velocity, int(round(max_velocity)))
+                return velocity
+            except (TypeError, ValueError):
+                return None
+        try:
+            return max(0, int(round(target.speed)))
+        except (TypeError, ValueError):
+            return None
+
     def _position_velocity(self, start: MotionTarget, target: MotionTarget, duration_seconds: float) -> int | None:
+        velocity = None
         if hasattr(self.handy, "velocity_for_depth_interval"):
-            return self.handy.velocity_for_depth_interval(
+            velocity = self.handy.velocity_for_depth_interval(
                 target.speed,
                 start.depth,
                 target.depth,
                 duration_seconds,
             )
-        return None
+        cap = self._position_velocity_cap(target)
+        if velocity is None:
+            return cap
+        try:
+            velocity = int(round(velocity))
+        except (TypeError, ValueError):
+            return cap
+        if cap is not None:
+            velocity = min(velocity, cap)
+        return max(0, velocity)
+
+    def _coerce_position_frame(self, frame: Any) -> Optional[PositionFrame]:
+        target = getattr(frame, "target", None)
+        if not isinstance(target, MotionTarget):
+            return None
+        delay_factor = getattr(frame, "delay_factor", 1.0)
+        try:
+            delay_factor = max(0.0, float(delay_factor))
+        except (TypeError, ValueError):
+            delay_factor = 1.0
+        return PositionFrame(
+            target.clamped(),
+            delay_factor=delay_factor,
+            phase=str(getattr(frame, "phase", "pattern") or "pattern"),
+        )
+
+    def _direct_position_frames(self, target: MotionTarget) -> list[PositionFrame]:
+        return [
+            PositionFrame(step, delay_factor=1.0, phase="pattern")
+            for step in self.sanitizer.transition_path(self.current_target(), target)
+        ]
+
+    def _is_turn_apex(self, frames: list[PositionFrame], index: int) -> bool:
+        if index <= 0 or index >= len(frames) - 1:
+            return False
+        previous = frames[index - 1]
+        current = frames[index]
+        following = frames[index + 1]
+        if previous.phase != "pattern" or current.phase != "pattern" or following.phase != "pattern":
+            return False
+        into_turn = _depth_direction(previous.target, current.target, threshold=5.0)
+        out_of_turn = _depth_direction(current.target, following.target, threshold=5.0)
+        return bool(into_turn and out_of_turn and into_turn != out_of_turn)
+
+    def _turn_apex_frame(self, frames: list[PositionFrame], index: int) -> PositionFrame:
+        previous = frames[index - 1].target
+        current = frames[index].target
+        following = frames[index + 1].target
+        turn_speed = min(
+            _turn_slowdown_speed(previous, current),
+            _turn_slowdown_speed(current, following),
+        )
+        label = current.label or "position"
+        return PositionFrame(
+            MotionTarget(
+                turn_speed,
+                current.depth,
+                current.stroke_range,
+                label=f"{label} turn apex",
+            ).clamped(),
+            delay_factor=max(frames[index].delay_factor, POSITION_TURN_DELAY_FACTOR),
+            phase=frames[index].phase,
+        )
+
+    def _append_limited_position_frame(self, result: list[PositionFrame], frame: PositionFrame) -> None:
+        if not result:
+            result.append(frame)
+            return
+
+        previous = result[-1].target
+        target = frame.target
+        depth_delta = target.depth - previous.depth
+        steps = max(0, math.ceil(abs(depth_delta) / POSITION_MAX_DEPTH_STEP) - 1)
+        for step in range(1, steps + 1):
+            amount = step / (steps + 1)
+            transition_speed = min(
+                previous.speed + (target.speed - previous.speed) * amount,
+                max(8.0, min(previous.speed, target.speed) * 0.82),
+            )
+            result.append(
+                PositionFrame(
+                    MotionTarget(
+                        transition_speed,
+                        previous.depth + depth_delta * amount,
+                        previous.stroke_range + (target.stroke_range - previous.stroke_range) * amount,
+                        label=f"{target.label or 'position'} transition blend {step}",
+                    ).clamped(),
+                    delay_factor=POSITION_BLEND_DELAY_FACTOR,
+                    phase="blend",
+                )
+            )
+        result.append(frame)
+
+    def _position_playback_frames(self, frames: list[Any]) -> list[PositionFrame]:
+        coerced = [frame for raw in frames if (frame := self._coerce_position_frame(raw)) is not None]
+        result: list[PositionFrame] = []
+        for index, frame in enumerate(coerced):
+            if self._is_turn_apex(coerced, index):
+                frame = self._turn_apex_frame(coerced, index)
+            self._append_limited_position_frame(result, frame)
+        return result
 
     def _apply_position_step(
         self,
@@ -702,8 +854,18 @@ class MotionController:
         finally:
             self._set_frame_playback_active(False)
 
-    def apply_position_frames(self, frames: list[Any], *, stop_after: bool = False, source: str = "pattern preview") -> bool:
+    def apply_position_frames(
+        self,
+        frames: list[Any],
+        *,
+        stop_after: bool = False,
+        source: str = "pattern preview",
+        final_stop_on_target: bool = True,
+    ) -> bool:
         if not frames:
+            return False
+        playback_frames = self._position_playback_frames(frames)
+        if not playback_frames:
             return False
 
         with self._lock:
@@ -713,22 +875,27 @@ class MotionController:
 
         try:
             previous_target = self.current_target()
-            frame_count = len(frames)
-            for index, frame in enumerate(frames):
+            frame_count = len(playback_frames)
+            for index, frame in enumerate(playback_frames):
                 with self._lock:
                     if generation != self._generation:
                         return False
                 delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
                 is_last_frame = index == frame_count - 1
-                velocity = self._position_velocity(previous_target, frame.target, delay_seconds)
+                is_pass_through_final = is_last_frame and not final_stop_on_target and not stop_after
+                velocity_seconds = delay_seconds
+                if is_pass_through_final:
+                    velocity_seconds = max(velocity_seconds, POSITION_PASS_THROUGH_MIN_SECONDS)
+                velocity = self._position_velocity(previous_target, frame.target, velocity_seconds)
                 self._apply_position_step(
                     frame.target,
-                    stop_on_target=is_last_frame and not stop_after,
+                    stop_on_target=is_last_frame and final_stop_on_target and not stop_after,
                     velocity=velocity,
                     source=source,
                 )
                 previous_target = frame.target
-                if self.step_delay > 0:
+                should_sleep = not is_pass_through_final
+                if self.step_delay > 0 and should_sleep:
                     time.sleep(delay_seconds)
 
             if stop_after:

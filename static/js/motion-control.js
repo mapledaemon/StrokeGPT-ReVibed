@@ -69,8 +69,19 @@ export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
     state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
     state.motionFeedbackAutoDisable = data.motion_feedback_auto_disable ?? state.motionFeedbackAutoDisable ?? false;
+    state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
+    state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
+    }
+    if (el.allowLlmEdgeFreestyleCheckbox) {
+        el.allowLlmEdgeFreestyleCheckbox.checked = Boolean(state.allowLlmEdgeInFreestyle);
+    }
+    if (el.allowLlmEdgeChatCheckbox) {
+        el.allowLlmEdgeChatCheckbox.checked = Boolean(state.allowLlmEdgeInChat);
+    }
+    if (el.llmEdgePermissionsStatus) {
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}.`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -1318,7 +1329,7 @@ export async function pollMotionStatus() {
     }[data.mood] || '';
     el.moodDisplay.textContent = `Mood: ${data.mood} ${emoji}`;
     if (el.imCloseBtn) {
-        el.imCloseBtn.style.display = ['edging', 'milking'].includes(data.active_mode) ? 'block' : 'none';
+        el.imCloseBtn.style.display = ['edging', 'milking', 'freestyle'].includes(data.active_mode) ? 'block' : 'none';
     }
     if (data.active_mode !== 'edging' && state.edgingTimerInterval) {
         stopEdgingTimer();
@@ -1378,6 +1389,32 @@ async function startMilkingMode() {
     }
 }
 
+async function saveLlmEdgePermissions() {
+    const data = await apiCall('/set_llm_edge_permissions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            allow_llm_edge_in_freestyle: Boolean(el.allowLlmEdgeFreestyleCheckbox?.checked),
+            allow_llm_edge_in_chat: Boolean(el.allowLlmEdgeChatCheckbox?.checked),
+        }),
+    });
+    if (data && data.status === 'success') {
+        populateMotionSettings(data);
+        if (el.llmEdgePermissionsStatus) el.llmEdgePermissionsStatus.textContent = 'LLM edge permissions saved.';
+        el.statusText.textContent = 'LLM edge permissions saved.';
+    }
+}
+
+async function startFreestyleMode() {
+    el.statusText.textContent = 'Starting Freestyle...';
+    const data = await apiCall('/start_freestyle_mode', {method: 'POST'});
+    if (data && data.status === 'freestyle_started') {
+        el.statusText.textContent = 'Freestyle started.';
+        el.imCloseBtn.style.display = 'block';
+        stopEdgingTimer();
+    }
+}
+
 export function initMotionControls({sendUserMessage}) {
     D.getElementById('like-this-move-btn').addEventListener('click', likeLastMove);
     D.getElementById('dislike-this-move-btn')?.addEventListener('click', dislikeLastMove);
@@ -1389,12 +1426,15 @@ export function initMotionControls({sendUserMessage}) {
         else apiCall('/stop_auto_mode', {method: 'POST'});
     }));
     el.edgingModeBtn.addEventListener('click', startEdgingMode);
+    el.freestyleModeBtn?.addEventListener('click', startFreestyleMode);
     el.toggleMemoryBtn?.addEventListener('click', toggleLongTermMemory);
     el.imCloseBtn.addEventListener('click', async () => {
         const data = await apiCall('/signal_edge', {method: 'POST'});
         if (data && data.status === 'signaled') {
             el.statusText.textContent = data.mode === 'milking'
                 ? 'Milking mode extended.'
+                : data.mode === 'freestyle'
+                    ? 'Freestyle close signal sent.'
                 : 'Close signal sent.';
         }
         el.imCloseBtn.style.transform = 'scale(0.95)';
@@ -1406,6 +1446,7 @@ export function initMotionControls({sendUserMessage}) {
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
+    el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.addEventListener('change', saveMotionFeedbackOptions);

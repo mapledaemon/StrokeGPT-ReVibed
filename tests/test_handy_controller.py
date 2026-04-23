@@ -137,6 +137,16 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual(velocity, 40)
 
+    def test_position_velocity_never_exceeds_current_max_speed(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 30, 0, 100)
+
+        self.assertEqual(handy.velocity_for_depth_interval(100, 0, 100, 0.1), 30)
+        handy.move_to_depth(100, 90, velocity=1000)
+
+        body = handy.commands[-1][1]
+        self.assertEqual(body["velocity"], 30)
+
     def test_move_to_depth_stops_hamp_before_position_preview(self):
         handy = RecordingHandyController()
         handy.move(50, 50, 50)

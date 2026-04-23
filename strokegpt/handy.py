@@ -76,6 +76,9 @@ class HandyController:
         velocity = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
         return int(round(velocity))
 
+    def max_velocity_for_relative_speed(self, speed):
+        return min(self.max_user_speed, self._relative_speed_to_velocity(speed))
+
     def _relative_depth_to_mm(self, depth):
         absolute_pos_pct = self._relative_depth_to_physical_percent(depth)
         return self.FULL_TRAVEL_MM * (absolute_pos_pct / 100.0)
@@ -86,7 +89,7 @@ class HandyController:
         return self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
 
     def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
-        max_velocity = self._relative_speed_to_velocity(speed)
+        max_velocity = self.max_velocity_for_relative_speed(speed)
         try:
             duration_seconds = float(duration_seconds)
         except (TypeError, ValueError):
@@ -182,9 +185,12 @@ class HandyController:
         relative_speed_pct = self._safe_percent(speed)
         relative_pos_pct = self._safe_percent(depth)
         if velocity is None:
-            velocity = self._relative_speed_to_velocity(relative_speed_pct)
+            velocity = self.max_velocity_for_relative_speed(relative_speed_pct)
         else:
-            velocity = max(self.min_user_speed, min(self._relative_speed_to_velocity(relative_speed_pct), int(round(velocity))))
+            velocity = max(
+                self.min_user_speed,
+                min(self.max_velocity_for_relative_speed(relative_speed_pct), int(round(velocity))),
+            )
         position = self._relative_depth_to_mm(relative_pos_pct)
         body = {"position": position, "velocity": velocity, "stopOnTarget": bool(stop_on_target)}
         if not self._send_command("hdsp/xava", body):

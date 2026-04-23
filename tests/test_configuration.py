@@ -64,6 +64,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
         self.assertEqual(saved["ollama_diagnostics_level"], "compact")
         self.assertFalse(saved["motion_feedback_auto_disable"])
+        self.assertTrue(saved["allow_llm_edge_in_freestyle"])
+        self.assertTrue(saved["allow_llm_edge_in_chat"])
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -86,6 +88,24 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_diagnostics_level, "compact")
         self.assertEqual(settings.ollama_diagnostics_level, "compact")
         self.assertFalse(settings.motion_feedback_auto_disable)
+        self.assertTrue(settings.allow_llm_edge_in_freestyle)
+        self.assertTrue(settings.allow_llm_edge_in_chat)
+
+    def test_llm_edge_permission_settings_are_persisted(self):
+        fake_path = FakePath(json.dumps({
+            "allow_llm_edge_in_freestyle": False,
+            "allow_llm_edge_in_chat": False,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertFalse(settings.allow_llm_edge_in_freestyle)
+        self.assertFalse(settings.allow_llm_edge_in_chat)
+        self.assertFalse(saved["allow_llm_edge_in_freestyle"])
+        self.assertFalse(saved["allow_llm_edge_in_chat"])
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -227,6 +247,24 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"as fast as you can on the base"', prompt)
         self.assertIn('"as fast as you can on the base"**: `{"sp": 80', prompt)
 
+    def test_llm_prompt_can_disallow_edge_patterns_in_chat(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "Available fixed move.pattern weights from 0-100.\nsway=74",
+            "allow_llm_edge_in_chat": False,
+        })
+
+        self.assertIn("CHAT EDGE PERMISSION", prompt)
+        self.assertIn("Do not choose edge-specific fixed `move.pattern` ids", prompt)
+
     def test_llm_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")
 
@@ -292,10 +330,46 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>"', prompt)
         self.assertIn("duration_seconds", prompt)
         self.assertIn("5-180", prompt)
+        self.assertIn("`milking` and `freestyle` are continuous modes", prompt)
+        self.assertIn("not permission to finish", prompt)
+        self.assertIn("continuous mode just because the duration elapses", prompt)
         self.assertIn("configured speed range `12-64`", prompt)
         self.assertIn("mode: edging", prompt)
         self.assertIn("event: close_signal", prompt)
         self.assertIn("edge_count: 2", prompt)
+
+    def test_freestyle_mode_decision_prompt_honors_edge_permission(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+        captured = {}
+
+        def fake_talk(messages, temperature=0.3):
+            captured["messages"] = messages
+            captured["temperature"] = temperature
+            return {
+                "action": "hold_then_resume",
+                "duration_seconds": 25,
+                "intensity": 72,
+                "chat": "Holding back.",
+            }
+
+        service._talk_to_llm = fake_talk
+        service.get_mode_decision(
+            [{"role": "user", "content": "I'm close"}],
+            {
+                "current_mood": "Anticipatory",
+                "min_speed": 12,
+                "max_speed": 64,
+                "allow_llm_edge_in_freestyle": False,
+            },
+            mode="freestyle",
+            event="close_signal",
+            edge_count=1,
+            current_target={"speed": 40, "depth": 55, "stroke_range": 48},
+        )
+
+        prompt = captured["messages"][0]["content"]
+        self.assertIn("edge-style behavior is disabled", prompt)
+        self.assertIn("Do not return `hold_then_resume` or `pull_back`", prompt)
 
     def test_legacy_model_migrates_to_new_default(self):
         fake_path = FakePath(json.dumps({"ollama_model": LEGACY_OLLAMA_MODEL}))

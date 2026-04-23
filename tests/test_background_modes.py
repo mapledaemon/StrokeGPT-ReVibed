@@ -7,12 +7,16 @@ from unittest import mock
 from strokegpt import background_modes
 from strokegpt.background_modes import AutoModeThread, _sleep_with_stop
 from strokegpt.motion import MotionTarget
+from strokegpt.motion_patterns import MotionPattern, PatternAction
 
 
 class FakeMotionController:
     def __init__(self):
         self.stopped = False
         self.applied = []
+        self.position_frames = []
+        self.position_sources = []
+        self.position_final_stop_on_target = []
 
     def stop(self):
         self.stopped = True
@@ -24,6 +28,41 @@ class FakeMotionController:
 
     def apply_target(self, target, source="target"):
         self.applied.append(target)
+
+    def apply_position_frames(
+        self,
+        frames,
+        *,
+        stop_after=False,
+        source="pattern preview",
+        final_stop_on_target=True,
+    ):
+        self.position_frames.extend(frames)
+        self.position_sources.append(source)
+        self.position_final_stop_on_target.append(final_stop_on_target)
+        if frames:
+            self.applied.append(frames[-1].target)
+        return True
+
+
+class FakePatternRecord:
+    def __init__(self, pattern_id, name=None, source="fixed", enabled=True):
+        self.pattern_id = pattern_id
+        self.name = name or pattern_id
+        self.source = source
+        self.enabled = enabled
+        self.feedback = {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0}
+
+    def to_motion_pattern(self):
+        return MotionPattern(
+            self.name,
+            (
+                PatternAction(0, 20),
+                PatternAction(240, 80),
+                PatternAction(480, 30),
+            ),
+            interpolation_ms=80,
+        )
 
 
 class AutoModeThreadTests(unittest.TestCase):
@@ -65,6 +104,13 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertTrue(finished.wait(0.5))
         thread.join(timeout=1)
         self.assertFalse(thread.is_alive())
+
+    def test_sleep_allows_zero_duration_yield_without_interval_floor(self):
+        started = time.monotonic()
+
+        _sleep_with_stop(threading.Event(), 0)
+
+        self.assertLess(time.monotonic() - started, 0.05)
 
     def test_stop_during_initial_delay_runs_cleanup_without_mode_step(self):
         messages = []
@@ -112,12 +158,16 @@ class AutoModeThreadTests(unittest.TestCase):
             "remember_pattern": remembered.append,
         }
 
-        with mock.patch.object(background_modes.random, "randint", side_effect=[2, 3]):
-            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
-                background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
+        def stop_after_five_steps(event, *_args, **_kwargs):
+            if len(motion.applied) >= 5:
+                event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_five_steps):
+            background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(len(motion.applied), 5)
         self.assertTrue(any("Staying with it" in message for message in messages))
+        self.assertFalse(any("Finishing the sequence" in message for message in messages))
         self.assertEqual(len(remembered), len(motion.applied))
         self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
 
@@ -151,14 +201,56 @@ class AutoModeThreadTests(unittest.TestCase):
             "mode_decision": mode_decision,
         }
 
-        with mock.patch.object(background_modes.random, "randint", return_value=2):
-            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
-                background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
+        def stop_after_ten_steps(event, *_args, **_kwargs):
+            if len(motion.applied) >= 10:
+                event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_ten_steps):
+            background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(decisions, [("milking", "start"), ("milking", "close_signal")])
         self.assertEqual(len(motion.applied), 10)
         self.assertTrue(any("Keeping the finish going" in message for message in messages))
+        self.assertFalse(any("Finishing the sequence" in message for message in messages))
         self.assertTrue(all(target.speed >= 0 for target in motion.applied))
+
+    def test_milking_start_duration_does_not_finish_the_mode(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        messages = []
+        decisions = []
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"]))
+            return {
+                "action": "continue",
+                "duration_seconds": 5,
+                "intensity": 55,
+                "chat": "Starting milk.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (1, 1),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": threading.Event(),
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": lambda _target: None,
+            "mode_decision": mode_decision,
+        }
+
+        def stop_after_twelve_steps(event, *_args, **_kwargs):
+            if len(motion.applied) >= 12:
+                event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_twelve_steps):
+            background_modes.milking_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(decisions, [("milking", "start")])
+        self.assertEqual(len(motion.applied), 12)
+        self.assertTrue(any("Starting milk" in message for message in messages))
+        self.assertFalse(any("Finishing the sequence" in message for message in messages))
 
     def test_edging_close_signal_can_switch_to_milking_from_llm_decision(self):
         motion = FakeMotionController()
@@ -192,15 +284,348 @@ class AutoModeThreadTests(unittest.TestCase):
             "set_mode_name": mode_names.append,
         }
 
+        def stop_after_milk_starts(event, *_args, **_kwargs):
+            if mode_names and mode_names[-1] == "milking" and len(motion.applied) >= 8:
+                event.set()
+
         with mock.patch.object(background_modes.random, "randint", return_value=2):
-            with mock.patch.object(background_modes, "_sleep_with_stop", lambda *args, **kwargs: None):
+            with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_milk_starts):
                 background_modes.edging_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertIn(("edging", "start", 0), decisions)
         self.assertIn(("edging", "close_signal", 1), decisions)
         self.assertIn("milking", mode_names)
         self.assertTrue(any("Switching to milk" in message for message in messages))
+        self.assertFalse(any("Holding there" in message for message in messages))
         self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
+
+    def test_freestyle_mode_plays_enabled_pattern_with_position_frames(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        messages = []
+        remembered = []
+        candidates = [
+            {
+                "id": "disabled-flick",
+                "name": "Disabled Flick",
+                "source": "fixed",
+                "enabled": False,
+                "weight": 100,
+                "record": FakePatternRecord("disabled-flick", "Disabled Flick", enabled=False),
+            },
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+        }
+        sleep_seconds = []
+
+        def stop_after_iteration(event, seconds, *_args, **_kwargs):
+            sleep_seconds.append(seconds)
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(remembered, ["sway", "sway", "sway", "sway"])
+        self.assertEqual(motion.position_sources, ["freestyle planner"])
+        self.assertEqual(motion.position_final_stop_on_target, [False])
+        self.assertTrue(motion.position_frames)
+        self.assertEqual(sleep_seconds, [0])
+        self.assertTrue(any("Freestyle selecting Sway" in message for message in messages))
+
+    def test_freestyle_close_signal_asks_llm_for_milk_style(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        remembered = []
+        decisions = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+            {
+                "id": "milking-pressure-build",
+                "name": "Milking Pressure Build",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 50,
+                "record": FakePatternRecord("milking-pressure-build", "Milking Pressure Build"),
+            },
+        ]
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"], kwargs["edge_count"]))
+            return {
+                "action": "switch_to_milk",
+                "duration_seconds": 12,
+                "intensity": 84,
+                "chat": "Choosing milk style.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+            "mode_decision": mode_decision,
+        }
+
+        def stop_after_iteration(event, *_args, **_kwargs):
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(decisions, [("freestyle", "close_signal", 1)])
+        self.assertEqual(remembered[0], "milking-pressure-build")
+        self.assertEqual(motion.position_final_stop_on_target, [False])
+        self.assertTrue(any("Choosing milk style" in message for message in messages))
+
+    def test_freestyle_close_signal_runs_edge_reaction_then_resumes_freestyle(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        remembered = []
+        decisions = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"], kwargs["edge_count"]))
+            return {
+                "action": "hold_then_resume",
+                "duration_seconds": 12,
+                "intensity": 30,
+                "chat": "Holding the edge.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+            "mode_decision": mode_decision,
+        }
+        freestyle_iterations = []
+
+        def stop_after_freestyle_resume(event, *_args, **_kwargs):
+            freestyle_iterations.append(True)
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_freestyle_resume):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(decisions, [("freestyle", "close_signal", 1)])
+        self.assertEqual(motion.position_sources[0], "freestyle edge reaction")
+        self.assertEqual(motion.position_sources[1], "freestyle planner")
+        self.assertEqual(motion.position_final_stop_on_target, [False, False])
+        self.assertEqual(remembered, ["sway", "sway", "sway", "sway", "sway", "sway"])
+        self.assertTrue(freestyle_iterations)
+        self.assertTrue(any("Holding the edge" in message for message in messages))
+        self.assertTrue(any("Backing off. Edge count: 1." in message for message in messages))
+
+    def test_freestyle_close_signal_keeps_motion_running_while_llm_decides(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        bridge_started = threading.Event()
+        release_decision = threading.Event()
+        remembered = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+
+        original_apply_position_frames = motion.apply_position_frames
+
+        def apply_position_frames(frames, **kwargs):
+            if kwargs.get("source") == "freestyle edge reaction":
+                bridge_started.set()
+                release_decision.set()
+            return original_apply_position_frames(frames, **kwargs)
+
+        def mode_decision(**_kwargs):
+            bridge_started.wait(timeout=1)
+            release_decision.wait(timeout=1)
+            return {
+                "action": "hold_then_resume",
+                "duration_seconds": 12,
+                "intensity": 30,
+                "chat": "Holding the edge.",
+            }
+
+        motion.apply_position_frames = apply_position_frames
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+            "mode_decision": mode_decision,
+        }
+
+        def stop_after_resume(event, *_args, **_kwargs):
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_resume):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertTrue(bridge_started.is_set())
+        self.assertEqual(motion.position_sources[0], "freestyle edge reaction")
+        self.assertEqual(motion.position_final_stop_on_target[0], False)
+        self.assertGreaterEqual(len(remembered), 2)
+
+    def test_freestyle_close_signal_uses_milk_style_when_edge_permission_disabled(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+        remembered = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+            {
+                "id": "milking-pressure-build",
+                "name": "Milking Pressure Build",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 50,
+                "record": FakePatternRecord("milking-pressure-build", "Milking Pressure Build"),
+            },
+        ]
+
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+            "allow_llm_edge_in_freestyle": lambda: False,
+            "mode_decision": lambda **_kwargs: {
+                "action": "hold_then_resume",
+                "duration_seconds": 12,
+                "intensity": 84,
+                "chat": "Choosing edge style.",
+            },
+        }
+
+        def stop_after_iteration(event, *_args, **_kwargs):
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(motion.position_sources, ["freestyle planner"])
+        self.assertEqual(remembered[0], "milking-pressure-build")
+        self.assertTrue(any("Switching to milk-style Freestyle" in message for message in messages))
+
+    def test_freestyle_close_signal_stops_only_when_llm_requests_stop(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        signal_event = threading.Event()
+        signal_event.set()
+        messages = []
+
+        callbacks = {
+            "get_timings": lambda _mode: (0, 0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": signal_event,
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": lambda _pattern_id: None,
+            "freestyle_candidates": lambda: (),
+            "mode_decision": lambda **_kwargs: {
+                "action": "stop",
+                "duration_seconds": 5,
+                "intensity": 0,
+                "chat": "Stopping now.",
+            },
+        }
+
+        background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertTrue(stop_event.is_set())
+        self.assertFalse(motion.position_frames)
+        self.assertEqual(messages, ["Stopping now."])
+
+    def test_freestyle_selector_uses_chat_feedback_target(self):
+        current = MotionTarget(28, 42, 48)
+        feedback_target = MotionTarget(70, 14, 20, label="tip flick fast")
+        flick = FakePatternRecord("flick", "Flick")
+        sway = FakePatternRecord("sway", "Sway")
+
+        choice = background_modes._choose_freestyle_pattern(
+            [
+                {"id": "flick", "name": "Flick", "source": "fixed", "enabled": True, "weight": 30, "record": flick},
+                {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 80, "record": sway},
+            ],
+            current,
+            feedback_target=feedback_target,
+            rng=background_modes.random.Random(1),
+        )
+
+        self.assertEqual(choice.pattern_id, "flick")
+        self.assertIn("Flick", choice.reason)
 
 
 if __name__ == "__main__":
