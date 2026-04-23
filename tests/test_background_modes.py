@@ -105,6 +105,26 @@ class AutoModeThreadTests(unittest.TestCase):
         thread.join(timeout=1)
         self.assertFalse(thread.is_alive())
 
+    def test_sleep_waits_while_paused(self):
+        stop_event = threading.Event()
+        pause_event = threading.Event()
+        finished = threading.Event()
+        pause_event.set()
+
+        def sleeper():
+            _sleep_with_stop(stop_event, 0.01, pause_event=pause_event)
+            finished.set()
+
+        thread = threading.Thread(target=sleeper)
+        thread.start()
+        time.sleep(0.05)
+        self.assertFalse(finished.is_set())
+
+        pause_event.clear()
+        self.assertTrue(finished.wait(0.5))
+        thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
+
     def test_sleep_allows_zero_duration_yield_without_interval_floor(self):
         started = time.monotonic()
 
@@ -139,6 +159,46 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertFalse(mode_called)
         self.assertTrue(motion.stopped)
         self.assertTrue(cleanup_called)
+
+    def test_auto_mode_thread_pause_and_resume_stop_motion_without_stopping_thread(self):
+        motion = FakeMotionController()
+        entered = threading.Event()
+        pause_seen = threading.Event()
+        release = threading.Event()
+        messages = []
+        stop_seen = []
+
+        def mode_func(stop_event, _services, callbacks):
+            entered.set()
+            callbacks["pause_event"].wait(0.5)
+            stop_seen.append(stop_event.is_set())
+            pause_seen.set()
+            while not stop_event.is_set() and not release.is_set():
+                time.sleep(0.01)
+
+        thread = AutoModeThread(
+            mode_func,
+            "Starting.",
+            {"motion": motion},
+            {"send_message": messages.append},
+            initial_delay=0,
+        )
+
+        thread.start()
+        self.assertTrue(entered.wait(0.5))
+        thread.pause()
+
+        self.assertTrue(thread.is_paused())
+        self.assertTrue(motion.stopped)
+        self.assertTrue(pause_seen.wait(0.5))
+        self.assertEqual(stop_seen, [False])
+
+        thread.resume()
+        self.assertFalse(thread.is_paused())
+        release.set()
+        thread.stop()
+        thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
         self.assertEqual(messages, ["Starting.", "Okay, you're in control now."])
 
     def test_milking_close_signal_extends_bounded_sequence(self):

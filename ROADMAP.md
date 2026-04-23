@@ -40,13 +40,6 @@ mode controls still have rough edges that block daily use.
   recent-sequence log across Auto, Edge, Milk, Freestyle, and mode
   transitions, and tune the displayed timing/label detail if on-device
   testing shows noisy or misleading output.
-- Add a Pause/Resume control that pauses the active mode or current
-  LLM-driven motion (including chat-driven motion) without resetting the
-  mode plan, and that resumes from the same point. Pause should leave the
-  current sequence/log entry intact and visible instead of replacing it
-  with a stop marker.
-- Add hotkeys for `I'm Close`, Stop, and Pause/Resume so the same controls
-  are reachable without leaving the keyboard.
 - Review whether the current Milking/Freestyle start-decision `stop` guard
   should remain in the final mode framework. The framework should eventually
   be smart enough to allow deliberate stops at any event without losing the

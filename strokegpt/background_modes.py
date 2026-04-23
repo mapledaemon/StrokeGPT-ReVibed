@@ -48,7 +48,9 @@ class AutoModeThread(threading.Thread):
         self._mode_func = mode_func
         self._initial_message = initial_message
         self._services = services
-        self._callbacks = callbacks
+        self._pause_event = threading.Event()
+        self._callbacks = dict(callbacks)
+        self._callbacks["pause_event"] = self._pause_event
         self._initial_delay = initial_delay
         self._stop_event = threading.Event()
         self.daemon = True
@@ -79,6 +81,27 @@ class AutoModeThread(threading.Thread):
 
     def stop(self):
         self._stop_event.set()
+        self._pause_event.clear()
+        motion_controller = self._services.get("motion")
+        if motion_controller and hasattr(motion_controller, "stop"):
+            motion_controller.stop()
+
+    def pause(self):
+        self._pause_event.set()
+        motion_controller = self._services.get("motion")
+        if motion_controller and hasattr(motion_controller, "pause"):
+            motion_controller.pause()
+        elif motion_controller and hasattr(motion_controller, "stop"):
+            motion_controller.stop()
+
+    def resume(self):
+        motion_controller = self._services.get("motion")
+        if motion_controller and hasattr(motion_controller, "resume"):
+            motion_controller.resume()
+        self._pause_event.clear()
+
+    def is_paused(self):
+        return self._pause_event.is_set()
 
 
 def _check_for_user_message(queue, message_event=None):
@@ -104,13 +127,30 @@ def _feedback_target(stop_event, motion_controller, user_message):
     return None
 
 
-def _sleep_with_stop(stop_event, seconds, wake_event=None):
+def _wait_while_paused(stop_event, pause_event=None):
+    if not pause_event:
+        return False
+    while pause_event.is_set() and not stop_event.is_set():
+        stop_event.wait(0.05)
+    return stop_event.is_set()
+
+
+def _sleep_with_stop(stop_event, seconds, wake_event=None, pause_event=None):
     seconds = max(0.0, float(seconds or 0.0))
+    if _wait_while_paused(stop_event, pause_event):
+        return
     if seconds <= 0:
         time.sleep(0)
         return
     deadline = time.monotonic() + seconds
     while not stop_event.is_set():
+        if pause_event and pause_event.is_set():
+            paused_at = time.monotonic()
+            if _wait_while_paused(stop_event, pause_event):
+                return
+            deadline += time.monotonic() - paused_at
+            if wake_event and wake_event.is_set():
+                return
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return
@@ -586,6 +626,7 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None, *,
     get_timings = callbacks["get_timings"]
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
+    pause_event = callbacks.get("pause_event")
     user_signal_event = callbacks.get("user_signal_event")
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
@@ -612,6 +653,8 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None, *,
             return
 
     while not stop_event.is_set() and (max_steps is None or step_count < max_steps):
+        if _wait_while_paused(stop_event, pause_event):
+            break
         min_time, max_time = get_timings(mode)
         if mode == "milking" and user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
@@ -645,7 +688,7 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None, *,
         motion_controller.apply_target(target, source=f"{mode} mode")
         remember_pattern(target)
         step_count += 1
-        _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event)
+        _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event, pause_event)
 
 
 def auto_mode_logic(stop_event, services, callbacks):
@@ -657,6 +700,7 @@ def freestyle_mode_logic(stop_event, services, callbacks):
     get_timings = callbacks["get_timings"]
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
+    pause_event = callbacks.get("pause_event")
     user_signal_event = callbacks.get("user_signal_event")
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
@@ -671,6 +715,8 @@ def freestyle_mode_logic(stop_event, services, callbacks):
     close_style_until = 0.0
 
     while not stop_event.is_set():
+        if _wait_while_paused(stop_event, pause_event):
+            break
         min_time, max_time = get_timings("freestyle")
         if user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
@@ -689,6 +735,8 @@ def freestyle_mode_logic(stop_event, services, callbacks):
             edge_buffer_resume_choices = []
             decision = None
             while not stop_event.is_set():
+                if _wait_while_paused(stop_event, pause_event):
+                    break
                 decision = _poll_mode_decision_request(decision_thread, decision_result)
                 if decision is not None:
                     break
@@ -784,7 +832,7 @@ def freestyle_mode_logic(stop_event, services, callbacks):
             recent_ids[:] = recent_ids[-8:]
 
         step_count += len(choices)
-        _sleep_with_stop(stop_event, 0, message_event)
+        _sleep_with_stop(stop_event, 0, message_event, pause_event)
 
 
 def milking_mode_logic(stop_event, services, callbacks):
@@ -807,6 +855,7 @@ def edging_mode_logic(stop_event, services, callbacks):
     user_signal_event = callbacks["user_signal_event"]
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
+    pause_event = callbacks.get("pause_event")
     planner = MotionScriptPlanner("edging")
     edge_count = 0
     step_count = 0
@@ -845,6 +894,8 @@ def edging_mode_logic(stop_event, services, callbacks):
         return
 
     while not stop_event.is_set():
+        if _wait_while_paused(stop_event, pause_event):
+            break
         edging_min, edging_max = get_timings("edging")
         step = None
 
@@ -940,7 +991,7 @@ def edging_mode_logic(stop_event, services, callbacks):
         motion_controller.apply_target(target, source="edging mode")
         remember_pattern(target)
         step_count += 1
-        _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event)
+        _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event, pause_event)
         if reaction_steps_remaining is not None:
             reaction_steps_remaining -= 1
             if reaction_steps_remaining < 0:
