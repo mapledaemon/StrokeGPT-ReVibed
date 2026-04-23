@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-22 - PR #42 - Bridge Position Playback And Trace Timing
+----------------------------------------------------------------
+
+Branch: codex-freestyle-bridge-and-trace-timing
+
+- Added a controller-level current-position bridge to the flexible position
+  backend so the existing depth-step splitter also smooths the jump from the
+  device's last commanded depth into the first frame of every batch, mirroring
+  the HAMP transition path used by the default backend.
+- Hardened the LLM mode-decision coercion so a `stop` action emitted on the
+  start of a continuous mode (Milking or Freestyle) is downgraded to
+  `continue`, matching the prompt contract and preventing local models from
+  ending continuous modes by their own start decision.
+- Added per-frame timing fields (command_ms, gap_ms, batch_gap_ms,
+  frame_index, frame_count, is_pass_through_final) to the position-backend
+  observability trace so the next on-device test can pinpoint whether a
+  Freestyle stop is planner-side or API-side without changing playback.
+- Updated motion-control tests to cover the new leading bridge frame and the
+  new trace timing fields, and added a coercion test for the continuous-mode
+  start guard.
+
+
 2026-04-22 - Unreleased - Add Adaptive Freestyle Planner
 ---------------------------------------------------------
 

@@ -468,9 +468,12 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(completed)
         self.assertEqual(handy.moves, [])
         depths = [move[1] for move in handy.position_moves]
-        self.assertEqual(depths[0], 20)
+        self.assertIn(20, depths)
         self.assertEqual(depths[-1], 35)
         self.assertIn(80, depths)
+        # First emitted depth bridges from the controller's starting depth (30)
+        # so it must stay within the per-step depth budget of 9.
+        self.assertLessEqual(abs(depths[0] - 30), 9)
         self.assertTrue(all(abs(a - b) <= 9 for a, b in zip(depths, depths[1:])), depths)
         self.assertTrue(all(move[3] is not None and move[3] <= move[0] for move in handy.position_moves))
         self.assertEqual(handy.last_stroke_range, 40)
@@ -493,9 +496,10 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(completed)
         depths = [move[1] for move in handy.position_moves]
         speeds = [move[0] for move in handy.position_moves]
-        self.assertEqual(depths[0], 20)
+        self.assertIn(20, depths)
         self.assertEqual(depths[-1], 35)
         self.assertIn(80, depths)
+        self.assertLessEqual(abs(depths[0] - 30), 9)
         apex_index = depths.index(80)
         self.assertLess(speeds[apex_index], 45)
         self.assertTrue(all(speed <= 30 for speed in speeds[apex_index:]), speeds)
@@ -553,6 +557,57 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(handy.velocity_intervals[-1][3], POSITION_PASS_THROUGH_MIN_SECONDS)
         self.assertFalse(handy.position_moves[-1][2])
         self.assertFalse(handy.stopped)
+
+    def test_apply_position_frames_bridges_from_current_target_into_first_frame(self):
+        # Starting depth is 30 (FakeHandy default); first frame is 80, a 50-unit
+        # jump that exceeds the per-step depth budget of 9. The bridge should
+        # split that jump into intermediate steps before reaching 80.
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        frames = [
+            SimpleNamespace(target=MotionTarget(45, 80, 10), delay_factor=0),
+        ]
+
+        completed = controller.apply_position_frames(frames, stop_after=False)
+
+        self.assertTrue(completed)
+        depths = [move[1] for move in handy.position_moves]
+        self.assertGreater(len(depths), 1, depths)
+        self.assertLessEqual(abs(depths[0] - 30), 9)
+        self.assertEqual(depths[-1], 80)
+        self.assertTrue(all(abs(a - b) <= 9 for a, b in zip(depths, depths[1:])), depths)
+
+    def test_apply_position_frames_records_per_frame_timing_in_trace(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        frames = [
+            SimpleNamespace(target=MotionTarget(40, 25, 10), delay_factor=0),
+            SimpleNamespace(target=MotionTarget(40, 28, 10), delay_factor=0),
+        ]
+
+        completed = controller.apply_position_frames(frames, stop_after=False)
+
+        self.assertTrue(completed)
+        snapshot = controller.observability_snapshot()
+        position_points = [point for point in snapshot["trace"] if "frame_index" in point]
+        self.assertGreaterEqual(len(position_points), 2)
+        for point in position_points:
+            self.assertIn("command_ms", point)
+            self.assertIn("frame_count", point)
+            self.assertIn("is_pass_through_final", point)
+            self.assertGreaterEqual(point["command_ms"], 0)
+        # Every emitted point after the first one should report the gap from the
+        # previous command, so the operator can spot starvation between frames.
+        self.assertTrue(any("gap_ms" in point for point in position_points[1:]))
+
+        completed = controller.apply_position_frames(frames, stop_after=False)
+        self.assertTrue(completed)
+        snapshot = controller.observability_snapshot()
+        position_points = [point for point in snapshot["trace"] if "frame_index" in point]
+        # The first frame of a follow-up batch carries the inter-batch gap so we
+        # can tell the planner-side wait apart from per-frame stalls.
+        first_frame_points = [point for point in position_points if point.get("frame_index") == 0]
+        self.assertTrue(any("batch_gap_ms" in point for point in first_frame_points))
 
 
 if __name__ == "__main__":

@@ -628,5 +628,31 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertIn("Flick", choice.reason)
 
 
+class CoerceModeDecisionTests(unittest.TestCase):
+    def test_start_event_drops_stop_action_for_milking(self):
+        decision = background_modes._coerce_mode_decision(
+            {"action": "stop"},
+            mode="milking",
+            event="start",
+        )
+        self.assertEqual(decision.action, "continue")
+
+    def test_start_event_drops_stop_action_for_freestyle(self):
+        decision = background_modes._coerce_mode_decision(
+            {"action": "stop"},
+            mode="freestyle",
+            event="start",
+        )
+        self.assertEqual(decision.action, "continue")
+
+    def test_progress_event_still_allows_stop_for_freestyle(self):
+        decision = background_modes._coerce_mode_decision(
+            {"action": "stop"},
+            mode="freestyle",
+            event="progress",
+        )
+        self.assertEqual(decision.action, "stop")
+
+
 if __name__ == "__main__":
     unittest.main()

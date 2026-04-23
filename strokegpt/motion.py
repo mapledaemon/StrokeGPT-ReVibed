@@ -599,6 +599,8 @@ class MotionController:
         self._last_label = "idle"
         self._last_command_time = None
         self._frame_playback_active = False
+        self._last_position_command_ended_at = None
+        self._last_position_batch_ended_at = None
 
     def set_backend(self, backend: str) -> None:
         normalized = "position" if str(backend or "").lower() == "position" else "hamp"
@@ -791,12 +793,19 @@ class MotionController:
 
     def _position_playback_frames(self, frames: list[Any]) -> list[PositionFrame]:
         coerced = [frame for raw in frames if (frame := self._coerce_position_frame(raw)) is not None]
-        result: list[PositionFrame] = []
+        if not coerced:
+            return []
+        # Seed with the controller's current state so the same depth-jump
+        # splitter that smooths between frames also bridges from the device's
+        # last commanded position into frames[0]. The seed is dropped before
+        # the playback list is returned so it never gets sent to the device.
+        seed = PositionFrame(self.current_target(), delay_factor=0.0, phase="seed")
+        result: list[PositionFrame] = [seed]
         for index, frame in enumerate(coerced):
             if self._is_turn_apex(coerced, index):
                 frame = self._turn_apex_frame(coerced, index)
             self._append_limited_position_frame(result, frame)
-        return result
+        return result[1:]
 
     def _apply_position_step(
         self,
@@ -873,9 +882,17 @@ class MotionController:
             generation = self._generation
         self._set_frame_playback_active(True)
 
+        batch_started_at = time.monotonic()
+        with self._observability_lock:
+            prior_batch_ended_at = self._last_position_batch_ended_at
+        batch_gap_ms = None
+        if prior_batch_ended_at is not None:
+            batch_gap_ms = round((batch_started_at - prior_batch_ended_at) * 1000.0, 1)
+
         try:
             previous_target = self.current_target()
             frame_count = len(playback_frames)
+            previous_command_ended_at = None
             for index, frame in enumerate(playback_frames):
                 with self._lock:
                     if generation != self._generation:
@@ -887,16 +904,34 @@ class MotionController:
                 if is_pass_through_final:
                     velocity_seconds = max(velocity_seconds, POSITION_PASS_THROUGH_MIN_SECONDS)
                 velocity = self._position_velocity(previous_target, frame.target, velocity_seconds)
+                send_started_at = time.monotonic()
                 self._apply_position_step(
                     frame.target,
                     stop_on_target=is_last_frame and final_stop_on_target and not stop_after,
                     velocity=velocity,
                     source=source,
                 )
+                send_ended_at = time.monotonic()
+                self._augment_last_trace(
+                    self._position_trace_extras(
+                        index=index,
+                        frame_count=frame_count,
+                        send_started_at=send_started_at,
+                        send_ended_at=send_ended_at,
+                        previous_command_ended_at=previous_command_ended_at,
+                        batch_gap_ms=batch_gap_ms,
+                        is_pass_through_final=is_pass_through_final,
+                    )
+                )
+                previous_command_ended_at = send_ended_at
                 previous_target = frame.target
                 should_sleep = not is_pass_through_final
                 if self.step_delay > 0 and should_sleep:
                     time.sleep(delay_seconds)
+
+            with self._observability_lock:
+                self._last_position_batch_ended_at = time.monotonic()
+                self._last_position_command_ended_at = previous_command_ended_at
 
             if stop_after:
                 with self._lock:
@@ -961,6 +996,39 @@ class MotionController:
 
     def _record_current_state(self, source: str = "status", label: str = "current") -> None:
         self._record_target(self.current_target(), source=source, label=label)
+
+    def _augment_last_trace(self, extras: Optional[dict[str, Any]]) -> None:
+        if not extras:
+            return
+        with self._observability_lock:
+            if not self._trace:
+                return
+            point = dict(self._trace[-1])
+            point.update(extras)
+            self._trace[-1] = point
+
+    def _position_trace_extras(
+        self,
+        *,
+        index: int,
+        frame_count: int,
+        send_started_at: float,
+        send_ended_at: float,
+        previous_command_ended_at: Optional[float],
+        batch_gap_ms: Optional[float],
+        is_pass_through_final: bool,
+    ) -> dict[str, Any]:
+        extras: dict[str, Any] = {
+            "frame_index": index,
+            "frame_count": frame_count,
+            "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
+            "is_pass_through_final": bool(is_pass_through_final),
+        }
+        if previous_command_ended_at is not None:
+            extras["gap_ms"] = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
+        if index == 0 and batch_gap_ms is not None:
+            extras["batch_gap_ms"] = batch_gap_ms
+        return extras
 
     def _expanded_frames(self, target: MotionTarget) -> list[Any]:
         current = self.current_target()

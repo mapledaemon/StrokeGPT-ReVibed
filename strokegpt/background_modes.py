@@ -145,6 +145,10 @@ def _coerce_mode_decision(raw, *, mode, event):
         action = "continue"
     if event == "start" and mode == "milking" and action in {"pull_back", "hold_then_resume"}:
         action = "continue"
+    if event == "start" and mode in {"milking", "freestyle"} and action == "stop":
+        # Continuous modes must not be ended by their own start decision; the
+        # prompt forbids it but a small local model can still emit `stop` here.
+        action = "continue"
 
     duration = None
     for key in ("duration_seconds", "duration", "seconds"):
