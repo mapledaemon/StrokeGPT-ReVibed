@@ -15,7 +15,7 @@
         <div id="top-bar">
             <h1>StrokeGPT</h1>
             <div class="top-bar-info">
-                <div id="edging-timer" style="display: none;">00:00</div>
+                <div id="edging-timer" style="display: none;" aria-live="polite">00:00</div>
                 <div id="mood-display">Mood: ...</div>
             </div>
             <button id="toggle-sidebar-btn">&laquo;</button>
@@ -32,27 +32,29 @@
             </div>
         </div>
         <div id="bottom-input-area">
-            <div id="visualizer-box">
-                <div id="motion-quick-status-row">
-                    <div id="motion-sequence-indicator" class="motion-sequence-indicator">Idle</div>
-                    <div id="motion-meter-panel">
-                        <div class="motion-meter-row">
-                            <span class="motion-meter-label">Speed</span>
-                            <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
-                            <span id="motion-speed-meter-value" class="motion-meter-value">0%</span>
+            <div id="motion-status-strip">
+                <div id="motion-sequence-indicator" class="motion-sequence-indicator motion-sequence-log" role="log" aria-live="polite" aria-label="Motion sequence log">Idle</div>
+                <div id="visualizer-box">
+                    <div id="motion-quick-status-row">
+                        <div id="motion-meter-panel">
+                            <div class="motion-meter-row">
+                                <span class="motion-meter-label">Speed</span>
+                                <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
+                                <span id="motion-speed-meter-value" class="motion-meter-value">0%</span>
+                            </div>
+                            <div class="motion-meter-row">
+                                <span class="motion-meter-label">Depth</span>
+                                <div class="motion-meter-track"><div id="motion-depth-meter-fill" class="motion-meter-fill depth"></div></div>
+                                <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
+                            </div>
                         </div>
-                        <div class="motion-meter-row">
-                            <span class="motion-meter-label">Depth</span>
-                            <div class="motion-meter-track"><div id="motion-depth-meter-fill" class="motion-meter-fill depth"></div></div>
-                            <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
+                        <div id="motion-feedback-buttons">
+                            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
+                            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
                         </div>
                     </div>
-                    <div id="motion-feedback-buttons">
-                        <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
-                        <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
-                    </div>
+                    <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                 </div>
-                <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
             </div>
             <div id="message-input-line">
                 <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command...">

@@ -24,17 +24,17 @@ Follow-up work:
 
 ## Flexible Position Backend Default Readiness
 
-Status: Open
+Status: Open / Needs Verification
 
 The experimental flexible position/script backend now routes pattern playback,
 Freestyle playback, motion training previews, and plain chat-generated targets
 through shared smoothing and velocity guard rails. It still needs real Handy
 testing before it replaces HAMP as the default, because recent manual testing
 showed boundary stutter/stopping in Freestyle and direction-change smoothing
-that was not obvious enough on-device. Freestyle still stops during normal
-playback even after pass-through final targets, longer selected chains, and
-handoff velocity cushioning were added, so the stop source is still unresolved
-and should not be treated as only an `I'm Close` edge-reaction issue.
+that was not obvious enough on-device. PR #42 added a current-position bridge
+and per-frame timing traces that may have fixed the regular Freestyle stop, but
+that needs longer on-device confirmation before the problem is closed or the
+flexible backend is promoted.
 
 Transition notes to preserve when the motion schema is fully replaced:
 

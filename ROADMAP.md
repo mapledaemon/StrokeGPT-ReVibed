@@ -14,13 +14,39 @@ Complexity key:
 
 ## Best Next Targets
 
-### 1. Motion Vocabulary And Preset Semantics (S/M)
+### 1. Freestyle Diagnostics And Mode Control Reliability (S/M)
+
+Why next: Freestyle still has an on-device stop that is now instrumented but
+not diagnosed. Fixing the control loop and mode controls should happen before
+larger motion-schema changes.
+
+- Use the PR #42 trace fields and the expanded status/debug diagnostics UI
+  during manual Freestyle testing to identify whether stops are planner-side,
+  API-side, or Handy position-mode behavior.
+- Validate the active-mode elapsed timer and detached vertical recent-sequence
+  log across Auto, Edge, Milk, Freestyle, and mode transitions, and tune the
+  displayed timing/label detail if on-device testing shows noisy or misleading
+  output.
+- Add hotkeys for `I'm Close` and Stop, plus a Pause/Resume button that pauses
+  the active mode or current LLM-driven motion without resetting the mode plan.
+- Review whether the current Milking/Freestyle start-decision guard is only a
+  temporary local-model safety net or should remain in the final mode framework.
+- Investigate longer or adaptive chain lengths for all scripted/experimental
+  modes after Freestyle trace data shows whether command starvation is still
+  happening at batch boundaries.
+
+### 2. Motion Vocabulary And Preset Semantics (S/M)
 
 Why next: consistent terms make both deterministic commands and LLM outputs less
 surprising before deeper pattern generation work.
 
 - Define remaining named motion semantics for deterministic speed ranges,
   full-range behavior, and optional LLM-controlled auto timing.
+- Ensure Milk Me and natural-language milk requests use most or all of the
+  safe calibrated range unless the user explicitly asks for short/tight motion.
+- Add a selector for deterministic speed/range semantics versus more
+  freeform/freestyle interpretation, so users can choose how tightly the app
+  maps language to fixed ranges.
 - Add user-facing Freestyle planner controls and diagnostics for fuzzy inputs
   such as visible weights, feedback, recent chat, and current motion context.
 - Keep Freestyle off HAMP/current scripted Auto arcs; it should continue using
@@ -28,10 +54,13 @@ surprising before deeper pattern generation work.
   replaces the current default.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
+- Allow the LLM to request visible modes such as Freestyle, Edge Me, and Milk
+  Me through the same guard rails as UI buttons, making sure chat edge-blocking
+  settings also affect model-requested mode changes.
 - Let preset modes speak occasionally without turning mode timers into repeated
   narration.
 
-### 2. Motion Style Preferences (M)
+### 3. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift.
@@ -46,7 +75,7 @@ drift.
 - Let users reset learned motion feedback and style preferences without a full
   settings reset.
 
-### 3. Soft-Anchor Pattern Authoring (M/L)
+### 4. Soft-Anchor Pattern Authoring (M/L)
 
 Why next: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable.
@@ -66,7 +95,7 @@ control while staying inspectable.
   targets smoothly, may slow down to hit a target, and should not snap or stop
   just because a target was reached.
 
-### 4. Architecture Audit And Refactor Targets (M)
+### 5. Architecture Audit And Refactor Targets (M)
 
 Why next: the app has accumulated adapters and translation layers while motion
 control stabilized; targeted cleanup should happen before larger feature work.
@@ -88,7 +117,7 @@ control stabilized; targeted cleanup should happen before larger feature work.
 - Prefer practical maintainability refactors when they improve editability,
   recoverability, or safety.
 
-### 5. Motion Training Editor Depth (M)
+### 6. Motion Training Editor Depth (M)
 
 Why next: the training workspace already exists, so richer editing can build on
 the current surface without crowding Settings.
@@ -107,7 +136,7 @@ the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 6. User Profile And Preference Setup (M)
+### 7. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics and motion vocabulary cleanup.
@@ -117,10 +146,17 @@ context, so it should follow runtime diagnostics and motion vocabulary cleanup.
   upper-right area.
 - Add startup and Settings selectors for user identity and interested-in
   preferences, with custom values.
+- Include initial identity options for Cis Male, Cis Female, Trans Man, Trans
+  Woman, Gender fluid, No gender, and custom values. Include interested-in
+  options for Cis Male, Cis Female, Trans Man, Trans Woman, Gender neutral, and
+  custom values.
+- Add an About window reachable from the profile/settings area, preserving the
+  README donation information and Bitcoin/Ethereum QR codes without crowding
+  the main UI.
 - Keep identity/preferences inspectable and resettable; do not bury them inside
   natural-language memory.
 
-### 7. Runtime And Setup Diagnostics (M)
+### 8. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice without turning the compact status UI into a setup console.
@@ -131,6 +167,17 @@ verbosity slice without turning the compact status UI into a setup console.
 - Add a visible Handy connection indicator and reconnect button below the
   sidebar visualizer, using the same connection state as diagnostics rather
   than a separate hidden device path.
+- Double-check frontend modules against backend save routes so settings changes
+  show clear success/failure states and do not fail silently when the tab stays
+  open after the app shuts down.
+- Tighten spacing in the right-side/collapsible UI, settings panels, and
+  compact control rows so new diagnostics, reconnect, pause/resume, and mode
+  buttons fit without adding unnecessary boundaries or dead space.
+- Add separate verbosity controls for motion diagnostics and Ollama/LLM
+  diagnostics. High motion verbosity should show current sequence names,
+  timing, latency, connection status, and backend state; high Ollama verbosity
+  should surface direct model output and thinking fields when the local runtime
+  exposes them.
 - Add optional live Handy position polling where it is useful and does not
   create excessive device/API traffic, so the sidebar position indicator can
   compare reported position against commanded targets.
@@ -147,7 +194,7 @@ verbosity slice without turning the compact status UI into a setup console.
   missing.
 - Keep optional model downloads as explicit UI actions with visible status.
 
-### 8. Tip And Base Calibration Research And Restoration (M/L)
+### 9. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the benefit
 should be confirmed against current stroke-range behavior before adding another
@@ -172,13 +219,14 @@ setup surface.
   same calibration mapping without bypassing smoothing, stop behavior, or user
   speed limits.
 
-### 9. Reference Research Backlog (S/M)
+### 10. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs licensing,
 scope, and architecture review before implementation.
 
 - Review Handy-control references:
   https://github.com/defucilis/thehandy,
+  https://github.com/fredtungsten/scriptplayerthe,
   https://github.com/Yazui1/handy-companion,
   https://github.com/KarilChan/handy-koikatsu-server, and
   https://thehandyapp.ddns.net/#/voice-commands-page.
@@ -206,8 +254,11 @@ scope, and architecture review before implementation.
   https://github.com/ofs69/syncopathy,
   https://github.com/Karasukaigan/OSRChat, and
   https://github.com/buttplugio/awesome-buttplug.
+- Check reference applications when they can clarify motion, editor, or device
+  behavior, but avoid importing designs that add unnecessary pauses, stops, or
+  other counterproductive playback behavior.
 
-### 10. Local Voice Control MVP (L)
+### 11. Local Voice Control MVP (L)
 
 Why next: voice control is the largest user-facing feature, but it should ship
 as push-to-talk before always-on listening.
@@ -240,7 +291,7 @@ Candidate local ASR providers:
   4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 11. Story Mode (L/XL)
+### 12. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -254,7 +305,7 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
-### 12. Optional Runtime And Packaging Work (XL)
+### 13. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.

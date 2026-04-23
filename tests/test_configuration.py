@@ -237,15 +237,17 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("MOTION PATTERN PREFERENCES", prompt)
         self.assertIn("sway=74", prompt)
         self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
+        self.assertIn("do not sanitize or euphemize", prompt)
         self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
         self.assertIn("TRANSLATE SPEED WORDS INTO `sp`", prompt)
+        self.assertIn("favor base-through-mid or mid-base movement first", prompt)
         self.assertIn("The current configured speed range is `10-80`", prompt)
         self.assertIn('"slowly focus on the tip"', prompt)
-        self.assertIn('"slowly focus on the tip"**: `{"sp": 24', prompt)
+        self.assertIn('"slowly focus on the tip": `{"sp": 24', prompt)
         self.assertIn('"quickly use the shaft"', prompt)
-        self.assertIn('"quickly use the shaft"**: `{"sp": 62', prompt)
+        self.assertIn('"quickly use the shaft": `{"sp": 62', prompt)
         self.assertIn('"as fast as you can on the base"', prompt)
-        self.assertIn('"as fast as you can on the base"**: `{"sp": 80', prompt)
+        self.assertIn('"as fast as you can on the base": `{"sp": 80', prompt)
 
     def test_llm_prompt_can_disallow_edge_patterns_in_chat(self):
         service = LLMService(url="http://localhost:11434/api/chat")
@@ -280,7 +282,7 @@ class ModelConfigurationTests(unittest.TestCase):
         })
 
         self.assertIn("The current configured speed range is `5-50`", prompt)
-        self.assertIn('"as fast as you can on the base"**: `{"sp": 50', prompt)
+        self.assertIn('"as fast as you can on the base": `{"sp": 50', prompt)
         self.assertNotIn('"sp": 88', prompt)
 
     def test_glados_prompt_speed_guidance_uses_configured_speed_ceiling(self):
@@ -292,7 +294,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "max_speed": 44,
         })
 
-        self.assertIn('{"chat": "<Your sarcastic reply>"', prompt)
+        self.assertIn('{"chat":"<sarcastic reply>"', prompt)
         self.assertIn("Current configured speed range is `12-44`", prompt)
 
     def test_mode_decision_prompt_includes_bounded_edge_context(self):
@@ -329,11 +331,16 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(captured["temperature"], 0.2)
         self.assertIn('"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>"', prompt)
         self.assertIn("duration_seconds", prompt)
-        self.assertIn("5-180", prompt)
-        self.assertIn("`milking` and `freestyle` are continuous modes", prompt)
-        self.assertIn("not permission to finish", prompt)
-        self.assertIn("continuous mode just because the duration elapses", prompt)
-        self.assertIn("configured speed range `12-64`", prompt)
+        self.assertIn("10-180", prompt)
+        self.assertIn("Avoid very short durations", prompt)
+        self.assertIn("20-90 seconds", prompt)
+        self.assertIn("begin base-through-mid or mid-base", prompt)
+        self.assertIn("`milking` and `freestyle` are continuous", prompt)
+        self.assertIn("not a countdown", prompt)
+        self.assertIn("Never return `stop` on `start`", prompt)
+        self.assertIn("do not stop abruptly just because a timing window ended", prompt)
+        self.assertIn("configured speed range", prompt)
+        self.assertIn("`12-64`", prompt)
         self.assertIn("mode: edging", prompt)
         self.assertIn("event: close_signal", prompt)
         self.assertIn("edge_count: 2", prompt)

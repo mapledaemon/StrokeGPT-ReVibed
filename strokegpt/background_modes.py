@@ -1,12 +1,11 @@
 import math
 import random
-import re
 import threading
 import time
 
 from dataclasses import dataclass, replace
 
-from .motion import IntentMatcher, MotionTarget
+from .motion import IntentMatcher, MotionTarget, _slugify_motion_pattern_id
 from .motion_patterns import expand_motion_pattern
 from .motion_scripts import MotionScriptPlanner
 
@@ -38,6 +37,8 @@ class FreestyleChoice:
 FREESTYLE_CHAIN_LENGTH = 4
 FREESTYLE_EDGE_RESUME_CHAIN_LENGTH = 2
 FREESTYLE_DECISION_GRACE_SECONDS = 0.05
+EDGE_START_MIN_STEPS = 12
+EDGE_PROGRESS_MIN_STEPS = 10
 
 
 class AutoModeThread(threading.Thread):
@@ -145,8 +146,8 @@ def _coerce_mode_decision(raw, *, mode, event):
         action = "continue"
     if event == "start" and mode == "milking" and action in {"pull_back", "hold_then_resume"}:
         action = "continue"
-    if event == "start" and mode in {"milking", "freestyle"} and action == "stop":
-        # Continuous modes must not be ended by their own start decision; the
+    if event == "start" and mode in {"edging", "milking", "freestyle"} and action == "stop":
+        # Modes must not be ended by their own start decision; the
         # prompt forbids it but a small local model can still emit `stop` here.
         action = "continue"
 
@@ -158,7 +159,7 @@ def _coerce_mode_decision(raw, *, mode, event):
         except (TypeError, ValueError):
             duration = None
     if duration is not None:
-        duration = max(5.0, min(180.0, duration))
+        duration = max(10.0, min(180.0, duration))
 
     intensity = None
     try:
@@ -353,11 +354,7 @@ def _apply_freestyle_edge_reaction(
     return False, edge_steps, resume_choices
 
 
-def _slug_pattern_id(value):
-    cleaned = str(value or "").strip().lower()
-    cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned)
-    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-_")
-    return cleaned[:64]
+_slug_pattern_id = _slugify_motion_pattern_id
 
 
 def _candidate_value(candidate, key, default=None):
@@ -814,8 +811,6 @@ def edging_mode_logic(stop_event, services, callbacks):
     edge_count = 0
     step_count = 0
     max_steps = random.randint(56, 78)
-    stop_after_reaction_steps = None
-    completed_after_signal = False
     mode_intensity = None
     reaction_steps_remaining = None
 
@@ -830,7 +825,10 @@ def edging_mode_logic(stop_event, services, callbacks):
     _send_mode_decision_message(send_message, start_decision)
     if start_decision.intensity is not None:
         mode_intensity = start_decision.intensity
-    max_steps = _step_limit_for_duration(start_decision, edging_min, edging_max, max_steps)
+    max_steps = max(
+        EDGE_START_MIN_STEPS,
+        _step_limit_for_duration(start_decision, edging_min, edging_max, max_steps),
+    )
     if start_decision.action == "stop":
         stop_event.set()
         return
@@ -846,20 +844,15 @@ def edging_mode_logic(stop_event, services, callbacks):
         )
         return
 
-    while not stop_event.is_set() and step_count < max_steps:
+    while not stop_event.is_set():
         edging_min, edging_max = get_timings("edging")
-        user_message = _check_for_user_message(message_queue, message_event)
-        feedback_target = _feedback_target(stop_event, motion_controller, user_message)
-        if stop_event.is_set():
-            break
+        step = None
 
-        if user_signal_event.is_set():
-            user_signal_event.clear()
-            edge_count += 1
+        if step_count >= max_steps:
             decision = _request_mode_decision(
                 callbacks,
                 "edging",
-                "close_signal",
+                "progress",
                 edge_count=edge_count,
                 current_target=motion_controller.current_target(),
             )
@@ -880,16 +873,65 @@ def edging_mode_logic(stop_event, services, callbacks):
                     initial_intensity=mode_intensity,
                 )
                 return
-            step = planner.next_step(motion_controller.current_target(), edge_count=edge_count)
-            if decision.source == "fallback" and edge_count >= 3:
-                stop_after_reaction_steps = len(planner.steps)
-            elif decision.duration_seconds is not None:
-                reaction_steps_remaining = max(
-                    0,
-                    _step_limit_for_duration(decision, edging_min, edging_max, len(planner.steps) + 1) - 1,
+            extension_default = random.randint(10, 16)
+            max_steps = step_count + max(
+                EDGE_PROGRESS_MIN_STEPS,
+                _step_limit_for_duration(decision, edging_min, edging_max, extension_default),
+            )
+            if decision.action in {"hold_then_resume", "pull_back"}:
+                step = planner.next_step(
+                    motion_controller.current_target(),
+                    edge_count=max(1, edge_count),
                 )
-        else:
-            step = planner.next_step(motion_controller.current_target(), feedback_target=feedback_target)
+                if decision.duration_seconds is not None:
+                    reaction_steps_remaining = max(
+                        0,
+                        _step_limit_for_duration(decision, edging_min, edging_max, len(planner.steps) + 1) - 1,
+                    )
+            else:
+                continue
+
+        if step is None:
+            user_message = _check_for_user_message(message_queue, message_event)
+            feedback_target = _feedback_target(stop_event, motion_controller, user_message)
+            if stop_event.is_set():
+                break
+
+            if user_signal_event.is_set():
+                user_signal_event.clear()
+                edge_count += 1
+                decision = _request_mode_decision(
+                    callbacks,
+                    "edging",
+                    "close_signal",
+                    edge_count=edge_count,
+                    current_target=motion_controller.current_target(),
+                )
+                _send_mode_decision_message(send_message, decision)
+                if decision.intensity is not None:
+                    mode_intensity = decision.intensity
+                if decision.action == "stop":
+                    stop_event.set()
+                    break
+                if decision.action == "switch_to_milk":
+                    _set_active_mode(callbacks, "milking")
+                    _run_scripted_mode(
+                        stop_event,
+                        services,
+                        callbacks,
+                        "milking",
+                        max_steps=None,
+                        initial_intensity=mode_intensity,
+                    )
+                    return
+                step = planner.next_step(motion_controller.current_target(), edge_count=edge_count)
+                if decision.duration_seconds is not None:
+                    reaction_steps_remaining = max(
+                        0,
+                        _step_limit_for_duration(decision, edging_min, edging_max, len(planner.steps) + 1) - 1,
+                    )
+            else:
+                step = planner.next_step(motion_controller.current_target(), feedback_target=feedback_target)
 
         if step.message:
             send_message(step.message)
@@ -904,15 +946,3 @@ def edging_mode_logic(stop_event, services, callbacks):
             if reaction_steps_remaining < 0:
                 planner.steps.clear()
                 reaction_steps_remaining = None
-        if stop_after_reaction_steps is not None:
-            stop_after_reaction_steps -= 1
-            if stop_after_reaction_steps < 0:
-                completed_after_signal = True
-                break
-
-    if completed_after_signal:
-        send_message(f"Holding there. Edge count: {edge_count}.")
-        update_mood("Afterglow")
-    elif not stop_event.is_set():
-        send_message(f"Session complete. Edge count: {edge_count}.")
-        update_mood("Afterglow")

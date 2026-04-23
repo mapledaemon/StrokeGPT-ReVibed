@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import time
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -104,8 +105,12 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="dislike-this-move-btn"', page)
             self.assertIn('id="motion-meter-panel"', page)
             self.assertIn('id="motion-feedback-buttons"', page)
+            self.assertIn('id="motion-status-strip"', page)
             self.assertIn('id="motion-sequence-indicator"', page)
+            self.assertIn('class="motion-sequence-indicator motion-sequence-log"', page)
+            self.assertIn('role="log"', page)
             self.assertIn('id="motion-diagnostics-panel"', page)
+            self.assertIn('id="edging-timer" style="display: none;" aria-live="polite"', page)
             self.assertIn('id="ollama-diagnostics-level-select"', page)
             self.assertIn('id="motion-diagnostics-level-select"', page)
             self.assertIn('id="motion-feedback-auto-disable-checkbox"', page)
@@ -184,6 +189,7 @@ class WebStaticAssetTests(unittest.TestCase):
                 response.close()
 
             self.assertEqual(payload["relative_speed"], 55)
+            self.assertIn("active_mode_elapsed_seconds", payload)
             self.assertIn("motion_observability", payload)
             observability = payload["motion_observability"]
             self.assertEqual(payload["motion_diagnostics_level"], "debug")
@@ -209,6 +215,38 @@ class WebStaticAssetTests(unittest.TestCase):
                 motion._last_source = "idle"
                 motion._last_label = "idle"
                 motion._last_command_time = None
+
+    def test_status_payload_reports_active_mode_elapsed_time(self):
+        import strokegpt.web as web
+
+        original_state = (
+            web.auto_mode_active_task,
+            web.active_mode_name,
+            web.active_mode_started_at,
+            web.edging_start_time,
+        )
+        try:
+            web.auto_mode_active_task = None
+            web.active_mode_name = "freestyle"
+            web.active_mode_started_at = time.time() - 12.2
+            web.edging_start_time = None
+
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["active_mode"], "freestyle")
+            self.assertGreaterEqual(payload["active_mode_elapsed_seconds"], 12)
+        finally:
+            (
+                web.auto_mode_active_task,
+                web.active_mode_name,
+                web.active_mode_started_at,
+                web.edging_start_time,
+            ) = original_state
 
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, settings
@@ -569,12 +607,22 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn(".my-button:disabled", css)
             self.assertIn("#motion-meter-panel", css)
             self.assertIn("#motion-feedback-buttons", css)
+            self.assertIn("#motion-status-strip", css)
+            self.assertIn("#motion-status-strip { width: min(1180px, 100%); height: 74px;", css)
+            self.assertIn("grid-template-columns: minmax(420px, 1.3fr) minmax(360px, 0.9fr)", css)
+            self.assertIn("#visualizer-box { width: 100%; height: 74px;", css)
             self.assertIn(".motion-sequence-indicator", css)
+            self.assertIn(".motion-sequence-log", css)
+            self.assertIn(".motion-sequence-entry", css)
+            self.assertIn(".motion-sequence-log { width: 100%; height: 74px;", css)
+            self.assertIn("grid-template-rows: 68px 58px", css)
+            self.assertIn("overflow-y: auto", css)
+            self.assertNotIn("@keyframes motion-sequence-scroll", css)
             self.assertIn(".motion-diagnostics-panel", css)
             self.assertIn("#sidebar-motion-indicator", css)
             self.assertIn("#handy-cylinder-indicator", css)
             self.assertIn("#handy-cylinder-range { position: absolute; left: 8px; right: 8px; top: 8%; height: 84%;", css)
-            self.assertIn("#visualizer-box { width: min(620px, 100%);", css)
+            self.assertIn("#visualizer-box { width: 100%;", css)
             self.assertIn(".settings-subsection { display: flex; flex-direction: column; gap: 12px;", css)
             self.assertIn(".settings-help", css)
             self.assertIn(".settings-checkbox-line", css)
@@ -699,6 +747,17 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function updateMotionMeters", script)
         self.assertIn("function updateMotionSequenceIndicator", script)
         self.assertIn("function updateMotionDiagnosticsPanel", script)
+        self.assertIn("function updateActiveModeTimer", script)
+        self.assertIn("function formatClockElapsed", script)
+        self.assertIn("padStart(2, '0')", script)
+        self.assertIn("function formatMotionTraceTiming", script)
+        self.assertIn("MOTION_SEQUENCE_LOG_LIMIT", script)
+        self.assertIn("function resetMotionSequenceLog", script)
+        self.assertIn("function appendMotionSequenceLogEntry", script)
+        self.assertIn("function motionSequenceLogTime", script)
+        self.assertIn("formatClockElapsed(state.activeModeElapsedSeconds ?? 0)", script)
+        self.assertIn("state.activeModeName", script)
+        self.assertIn("active_mode_elapsed_seconds", script)
         self.assertIn("function updateMemoryToggleUi", script)
         self.assertIn("async function toggleLongTermMemory", script)
         self.assertIn("/toggle_memory", script)
