@@ -146,6 +146,9 @@ mode_message_event = threading.Event()
 mode_message_queue = deque(maxlen=5)
 active_mode_name = ""
 active_mode_started_at = None
+active_mode_paused_at = None
+active_mode_paused_total = 0.0
+motion_pause_active = False
 edging_start_time = None
 depth_test_lock = threading.Lock()
 ollama_pull_lock = threading.Lock()
@@ -174,6 +177,7 @@ last_live_motion_pattern_id = ""
 
 def _set_runtime_active_mode(mode_name, *, reset_timer=False):
     global active_mode_name, active_mode_started_at, edging_start_time, auto_mode_active_task
+    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
 
     mode_name = str(mode_name or "").strip()
     changed = active_mode_name != mode_name
@@ -181,11 +185,19 @@ def _set_runtime_active_mode(mode_name, *, reset_timer=False):
 
     if not mode_name:
         active_mode_started_at = None
+        active_mode_paused_at = None
+        active_mode_paused_total = 0.0
+        motion_pause_active = False
         edging_start_time = None
         return
 
     if reset_timer or changed or active_mode_started_at is None:
         active_mode_started_at = time.time()
+        active_mode_paused_at = None
+        active_mode_paused_total = 0.0
+        motion_pause_active = False
+        if hasattr(motion, "resume"):
+            motion.resume()
 
     if mode_name == "edging":
         edging_start_time = active_mode_started_at
@@ -198,12 +210,59 @@ def _set_runtime_active_mode(mode_name, *, reset_timer=False):
 
 def _active_mode_snapshot():
     mode_name = auto_mode_active_task.name if auto_mode_active_task else active_mode_name
+    paused = bool(motion_pause_active or getattr(motion, "is_paused", lambda: False)())
     if not mode_name:
-        return {"active_mode": "", "active_mode_elapsed_seconds": None}
+        return {
+            "active_mode": "",
+            "active_mode_elapsed_seconds": None,
+            "active_mode_paused": False,
+            "motion_paused": paused,
+        }
     elapsed = None
     if active_mode_started_at:
-        elapsed = max(0, int(time.time() - active_mode_started_at))
-    return {"active_mode": mode_name, "active_mode_elapsed_seconds": elapsed}
+        now = active_mode_paused_at if active_mode_paused_at is not None else time.time()
+        elapsed = max(0, int(now - active_mode_started_at - active_mode_paused_total))
+    return {
+        "active_mode": mode_name,
+        "active_mode_elapsed_seconds": elapsed,
+        "active_mode_paused": paused,
+        "motion_paused": paused,
+    }
+
+
+def _clear_motion_pause_state():
+    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
+    active_mode_paused_at = None
+    active_mode_paused_total = 0.0
+    motion_pause_active = False
+    if hasattr(motion, "resume"):
+        motion.resume()
+
+
+def _set_motion_paused(paused):
+    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
+
+    paused = bool(paused)
+    now = time.time()
+    if paused:
+        if not motion_pause_active:
+            motion_pause_active = True
+            if active_mode_name and active_mode_paused_at is None:
+                active_mode_paused_at = now
+        if auto_mode_active_task and hasattr(auto_mode_active_task, "pause"):
+            auto_mode_active_task.pause()
+        elif hasattr(motion, "pause"):
+            motion.pause()
+    else:
+        if motion_pause_active and active_mode_paused_at is not None:
+            active_mode_paused_total += max(0.0, now - active_mode_paused_at)
+        active_mode_paused_at = None
+        motion_pause_active = False
+        if auto_mode_active_task and hasattr(auto_mode_active_task, "resume"):
+            auto_mode_active_task.resume()
+        elif hasattr(motion, "resume"):
+            motion.resume()
+    return _active_mode_snapshot()
 
 # Easter Egg State
 special_persona_mode = None
@@ -882,7 +941,7 @@ def _stop_motion_training():
 
 def reset_runtime_state():
     global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
-    global active_mode_name, active_mode_started_at
+    global active_mode_name, active_mode_started_at, active_mode_paused_at, active_mode_paused_total, motion_pause_active
     global use_long_term_memory
     global special_persona_mode, special_persona_interactions_left
 
@@ -892,16 +951,21 @@ def reset_runtime_state():
         auto_mode_active_task = None
 
     _stop_motion_training()
+    _clear_motion_pause_state()
     settings.reset_to_defaults(save=True)
     apply_settings_to_services()
     chat_history.clear()
     messages_for_ui.clear()
     mode_message_queue.clear()
     user_signal_event.clear()
+    mode_message_event.clear()
     current_mood = "Curious"
     calibration_pos_mm = 0.0
     active_mode_name = ""
     active_mode_started_at = None
+    active_mode_paused_at = None
+    active_mode_paused_total = 0.0
+    motion_pause_active = False
     edging_start_time = None
     use_long_term_memory = True
     special_persona_mode = None
@@ -971,6 +1035,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         auto_mode_active_task.stop()
         auto_mode_active_task.join(timeout=5)
     _stop_motion_training()
+    _clear_motion_pause_state()
     
     user_signal_event.clear()
     mode_message_event.clear()
@@ -1048,6 +1113,7 @@ def _konami_code_action():
 def _handle_chat_commands(text, allow_motion=True):
     intent = intent_matcher.parse(text, motion.current_target())
     if intent.kind == "stop":
+        _clear_motion_pause_state()
         if auto_mode_active_task: auto_mode_active_task.stop()
         _stop_motion_training()
         add_message_to_queue("Stopping.", add_to_history=False)
@@ -1062,6 +1128,7 @@ def _handle_chat_commands(text, allow_motion=True):
         start_background_mode(freestyle_mode_logic, "Starting adaptive Freestyle.", mode_name='freestyle')
         return True, jsonify({"status": "freestyle_started"})
     if intent.kind == "auto_off" and auto_mode_active_task:
+        _clear_motion_pause_state()
         auto_mode_active_task.stop()
         return True, jsonify({"status": "auto_stopped"})
     if intent.kind == "edging":
@@ -1509,6 +1576,25 @@ def signal_edge_route():
         return jsonify({"status": "signaled", "mode": auto_mode_active_task.name})
     return jsonify({"status": "ignored", "message": "Edge, milking, or Freestyle mode not active."}), 400
 
+@app.route('/toggle_motion_pause', methods=['POST'])
+def toggle_motion_pause_route():
+    data = _request_json()
+    action = str(data.get("action") or "toggle").strip().lower()
+    if action in {"pause", "paused"}:
+        paused = True
+    elif action in {"resume", "play", "unpause", "running"}:
+        paused = False
+    else:
+        paused = not bool(motion_pause_active or getattr(motion, "is_paused", lambda: False)())
+    snapshot = _set_motion_paused(paused)
+    return jsonify({
+        "status": "success",
+        "paused": snapshot["motion_paused"],
+        "active_mode": snapshot["active_mode"],
+        "active_mode_paused": snapshot["active_mode_paused"],
+        "active_mode_elapsed_seconds": snapshot["active_mode_elapsed_seconds"],
+    })
+
 @app.route('/set_profile_picture', methods=['POST'])
 def set_pfp_route():
     b64_data = _request_json().get('pfp_b64')
@@ -1734,6 +1820,8 @@ def get_status_route():
         "range": diagnostics["range"],
         "active_mode": active_mode["active_mode"],
         "active_mode_elapsed_seconds": active_mode["active_mode_elapsed_seconds"],
+        "active_mode_paused": active_mode["active_mode_paused"],
+        "motion_paused": active_mode["motion_paused"],
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "motion_training": _motion_training_snapshot(),
         "motion_observability": motion_observability,
@@ -1912,6 +2000,7 @@ def start_freestyle_route():
 
 @app.route('/stop_auto_mode', methods=['POST'])
 def stop_auto_route():
+    _clear_motion_pause_state()
     if auto_mode_active_task: auto_mode_active_task.stop()
     return jsonify({"status": "auto_mode_stopped"})
 

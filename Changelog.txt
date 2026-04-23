@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #47 - Add Pause Resume And Mode Hotkeys
+--------------------------------------------------------
+
+Branch: codex-pause-resume-hotkeys
+
+- Added a shared motion pause state that pauses active modes and in-flight
+  motion playback without using the stop path or resetting the active mode
+  timer.
+- Added a Pause/Resume control, media Play/Pause key handling, media Stop key
+  handling, and double-Shift `I'm Close` signaling.
+- Added hover tooltips for the relevant controls so the mapped hotkeys are
+  discoverable in the UI.
+- Added tests for paused sleeps, controller pause observability, pause/resume
+  status payloads, route behavior, and frontend hotkey wiring.
+
+
 2026-04-23 - PR #46 - Add Tool-Neutral Agent Handoff
 ----------------------------------------------------
 

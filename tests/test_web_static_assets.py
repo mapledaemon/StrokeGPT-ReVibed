@@ -116,6 +116,11 @@ class WebStaticAssetTests(unittest.TestCase):
             self.assertIn('id="motion-feedback-auto-disable-checkbox"', page)
             self.assertIn('id="toggle-memory-btn"', page)
             self.assertIn("Memories: ON", page)
+            self.assertIn('id="pause-resume-btn"', page)
+            self.assertLess(page.index('id="pause-resume-btn"'), page.index('id="start-auto-btn"'))
+            self.assertIn('Hotkey: Play/Pause media key', page)
+            self.assertIn('Hotkey: double-tap Shift', page)
+            self.assertIn('Hotkey: Stop media key', page)
             self.assertIn('id="sidebar-motion-indicator"', page)
             self.assertIn('id="handy-cylinder-indicator"', page)
             self.assertNotIn('id="motion-trace-panel"', page)
@@ -247,6 +252,122 @@ class WebStaticAssetTests(unittest.TestCase):
                 web.active_mode_started_at,
                 web.edging_start_time,
             ) = original_state
+
+    def test_status_payload_reports_motion_pause_state_and_frozen_timer(self):
+        import strokegpt.web as web
+
+        original_state = (
+            web.auto_mode_active_task,
+            web.active_mode_name,
+            web.active_mode_started_at,
+            web.active_mode_paused_at,
+            web.active_mode_paused_total,
+            web.motion_pause_active,
+            web.edging_start_time,
+        )
+        try:
+            now = time.time()
+            web.auto_mode_active_task = None
+            web.active_mode_name = "freestyle"
+            web.active_mode_started_at = now - 20
+            web.active_mode_paused_at = now - 5
+            web.active_mode_paused_total = 0
+            web.motion_pause_active = True
+            web.edging_start_time = None
+
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["active_mode"], "freestyle")
+            self.assertTrue(payload["active_mode_paused"])
+            self.assertTrue(payload["motion_paused"])
+            self.assertGreaterEqual(payload["active_mode_elapsed_seconds"], 14)
+            self.assertLessEqual(payload["active_mode_elapsed_seconds"], 16)
+        finally:
+            (
+                web.auto_mode_active_task,
+                web.active_mode_name,
+                web.active_mode_started_at,
+                web.active_mode_paused_at,
+                web.active_mode_paused_total,
+                web.motion_pause_active,
+                web.edging_start_time,
+            ) = original_state
+            web.motion.resume()
+
+    def test_toggle_motion_pause_route_pauses_and_resumes_active_mode(self):
+        import strokegpt.web as web
+
+        class FakeTask:
+            name = "freestyle"
+
+            def __init__(self):
+                self.paused = False
+
+            def pause(self):
+                self.paused = True
+
+            def resume(self):
+                self.paused = False
+
+        original_state = (
+            web.auto_mode_active_task,
+            web.active_mode_name,
+            web.active_mode_started_at,
+            web.active_mode_paused_at,
+            web.active_mode_paused_total,
+            web.motion_pause_active,
+            web.edging_start_time,
+        )
+        task = FakeTask()
+        try:
+            web.auto_mode_active_task = task
+            web.active_mode_name = "freestyle"
+            web.active_mode_started_at = time.time() - 10
+            web.active_mode_paused_at = None
+            web.active_mode_paused_total = 0
+            web.motion_pause_active = False
+            web.edging_start_time = None
+
+            response = self.client.post("/toggle_motion_pause", json={"action": "pause"})
+            try:
+                self.assertEqual(response.status_code, 200)
+                paused_payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertTrue(paused_payload["paused"])
+            self.assertTrue(paused_payload["active_mode_paused"])
+            self.assertTrue(task.paused)
+            self.assertIsNotNone(web.active_mode_paused_at)
+
+            response = self.client.post("/toggle_motion_pause", json={"action": "resume"})
+            try:
+                self.assertEqual(response.status_code, 200)
+                resumed_payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertFalse(resumed_payload["paused"])
+            self.assertFalse(resumed_payload["active_mode_paused"])
+            self.assertFalse(task.paused)
+            self.assertIsNone(web.active_mode_paused_at)
+            self.assertGreaterEqual(web.active_mode_paused_total, 0)
+        finally:
+            (
+                web.auto_mode_active_task,
+                web.active_mode_name,
+                web.active_mode_started_at,
+                web.active_mode_paused_at,
+                web.active_mode_paused_total,
+                web.motion_pause_active,
+                web.edging_start_time,
+            ) = original_state
+            web.motion.resume()
 
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import audio, chat_history, handy, llm, messages_for_ui, settings
@@ -748,6 +869,15 @@ class WebStaticAssetTests(unittest.TestCase):
         self.assertIn("function updateMotionSequenceIndicator", script)
         self.assertIn("function updateMotionDiagnosticsPanel", script)
         self.assertIn("function updateActiveModeTimer", script)
+        self.assertIn("function updatePauseResumeUi", script)
+        self.assertIn("el.pauseResumeBtn.textContent = 'Resume/Pause'", script)
+        self.assertIn("async function toggleMotionPause", script)
+        self.assertIn("function handleMotionHotkey", script)
+        self.assertIn("function closeSignalAvailable", script)
+        self.assertIn("MediaPlayPause", script)
+        self.assertIn("MediaStop", script)
+        self.assertIn("SHIFT_DOUBLE_TAP_MS", script)
+        self.assertIn("/toggle_motion_pause", script)
         self.assertIn("function formatClockElapsed", script)
         self.assertIn("padStart(2, '0')", script)
         self.assertIn("function formatMotionTraceTiming", script)

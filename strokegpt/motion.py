@@ -634,6 +634,7 @@ class MotionController:
         self._frame_playback_active = False
         self._last_position_command_ended_at = None
         self._last_position_batch_ended_at = None
+        self._pause_event = threading.Event()
 
     def set_backend(self, backend: str) -> None:
         normalized = "position" if str(backend or "").lower() == "position" else "hamp"
@@ -662,6 +663,8 @@ class MotionController:
             current = self.current_target()
 
         if not smooth:
+            if not self._wait_for_resume(generation):
+                return
             self._apply_step(target, source=source)
             return
 
@@ -669,8 +672,11 @@ class MotionController:
             with self._lock:
                 if generation != self._generation:
                     return
+            if not self._wait_for_resume(generation):
+                return
             self._apply_step(step, source=source)
-            time.sleep(self.step_delay)
+            if not self._sleep_with_pause(self.step_delay, generation):
+                return
 
     def apply_llm_move(self, move: Any) -> Optional[MotionTarget]:
         target = self.sanitizer.from_llm_move(move, self.current_target())
@@ -693,9 +699,48 @@ class MotionController:
     def stop(self) -> None:
         with self._lock:
             self._generation += 1
+        self._pause_event.clear()
         self._set_frame_playback_active(False)
         self.handy.stop()
         self._record_current_state(source="stop", label="stopped")
+
+    def pause(self) -> None:
+        self._pause_event.set()
+        self._set_frame_playback_active(False)
+        self.handy.stop()
+
+    def resume(self) -> None:
+        self._pause_event.clear()
+
+    def is_paused(self) -> bool:
+        return self._pause_event.is_set()
+
+    def _wait_for_resume(self, generation: int) -> bool:
+        while self._pause_event.is_set():
+            with self._lock:
+                if generation != self._generation:
+                    return False
+            time.sleep(0.05)
+        with self._lock:
+            return generation == self._generation
+
+    def _sleep_with_pause(self, seconds: float, generation: int) -> bool:
+        seconds = max(0.0, float(seconds or 0.0))
+        deadline = time.monotonic() + seconds
+        while True:
+            with self._lock:
+                if generation != self._generation:
+                    return False
+            if self._pause_event.is_set():
+                paused_at = time.monotonic()
+                if not self._wait_for_resume(generation):
+                    return False
+                deadline += time.monotonic() - paused_at
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return True
+            time.sleep(min(0.05, remaining))
 
     def _apply_step(self, target: MotionTarget, source: str = "target") -> None:
         target = target.rounded()
@@ -874,16 +919,22 @@ class MotionController:
                 with self._lock:
                     if generation != self._generation:
                         return False
+                if not self._wait_for_resume(generation):
+                    return False
 
                 for step in self.sanitizer.transition_path(self.current_target(), frame.target):
                     with self._lock:
                         if generation != self._generation:
                             return False
+                    if not self._wait_for_resume(generation):
+                        return False
                     self._apply_step(step, source=source)
-                    time.sleep(self.step_delay)
+                    if not self._sleep_with_pause(self.step_delay, generation):
+                        return False
 
                 if self.step_delay > 0:
-                    time.sleep(self.step_delay * frame.delay_factor)
+                    if not self._sleep_with_pause(self.step_delay * frame.delay_factor, generation):
+                        return False
 
             if stop_after:
                 with self._lock:
@@ -930,6 +981,8 @@ class MotionController:
                 with self._lock:
                     if generation != self._generation:
                         return False
+                if not self._wait_for_resume(generation):
+                    return False
                 delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
                 is_last_frame = index == frame_count - 1
                 is_pass_through_final = is_last_frame and not final_stop_on_target and not stop_after
@@ -960,7 +1013,8 @@ class MotionController:
                 previous_target = frame.target
                 should_sleep = not is_pass_through_final
                 if self.step_delay > 0 and should_sleep:
-                    time.sleep(delay_seconds)
+                    if not self._sleep_with_pause(delay_seconds, generation):
+                        return False
 
             with self._observability_lock:
                 self._last_position_batch_ended_at = time.monotonic()

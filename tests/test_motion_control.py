@@ -1,3 +1,5 @@
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 
@@ -439,6 +441,49 @@ class MotionControllerTests(unittest.TestCase):
         controller = MotionController(handy, step_delay=0)
         controller.stop()
         self.assertTrue(handy.stopped)
+
+    def test_pause_stops_handy_without_replacing_observability_label(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        controller.apply_target(MotionTarget(45, 55, 65, label="active pattern"), source="unit test")
+
+        controller.pause()
+        snapshot = controller.observability_snapshot()
+
+        self.assertTrue(handy.stopped)
+        self.assertTrue(controller.is_paused())
+        self.assertEqual(snapshot["label"], "active pattern")
+        self.assertNotEqual(snapshot["source"], "stop")
+
+        controller.resume()
+        self.assertFalse(controller.is_paused())
+
+    def test_position_playback_waits_for_resume(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.03)
+        controller.pause()
+        finished = threading.Event()
+
+        def run_playback():
+            controller.apply_position_frames(
+                [
+                    SimpleNamespace(target=MotionTarget(35, 45, 50, "paused frame"), delay_factor=1),
+                ],
+                source="unit test",
+            )
+            finished.set()
+
+        thread = threading.Thread(target=run_playback)
+        thread.start()
+        time.sleep(0.05)
+
+        self.assertFalse(finished.is_set())
+        self.assertEqual(handy.position_moves, [])
+
+        controller.resume()
+        self.assertTrue(finished.wait(1))
+        thread.join(timeout=1)
+        self.assertTrue(handy.position_moves)
 
     def test_apply_frames_can_stop_handy_after_preview_completion(self):
         handy = FakeHandy()

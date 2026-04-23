@@ -1,8 +1,10 @@
 import { D, apiCall, clampNumber, el, setSliderValue, state } from './context.js';
 
 const MOTION_SEQUENCE_LOG_LIMIT = 40;
+const SHIFT_DOUBLE_TAP_MS = 350;
 let motionSequenceLogInitialized = false;
 let lastMotionSequenceLogKey = '';
+let lastShiftDownAt = 0;
 
 function normalizeMotionSpeedLimits() {
     const a = parseInt(el.motionSpeedMinSlider.value, 10);
@@ -1443,7 +1445,17 @@ function formatClockElapsed(seconds) {
     return `${twoDigit(minutes)}:${twoDigit(remainingSeconds)}`;
 }
 
-function updateActiveModeTimer(modeName, elapsedSeconds) {
+function updatePauseResumeUi(paused = state.motionPaused) {
+    state.motionPaused = Boolean(paused);
+    if (!el.pauseResumeBtn) return;
+    el.pauseResumeBtn.textContent = 'Resume/Pause';
+    el.pauseResumeBtn.setAttribute('aria-pressed', state.motionPaused ? 'true' : 'false');
+    el.pauseResumeBtn.title = state.motionPaused
+        ? 'Hotkey: Play/Pause media key to resume'
+        : 'Hotkey: Play/Pause media key to pause';
+}
+
+function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.motionPaused) {
     if (!el.edgingTimer) return;
     const normalizedMode = modeName || '';
     const nextElapsed = normalizedMode ? Math.max(0, Math.round(Number(elapsedSeconds) || 0)) : null;
@@ -1469,8 +1481,8 @@ function updateActiveModeTimer(modeName, elapsedSeconds) {
     state.activeModeElapsedSeconds = nextElapsed;
     const elapsed = formatClockElapsed(state.activeModeElapsedSeconds);
     el.edgingTimer.style.display = 'block';
-    el.edgingTimer.textContent = `${label} ${elapsed}`;
-    el.edgingTimer.title = `${label} active for ${elapsed}`;
+    el.edgingTimer.textContent = `${label} ${elapsed}${paused ? ' paused' : ''}`;
+    el.edgingTimer.title = paused ? `${label} paused at ${elapsed}` : `${label} active for ${elapsed}`;
 }
 
 export async function pollMotionStatus() {
@@ -1499,7 +1511,9 @@ export async function pollMotionStatus() {
     if (el.imCloseBtn) {
         el.imCloseBtn.style.display = ['edging', 'milking', 'freestyle'].includes(data.active_mode) ? 'block' : 'none';
     }
-    updateActiveModeTimer(data.active_mode, data.active_mode_elapsed_seconds);
+    state.motionPaused = Boolean(data.motion_paused);
+    updatePauseResumeUi(state.motionPaused);
+    updateActiveModeTimer(data.active_mode, data.active_mode_elapsed_seconds, Boolean(data.active_mode_paused));
     state.motionObservability = data.motion_observability || {
         backend: state.motionBackend,
         source: 'status',
@@ -1542,7 +1556,8 @@ async function startEdgingMode() {
     if (data && data.status === 'edging_started') {
         el.statusText.textContent = 'Edging mode started.';
         el.imCloseBtn.style.display = 'block';
-        updateActiveModeTimer('edging', 0);
+        updatePauseResumeUi(false);
+        updateActiveModeTimer('edging', 0, false);
     }
 }
 
@@ -1552,7 +1567,8 @@ async function startMilkingMode() {
     if (data && data.status === 'milking_started') {
         el.statusText.textContent = 'Milking mode started.';
         el.imCloseBtn.style.display = 'block';
-        updateActiveModeTimer('milking', 0);
+        updatePauseResumeUi(false);
+        updateActiveModeTimer('milking', 0, false);
     }
 }
 
@@ -1578,8 +1594,77 @@ async function startFreestyleMode() {
     if (data && data.status === 'freestyle_started') {
         el.statusText.textContent = 'Freestyle started.';
         el.imCloseBtn.style.display = 'block';
-        updateActiveModeTimer('freestyle', 0);
+        updatePauseResumeUi(false);
+        updateActiveModeTimer('freestyle', 0, false);
     }
+}
+
+async function toggleMotionPause(action = 'toggle') {
+    const data = await apiCall('/toggle_motion_pause', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action}),
+    });
+    if (data && data.status === 'success') {
+        updatePauseResumeUi(data.paused);
+        updateActiveModeTimer(data.active_mode, data.active_mode_elapsed_seconds, data.active_mode_paused);
+        el.statusText.textContent = data.paused ? 'Motion paused.' : 'Motion resumed.';
+    }
+}
+
+function closeSignalAvailable() {
+    return ['edging', 'milking', 'freestyle'].includes(state.activeModeName);
+}
+
+async function signalImClose() {
+    if (!closeSignalAvailable()) {
+        el.statusText.textContent = "I'm Close is available in Edge, Milk, or Freestyle.";
+        return;
+    }
+    const data = await apiCall('/signal_edge', {method: 'POST'});
+    if (data && data.status === 'signaled') {
+        el.statusText.textContent = data.mode === 'milking'
+            ? 'Milking mode extended.'
+            : data.mode === 'freestyle'
+                ? 'Freestyle close signal sent.'
+            : 'Close signal sent.';
+    }
+    if (el.imCloseBtn) {
+        el.imCloseBtn.style.transform = 'scale(0.95)';
+        setTimeout(() => { el.imCloseBtn.style.transform = ''; }, 100);
+    }
+}
+
+function stopMotion(sendUserMessage, emergency = false) {
+    if (el.imCloseBtn) el.imCloseBtn.style.display = 'none';
+    updatePauseResumeUi(false);
+    updateActiveModeTimer('', null, false);
+    if (emergency) sendUserMessage('stop');
+    else apiCall('/stop_auto_mode', {method: 'POST'});
+}
+
+function handleMotionHotkey(event, sendUserMessage) {
+    if (event.repeat) return;
+    if (event.key === 'MediaPlayPause' || event.key === 'MediaPause' || event.key === 'MediaPlay') {
+        event.preventDefault();
+        const action = event.key === 'MediaPause' ? 'pause' : event.key === 'MediaPlay' ? 'resume' : 'toggle';
+        toggleMotionPause(action);
+        return;
+    }
+    if (event.key === 'MediaStop') {
+        event.preventDefault();
+        stopMotion(sendUserMessage, true);
+        return;
+    }
+    if (event.key !== 'Shift' || event.ctrlKey || event.altKey || event.metaKey) return;
+    const now = Date.now();
+    if (lastShiftDownAt && now - lastShiftDownAt <= SHIFT_DOUBLE_TAP_MS) {
+        event.preventDefault();
+        lastShiftDownAt = 0;
+        signalImClose();
+        return;
+    }
+    lastShiftDownAt = now;
 }
 
 export function initMotionControls({sendUserMessage}) {
@@ -1587,26 +1672,13 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('dislike-this-move-btn')?.addEventListener('click', dislikeLastMove);
     const stopButtons = [D.getElementById('stop-auto-btn'), D.getElementById('emergency-stop-all-btn')];
     stopButtons.forEach(btn => btn.addEventListener('click', () => {
-        el.imCloseBtn.style.display = 'none';
-        updateActiveModeTimer('', null);
-        if (btn.id === 'emergency-stop-all-btn') sendUserMessage('stop');
-        else apiCall('/stop_auto_mode', {method: 'POST'});
+        stopMotion(sendUserMessage, btn.id === 'emergency-stop-all-btn');
     }));
+    el.pauseResumeBtn?.addEventListener('click', () => toggleMotionPause());
     el.edgingModeBtn.addEventListener('click', startEdgingMode);
     el.freestyleModeBtn?.addEventListener('click', startFreestyleMode);
     el.toggleMemoryBtn?.addEventListener('click', toggleLongTermMemory);
-    el.imCloseBtn.addEventListener('click', async () => {
-        const data = await apiCall('/signal_edge', {method: 'POST'});
-        if (data && data.status === 'signaled') {
-            el.statusText.textContent = data.mode === 'milking'
-                ? 'Milking mode extended.'
-                : data.mode === 'freestyle'
-                    ? 'Freestyle close signal sent.'
-                : 'Close signal sent.';
-        }
-        el.imCloseBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => { el.imCloseBtn.style.transform = ''; }, 100);
-    });
+    el.imCloseBtn.addEventListener('click', signalImClose);
     el.motionSpeedMinSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
@@ -1629,6 +1701,7 @@ export function initMotionControls({sendUserMessage}) {
     }
     D.addEventListener('keydown', event => {
         if (event.key === 'Escape' && el.motionTrainingDialog?.classList.contains('open')) closeMotionTrainingWorkspace();
+        handleMotionHotkey(event, sendUserMessage);
     });
     window.addEventListener('resize', drawOpenMotionTrainingPreview);
     el.motionTransformSmoothBtn?.addEventListener('click', smoothEditedPattern);
@@ -1655,6 +1728,7 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('milking-mode-btn').addEventListener('click', startMilkingMode);
     updateMotionTrainingStatus();
     updateMotionTrainingEditButtons();
+    updatePauseResumeUi(false);
     startHandyCylinderAnimation();
     refreshMotionPatterns();
 }

@@ -185,8 +185,8 @@ branch, remove any roadmap item that has already landed and is covered in
 Current Up Next targets are:
 
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
-   diagnostics on-device, fix remaining stop/log/timer regressions, and add
-   Pause/Resume plus hotkeys without resetting mode plans.
+   diagnostics on-device, fix remaining stop/log/timer regressions, and verify
+   the Pause/Resume and hotkey behavior on real hardware.
 2. Code Reorganization Plan: split `web.py` into domain blueprints, extract
    freestyle and mode-decision helpers from `background_modes.py`, introduce an
    `AppState` lock boundary, and type the services/callbacks contracts.
