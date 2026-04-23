@@ -8,6 +8,48 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #44 - Roadmap Tier Rework And Notes Merge
+-----------------------------------------------------------
+
+Branch: codex-roadmap-tier-rework
+
+- Restructured ROADMAP.md from a flat numbered "Best Next Targets" list into
+  Up Next / Queued / Backlog / Long-Horizon tiers so priority is independent
+  from per-task complexity (S/M/L/XL).
+- Merged the standalone project notes into ROADMAP.md, ranking each merged
+  item by feasibility for the next round of changes rather than by raw
+  desirability.
+- Added a Code Reorganization Plan to Up Next covering the planned web.py
+  blueprint split (settings/motion/audio/modes plus a payloads module),
+  freestyle.py and mode_decisions.py extraction from background_modes.py,
+  AppState dataclass with RLock for runtime globals, translator/adapter audit
+  for redundant string-to-code conversions, TypedDict/Protocol typing for
+  callbacks and services dicts, and deferred lazy-load of the JSON pattern
+  library.
+- Added a Persona Naming And Prompt Audit (S) entry so the GLaDOS persona name
+  exposure to the local LLM can be reviewed and renamed if it is leaking into
+  motion or chat behavior.
+- Added a UI bullet to split the active-mode timer and the mode-label
+  indicator into two fixed-size elements so neither resizes the strip.
+- Added a Motion Vocabulary bullet calling out that motion targets should vary
+  speed and depth instead of high-frequency oscillation inside a tight range,
+  using the audiosurf/TRRS metaphor from the notes.
+- Added a freeform/freestyle restriction-removal toggle bullet so users can
+  opt in to non-deterministic speed ranges without changing the default
+  guarded behavior.
+- Tightened the Guardrails section so any feedback-driven change to weights or
+  pattern enablement must appear immediately in the GUI, and added a
+  reference-projects caveat warning against borrowing pause/stop logic that
+  would harm smoothness.
+- Added a new KNOWN_PROBLEMS.md entry, "Local LLM Chat Text Sometimes Missing
+  While Voice Plays", describing the chat-emit vs TTS-enqueue divergence.
+- Added a new KNOWN_PROBLEMS.md entry, "Web UI Stays Functional After Backend
+  Shutdown", describing silent failure of settings writes when the Flask
+  backend is no longer reachable.
+- Extended Visual Element Formatting follow-ups with the timer/mode-indicator
+  split and the right-side collapsible menu spacing tightening.
+
+
 2026-04-23 - PR #43 - Improve Freestyle Diagnostics And Motion Hot Paths
 -------------------------------------------------------------------------
 
