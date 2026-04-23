@@ -6,7 +6,7 @@ review and test locally before pushing.
 ## PR 1 - Pattern Files And Import/Export
 
 ```text
-Continue StrokeGPT-ReVibed motion training work. Read Codex.md, README.md,
+Continue StrokeGPT-ReVibed motion training work. Read AGENTS.md, README.md,
 ROADMAP.md, Changelog.txt, strokegpt/motion_patterns.py, and the current web
 routes first. Implement only the backend foundation for shareable motion
 patterns: a dependency-free JSON schema, a user_data/patterns registry,

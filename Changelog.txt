@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #46 - Add Tool-Neutral Agent Handoff
+----------------------------------------------------
+
+Branch: codex-agent-handoff-docs
+
+- Renamed the canonical coding-agent handoff from `Codex.md` to
+  `AGENTS.md` so Codex and Claude can share one source of truth.
+- Replaced `Codex.md` with a short pointer to `AGENTS.md` and added a matching
+  `CLAUDE.md` pointer for Claude filename discovery.
+- Updated existing follow-up prompt text to tell future agents to read
+  `AGENTS.md` first.
+- Expanded `AGENTS.md` with the current documentation layout, PR #43-#45
+  progress snapshot, current roadmap priorities, refreshed continuation
+  prompts, and the rule that `Codex.md` and `CLAUDE.md` stay as short pointers.
+
+
 2026-04-23 - PR #45 - Chat Interface Planning And Motion Log Regression
 -------------------------------------------------------------------------
 
