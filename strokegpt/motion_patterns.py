@@ -1,6 +1,7 @@
 import math
 import random
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Iterable, Optional
 
 from .motion_anchors import AnchorProgram, coerce_anchor_program
@@ -249,7 +250,15 @@ def simplify_collinear_actions(
     return tuple(simplified)
 
 
+@lru_cache(maxsize=256)
 def prepare_pattern_actions(pattern: MotionPattern) -> tuple[PatternAction, ...]:
+    """Normalize, repeat, interpolate, and simplify a pattern's actions.
+
+    The result depends only on the immutable MotionPattern dataclass, so it is
+    safe to memoize. Pattern preparation can run multiple times per playback
+    batch (once per expansion call plus once per `duration_ms` lookup), and
+    the underlying numerical work is non-trivial.
+    """
     actions = normalize_actions(pattern.actions, pattern.min_interval_ms)
     actions = repeat_actions(actions, pattern.repeat)
     actions = normalize_actions(actions, pattern.min_interval_ms)

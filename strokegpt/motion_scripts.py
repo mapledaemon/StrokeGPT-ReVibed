@@ -50,16 +50,16 @@ AUTO_ARCS = (
 
 MILKING_ARCS = (
     (
-        ("milking-pressure-build", "Dominant", 54, 48, 70),
-        ("milking-wide-pressure", "Passionate", 62, 54, 78),
+        ("milking-pressure-build", "Dominant", 54, 66, 46),
+        ("milking-wide-pressure", "Passionate", 62, 58, 68),
         ("milking-deep-pulse", "Overwhelmed", 72, 76, 38),
         ("milking-fast-middle", "Excited", 78, 48, 46),
         ("milking-deep-finish", "Dominant", 68, 82, 34),
         ("milking-recover", "Afterglow", 28, 30, 28),
     ),
     (
-        ("milking-steady-press", "Confident", 58, 44, 62),
-        ("milking-short-burst", "Excited", 74, 34, 30),
+        ("milking-steady-press", "Confident", 58, 64, 48),
+        ("milking-short-burst", "Excited", 74, 58, 30),
         ("milking-full-drive", "Passionate", 66, 52, 88),
         ("milking-deep-squeeze", "Dominant", 76, 86, 24),
         ("milking-final-wave", "Breathless", 70, 58, 74),
@@ -68,17 +68,17 @@ MILKING_ARCS = (
 
 EDGING_ARCS = (
     (
-        ("edge-build-low", "Seductive", 24, 24, 32),
-        ("edge-build-mid", "Anticipatory", 34, 42, 48),
-        ("edge-hold", "Confident", 34, 32, 46),
+        ("edge-build-low", "Seductive", 24, 78, 28),
+        ("edge-build-mid", "Anticipatory", 34, 62, 42),
+        ("edge-hold", "Confident", 34, 42, 42),
         ("edge-tip-tease", "Playful", 42, 14, 18),
         ("edge-recover", "Loving", 18, 68, 48),
     ),
     (
-        ("edge-slow-wide", "Intimate", 24, 48, 62),
+        ("edge-deeper-risk", "Dominant", 28, 78, 28),
+        ("edge-middle-hold", "Confident", 36, 52, 36),
+        ("edge-slow-wide", "Intimate", 30, 54, 52),
         ("edge-shallow-snap", "Teasing", 46, 16, 20),
-        ("edge-middle-hold", "Confident", 36, 44, 36),
-        ("edge-deeper-risk", "Dominant", 48, 74, 30),
         ("edge-pull-back", "Loving", 14, 88, 18),
     ),
 )

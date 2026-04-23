@@ -4,6 +4,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional
 
 from .motion_anchors import coerce_anchor_program_dict
@@ -127,7 +128,20 @@ SPEED_DEFAULTS = {
     "max": 86.0,
 }
 
-ZONE_PATTERNS = (
+def _compile_patterns(*patterns: str) -> tuple[re.Pattern[str], ...]:
+    return tuple(re.compile(pattern) for pattern in patterns)
+
+
+def _compile_groups(
+    *groups: tuple[str, tuple[str, ...]],
+) -> tuple[tuple[str, tuple[re.Pattern[str], ...]], ...]:
+    return tuple((name, _compile_patterns(*patterns)) for name, patterns in groups)
+
+
+# Module-level regex constants are pre-compiled once at import time so the
+# detection helpers below can match against pattern objects directly instead of
+# recompiling source strings on every chat turn / playback frame.
+ZONE_PATTERNS = _compile_groups(
     ("full", (r"\bbase\s+to\s+tip\b", r"\btip\s+to\s+base\b", r"\bwhole\s+(?:thing|length)\b", r"\bentire\s+length\b")),
     ("base", (r"\bbase\b", r"\broot\b", r"\bbottom\b", r"\bdeepthroat\b", r"\bgag\b", r"\bdeep\s+(?:only|strokes?|position)\b")),
     ("tip", (r"\btip\b", r"\bhead\b", r"\bshallow\b", r"\btop\b")),
@@ -135,7 +149,7 @@ ZONE_PATTERNS = (
     ("middle", (r"\bmiddle\b", r"\bmid(?:dle)?\s+shaft\b", r"\bshaft\b", r"\bcenter\b", r"\bcentre\b")),
 )
 
-LENGTH_PATTERNS = (
+LENGTH_PATTERNS = _compile_groups(
     ("full", (r"\bfull\s+(?:stroke|range|length|sweep|travel|strokes)\b", r"\ball\s+the\s+way\b", r"\bwhole\s+(?:thing|length)\b")),
     ("half", (r"\bhalf\b(?:\s+(?:stroke|range|length|way))?", r"\bhalfway\b")),
     ("tiny", (r"\btiny\b", r"\bmicro\b", r"\btwitch(?:y|ing)?\b")),
@@ -143,7 +157,7 @@ LENGTH_PATTERNS = (
     ("long", (r"\blong\s+(?:stroke|range|strokes)?\b", r"\bbig\s+(?:stroke|range|strokes)?\b", r"\bwide\s+(?:stroke|range|strokes)?\b")),
 )
 
-PATTERN_PATTERNS = (
+PATTERN_PATTERNS = _compile_groups(
     ("anchor_loop", (r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b")),
     ("milk", (r"\bmilk(?:ing)?\b",)),
     ("flutter", (r"\bflutter\b", r"\bstutter\b", r"\bquick\s+little\s+pulses?\b")),
@@ -159,7 +173,7 @@ PATTERN_PATTERNS = (
     ("stroke", (r"\bstroke\b", r"\bstroking\b")),
 )
 
-SPEED_PATTERNS = (
+SPEED_PATTERNS = _compile_groups(
     ("max", (r"\bmaximum\b", r"\bmax\b", r"\bvery\s+fast\b")),
     ("fast", (r"\bfast\b", r"\bquick\b", r"\brapid\b")),
     ("crawl", (r"\bcrawl\b", r"\bvery\s+slow\b")),
@@ -168,24 +182,32 @@ SPEED_PATTERNS = (
 )
 
 
+_WHITESPACE_RE = re.compile(r"\s+")
+_SLUG_INVALID_RE = re.compile(r"[^a-z0-9_-]+")
+_SLUG_DASH_RUN_RE = re.compile(r"-{2,}")
+
+
 def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
-    return re.sub(r"\s+", " ", str(value).lower()).strip()
+    return _WHITESPACE_RE.sub(" ", str(value).lower()).strip()
 
 
 def _slugify_motion_pattern_id(value: Any) -> str:
     cleaned = str(value or "").strip().lower()
-    cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned)
-    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-_")
+    cleaned = _SLUG_INVALID_RE.sub("-", cleaned)
+    cleaned = _SLUG_DASH_RUN_RE.sub("-", cleaned).strip("-_")
     return cleaned[:64]
 
 
-def _matches_any(text: str, patterns: Iterable[str]) -> bool:
-    return any(re.search(pattern, text) for pattern in patterns)
+def _matches_any(text: str, patterns: Iterable[re.Pattern[str]]) -> bool:
+    return any(pattern.search(text) for pattern in patterns)
 
 
-def _detect_from_patterns(text: str, pattern_groups: Iterable[tuple[str, Iterable[str]]]) -> Optional[str]:
+def _detect_from_patterns(
+    text: str,
+    pattern_groups: Iterable[tuple[str, tuple[re.Pattern[str], ...]]],
+) -> Optional[str]:
     clean_text = _normalize_text(text)
     if not clean_text:
         return None
@@ -357,10 +379,21 @@ def _target_from_cues(
     ).clamped()
 
 
+_INTENT_FASTER_PATTERNS = _compile_patterns(r"\bfaster\b", r"\bspeed\s+up\b", r"\bmore\s+speed\b")
+_INTENT_SLOWER_PATTERNS = _compile_patterns(r"\bslower\b", r"\bslowly\b", r"\bslow\s+down\b", r"\bease\s+up\b")
+_INTENT_HARDER_PATTERNS = _compile_patterns(r"\bharder\b", r"\bstronger\b", r"\bmore\s+intense\b")
+_INTENT_GENTLE_PATTERNS = _compile_patterns(r"\bgentle\b", r"\bsofter\b", r"\blighter\b")
+_INTENT_DEEPER_PATTERNS = _compile_patterns(r"\bdeeper\b", r"\bgo\s+deep\b", r"\bmore\s+depth\b")
+_INTENT_SHALLOWER_PATTERNS = _compile_patterns(r"\bshallower\b", r"\bnot\s+so\s+deep\b")
+_INTENT_ANCHOR_PROGRAM_PATTERNS = _compile_patterns(
+    r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b"
+)
+
+
 class IntentMatcher:
     """Deterministic natural-language controls that take precedence over LLM output."""
 
-    STOP_PATTERNS = (
+    STOP_PATTERNS = _compile_patterns(
         r"\bstop\b",
         r"\bpause\b",
         r"\bhalt\b",
@@ -368,20 +401,20 @@ class IntentMatcher:
         r"\bhold\s+(?:on|still|up)\b",
         r"\bwait\b",
     )
-    STOP_NEGATIONS = (
+    STOP_NEGATIONS = _compile_patterns(
         r"\bdon'?t\s+stop\b",
         r"\bdo\s+not\s+stop\b",
         r"\bkeep\s+going\b",
         r"\bcontinue\b",
     )
-    CONTROL_PATTERNS = (
+    CONTROL_PATTERNS = _compile_groups(
         ("auto_on", (r"\btake\s+over\b", r"\byou\s+drive\b", r"\bauto\s+mode\b")),
         ("auto_off", (r"\bstop\s+auto\b", r"\bmanual\b", r"\bmy\s+turn\b")),
         ("freestyle", (r"\bfreestyle\b", r"\badaptive\s+motion\b", r"\bneural\s+style\b")),
         ("edging", (r"\bedge\s+me\b", r"\bstart\s+edging\b", r"\btease\s+and\s+deny\b")),
         ("milking", (r"\bi'?m\s+close\b", r"\bfinish\s+me\b")),
     )
-    INFORMATIONAL_PATTERNS = (
+    INFORMATIONAL_PATTERNS = _compile_patterns(
         r"\bwhat\s+(?:does|do|is|are)\b.*\b(?:mean|means|meaning)\b",
         r"\b(?:explain|describe|define|tell\s+me\s+about)\b",
     )
@@ -414,24 +447,24 @@ class IntentMatcher:
         cues = _detect_motion_cues(text)
         motion_program = self._motion_program_from_text(text, cues)
 
-        if self._matches_any(text, (r"\bfaster\b", r"\bspeed\s+up\b", r"\bmore\s+speed\b")):
+        if self._matches_any(text, _INTENT_FASTER_PATTERNS):
             speed += 22
             labels.append("faster")
-        if self._matches_any(text, (r"\bslower\b", r"\bslowly\b", r"\bslow\s+down\b", r"\bease\s+up\b")):
+        if self._matches_any(text, _INTENT_SLOWER_PATTERNS):
             speed -= 22
             labels.append("slower")
-        if self._matches_any(text, (r"\bharder\b", r"\bstronger\b", r"\bmore\s+intense\b")):
+        if self._matches_any(text, _INTENT_HARDER_PATTERNS):
             speed += 20
             stroke_range += 12
             labels.append("harder")
-        if self._matches_any(text, (r"\bgentle\b", r"\bsofter\b", r"\blighter\b")):
+        if self._matches_any(text, _INTENT_GENTLE_PATTERNS):
             speed -= 15
             stroke_range -= 10
             labels.append("gentle")
-        if self._matches_any(text, (r"\bdeeper\b", r"\bgo\s+deep\b", r"\bmore\s+depth\b")):
+        if self._matches_any(text, _INTENT_DEEPER_PATTERNS):
             depth += 20
             labels.append("deeper")
-        if self._matches_any(text, (r"\bshallower\b", r"\bnot\s+so\s+deep\b")):
+        if self._matches_any(text, _INTENT_SHALLOWER_PATTERNS):
             depth -= 20
             labels.append("shallower")
 
@@ -461,7 +494,7 @@ class IntentMatcher:
         return MotionTarget(speed, depth, stroke_range, "+".join(labels))
 
     def _motion_program_from_text(self, text: str, cues: MotionCues) -> Optional[dict[str, Any]]:
-        if not self._matches_any(text, (r"\bsoft\s+bounce\b", r"\bbounce\b", r"\banchor\s+loop\b", r"\bspline\b")):
+        if not self._matches_any(text, _INTENT_ANCHOR_PROGRAM_PATTERNS):
             return None
         return coerce_anchor_program_dict(
             {"motion": "anchor_loop"},
@@ -472,10 +505,10 @@ class IntentMatcher:
         )
 
     def _normalize(self, text: str) -> str:
-        return re.sub(r"\s+", " ", text.lower()).strip()
+        return _WHITESPACE_RE.sub(" ", text.lower()).strip()
 
-    def _matches_any(self, text: str, patterns: Iterable[str]) -> bool:
-        return any(re.search(pattern, text) for pattern in patterns)
+    def _matches_any(self, text: str, patterns: Iterable[re.Pattern[str]]) -> bool:
+        return any(pattern.search(text) for pattern in patterns)
 
 
 class MotionSanitizer:
@@ -1045,15 +1078,34 @@ class MotionController:
         return []
 
     def _pattern_from_label(self, label: str) -> Optional[str]:
-        clean_label = (label or "").lower()
-        slug_label = _slugify_motion_pattern_id(label)
-        from .motion_patterns import PATTERNS
+        return _pattern_from_label_cached(label or "")
 
-        for pattern in sorted(PATTERNS, key=len, reverse=True):
-            if (
-                pattern in clean_label
-                or slug_label == pattern
-                or slug_label.startswith(f"{pattern}-")
-            ):
-                return pattern
+
+@lru_cache(maxsize=512)
+def _pattern_from_label_cached(label: str) -> Optional[str]:
+    """Resolve a free-form motion label to a known pattern id.
+
+    Cached because labels are reused across every generated target and the
+    PATTERNS dict is static after import. The cached path also avoids the
+    per-call `sorted(PATTERNS, key=len)` allocation by relying on a one-time
+    sorted snapshot.
+    """
+    if not label:
         return None
+    clean_label = label.lower()
+    slug_label = _slugify_motion_pattern_id(label)
+    for pattern in _patterns_sorted_by_length():
+        if (
+            pattern in clean_label
+            or slug_label == pattern
+            or slug_label.startswith(f"{pattern}-")
+        ):
+            return pattern
+    return None
+
+
+@lru_cache(maxsize=1)
+def _patterns_sorted_by_length() -> tuple[str, ...]:
+    from .motion_patterns import PATTERNS
+
+    return tuple(sorted(PATTERNS, key=len, reverse=True))

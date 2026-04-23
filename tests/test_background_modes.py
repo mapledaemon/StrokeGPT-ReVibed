@@ -252,6 +252,77 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertTrue(any("Starting milk" in message for message in messages))
         self.assertFalse(any("Finishing the sequence" in message for message in messages))
 
+    def test_edging_start_duration_cannot_finish_immediately(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        messages = []
+
+        callbacks = {
+            "get_timings": lambda _mode: (5, 8),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": threading.Event(),
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": lambda _target: None,
+            "mode_decision": lambda **_kwargs: {
+                "action": "continue",
+                "duration_seconds": 5,
+                "intensity": 40,
+            },
+        }
+
+        def stop_after_three_steps(event, *_args, **_kwargs):
+            if len(motion.applied) >= 3:
+                event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_three_steps):
+            background_modes.edging_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(len(motion.applied), 3)
+        self.assertFalse(any("Session complete" in message for message in messages))
+
+    def test_edging_progress_checkpoint_extends_instead_of_completing(self):
+        motion = FakeMotionController()
+        stop_event = threading.Event()
+        messages = []
+        decisions = []
+
+        def mode_decision(**kwargs):
+            decisions.append((kwargs["mode"], kwargs["event"], kwargs["edge_count"]))
+            return {
+                "action": "continue",
+                "intensity": 45,
+                "chat": "Holding the edge.",
+            }
+
+        callbacks = {
+            "get_timings": lambda _mode: (1, 1),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "user_signal_event": threading.Event(),
+            "send_message": messages.append,
+            "update_mood": lambda _mood: None,
+            "remember_pattern": lambda _target: None,
+            "mode_decision": mode_decision,
+        }
+
+        def stop_after_five_steps(event, *_args, **_kwargs):
+            if len(motion.applied) >= 5:
+                event.set()
+
+        with mock.patch.object(background_modes, "EDGE_START_MIN_STEPS", 2):
+            with mock.patch.object(background_modes, "EDGE_PROGRESS_MIN_STEPS", 2):
+                with mock.patch.object(background_modes.random, "randint", return_value=2):
+                    with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_five_steps):
+                        background_modes.edging_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertIn(("edging", "start", 0), decisions)
+        self.assertIn(("edging", "progress", 0), decisions)
+        self.assertGreaterEqual(len(motion.applied), 5)
+        self.assertTrue(any("Holding the edge" in message for message in messages))
+        self.assertFalse(any("Session complete" in message for message in messages))
+
     def test_edging_close_signal_can_switch_to_milking_from_llm_decision(self):
         motion = FakeMotionController()
         stop_event = threading.Event()
@@ -645,6 +716,14 @@ class CoerceModeDecisionTests(unittest.TestCase):
         )
         self.assertEqual(decision.action, "continue")
 
+    def test_start_event_drops_stop_action_for_edging(self):
+        decision = background_modes._coerce_mode_decision(
+            {"action": "stop"},
+            mode="edging",
+            event="start",
+        )
+        self.assertEqual(decision.action, "continue")
+
     def test_progress_event_still_allows_stop_for_freestyle(self):
         decision = background_modes._coerce_mode_decision(
             {"action": "stop"},
@@ -652,6 +731,14 @@ class CoerceModeDecisionTests(unittest.TestCase):
             event="progress",
         )
         self.assertEqual(decision.action, "stop")
+
+    def test_very_short_duration_is_clamped_up(self):
+        decision = background_modes._coerce_mode_decision(
+            {"action": "continue", "duration_seconds": 5},
+            mode="edging",
+            event="close_signal",
+        )
+        self.assertEqual(decision.duration_seconds, 10.0)
 
 
 if __name__ == "__main__":

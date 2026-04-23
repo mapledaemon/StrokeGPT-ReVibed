@@ -18,7 +18,7 @@ from strokegpt.motion_patterns import (
     prepare_pattern_actions,
     repeat_actions,
 )
-from strokegpt.motion_scripts import MotionScriptPlanner
+from strokegpt.motion_scripts import EDGING_ARCS, MILKING_ARCS, MotionScriptPlanner
 
 
 class MotionScriptPlannerTests(unittest.TestCase):
@@ -76,6 +76,21 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertTrue(any(label.startswith("Milking ") for label in labels))
         self.assertFalse(any(label == "current" for label in labels))
         self.assertFalse(any(label.startswith("pressure build") for label in labels))
+
+    def test_mode_arcs_start_base_mid_before_tip(self):
+        for arc in EDGING_ARCS:
+            early_depths = [depth for _pattern_id, _mood, _speed, depth, _stroke_range in arc[:2]]
+            self.assertTrue(all(depth >= 50 for depth in early_depths))
+            tip_indices = [
+                index
+                for index, (pattern_id, *_rest) in enumerate(arc)
+                if "tip" in pattern_id or "shallow" in pattern_id
+            ]
+            self.assertTrue(all(index >= 3 for index in tip_indices))
+
+        for arc in MILKING_ARCS:
+            early_depths = [depth for _pattern_id, _mood, _speed, depth, _stroke_range in arc[:2]]
+            self.assertTrue(all(depth >= 50 for depth in early_depths))
 
     def test_edge_reaction_ramps_down_then_recovers_to_hold(self):
         planner = MotionScriptPlanner("edging", rng=random.Random(5))

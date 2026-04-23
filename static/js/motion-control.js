@@ -1,5 +1,9 @@
 import { D, apiCall, clampNumber, el, setSliderValue, state } from './context.js';
 
+const MOTION_SEQUENCE_LOG_LIMIT = 40;
+let motionSequenceLogInitialized = false;
+let lastMotionSequenceLogKey = '';
+
 function normalizeMotionSpeedLimits() {
     const a = parseInt(el.motionSpeedMinSlider.value, 10);
     const b = parseInt(el.motionSpeedMaxSlider.value, 10);
@@ -1118,46 +1122,177 @@ async function saveMotionFeedbackOptions() {
 
 function updateMotionSequenceIndicator(payload = {}) {
     if (!el.motionSequenceIndicator) return;
-    const label = String(payload.label || '').trim();
-    const source = String(payload.source || '').trim();
-    const backend = payload.backend === 'position' ? 'Position' : 'HAMP';
-    const sequence = label || source || 'Idle';
     const level = payload.diagnostics_level || state.motionDiagnosticsLevel || 'compact';
     state.motionDiagnosticsLevel = level;
-    el.motionSequenceIndicator.textContent = level === 'compact'
-        ? sequence
-        : `${sequence} | ${backend}`;
+    const source = String(payload.source || '').trim();
+    const sequence = formatMotionSequenceText(payload, level);
+    appendMotionSequenceLogEntry(sequence, payload, level);
     el.motionSequenceIndicator.title = source && source !== sequence
         ? `${source}: ${sequence}`
         : sequence;
+}
+
+function resetMotionSequenceLog() {
+    lastMotionSequenceLogKey = '';
+    motionSequenceLogInitialized = false;
+    if (el.motionSequenceIndicator) el.motionSequenceIndicator.textContent = 'Idle';
+}
+
+function motionSequenceLogTime() {
+    return formatClockElapsed(state.activeModeElapsedSeconds ?? 0);
+}
+
+function motionSequenceLogKey(text, payload = {}, level = 'compact') {
+    const point = latestTracePoint(payload);
+    return [
+        level,
+        text,
+        payload.source || '',
+        payload.backend || state.motionBackend || '',
+        payload.playback_active ? 'active' : 'idle',
+        point.label || '',
+        point.frame_index ?? '',
+        point.frame_count ?? '',
+        point.t ?? point.time ?? '',
+    ].join('|');
+}
+
+function appendMotionSequenceLogEntry(text, payload = {}, level = 'compact') {
+    if (!el.motionSequenceIndicator) return;
+    const value = String(text || 'Idle').trim() || 'Idle';
+    const key = motionSequenceLogKey(value, payload, level);
+    if (key === lastMotionSequenceLogKey) return;
+    lastMotionSequenceLogKey = key;
+
+    if (!motionSequenceLogInitialized) {
+        el.motionSequenceIndicator.replaceChildren();
+        motionSequenceLogInitialized = true;
+    }
+
+    const entry = D.createElement('div');
+    entry.className = 'motion-sequence-entry';
+    if (value === 'Idle') entry.classList.add('is-idle');
+
+    const time = D.createElement('span');
+    time.className = 'motion-sequence-time';
+    time.textContent = motionSequenceLogTime();
+
+    const message = D.createElement('span');
+    message.className = 'motion-sequence-text';
+    message.textContent = value;
+
+    entry.append(time, message);
+    el.motionSequenceIndicator.appendChild(entry);
+    while (el.motionSequenceIndicator.children.length > MOTION_SEQUENCE_LOG_LIMIT) {
+        el.motionSequenceIndicator.removeChild(el.motionSequenceIndicator.firstElementChild);
+    }
+    el.motionSequenceIndicator.scrollTop = el.motionSequenceIndicator.scrollHeight;
+}
+
+function latestTracePoint(payload = {}) {
+    const trace = Array.isArray(payload.trace) ? payload.trace : [];
+    return trace.length ? trace[trace.length - 1] || {} : {};
+}
+
+function recentMotionLabels(payload = {}, limit = 4) {
+    const trace = Array.isArray(payload.trace) ? payload.trace : [];
+    const labels = [];
+    const seen = new Set();
+    for (let index = trace.length - 1; index >= 0 && labels.length < limit; index--) {
+        const point = trace[index] || {};
+        const label = String(point.label || point.source || '').trim();
+        if (!label) continue;
+        const key = label.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        labels.unshift(label);
+    }
+    if (!labels.length) {
+        const fallback = String(payload.label || payload.source || '').trim();
+        if (fallback) labels.push(fallback);
+    }
+    return labels;
+}
+
+function formatBackendName(backend) {
+    return backend === 'position' ? 'Position' : 'HAMP';
+}
+
+function formatMotionTraceTiming(point = {}) {
+    const parts = [];
+    if (point.batch_gap_ms !== undefined) parts.push(`batch ${observationNumber(point.batch_gap_ms, 0).toFixed(1)}ms`);
+    if (point.gap_ms !== undefined) parts.push(`gap ${observationNumber(point.gap_ms, 0).toFixed(1)}ms`);
+    if (point.command_ms !== undefined) parts.push(`cmd ${observationNumber(point.command_ms, 0).toFixed(1)}ms`);
+    return parts;
+}
+
+function formatMotionFrame(point = {}) {
+    if (point.frame_index === undefined || point.frame_count === undefined) return '';
+    return `frame ${Number(point.frame_index) + 1}/${Number(point.frame_count)}`;
+}
+
+function formatMotionSequenceText(payload = {}, level = 'compact') {
+    const diagnostics = payload.diagnostics || {};
+    const point = latestTracePoint(payload);
+    const labels = recentMotionLabels(payload);
+    const sequence = labels.join(' -> ') || 'Idle';
+    if (level === 'compact') return sequence;
+
+    const speed = Math.round(clampPercent(point.speed ?? diagnostics.relative_speed, 0));
+    const depth = Math.round(clampPercent(point.depth ?? diagnostics.depth, 50));
+    const range = Math.round(clampPercent(point.range ?? diagnostics.range, 50));
+    const parts = [
+        sequence,
+        `${speed}% spd`,
+        `${depth}% d / ${range}% r`,
+        formatBackendName(payload.backend || state.motionBackend),
+    ];
+    if (level === 'status') parts.push(...formatMotionTraceTiming(point).slice(0, 2));
+    if (level === 'debug') {
+        const frame = formatMotionFrame(point);
+        if (frame) parts.push(frame);
+        parts.push(...formatMotionTraceTiming(point));
+        if (point.is_pass_through_final) parts.push('pass-through final');
+        parts.push(payload.playback_active ? 'playback active' : 'playback idle');
+    }
+    return parts.filter(Boolean).join(' | ');
 }
 
 function updateMotionDiagnosticsPanel(payload = {}) {
     if (!el.motionDiagnosticsPanel) return;
     const level = payload.diagnostics_level || state.motionDiagnosticsLevel || 'compact';
     state.motionDiagnosticsLevel = level;
-    if (level !== 'debug') {
+    if (level === 'compact') {
         el.motionDiagnosticsPanel.hidden = true;
         el.motionDiagnosticsPanel.textContent = '';
         return;
     }
     const diagnostics = payload.diagnostics || {};
+    const point = latestTracePoint(payload);
     const lastCommandTime = payload.last_command_time
         ? `${Math.max(0, Date.now() / 1000 - payload.last_command_time).toFixed(1)}s ago`
         : 'none';
     const lines = [
-        `Source: ${payload.source || 'idle'}`,
-        `Backend: ${payload.backend || state.motionBackend || 'hamp'}`,
-        `Playback: ${payload.playback_active ? 'active' : 'idle'}`,
-        `Last command: ${lastCommandTime}`,
-        `Relative speed: ${Math.round(clampPercent(diagnostics.relative_speed, 0))}%`,
-        `Physical speed: ${Math.round(observationNumber(diagnostics.physical_speed, 0))}`,
-        `Depth/range: ${Math.round(clampPercent(diagnostics.depth, 50))}% / ${Math.round(clampPercent(diagnostics.range, 50))}%`,
-        `Position: ${observationNumber(diagnostics.position_mm, 0).toFixed(1)}mm`,
-        `HAMP: ${diagnostics.hamp_started ? 'started' : 'stopped'}`,
+        `Source ${payload.source || 'idle'} | backend ${formatBackendName(payload.backend || state.motionBackend)} | playback ${payload.playback_active ? 'active' : 'idle'} | last ${lastCommandTime}`,
     ];
+    const traceParts = [
+        `Trace ${point.label || payload.label || 'none'}`,
+        formatMotionFrame(point),
+        ...formatMotionTraceTiming(point),
+        point.is_pass_through_final ? 'pass-through final' : '',
+    ].filter(Boolean);
+    if (traceParts.length) lines.push(traceParts.join(' | '));
+    if (level === 'debug') {
+        lines.push([
+            `Device pos ${observationNumber(diagnostics.position_mm, 0).toFixed(1)}mm`,
+            `relative ${Math.round(clampPercent(diagnostics.relative_speed, 0))}%`,
+            `physical ${Math.round(observationNumber(diagnostics.physical_speed, 0))}`,
+            `depth/range ${Math.round(clampPercent(diagnostics.depth, 50))}%/${Math.round(clampPercent(diagnostics.range, 50))}%`,
+            `HAMP ${diagnostics.hamp_started ? 'started' : 'stopped'}`,
+        ].join(' | '));
+    }
     el.motionDiagnosticsPanel.hidden = false;
-    el.motionDiagnosticsPanel.textContent = lines.join(' | ');
+    el.motionDiagnosticsPanel.textContent = lines.join('\n');
 }
 
 function normalizedPercentRange(minValue, maxValue, fallbackMin = 0, fallbackMax = 100) {
@@ -1287,22 +1422,55 @@ function startHandyCylinderAnimation() {
     window.requestAnimationFrame(tick);
 }
 
-export function startEdgingTimer() {
-    if (state.edgingTimerInterval) clearInterval(state.edgingTimerInterval);
-    el.edgingTimer.style.display = 'block';
-    let seconds = 0;
-    state.edgingTimerInterval = setInterval(() => {
-        seconds++;
-        const min = Math.floor(seconds / 60).toString().padStart(2, '0');
-        const sec = (seconds % 60).toString().padStart(2, '0');
-        el.edgingTimer.textContent = `${min}:${sec}`;
-    }, 1000);
+function activeModeDisplayName(modeName) {
+    return {
+        auto: 'Auto',
+        edging: 'Edge',
+        milking: 'Milk',
+        freestyle: 'Freestyle',
+    }[modeName] || modeName || '';
 }
 
-export function stopEdgingTimer() {
-    clearInterval(state.edgingTimerInterval);
-    state.edgingTimerInterval = null;
-    el.edgingTimer.style.display = 'none';
+function formatClockElapsed(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const remainingSeconds = total % 60;
+    const twoDigit = value => String(value).padStart(2, '0');
+    if (hours > 0) {
+        return `${hours}:${twoDigit(minutes)}:${twoDigit(remainingSeconds)}`;
+    }
+    return `${twoDigit(minutes)}:${twoDigit(remainingSeconds)}`;
+}
+
+function updateActiveModeTimer(modeName, elapsedSeconds) {
+    if (!el.edgingTimer) return;
+    const normalizedMode = modeName || '';
+    const nextElapsed = normalizedMode ? Math.max(0, Math.round(Number(elapsedSeconds) || 0)) : null;
+    const previousMode = state.activeModeName || '';
+    const previousElapsed = state.activeModeElapsedSeconds;
+    const timerStarted = Boolean(normalizedMode) && (
+        normalizedMode !== previousMode
+        || previousElapsed === null
+        || (nextElapsed <= 1 && Number(previousElapsed) > 2)
+    );
+
+    state.activeModeName = normalizedMode;
+    if (timerStarted) resetMotionSequenceLog();
+
+    if (!normalizedMode) {
+        state.activeModeElapsedSeconds = null;
+        el.edgingTimer.style.display = 'none';
+        el.edgingTimer.textContent = '';
+        el.edgingTimer.title = '';
+        return;
+    }
+    const label = activeModeDisplayName(normalizedMode);
+    state.activeModeElapsedSeconds = nextElapsed;
+    const elapsed = formatClockElapsed(state.activeModeElapsedSeconds);
+    el.edgingTimer.style.display = 'block';
+    el.edgingTimer.textContent = `${label} ${elapsed}`;
+    el.edgingTimer.title = `${label} active for ${elapsed}`;
 }
 
 export async function pollMotionStatus() {
@@ -1331,9 +1499,7 @@ export async function pollMotionStatus() {
     if (el.imCloseBtn) {
         el.imCloseBtn.style.display = ['edging', 'milking', 'freestyle'].includes(data.active_mode) ? 'block' : 'none';
     }
-    if (data.active_mode !== 'edging' && state.edgingTimerInterval) {
-        stopEdgingTimer();
-    }
+    updateActiveModeTimer(data.active_mode, data.active_mode_elapsed_seconds);
     state.motionObservability = data.motion_observability || {
         backend: state.motionBackend,
         source: 'status',
@@ -1376,7 +1542,7 @@ async function startEdgingMode() {
     if (data && data.status === 'edging_started') {
         el.statusText.textContent = 'Edging mode started.';
         el.imCloseBtn.style.display = 'block';
-        startEdgingTimer();
+        updateActiveModeTimer('edging', 0);
     }
 }
 
@@ -1386,6 +1552,7 @@ async function startMilkingMode() {
     if (data && data.status === 'milking_started') {
         el.statusText.textContent = 'Milking mode started.';
         el.imCloseBtn.style.display = 'block';
+        updateActiveModeTimer('milking', 0);
     }
 }
 
@@ -1411,7 +1578,7 @@ async function startFreestyleMode() {
     if (data && data.status === 'freestyle_started') {
         el.statusText.textContent = 'Freestyle started.';
         el.imCloseBtn.style.display = 'block';
-        stopEdgingTimer();
+        updateActiveModeTimer('freestyle', 0);
     }
 }
 
@@ -1421,7 +1588,7 @@ export function initMotionControls({sendUserMessage}) {
     const stopButtons = [D.getElementById('stop-auto-btn'), D.getElementById('emergency-stop-all-btn')];
     stopButtons.forEach(btn => btn.addEventListener('click', () => {
         el.imCloseBtn.style.display = 'none';
-        stopEdgingTimer();
+        updateActiveModeTimer('', null);
         if (btn.id === 'emergency-stop-all-btn') sendUserMessage('stop');
         else apiCall('/stop_auto_mode', {method: 'POST'});
     }));

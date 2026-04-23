@@ -8,6 +8,68 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #43 - Improve Freestyle Diagnostics And Motion Hot Paths
+-------------------------------------------------------------------------
+
+Branch: codex-freestyle-diagnostics-caching
+
+- Added a mode-agnostic elapsed timer to `/get_status` so Auto, Edge, Milk,
+  and Freestyle can show active runtime without depending on the edging prompt
+  context.
+- Detached the motion sequence indicator from the speed/depth meter and changed
+  it into a vertical, terminal-style recent-sequence log with duplicate
+  suppression.
+- Moved the motion sequence log to the left of the speed/depth indicator bar,
+  reset it when a new active-mode timer starts, and changed log timecodes to
+  use the active-mode elapsed timer instead of wall-clock time.
+- Widened the terminal-style motion log and tightened the paired indicator bar
+  layout so the log, speed/depth meters, and feedback buttons align without
+  loose spacing.
+- Fixed the motion status strip height so terminal-log content cannot resize
+  the footer section.
+- Let the motion sequence log include recent trace labels, speed/depth/range,
+  backend state, frame position, command timing, and gap timing as diagnostics
+  verbosity increases.
+- Made the motion diagnostics panel visible at status/debug levels and surfaced
+  PR #42 trace fields so Freestyle testing can distinguish planner gaps,
+  command latency, pass-through final frames, and backend/device state.
+- Restored the active-mode elapsed display to clock formatting and guarded Edge
+  start decisions so a short LLM start duration or start `stop` action cannot
+  immediately end the mode.
+- Rewrote the LLM mode-decision prompt to be shorter and more direct about
+  avoiding very short durations, with a 10-second minimum duration clamp for
+  parsed mode decisions.
+- Tightened chat, repair, naming, GLaDOS, and memory-consolidation prompts
+  while preserving direct erotic language and motion-control constraints.
+- Biased chat and mode-decision prompts so mode starts usually begin
+  base-through-mid or mid-base, with tip/full-travel extension later unless the
+  user explicitly asks for tip focus.
+- Rebalanced Edge and Milk scripted arcs so their early mode steps favor
+  base-to-mid targets before introducing tip-focused motion.
+- Changed Edge's random session cap into a progress decision checkpoint so the
+  LLM can continue, hold, pull back, switch to Milk, or deliberately stop
+  instead of letting Edge fall through to an abrupt automatic stop.
+- Pre-compiled the motion intent and cue regex tables (ZONE/LENGTH/PATTERN/
+  SPEED) and IntentMatcher's STOP/CONTROL/INFORMATIONAL groups at import time
+  so chat parsing and frame-time intent matching no longer recompile patterns.
+- Hoisted IntentMatcher's per-call faster/slower/harder/gentler/deeper/
+  shallower/anchor-program literal tuples to module-level compiled-pattern
+  constants so each invocation reuses the same Pattern objects.
+- Pre-compiled the slugify and whitespace-normalize regexes used by motion
+  cue detection and pattern-id slugging.
+- Added an lru_cache around the controller's label-to-pattern lookup so
+  repeated chat/LLM labels resolve from cache instead of re-sorting and
+  re-scanning the static PATTERNS dict on every generated target.
+- Added an lru_cache around prepare_pattern_actions in motion_patterns.py
+  so each pattern's normalize/repeat/interpolate/simplify pipeline runs once
+  per pattern instead of once per playback expansion and once per duration_ms
+  lookup.
+- Removed the duplicate _slug_pattern_id helper in background_modes.py and
+  re-exported the canonical motion._slugify_motion_pattern_id under the same
+  local name so the freestyle planner and the controller share one
+  implementation.
+
+
 2026-04-22 - PR #42 - Bridge Position Playback And Trace Timing
 ----------------------------------------------------------------
 
@@ -30,8 +92,8 @@ Branch: codex-freestyle-bridge-and-trace-timing
   start guard.
 
 
-2026-04-22 - Unreleased - Add Adaptive Freestyle Planner
----------------------------------------------------------
+2026-04-22 - PR #41 - Add Adaptive Freestyle Planner
+----------------------------------------------------
 
 Branch: codex-adaptive-freestyle-planner
 

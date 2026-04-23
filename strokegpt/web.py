@@ -144,6 +144,8 @@ calibration_pos_mm = 0.0
 user_signal_event = threading.Event()
 mode_message_event = threading.Event()
 mode_message_queue = deque(maxlen=5)
+active_mode_name = ""
+active_mode_started_at = None
 edging_start_time = None
 depth_test_lock = threading.Lock()
 ollama_pull_lock = threading.Lock()
@@ -168,6 +170,40 @@ motion_training_state = {
     "preview": False,
 }
 last_live_motion_pattern_id = ""
+
+
+def _set_runtime_active_mode(mode_name, *, reset_timer=False):
+    global active_mode_name, active_mode_started_at, edging_start_time, auto_mode_active_task
+
+    mode_name = str(mode_name or "").strip()
+    changed = active_mode_name != mode_name
+    active_mode_name = mode_name
+
+    if not mode_name:
+        active_mode_started_at = None
+        edging_start_time = None
+        return
+
+    if reset_timer or changed or active_mode_started_at is None:
+        active_mode_started_at = time.time()
+
+    if mode_name == "edging":
+        edging_start_time = active_mode_started_at
+    else:
+        edging_start_time = None
+
+    if auto_mode_active_task:
+        auto_mode_active_task.name = mode_name
+
+
+def _active_mode_snapshot():
+    mode_name = auto_mode_active_task.name if auto_mode_active_task else active_mode_name
+    if not mode_name:
+        return {"active_mode": "", "active_mode_elapsed_seconds": None}
+    elapsed = None
+    if active_mode_started_at:
+        elapsed = max(0, int(time.time() - active_mode_started_at))
+    return {"active_mode": mode_name, "active_mode_elapsed_seconds": elapsed}
 
 # Easter Egg State
 special_persona_mode = None
@@ -846,6 +882,7 @@ def _stop_motion_training():
 
 def reset_runtime_state():
     global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
+    global active_mode_name, active_mode_started_at
     global use_long_term_memory
     global special_persona_mode, special_persona_interactions_left
 
@@ -863,6 +900,8 @@ def reset_runtime_state():
     user_signal_event.clear()
     current_mood = "Curious"
     calibration_pos_mm = 0.0
+    active_mode_name = ""
+    active_mode_started_at = None
     edging_start_time = None
     use_long_term_memory = True
     special_persona_mode = None
@@ -936,13 +975,12 @@ def start_background_mode(mode_logic, initial_message, mode_name):
     user_signal_event.clear()
     mode_message_event.clear()
     mode_message_queue.clear()
-    if mode_name == 'edging':
-        edging_start_time = time.time()
+    _set_runtime_active_mode(mode_name, reset_timer=True)
     
     def on_stop():
         global auto_mode_active_task, edging_start_time
         auto_mode_active_task = None
-        edging_start_time = None
+        _set_runtime_active_mode("")
 
     def update_mood(m): global current_mood; current_mood = m
     def get_timings(n):
@@ -953,13 +991,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
             'edging': (settings.edging_min_time, settings.edging_max_time)
         }.get(n, (3, 5))
     def set_mode_name(n):
-        global auto_mode_active_task, edging_start_time
-        if auto_mode_active_task:
-            auto_mode_active_task.name = n
-        if n == 'edging' and edging_start_time is None:
-            edging_start_time = time.time()
-        elif n != 'edging':
-            edging_start_time = None
+        _set_runtime_active_mode(n)
     def mode_decision(**kwargs):
         context = get_current_context()
         target = kwargs.get("current_target")
@@ -1693,13 +1725,15 @@ def get_status_route():
     diagnostics = handy.diagnostics()
     motion_observability = motion.observability_snapshot(diagnostics)
     motion_observability["diagnostics_level"] = settings.motion_diagnostics_level
+    active_mode = _active_mode_snapshot()
     return jsonify({
         "mood": current_mood,
         "speed": diagnostics["physical_speed"],
         "relative_speed": diagnostics["relative_speed"],
         "depth": diagnostics["depth"],
         "range": diagnostics["range"],
-        "active_mode": auto_mode_active_task.name if auto_mode_active_task else "",
+        "active_mode": active_mode["active_mode"],
+        "active_mode_elapsed_seconds": active_mode["active_mode_elapsed_seconds"],
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "motion_training": _motion_training_snapshot(),
         "motion_observability": motion_observability,
