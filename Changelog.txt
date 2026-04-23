@@ -8,6 +8,48 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-23 - PR #48 - Extract Freestyle Planner And Mode Decision Helpers
+-------------------------------------------------------------------------
+
+Branch: codex-background-modes-split
+
+- Split `strokegpt/background_modes.py` into three focused modules to make
+  the mode-orchestration layer easier to read and extend without touching
+  the scoring or decision-parsing code paths. Behavior is preserved; this
+  is a mechanical extraction with re-exports so existing imports and tests
+  keep working.
+- Added `strokegpt/mode_decisions.py` owning `ModeDecision`,
+  `MODE_DECISION_ACTIONS`, `_coerce_mode_decision`,
+  `_request_mode_decision`, `_start_mode_decision_request`,
+  `_poll_mode_decision_request`, `_step_limit_for_duration`,
+  `_target_with_intensity`, and `_send_mode_decision_message` so the LLM
+  mode-decision contract lives in one testable place.
+- Added `strokegpt/freestyle.py` owning the Freestyle planner helpers:
+  `FreestyleChoice`, the `FREESTYLE_*` constants, candidate shaping
+  (`_candidate_*`), profile/blend/score/target helpers, edge-reaction
+  planning (`_edge_reaction_steps`, `_apply_freestyle_edge_reaction`),
+  chain planning (`_freestyle_choice_chain`, `_freestyle_choice_frames`,
+  `_apply_freestyle_choices`, `_record_freestyle_edge_playback`), and the
+  permission/close-style helpers used by the Freestyle loop.
+- Reduced `strokegpt/background_modes.py` to orchestration only:
+  `AutoModeThread`, `_check_for_user_message`, `_feedback_target`,
+  `_wait_while_paused`, `_sleep_with_stop`, `_set_active_mode`,
+  `_run_scripted_mode`, and the public `auto_mode_logic`,
+  `freestyle_mode_logic`, `milking_mode_logic`, `edging_mode_logic` entry
+  points. Module dropped from ~1000 lines to ~593; the new
+  `mode_decisions.py` (~154 lines) and `freestyle.py` (~356 lines) hold
+  the extracted logic.
+- Re-exported the split symbols through `background_modes` so existing
+  imports in `web.py` and the `background_modes._coerce_mode_decision`,
+  `background_modes._choose_freestyle_pattern`, and
+  `background_modes.random` references used by the test suite continue
+  to resolve to the correct callables without touching the tests.
+- Verified with `python -m unittest discover -s tests` (224 tests pass,
+  same 69 Flask-dependent tests skip as before) and
+  `python -m py_compile` across `background_modes.py`, `freestyle.py`,
+  `mode_decisions.py`, and `web.py`.
+
+
 2026-04-23 - PR #47 - Add Pause Resume And Mode Hotkeys
 --------------------------------------------------------
 

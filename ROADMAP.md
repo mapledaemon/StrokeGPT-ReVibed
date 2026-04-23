@@ -67,12 +67,6 @@ preserve behavior.
   Move payload-builder helpers (settings payload, Ollama status payload,
   pattern catalog payload) into a `payloads.py` module so route handlers
   stay short.
-- Extract the freestyle planner (`_freestyle_profile`, `_freestyle_target`,
-  `_freestyle_score`, `_freestyle_choice_chain`) and the LLM mode-decision
-  coercion (`_coerce_mode_decision`, `_request_mode_decision`,
-  `_start_mode_decision_request`) out of `strokegpt/background_modes.py`
-  into `freestyle.py` and `mode_decisions.py`. Keep `background_modes.py`
-  as orchestration only.
 - Wrap `web.py` global runtime state (active mode, edging start time,
   message queues, training lock, depth-test lock, ollama-pull lock) inside
   an `AppState` dataclass guarded by a single `RLock`, so multi-thread
