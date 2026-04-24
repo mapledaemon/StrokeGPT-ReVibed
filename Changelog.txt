@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #56 - Rewrite README Setup Guide
+-------------------------------------------------
+
+Branch: codex-readme-rewrite-review
+
+- Reworked `README.md` into a shorter user-facing setup guide that links to
+  roadmap, known-problems, and changelog context while keeping Windows setup
+  first and generic macOS/Linux Python setup separate.
+- Added `docs/local_voice_setup.md` with focused PyTorch install and
+  verification steps for Local Chatterbox voice, including CUDA, CPU, macOS,
+  and Linux notes.
+- Reviewed the rewrite for local paths, secrets, mojibake, and upstream
+  attribution wording, keeping attribution conservative and machine-neutral.
+
+
 2026-04-24 - PR #55 - Update Post-Shim Paydown Roadmap
 -------------------------------------------------------
 
