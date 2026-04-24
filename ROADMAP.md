@@ -102,10 +102,6 @@ Adapter audit findings:
 
 Concrete follow-up PRs:
 
-- Migrate `background_modes` helper tests that patch split Freestyle or
-  mode-decision helpers to `strokegpt.freestyle` / `strokegpt.mode_decisions`,
-  then shrink the `background_modes` re-export surface if no compatibility
-  caller remains.
 - Migrate web payload tests to `strokegpt.payloads` and route registration
   tests to the blueprint modules before removing or freezing old `web.*`
   payload/route aliases.

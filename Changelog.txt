@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #54 - Shrink Background Helper Shims
+-----------------------------------------------------
+
+Branch: codex-background-helper-shim-paydown
+
+- Updated `background_modes.py` to call split Freestyle and mode-decision
+  helpers through their canonical modules instead of rebinding their private
+  helper names into the `background_modes` namespace.
+- Kept the compatibility type and constant exports for existing callers while
+  adding a regression test that locks the private helper names as no longer
+  re-exported from `background_modes`.
+- Updated `AGENTS.md` and `ROADMAP.md` so PR #53 is reflected in the progress
+  snapshot and the completed `background_modes` shim-paydown bullet is removed
+  from future work.
+
+
 2026-04-24 - PR #53 - Freeze Compatibility Shim Surfaces
 ---------------------------------------------------------
 
