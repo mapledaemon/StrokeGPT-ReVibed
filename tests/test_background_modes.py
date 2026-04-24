@@ -1,10 +1,11 @@
+import random
 import threading
 import time
 import unittest
 from collections import deque
 from unittest import mock
 
-from strokegpt import background_modes
+from strokegpt import background_modes, freestyle, mode_decisions
 from strokegpt.background_modes import AutoModeThread, _sleep_with_stop
 from strokegpt.mode_contracts import ModeCallbacks, ModeServices
 from strokegpt.motion import MotionTarget
@@ -770,14 +771,14 @@ class AutoModeThreadTests(unittest.TestCase):
         flick = FakePatternRecord("flick", "Flick")
         sway = FakePatternRecord("sway", "Sway")
 
-        choice = background_modes._choose_freestyle_pattern(
+        choice = freestyle._choose_freestyle_pattern(
             [
                 {"id": "flick", "name": "Flick", "source": "fixed", "enabled": True, "weight": 30, "record": flick},
                 {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 80, "record": sway},
             ],
             current,
             feedback_target=feedback_target,
-            rng=background_modes.random.Random(1),
+            rng=random.Random(1),
         )
 
         self.assertEqual(choice.pattern_id, "flick")
@@ -786,7 +787,7 @@ class AutoModeThreadTests(unittest.TestCase):
 
 class CoerceModeDecisionTests(unittest.TestCase):
     def test_start_event_drops_stop_action_for_milking(self):
-        decision = background_modes._coerce_mode_decision(
+        decision = mode_decisions._coerce_mode_decision(
             {"action": "stop"},
             mode="milking",
             event="start",
@@ -794,7 +795,7 @@ class CoerceModeDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, "continue")
 
     def test_start_event_drops_stop_action_for_freestyle(self):
-        decision = background_modes._coerce_mode_decision(
+        decision = mode_decisions._coerce_mode_decision(
             {"action": "stop"},
             mode="freestyle",
             event="start",
@@ -802,7 +803,7 @@ class CoerceModeDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, "continue")
 
     def test_start_event_drops_stop_action_for_edging(self):
-        decision = background_modes._coerce_mode_decision(
+        decision = mode_decisions._coerce_mode_decision(
             {"action": "stop"},
             mode="edging",
             event="start",
@@ -810,7 +811,7 @@ class CoerceModeDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, "continue")
 
     def test_progress_event_still_allows_stop_for_freestyle(self):
-        decision = background_modes._coerce_mode_decision(
+        decision = mode_decisions._coerce_mode_decision(
             {"action": "stop"},
             mode="freestyle",
             event="progress",
@@ -818,7 +819,7 @@ class CoerceModeDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, "stop")
 
     def test_very_short_duration_is_clamped_up(self):
-        decision = background_modes._coerce_mode_decision(
+        decision = mode_decisions._coerce_mode_decision(
             {"action": "continue", "duration_seconds": 5},
             mode="edging",
             event="close_signal",

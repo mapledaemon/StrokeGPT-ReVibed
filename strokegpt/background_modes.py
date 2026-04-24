@@ -13,6 +13,10 @@ import threading
 import time
 from typing import cast
 
+# Compatibility shim - do not extend. These broad imports preserve legacy
+# ``background_modes.*`` helper access from before PR #48; new code should
+# import split helpers from ``strokegpt.freestyle`` or
+# ``strokegpt.mode_decisions`` directly.
 from .freestyle import (
     FREESTYLE_CHAIN_LENGTH,
     FREESTYLE_DECISION_GRACE_SECONDS,
@@ -76,8 +80,8 @@ __all__ = [
     "INTENT_MATCHER",
     "EDGE_START_MIN_STEPS",
     "EDGE_PROGRESS_MIN_STEPS",
-    # Re-exports for the split modules, so tests and any external callers
-    # that historically imported through ``background_modes`` keep working.
+    # Compatibility shim - do not extend. These names keep historical
+    # ``background_modes`` imports working while callers migrate.
     "ModeDecision",
     "MODE_DECISION_ACTIONS",
     "FreestyleChoice",

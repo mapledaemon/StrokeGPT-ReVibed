@@ -138,6 +138,8 @@ if settings.audio_provider == "local":
 app_state = AppState()
 
 
+# Compatibility shim - do not extend. Legacy callers may still access the old
+# ``strokegpt.web`` runtime attributes; new code should use ``app_state``.
 class _WebModule(types.ModuleType):
     def __getattr__(self, name):
         if name in APP_STATE_EXPORTS:
@@ -289,6 +291,9 @@ def _ollama_installed_models():
     return models
 
 def _ollama_status_payload():
+    # Compatibility shim - do not extend. The canonical payload builder lives
+    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
+    # points while route blueprints still compose through ``web.py`` services.
     return payloads.ollama_status_payload(
         settings=settings,
         llm=llm,
@@ -392,6 +397,9 @@ def get_persona_prompts_for_ui():
     return payloads.persona_prompts_for_ui(settings)
 
 def settings_payload():
+    # Compatibility shim - do not extend. The canonical payload builder lives
+    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
+    # points while route blueprints still compose through ``web.py`` services.
     return payloads.settings_payload(
         settings=settings,
         llm=llm,
@@ -438,6 +446,9 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
+    # Compatibility shim - do not extend. The canonical payload builder lives
+    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
+    # points while route blueprints still compose through ``web.py`` services.
     return payloads.motion_pattern_catalog_payload(
         motion_pattern_library,
         settings,
@@ -1198,7 +1209,9 @@ from .blueprints import settings as settings_routes
 
 register_blueprints(app)
 
-# Preserve old strokegpt.web route-function names for tests and direct imports.
+# Compatibility shim - do not extend. Preserve old ``strokegpt.web``
+# route-function names for tests and direct imports; new code should import
+# route handlers from ``strokegpt.blueprints.*``.
 check_settings_route = settings_routes.check_settings_route
 reset_settings_route = settings_routes.reset_settings_route
 set_persona_prompt_route = settings_routes.set_persona_prompt_route

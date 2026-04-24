@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #53 - Freeze Compatibility Shim Surfaces
+---------------------------------------------------------
+
+Branch: codex-compat-shim-freeze
+
+- Marked the PR #48-#50 compatibility shim surfaces in `background_modes.py`
+  and `web.py` with explicit "Compatibility shim - do not extend" comments so
+  future code imports from canonical modules instead of expanding the shims.
+- Migrated background mode helper tests that directly exercise Freestyle
+  selection and mode-decision coercion to canonical `strokegpt.freestyle` and
+  `strokegpt.mode_decisions` imports while leaving orchestration tests on
+  `background_modes`.
+- Updated `AGENTS.md` and `ROADMAP.md` with the PR #52 audit outcome, explicit
+  shim-paydown sequencing, the `web._motion_pattern_summary()` decision point,
+  and a findable pattern-library lazy-load parking note.
+
+
 2026-04-24 - PR #52 - Audit Adapter Boundaries And Compatibility Shims
 -----------------------------------------------------------------------
 
