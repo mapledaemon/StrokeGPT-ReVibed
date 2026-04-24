@@ -472,15 +472,14 @@ def _motion_pattern_record(pattern_id):
     )
 
 def _motion_pattern_summary(record, include_actions=False):
-    summary = record.to_summary_dict(include_actions=include_actions)
-    catalog = _motion_pattern_catalog_payload()
-    for pattern in catalog.get("patterns", []):
-        if pattern.get("id") == record.pattern_id:
-            for key, value in pattern.items():
-                if key != "actions":
-                    summary[key] = value
-            break
-    return summary
+    # Compatibility shim - do not extend. The canonical summary builder lives
+    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` import
+    # points while route blueprints import the canonical helper directly.
+    return payloads.motion_pattern_summary(
+        record,
+        settings.motion_pattern_weights,
+        include_actions=include_actions,
+    )
 
 def _fixed_pattern_id_from_target(target):
     label = getattr(target, "label", "") or ""
@@ -648,7 +647,9 @@ def _append_motion_feedback_history(record, rating, source, updated_pattern):
     if updated_pattern:
         entry["enabled"] = bool(getattr(updated_pattern, "enabled", True))
         if updated_pattern.source == "fixed":
-            entry["weight"] = _motion_pattern_summary(updated_pattern).get("weight", 50)
+            entry["weight"] = payloads.motion_pattern_summary(
+                updated_pattern, settings.motion_pattern_weights
+            ).get("weight", 50)
     settings.motion_pattern_feedback_history = (
         [entry] + list(settings.motion_pattern_feedback_history or [])
     )[:MOTION_FEEDBACK_HISTORY_LIMIT]

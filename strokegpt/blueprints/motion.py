@@ -5,6 +5,8 @@ import threading
 from flask import Blueprint, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
+from .. import payloads
+
 
 motion_blueprint = Blueprint("motion", __name__)
 
@@ -13,6 +15,14 @@ def _web():
     from .. import web
 
     return web
+
+
+def _pattern_summary(web, record, *, include_actions=False):
+    return payloads.motion_pattern_summary(
+        record,
+        web.settings.motion_pattern_weights,
+        include_actions=include_actions,
+    )
 
 
 @motion_blueprint.route('/motion_patterns')
@@ -60,7 +70,7 @@ def motion_pattern_detail_route(pattern_id):
     record = web._motion_pattern_record(pattern_id)
     if not record:
         return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    return jsonify({"status": "success", "pattern": web._motion_pattern_summary(record, include_actions=True)})
+    return jsonify({"status": "success", "pattern": _pattern_summary(web, record, include_actions=True)})
 
 
 @motion_blueprint.route('/motion_patterns/<pattern_id>/export')
@@ -94,7 +104,7 @@ def import_motion_pattern_route():
         record = web.motion_pattern_library.import_payload(payload, filename=filename)
     except web.PatternValidationError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
-    return jsonify({"status": "success", "pattern": web._motion_pattern_summary(record, include_actions=True)})
+    return jsonify({"status": "success", "pattern": _pattern_summary(web, record, include_actions=True)})
 
 
 @motion_blueprint.route('/motion_patterns/save_generated', methods=['POST'])
@@ -119,7 +129,7 @@ def save_generated_motion_pattern_route():
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({
         "status": "success",
-        "pattern": web._motion_pattern_summary(record, include_actions=True),
+        "pattern": _pattern_summary(web, record, include_actions=True),
         "motion_patterns": web._motion_pattern_catalog_payload(),
         "motion_preferences": web._motion_preference_payload(),
     })
@@ -137,7 +147,7 @@ def set_motion_pattern_enabled_route(pattern_id):
     updated = web._motion_pattern_record(record.pattern_id)
     return jsonify({
         "status": "success",
-        "pattern": web._motion_pattern_summary(updated, include_actions=True),
+        "pattern": _pattern_summary(web, updated, include_actions=True),
         "motion_patterns": web._motion_pattern_catalog_payload(),
         "motion_preferences": web._motion_preference_payload(),
     })
@@ -157,7 +167,7 @@ def set_motion_pattern_weight_route(pattern_id):
     updated = web._motion_pattern_record(record.pattern_id)
     return jsonify({
         "status": "success",
-        "pattern": web._motion_pattern_summary(updated, include_actions=True),
+        "pattern": _pattern_summary(web, updated, include_actions=True),
         "motion_patterns": web._motion_pattern_catalog_payload(),
         "motion_preferences": web._motion_preference_payload(),
     })
@@ -178,7 +188,7 @@ def reset_motion_pattern_feedback_route(pattern_id):
     return jsonify({
         "status": "success",
         "message": f"Reset feedback for {updated.name}.",
-        "pattern": web._motion_pattern_summary(updated, include_actions=True),
+        "pattern": _pattern_summary(web, updated, include_actions=True),
         "motion_patterns": web._motion_pattern_catalog_payload(),
         "motion_preferences": web._motion_preference_payload(),
     })
@@ -242,7 +252,7 @@ def motion_training_feedback_route(pattern_id):
     )
     return jsonify({
         "status": "success",
-        "pattern": web._motion_pattern_summary(updated, include_actions=True),
+        "pattern": _pattern_summary(web, updated, include_actions=True),
         "motion_patterns": result["motion_patterns"],
         "motion_preferences": result["motion_preferences"],
         "motion_training": web._motion_training_snapshot(),
@@ -399,7 +409,7 @@ def like_last_move_route():
     response = {"status": "boosted", "name": pattern_name}
     if result:
         response.update({
-            "pattern": web._motion_pattern_summary(result["pattern"]),
+            "pattern": _pattern_summary(web, result["pattern"]),
             "motion_patterns": result["motion_patterns"],
             "motion_preferences": result["motion_preferences"],
         })
@@ -424,7 +434,7 @@ def dislike_last_move_route():
     return jsonify({
         "status": "success",
         "message": message,
-        "pattern": web._motion_pattern_summary(pattern),
+        "pattern": _pattern_summary(web, pattern),
         "motion_patterns": result["motion_patterns"],
         "motion_preferences": result["motion_preferences"],
         "auto_disabled": result["auto_disabled"],
@@ -442,7 +452,7 @@ def rate_last_motion_pattern_route():
     pattern = result["pattern"]
     return jsonify({
         "status": "success",
-        "pattern": web._motion_pattern_summary(pattern),
+        "pattern": _pattern_summary(web, pattern),
         "motion_patterns": result["motion_patterns"],
         "motion_preferences": result["motion_preferences"],
         "auto_disabled": result["auto_disabled"],

@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Canonicalize motion pattern summary helper
+--------------------------------------------------------
+
+- Moved the `_motion_pattern_summary()` catalog-enrichment helper from
+  `strokegpt/web.py` into `strokegpt.payloads.motion_pattern_summary()` so
+  motion blueprint routes can share a single canonical boundary implementation
+  without rebuilding the full catalog (no more disk re-read via
+  `load_user_patterns` for a single-record summary).
+- Replaced the catalog-wide re-enrichment with a single-pattern
+  `enrich_catalog` call so the per-request cost is O(1) instead of scaling
+  with the number of fixed and user patterns; output shape and route payloads
+  are unchanged.
+- Converted `web._motion_pattern_summary()` into a thin compatibility shim
+  delegating to `payloads.motion_pattern_summary()` and migrated every
+  callsite inside `strokegpt/blueprints/motion.py` plus the internal
+  `_append_motion_feedback_history` path in `strokegpt/web.py` to the
+  canonical helper.
+- Added a `PatternLibraryTests` regression test for
+  `payloads.motion_pattern_summary()` covering the default weight, override
+  weight, `include_actions=True`, and the non-fixed `llm_visible=False` path.
+
+
 2026-04-24 - PR #56 - Rewrite README Setup Guide
 -------------------------------------------------
 
