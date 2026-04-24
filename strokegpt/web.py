@@ -18,6 +18,7 @@ from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
+from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
 from .motion_patterns import PATTERNS, expand_motion_pattern
 from .motion_preferences import (
@@ -498,7 +499,7 @@ def _remember_live_motion_pattern_id(pattern_id):
         return record.pattern_id
     return ""
 
-def _freestyle_candidate_patterns():
+def _freestyle_candidate_patterns() -> list[FreestyleCandidate]:
     catalog = _motion_pattern_catalog_payload()
     candidates = []
     for summary in catalog.get("patterns", []):
@@ -905,7 +906,7 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True):
             app_state.chat_history.append({"role": "assistant", "content": clean_text})
     threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
-def start_background_mode(mode_logic, initial_message, mode_name):
+def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
     with app_state.lock:
         active_task = app_state.auto_mode_active_task
     if active_task:
@@ -924,19 +925,19 @@ def start_background_mode(mode_logic, initial_message, mode_name):
             app_state.auto_mode_active_task = None
         _set_runtime_active_mode("")
 
-    def update_mood(m):
+    def update_mood(m: str) -> None:
         with app_state.lock:
             app_state.current_mood = m
-    def get_timings(n):
+    def get_timings(n: str) -> tuple[float, float]:
         return {
             'auto': (settings.auto_min_time, settings.auto_max_time),
             'freestyle': (settings.auto_min_time, settings.auto_max_time),
             'milking': (settings.milking_min_time, settings.milking_max_time),
             'edging': (settings.edging_min_time, settings.edging_max_time)
         }.get(n, (3, 5))
-    def set_mode_name(n):
+    def set_mode_name(n: str) -> None:
         _set_runtime_active_mode(n)
-    def mode_decision(**kwargs):
+    def mode_decision(**kwargs) -> object:
         context = get_current_context()
         target = kwargs.get("current_target")
         current_target = {
@@ -953,8 +954,8 @@ def start_background_mode(mode_logic, initial_message, mode_name):
             current_target=current_target,
         )
 
-    services = {'llm': llm, 'handy': handy, 'motion': motion}
-    callbacks = {
+    services: ModeServices = {'llm': llm, 'handy': handy, 'motion': motion}
+    callbacks: ModeCallbacks = {
         'send_message': add_message_to_queue, 'get_context': get_current_context,
         'get_timings': get_timings, 'on_stop': on_stop, 'update_mood': update_mood,
         'user_signal_event': app_state.user_signal_event,

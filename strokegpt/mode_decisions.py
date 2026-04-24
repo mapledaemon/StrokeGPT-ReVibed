@@ -10,6 +10,7 @@ import math
 import threading
 from dataclasses import dataclass
 
+from .mode_contracts import ModeCallbacks
 from .motion import MotionTarget
 
 
@@ -82,7 +83,14 @@ def _coerce_mode_decision(raw, *, mode, event):
     return ModeDecision(action=action, duration_seconds=duration, intensity=intensity, chat=chat, source="llm")
 
 
-def _request_mode_decision(callbacks, mode, event, *, edge_count=0, current_target=None):
+def _request_mode_decision(
+    callbacks: ModeCallbacks,
+    mode,
+    event,
+    *,
+    edge_count=0,
+    current_target=None,
+):
     provider = callbacks.get("mode_decision")
     if not provider:
         return ModeDecision()
@@ -99,7 +107,14 @@ def _request_mode_decision(callbacks, mode, event, *, edge_count=0, current_targ
     return _coerce_mode_decision(raw, mode=mode, event=event)
 
 
-def _start_mode_decision_request(callbacks, mode, event, *, edge_count=0, current_target=None):
+def _start_mode_decision_request(
+    callbacks: ModeCallbacks,
+    mode,
+    event,
+    *,
+    edge_count=0,
+    current_target=None,
+):
     result = {"decision": ModeDecision(), "ready": False}
 
     def request():

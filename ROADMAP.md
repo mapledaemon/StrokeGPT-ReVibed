@@ -68,9 +68,6 @@ preserve behavior.
   to runtime state, candidate dict to freestyle record. Rewrite the ones that
   exist purely because of historical drift; document the ones that are real
   abstraction boundaries.
-- Add `TypedDict`/`Protocol` definitions for the `callbacks` and `services`
-  dicts passed through `background_modes.py` and `web.py` so route and mode
-  handlers stop working from implicit shapes.
 - Defer until pattern count grows: lazy-load the JSON pattern library and
   cache prepared actions (the cache exists; the lazy-load is not justified
   yet).

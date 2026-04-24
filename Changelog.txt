@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #51 - Add Mode Callback Contracts
+--------------------------------------------------
+
+Branch: codex-mode-callback-contracts
+
+- Added `strokegpt/mode_contracts.py` with `TypedDict` and `Protocol`
+  contracts for the long-running mode `services` and `callbacks` dictionaries.
+- Annotated `AutoModeThread`, the public `*_mode_logic` entry points, the
+  mode-decision request helpers, and `web.start_background_mode()` so the
+  implicit route-to-mode callback shape is documented in code without changing
+  runtime behavior.
+- Added a regression test that locks the documented callback/service contract
+  keys used by `web.py`, `background_modes.py`, and the mode-decision layer.
+
+
 2026-04-24 - PR #50 - Move Web Runtime State Into AppState
 -----------------------------------------------------------
 
