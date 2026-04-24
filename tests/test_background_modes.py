@@ -91,6 +91,23 @@ class ModeContractTests(unittest.TestCase):
         }.issubset(callback_keys))
 
 
+class BackgroundModeShimTests(unittest.TestCase):
+    def test_split_private_helpers_are_not_reexported_from_background_modes(self):
+        self.assertIs(background_modes.ModeDecision, mode_decisions.ModeDecision)
+        self.assertIs(background_modes.FreestyleChoice, freestyle.FreestyleChoice)
+        self.assertEqual(background_modes.MODE_DECISION_ACTIONS, mode_decisions.MODE_DECISION_ACTIONS)
+        self.assertEqual(background_modes.FREESTYLE_CHAIN_LENGTH, freestyle.FREESTYLE_CHAIN_LENGTH)
+
+        for helper_name in (
+            "_choose_freestyle_pattern",
+            "_apply_freestyle_choices",
+            "_coerce_mode_decision",
+            "_request_mode_decision",
+        ):
+            with self.subTest(helper_name=helper_name):
+                self.assertFalse(hasattr(background_modes, helper_name))
+
+
 class AutoModeThreadTests(unittest.TestCase):
     def test_mode_starts_without_full_second_delay(self):
         mode_called = threading.Event()

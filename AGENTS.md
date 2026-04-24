@@ -84,6 +84,8 @@ behavior, and route motion changes through the shared controller path.
 - PR #51 added typed contracts for long-running mode services and callbacks.
 - PR #52 completed the adapter/shim audit, documented which conversion layers
   are real boundaries, and queued the compatibility-shim paydown sequence.
+- PR #53 marked the PR #48-#50 compatibility shim surfaces and moved the
+  direct Freestyle/mode-decision helper tests to canonical split modules.
 - Agent guidance now lives in `AGENTS.md`, with `Codex.md` and `CLAUDE.md`
   kept as short compatibility pointers. If the current docs branch has an open
   PR, its changelog entry should use the PR number before merge.
