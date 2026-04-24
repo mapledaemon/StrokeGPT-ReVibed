@@ -61,11 +61,6 @@ program (Soft-Anchor authoring, voice control, story mode) keeps merge
 conflicts and review effort low. These splits are mechanical and should
 preserve behavior.
 
-- Wrap `web.py` global runtime state (active mode, edging start time,
-  message queues, training lock, depth-test lock, ollama-pull lock) inside
-  an `AppState` dataclass guarded by a single `RLock`, so multi-thread
-  reads/writes go through one synchronization point instead of ad-hoc
-  per-variable patterns.
 - Audit the codebase for translator/adapter layers that map between
   overlapping schemas and decide whether each layer should be preserved,
   simplified, or rewritten. Examples to start from: motion-target to handy

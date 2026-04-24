@@ -253,11 +253,14 @@ def motion_training_feedback_route(pattern_id):
 @motion_blueprint.route('/nudge', methods=['POST'])
 def nudge_route():
     web = _web()
-    if web.calibration_pos_mm == 0.0 and (pos := web.handy.get_position_mm()):
-        web.calibration_pos_mm = pos
+    if web.app_state.calibration_pos_mm == 0.0 and (pos := web.handy.get_position_mm()):
+        with web.app_state.lock:
+            web.app_state.calibration_pos_mm = pos
     direction = web._request_json().get('direction')
-    web.calibration_pos_mm = web.handy.nudge(direction, 0, 100, web.calibration_pos_mm)
-    return jsonify({"status": "ok", "depth_percent": web.handy.mm_to_percent(web.calibration_pos_mm)})
+    with web.app_state.lock:
+        web.app_state.calibration_pos_mm = web.handy.nudge(direction, 0, 100, web.app_state.calibration_pos_mm)
+        calibration_pos_mm = web.app_state.calibration_pos_mm
+    return jsonify({"status": "ok", "depth_percent": web.handy.mm_to_percent(calibration_pos_mm)})
 
 
 @motion_blueprint.route('/test_depth_range', methods=['POST'])
@@ -268,7 +271,7 @@ def test_depth_range_route():
     depth2 = web._request_int(data, 'max_depth', 100)
     min_depth = max(0, min(100, min(depth1, depth2)))
     max_depth = max(0, min(100, max(depth1, depth2)))
-    if not web.depth_test_lock.acquire(blocking=False):
+    if not web.app_state.depth_test_lock.acquire(blocking=False):
         return jsonify({"status": "busy", "min_depth": min_depth, "max_depth": max_depth})
     web.motion.stop()
 
@@ -276,7 +279,7 @@ def test_depth_range_route():
         try:
             web.handy.test_depth_range(min_depth, max_depth)
         finally:
-            web.depth_test_lock.release()
+            web.app_state.depth_test_lock.release()
 
     threading.Thread(
         target=run_depth_test,
@@ -293,7 +296,7 @@ def get_status_route():
     motion_observability["diagnostics_level"] = web.settings.motion_diagnostics_level
     active_mode = web._active_mode_snapshot()
     return jsonify({
-        "mood": web.current_mood,
+        "mood": web.app_state.current_mood,
         "speed": diagnostics["physical_speed"],
         "relative_speed": diagnostics["relative_speed"],
         "depth": diagnostics["depth"],
@@ -379,14 +382,15 @@ def like_last_move_route():
     web = _web()
     last_speed = web.handy.last_relative_speed
     last_depth = web.handy.last_depth_pos
-    pattern_name = web.llm.name_this_move(last_speed, last_depth, web.current_mood)
+    current_mood = web.app_state.current_mood
+    pattern_name = web.llm.name_this_move(last_speed, last_depth, current_mood)
     sp_range = [max(0, last_speed - 5), min(100, last_speed + 5)]
     dp_range = [max(0, last_depth - 5), min(100, last_depth + 5)]
     new_pattern = {
         "name": pattern_name,
         "sp_range": [int(p) for p in sp_range],
         "dp_range": [int(p) for p in dp_range],
-        "moods": [web.current_mood],
+        "moods": [current_mood],
         "score": 1,
     }
     web.settings.session_liked_patterns.append(new_pattern)

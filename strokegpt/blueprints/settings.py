@@ -123,8 +123,9 @@ def set_ai_name_route():
         name = 'BOT'
 
     if name.lower() == 'glados':
-        web.special_persona_mode = "GLaDOS"
-        web.special_persona_interactions_left = 5
+        with web.app_state.lock:
+            web.app_state.special_persona_mode = "GLaDOS"
+            web.app_state.special_persona_interactions_left = 5
         web.settings.ai_name = "GLaDOS"
         web.settings.save()
         return jsonify({"status": "special_persona_activated", "persona": "GLaDOS", "message": "Oh, it's *you*."})
@@ -140,13 +141,16 @@ def toggle_memory_route():
     data = web._request_json()
     if "enabled" in data:
         enabled = data.get("enabled")
-        if isinstance(enabled, str):
-            web.use_long_term_memory = enabled.strip().lower() in {"1", "true", "yes", "on"}
-        else:
-            web.use_long_term_memory = bool(enabled)
+        use_long_term_memory = (
+            enabled.strip().lower() in {"1", "true", "yes", "on"}
+            if isinstance(enabled, str)
+            else bool(enabled)
+        )
     else:
-        web.use_long_term_memory = not web.use_long_term_memory
-    return jsonify({"status": "success", "use_long_term_memory": web.use_long_term_memory})
+        use_long_term_memory = not web.app_state.use_long_term_memory
+    with web.app_state.lock:
+        web.app_state.use_long_term_memory = use_long_term_memory
+    return jsonify({"status": "success", "use_long_term_memory": use_long_term_memory})
 
 
 @settings_blueprint.route('/set_profile_picture', methods=['POST'])
