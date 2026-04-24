@@ -11,6 +11,7 @@ re-exported so existing tests and ``web.py`` imports continue to work.
 import random
 import threading
 import time
+from typing import cast
 
 from .freestyle import (
     FREESTYLE_CHAIN_LENGTH,
@@ -53,6 +54,7 @@ from .mode_decisions import (
     _step_limit_for_duration,
     _target_with_intensity,
 )
+from .mode_contracts import ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher
 from .motion_scripts import MotionScriptPlanner
 
@@ -82,18 +84,29 @@ __all__ = [
     "FREESTYLE_CHAIN_LENGTH",
     "FREESTYLE_DECISION_GRACE_SECONDS",
     "FREESTYLE_EDGE_RESUME_CHAIN_LENGTH",
+    "ModeCallbacks",
+    "ModeLogic",
+    "ModeServices",
 ]
 
 
 class AutoModeThread(threading.Thread):
-    def __init__(self, mode_func, initial_message, services, callbacks, mode_name="auto", initial_delay=0.1):
+    def __init__(
+        self,
+        mode_func: ModeLogic,
+        initial_message: str,
+        services: ModeServices,
+        callbacks: ModeCallbacks,
+        mode_name: str = "auto",
+        initial_delay: float = 0.1,
+    ):
         super().__init__()
         self.name = mode_name
-        self._mode_func = mode_func
+        self._mode_func: ModeLogic = mode_func
         self._initial_message = initial_message
-        self._services = services
+        self._services: ModeServices = services
         self._pause_event = threading.Event()
-        self._callbacks = dict(callbacks)
+        self._callbacks = cast(ModeCallbacks, dict(callbacks))
         self._callbacks["pause_event"] = self._pause_event
         self._initial_delay = initial_delay
         self._stop_event = threading.Event()
@@ -205,7 +218,7 @@ def _sleep_with_stop(stop_event, seconds, wake_event=None, pause_event=None):
             return
 
 
-def _set_active_mode(callbacks, mode_name):
+def _set_active_mode(callbacks: ModeCallbacks, mode_name):
     setter = callbacks.get("set_mode_name")
     if setter:
         setter(mode_name)
@@ -215,7 +228,16 @@ def _set_active_mode(callbacks, mode_name):
         pass
 
 
-def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None, *, allow_mode_decisions=False, initial_intensity=None):
+def _run_scripted_mode(
+    stop_event: threading.Event,
+    services: ModeServices,
+    callbacks: ModeCallbacks,
+    mode: str,
+    max_steps=None,
+    *,
+    allow_mode_decisions=False,
+    initial_intensity=None,
+):
     motion_controller = services["motion"]
     get_timings = callbacks["get_timings"]
     message_queue = callbacks["message_queue"]
@@ -285,11 +307,11 @@ def _run_scripted_mode(stop_event, services, callbacks, mode, max_steps=None, *,
         _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event, pause_event)
 
 
-def auto_mode_logic(stop_event, services, callbacks):
+def auto_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
     _run_scripted_mode(stop_event, services, callbacks, "auto")
 
 
-def freestyle_mode_logic(stop_event, services, callbacks):
+def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
     motion_controller = services["motion"]
     get_timings = callbacks["get_timings"]
     message_queue = callbacks["message_queue"]
@@ -429,7 +451,7 @@ def freestyle_mode_logic(stop_event, services, callbacks):
         _sleep_with_stop(stop_event, 0, message_event, pause_event)
 
 
-def milking_mode_logic(stop_event, services, callbacks):
+def milking_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
     _run_scripted_mode(
         stop_event,
         services,
@@ -440,7 +462,7 @@ def milking_mode_logic(stop_event, services, callbacks):
     )
 
 
-def edging_mode_logic(stop_event, services, callbacks):
+def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
     motion_controller = services["motion"]
     get_timings = callbacks["get_timings"]
     update_mood = callbacks["update_mood"]

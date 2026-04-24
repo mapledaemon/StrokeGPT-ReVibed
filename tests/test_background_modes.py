@@ -6,6 +6,7 @@ from unittest import mock
 
 from strokegpt import background_modes
 from strokegpt.background_modes import AutoModeThread, _sleep_with_stop
+from strokegpt.mode_contracts import ModeCallbacks, ModeServices
 from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import MotionPattern, PatternAction
 
@@ -63,6 +64,30 @@ class FakePatternRecord:
             ),
             interpolation_ms=80,
         )
+
+
+class ModeContractTests(unittest.TestCase):
+    def test_mode_contracts_document_runtime_keys(self):
+        self.assertEqual({"llm", "handy", "motion"}, set(ModeServices.__annotations__))
+
+        callback_keys = set(ModeCallbacks.__annotations__)
+        self.assertTrue({
+            "send_message",
+            "get_context",
+            "get_timings",
+            "on_stop",
+            "update_mood",
+            "user_signal_event",
+            "message_event",
+            "message_queue",
+            "remember_pattern",
+            "remember_pattern_id",
+            "freestyle_candidates",
+            "allow_llm_edge_in_freestyle",
+            "set_mode_name",
+            "mode_decision",
+            "pause_event",
+        }.issubset(callback_keys))
 
 
 class AutoModeThreadTests(unittest.TestCase):
