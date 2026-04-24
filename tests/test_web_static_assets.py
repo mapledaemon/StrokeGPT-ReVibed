@@ -55,6 +55,18 @@ class WebStaticAssetTests(unittest.TestCase):
 
         self.assertNotIn("static", endpoints)
 
+    def test_domain_routes_are_registered_through_blueprints(self):
+        import strokegpt.web as web
+
+        endpoints = {rule.endpoint for rule in self.app.url_map.iter_rules()}
+
+        self.assertIn("settings.check_settings_route", endpoints)
+        self.assertIn("motion.get_status_route", endpoints)
+        self.assertIn("audio.get_audio_route", endpoints)
+        self.assertIn("modes.start_edging_route", endpoints)
+        self.assertIs(web.check_settings_route, web.settings_routes.check_settings_route)
+        self.assertIs(web.get_status_route, web.motion_routes.get_status_route)
+
     def test_startup_port_selection_falls_back(self):
         from strokegpt.web import _port_candidates, _select_bind_port
 
