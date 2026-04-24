@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #55 - Update Post-Shim Paydown Roadmap
+-------------------------------------------------------
+
+Branch: codex-post-shim-docs-update
+
+- Updated `AGENTS.md` to reflect that PR #54 landed and narrowed the
+  Compatibility Shim Paydown guidance to the remaining web alias and
+  Freestyle-candidate work.
+- Added roadmap entries for splitting `static/js/motion-control.js` into
+  focused frontend modules and extracting built-in motion-pattern data out of
+  `strokegpt/motion_patterns.py` without changing lazy-load behavior.
+- Added explicit future architecture notes for splitting `strokegpt/motion.py`
+  and later extracting audio provider modules while keeping compatibility
+  bridges and safety behavior intact.
+
+
 2026-04-24 - PR #54 - Shrink Background Helper Shims
 -----------------------------------------------------
 

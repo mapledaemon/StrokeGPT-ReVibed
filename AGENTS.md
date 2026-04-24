@@ -86,6 +86,9 @@ behavior, and route motion changes through the shared controller path.
   are real boundaries, and queued the compatibility-shim paydown sequence.
 - PR #53 marked the PR #48-#50 compatibility shim surfaces and moved the
   direct Freestyle/mode-decision helper tests to canonical split modules.
+- PR #54 shrank the `background_modes.py` compatibility surface by removing
+  private split-helper re-exports while keeping the public type/constant
+  compatibility exports.
 - Agent guidance now lives in `AGENTS.md`, with `Codex.md` and `CLAUDE.md`
   kept as short compatibility pointers. If the current docs branch has an open
   PR, its changelog entry should use the PR number before merge.
@@ -221,19 +224,24 @@ Current Up Next targets are:
    diagnostics on-device, fix remaining stop/log/timer regressions, and verify
    the Pause/Resume and hotkey behavior on real hardware.
 2. Compatibility Shim Paydown And Adapter Boundary Cleanup: keep the completed
-   code reorganization stable by marking or retiring PR #48-#50 compatibility
-   shims, migrating callers to canonical modules, and preserving real
-   conversion boundaries for motion safety, pattern compilation, settings
-   persistence, and browser payloads.
-3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
+   code reorganization stable by finishing the remaining web payload/route
+   alias paydown, deciding the `web._motion_pattern_summary()` boundary, and
+   then normalizing Freestyle candidates around the canonical typed shape.
+3. Frontend Motion-Control Module Split: split the oversized
+   `static/js/motion-control.js` into focused motion modules before large chat
+   or motion-training UI work grows it further.
+4. Built-In Pattern Data Extraction: move the hardcoded built-in pattern data
+   out of `strokegpt/motion_patterns.py` without changing eager loading,
+   pattern IDs, action timing, or the existing prepared-action cache.
+5. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
-4. Persona Naming And Prompt Audit: check whether proper-noun persona handles
+6. Persona Naming And Prompt Audit: check whether proper-noun persona handles
    such as `GLaDOS` should reach the local model or be hidden behind neutral
    internal labels.
-5. Motion Style Preferences: add visible style controls and resettable learned
+7. Motion Style Preferences: add visible style controls and resettable learned
    preferences without burying motion behavior inside natural-language memory.
-6. Chat Interface Refactor: modernize the chat shell, indicator strip, message
+8. Chat Interface Refactor: modernize the chat shell, indicator strip, message
    rendering, and control layout while preserving chat-driven motion behavior.
 
 ## Continuation Prompts
@@ -249,11 +257,15 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 ```
 
 ```text
-Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/background_modes.py, strokegpt/freestyle.py, strokegpt/mode_decisions.py, strokegpt/web.py, and strokegpt/payloads.py. Mark or retire one compatibility shim surface at a time, migrate callers to canonical modules where practical, preserve behavior, and update Changelog.txt before preparing a PR.
+Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/blueprints/, strokegpt/freestyle.py, and tests/test_web_static_assets.py. Focus on the remaining web payload/route alias paydown or the `web._motion_pattern_summary()` boundary decision before Freestyle candidate normalization. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
 ```
 
 ```text
-Continue the Chat Interface Refactor planning in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, KNOWN_PROBLEMS.md, index.html, static/app.css, static/app.js, and static/js/chat.js. Preserve message safety, TTS/chat synchronization, stop handling, and motion controls while improving the chat shell incrementally.
+Continue the Frontend Motion-Control Module Split in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, index.html, static/app.js, static/js/motion-control.js, and tests/test_web_static_assets.py. Extract one focused module at a time under static/js/motion/ while keeping top-level wiring stable, preserving pause/resume/stop behavior, motion-pattern management, training preview controls, and existing route payloads.
+```
+
+```text
+Continue the Chat Interface Refactor planning in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, KNOWN_PROBLEMS.md, index.html, static/app.css, static/app.js, static/js/chat.js, and static/js/motion-control.js. Preserve message safety, TTS/chat synchronization, stop handling, and motion controls while improving the chat shell incrementally.
 ```
 
 ```text
