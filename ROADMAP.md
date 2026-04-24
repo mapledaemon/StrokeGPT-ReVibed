@@ -94,12 +94,6 @@ Adapter audit findings:
   `FreestyleCandidate`, but `freestyle._candidate_*()` still accepts both dicts
   and record-like objects. Pick one canonical candidate shape and remove the
   historical duck-typing after tests are migrated.
-- Track `web._motion_pattern_summary()` as an open boundary decision before
-  changing Freestyle candidate handling. It merges
-  `PatternRecord.to_summary_dict()` with catalog weight/enabled fields; decide
-  whether that is a real route payload boundary or should be merged into the
-  canonical catalog summary shape.
-
 Concrete follow-up PRs:
 
 - Migrate web payload tests to `strokegpt.payloads` and route registration
@@ -110,8 +104,7 @@ Concrete follow-up PRs:
   asset tests stop sharing one catch-all file.
 - Normalize Freestyle candidate handling around the `FreestyleCandidate`
   contract and remove `_candidate_*` duck typing that only exists for
-  historical shapes. Must follow the canonical helper-test migration and the
-  `web._motion_pattern_summary()` boundary decision.
+  historical shapes. Must follow the canonical helper-test migration.
 
 ### 3. Frontend Motion-Control Module Split (M)
 

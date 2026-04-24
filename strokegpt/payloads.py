@@ -173,5 +173,16 @@ def motion_pattern_catalog_payload(pattern_library, settings, feedback_history_l
     return payload
 
 
+def motion_pattern_summary(record, weight_overrides=None, *, include_actions=False):
+    enriched = enrich_catalog(
+        {"patterns": [record.to_summary_dict(include_actions=include_actions)]},
+        weight_overrides,
+    )
+    patterns = enriched.get("patterns") or []
+    if patterns:
+        return patterns[0]
+    return record.to_summary_dict(include_actions=include_actions)
+
+
 def motion_preference_payload(catalog, excluded_llm_pattern_ids=None):
     return build_motion_preference_payload(catalog, excluded_llm_pattern_ids)

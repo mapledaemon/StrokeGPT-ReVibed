@@ -6,6 +6,7 @@ import time
 import unittest
 from pathlib import Path
 
+from strokegpt import payloads
 from strokegpt.motion_patterns import PATTERNS
 from strokegpt.pattern_library import (
     PATTERN_FILE_SUFFIX,
@@ -172,6 +173,51 @@ class PatternLibraryTests(unittest.TestCase):
 
             self.assertIn("milking-pressure-build", ids)
             self.assertIn("edge-build-low", ids)
+
+    def test_motion_pattern_summary_enriches_fixed_record_with_weight(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+            fixed_record = library.get_record("stroke")
+            self.assertIsNotNone(fixed_record)
+            self.assertEqual(fixed_record.source, "fixed")
+
+            default_summary = payloads.motion_pattern_summary(fixed_record)
+            self.assertEqual(default_summary["id"], "stroke")
+            self.assertEqual(default_summary["source"], "fixed")
+            self.assertEqual(default_summary["weight"], 50)
+            self.assertTrue(default_summary["llm_visible"])
+            self.assertNotIn("actions", default_summary)
+
+            override_summary = payloads.motion_pattern_summary(
+                fixed_record, {"stroke": 77}
+            )
+            self.assertEqual(override_summary["weight"], 77)
+            self.assertTrue(override_summary["llm_visible"])
+
+            with_actions = payloads.motion_pattern_summary(
+                fixed_record, include_actions=True
+            )
+            self.assertIn("actions", with_actions)
+            self.assertGreaterEqual(len(with_actions["actions"]), 2)
+
+    def test_motion_pattern_summary_marks_non_fixed_records_as_llm_hidden(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+            imported = library.import_payload(
+                {
+                    "id": "user-loop",
+                    "name": "User Loop",
+                    "actions": [{"at": 0, "pos": 10}, {"at": 250, "pos": 90}],
+                },
+                filename="user-loop.json",
+            )
+
+            summary = payloads.motion_pattern_summary(imported, {"user-loop": 88})
+
+            self.assertEqual(summary["id"], "user-loop")
+            self.assertNotEqual(summary["source"], "fixed")
+            self.assertFalse(summary["llm_visible"])
+            self.assertNotIn("weight", summary)
 
 
 @unittest.skipIf(MISSING_WEB_MODULES, f"missing app dependencies: {', '.join(MISSING_WEB_MODULES)}")
