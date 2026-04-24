@@ -6,12 +6,13 @@ import atexit
 import socket
 import threading
 import time
-from collections import deque
+import types
 from pathlib import Path
 import requests
 from flask import Flask, request, jsonify, render_template_string, send_from_directory
 from werkzeug.utils import secure_filename
 
+from .app_state import APP_STATE_EXPORTS, AppState
 from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
 from .llm import LLMService
@@ -133,81 +134,71 @@ if settings.audio_provider == "local":
     )
 
 # In-Memory State
-chat_history = deque(maxlen=20)
-messages_for_ui = deque()
-auto_mode_active_task = None
-current_mood = "Curious"
-use_long_term_memory = True
-calibration_pos_mm = 0.0
-user_signal_event = threading.Event()
-mode_message_event = threading.Event()
-mode_message_queue = deque(maxlen=5)
-active_mode_name = ""
-active_mode_started_at = None
-active_mode_paused_at = None
-active_mode_paused_total = 0.0
-motion_pause_active = False
-edging_start_time = None
-depth_test_lock = threading.Lock()
-ollama_pull_lock = threading.Lock()
-ollama_pull_thread = None
-ollama_pull_state = {
-    "state": "idle",
-    "model": "",
-    "message": "No model download running.",
-    "completed": 0,
-    "total": 0,
-    "percent": None,
-}
-motion_training_lock = threading.Lock()
-motion_training_thread = None
-motion_training_stop_event = threading.Event()
-motion_training_state = {
-    "state": "idle",
-    "pattern_id": "",
-    "pattern_name": "",
-    "message": "Motion training idle.",
-    "last_feedback": "",
-    "preview": False,
-}
-last_live_motion_pattern_id = ""
+app_state = AppState()
+
+
+class _WebModule(types.ModuleType):
+    def __getattr__(self, name):
+        if name in APP_STATE_EXPORTS:
+            return getattr(app_state, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name, value):
+        if name in APP_STATE_EXPORTS:
+            with app_state.lock:
+                setattr(app_state, name, value)
+            return
+        super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _WebModule
 
 
 def _set_runtime_active_mode(mode_name, *, reset_timer=False):
-    global active_mode_name, active_mode_started_at, edging_start_time, auto_mode_active_task
-    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
-
     mode_name = str(mode_name or "").strip()
-    changed = active_mode_name != mode_name
-    active_mode_name = mode_name
+    with app_state.lock:
+        changed = app_state.active_mode_name != mode_name
+        app_state.active_mode_name = mode_name
 
-    if not mode_name:
-        active_mode_started_at = None
-        active_mode_paused_at = None
-        active_mode_paused_total = 0.0
-        motion_pause_active = False
-        edging_start_time = None
-        return
+        if not mode_name:
+            app_state.active_mode_started_at = None
+            app_state.active_mode_paused_at = None
+            app_state.active_mode_paused_total = 0.0
+            app_state.motion_pause_active = False
+            app_state.edging_start_time = None
+            return
 
-    if reset_timer or changed or active_mode_started_at is None:
-        active_mode_started_at = time.time()
-        active_mode_paused_at = None
-        active_mode_paused_total = 0.0
-        motion_pause_active = False
-        if hasattr(motion, "resume"):
-            motion.resume()
+        should_resume = reset_timer or changed or app_state.active_mode_started_at is None
+        if should_resume:
+            app_state.active_mode_started_at = time.time()
+            app_state.active_mode_paused_at = None
+            app_state.active_mode_paused_total = 0.0
+            app_state.motion_pause_active = False
 
-    if mode_name == "edging":
-        edging_start_time = active_mode_started_at
-    else:
-        edging_start_time = None
+        if mode_name == "edging":
+            app_state.edging_start_time = app_state.active_mode_started_at
+        else:
+            app_state.edging_start_time = None
 
-    if auto_mode_active_task:
-        auto_mode_active_task.name = mode_name
+        active_task = app_state.auto_mode_active_task
+        if active_task:
+            active_task.name = mode_name
+
+    if should_resume and hasattr(motion, "resume"):
+        motion.resume()
 
 
 def _active_mode_snapshot():
-    mode_name = auto_mode_active_task.name if auto_mode_active_task else active_mode_name
+    with app_state.lock:
+        mode_name = (
+            app_state.auto_mode_active_task.name
+            if app_state.auto_mode_active_task
+            else app_state.active_mode_name
+        )
+        motion_pause_active = app_state.motion_pause_active
+        active_mode_started_at = app_state.active_mode_started_at
+        active_mode_paused_at = app_state.active_mode_paused_at
+        active_mode_paused_total = app_state.active_mode_paused_total
     paused = bool(motion_pause_active or getattr(motion, "is_paused", lambda: False)())
     if not mode_name:
         return {
@@ -229,42 +220,40 @@ def _active_mode_snapshot():
 
 
 def _clear_motion_pause_state():
-    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
-    active_mode_paused_at = None
-    active_mode_paused_total = 0.0
-    motion_pause_active = False
+    with app_state.lock:
+        app_state.active_mode_paused_at = None
+        app_state.active_mode_paused_total = 0.0
+        app_state.motion_pause_active = False
     if hasattr(motion, "resume"):
         motion.resume()
 
 
 def _set_motion_paused(paused):
-    global active_mode_paused_at, active_mode_paused_total, motion_pause_active
-
     paused = bool(paused)
     now = time.time()
+    with app_state.lock:
+        active_task = app_state.auto_mode_active_task
+        if paused:
+            if not app_state.motion_pause_active:
+                app_state.motion_pause_active = True
+                if app_state.active_mode_name and app_state.active_mode_paused_at is None:
+                    app_state.active_mode_paused_at = now
+        else:
+            if app_state.motion_pause_active and app_state.active_mode_paused_at is not None:
+                app_state.active_mode_paused_total += max(0.0, now - app_state.active_mode_paused_at)
+            app_state.active_mode_paused_at = None
+            app_state.motion_pause_active = False
     if paused:
-        if not motion_pause_active:
-            motion_pause_active = True
-            if active_mode_name and active_mode_paused_at is None:
-                active_mode_paused_at = now
-        if auto_mode_active_task and hasattr(auto_mode_active_task, "pause"):
-            auto_mode_active_task.pause()
+        if active_task and hasattr(active_task, "pause"):
+            active_task.pause()
         elif hasattr(motion, "pause"):
             motion.pause()
     else:
-        if motion_pause_active and active_mode_paused_at is not None:
-            active_mode_paused_total += max(0.0, now - active_mode_paused_at)
-        active_mode_paused_at = None
-        motion_pause_active = False
-        if auto_mode_active_task and hasattr(auto_mode_active_task, "resume"):
-            auto_mode_active_task.resume()
+        if active_task and hasattr(active_task, "resume"):
+            active_task.resume()
         elif hasattr(motion, "resume"):
             motion.resume()
     return _active_mode_snapshot()
-
-# Easter Egg State
-special_persona_mode = None
-special_persona_interactions_left = 0
 
 def get_ollama_models_for_ui():
     return payloads.ollama_models_for_ui(settings, llm)
@@ -273,12 +262,10 @@ def _format_bytes(value):
     return payloads.format_bytes(value)
 
 def _set_ollama_pull_state(**updates):
-    with ollama_pull_lock:
-        ollama_pull_state.update(updates)
+    return app_state.set_ollama_pull_state(**updates)
 
 def _ollama_pull_snapshot():
-    with ollama_pull_lock:
-        return dict(ollama_pull_state)
+    return app_state.ollama_pull_snapshot()
 
 def _diagnostics_level_options():
     return payloads.diagnostics_level_options()
@@ -367,8 +354,6 @@ def _run_ollama_pull(model):
         )
 
 def _start_ollama_pull(model):
-    global ollama_pull_thread
-
     model = normalize_ollama_model(model)
     if not model:
         return False, "Model name is required."
@@ -387,10 +372,10 @@ def _start_ollama_pull(model):
     if not status.get("available"):
         return False, status.get("message", "Ollama is not reachable.")
 
-    with ollama_pull_lock:
-        if ollama_pull_thread and ollama_pull_thread.is_alive():
-            return False, f"Already downloading {ollama_pull_state.get('model') or 'a model'}."
-        ollama_pull_state.update({
+    with app_state.lock:
+        if app_state.ollama_pull_thread and app_state.ollama_pull_thread.is_alive():
+            return False, f"Already downloading {app_state.ollama_pull_state.get('model') or 'a model'}."
+        app_state.ollama_pull_state.update({
             "state": "downloading",
             "model": model,
             "message": f"Queued download for {model}.",
@@ -398,8 +383,8 @@ def _start_ollama_pull(model):
             "total": 0,
             "percent": None,
         })
-        ollama_pull_thread = threading.Thread(target=_run_ollama_pull, args=(model,), daemon=True)
-        ollama_pull_thread.start()
+        app_state.ollama_pull_thread = threading.Thread(target=_run_ollama_pull, args=(model,), daemon=True)
+        app_state.ollama_pull_thread.start()
     return True, f"Started downloading {model}."
 
 def get_persona_prompts_for_ui():
@@ -410,7 +395,7 @@ def settings_payload():
         settings=settings,
         llm=llm,
         audio=audio,
-        use_long_term_memory=use_long_term_memory,
+        use_long_term_memory=app_state.use_long_term_memory,
         persona_prompts=get_persona_prompts_for_ui(),
         ollama_models=get_ollama_models_for_ui(),
         ollama_status=_ollama_status_payload(),
@@ -499,17 +484,17 @@ def _fixed_pattern_id_from_target(target):
     return ""
 
 def _remember_motion_pattern_from_target(target):
-    global last_live_motion_pattern_id
     pattern_id = _fixed_pattern_id_from_target(target)
     if pattern_id:
-        last_live_motion_pattern_id = pattern_id
+        with app_state.lock:
+            app_state.last_live_motion_pattern_id = pattern_id
     return pattern_id
 
 def _remember_live_motion_pattern_id(pattern_id):
-    global last_live_motion_pattern_id
     record = _motion_pattern_record(pattern_id)
     if record:
-        last_live_motion_pattern_id = record.pattern_id
+        with app_state.lock:
+            app_state.last_live_motion_pattern_id = record.pattern_id
         return record.pattern_id
     return ""
 
@@ -695,13 +680,10 @@ def _record_motion_pattern_feedback(pattern_id, rating, source="feedback"):
     }
 
 def _motion_training_snapshot():
-    with motion_training_lock:
-        return dict(motion_training_state)
+    return app_state.motion_training_snapshot()
 
 def _set_motion_training_state(**updates):
-    with motion_training_lock:
-        motion_training_state.update(updates)
-        return dict(motion_training_state)
+    return app_state.set_motion_training_state(**updates)
 
 def _training_target_for_record(record):
     current = motion.current_target()
@@ -742,7 +724,7 @@ def _run_motion_training_pattern(record, *, preview=False):
             stop_after=True,
             source="motion training preview" if preview else "motion training",
         )
-        if motion_training_stop_event.is_set():
+        if app_state.motion_training_stop_event.is_set():
             _set_motion_training_state(
                 state="stopped",
                 pattern_id=record.pattern_id,
@@ -775,7 +757,7 @@ def _run_motion_training_pattern(record, *, preview=False):
             preview=preview,
         )
     finally:
-        motion_training_stop_event.clear()
+        app_state.motion_training_stop_event.clear()
 
 def _training_payload_record(data):
     payload = data.get("pattern") if isinstance(data.get("pattern"), dict) else data
@@ -789,35 +771,34 @@ def _training_payload_record(data):
     )
 
 def _start_motion_training_record(record, *, preview=False):
-    global motion_training_thread
     if not handy.handy_key:
         return jsonify({"status": "error", "message": "Set a Handy connection key before playing motion training patterns."}), 400
-    if auto_mode_active_task:
+    if app_state.auto_mode_active_task:
         return jsonify({"status": "error", "message": "Stop the active mode before playing a training pattern."}), 409
 
-    with motion_training_lock:
-        if motion_training_thread and motion_training_thread.is_alive():
+    with app_state.lock:
+        if app_state.motion_training_thread and app_state.motion_training_thread.is_alive():
             return jsonify({"status": "error", "message": "A motion training pattern is already playing."}), 409
-        motion_training_stop_event.clear()
-        motion_training_state.update({
+        app_state.motion_training_stop_event.clear()
+        app_state.motion_training_state.update({
             "state": "starting",
             "pattern_id": record.pattern_id,
             "pattern_name": record.name,
             "message": f"Starting {'edited preview' if preview else record.name}.",
             "preview": preview,
         })
-        motion_training_thread = threading.Thread(
+        app_state.motion_training_thread = threading.Thread(
             target=_run_motion_training_pattern,
             args=(record,),
             kwargs={"preview": preview},
             daemon=True,
         )
-        motion_training_thread.start()
-        snapshot = dict(motion_training_state)
+        app_state.motion_training_thread.start()
+        snapshot = dict(app_state.motion_training_state)
     return jsonify({"status": "started", "motion_training": snapshot})
 
 def _stop_motion_training():
-    motion_training_stop_event.set()
+    app_state.motion_training_stop_event.set()
     snapshot = _motion_training_snapshot()
     if snapshot.get("state") in {"playing", "starting"}:
         _set_motion_training_state(
@@ -829,36 +810,37 @@ def _stop_motion_training():
     return _motion_training_snapshot()
 
 def reset_runtime_state():
-    global auto_mode_active_task, current_mood, calibration_pos_mm, edging_start_time
-    global active_mode_name, active_mode_started_at, active_mode_paused_at, active_mode_paused_total, motion_pause_active
-    global use_long_term_memory
-    global special_persona_mode, special_persona_interactions_left
+    with app_state.lock:
+        active_task = app_state.auto_mode_active_task
 
-    if auto_mode_active_task:
-        auto_mode_active_task.stop()
-        auto_mode_active_task.join(timeout=5)
-        auto_mode_active_task = None
+    if active_task:
+        active_task.stop()
+        active_task.join(timeout=5)
+        with app_state.lock:
+            if app_state.auto_mode_active_task is active_task:
+                app_state.auto_mode_active_task = None
 
     _stop_motion_training()
     _clear_motion_pause_state()
     settings.reset_to_defaults(save=True)
     apply_settings_to_services()
-    chat_history.clear()
-    messages_for_ui.clear()
-    mode_message_queue.clear()
-    user_signal_event.clear()
-    mode_message_event.clear()
-    current_mood = "Curious"
-    calibration_pos_mm = 0.0
-    active_mode_name = ""
-    active_mode_started_at = None
-    active_mode_paused_at = None
-    active_mode_paused_total = 0.0
-    motion_pause_active = False
-    edging_start_time = None
-    use_long_term_memory = True
-    special_persona_mode = None
-    special_persona_interactions_left = 0
+    with app_state.lock:
+        app_state.chat_history.clear()
+        app_state.messages_for_ui.clear()
+        app_state.mode_message_queue.clear()
+        app_state.user_signal_event.clear()
+        app_state.mode_message_event.clear()
+        app_state.current_mood = "Curious"
+        app_state.calibration_pos_mm = 0.0
+        app_state.active_mode_name = ""
+        app_state.active_mode_started_at = None
+        app_state.active_mode_paused_at = None
+        app_state.active_mode_paused_total = 0.0
+        app_state.motion_pause_active = False
+        app_state.edging_start_time = None
+        app_state.use_long_term_memory = True
+        app_state.special_persona_mode = None
+        app_state.special_persona_interactions_left = 0
     _set_motion_training_state(
         state="idle",
         pattern_id="",
@@ -887,7 +869,11 @@ SNAKE_ASCII = """
 # ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────────────────────────────
 
 def get_current_context():
-    global edging_start_time, special_persona_mode
+    with app_state.lock:
+        current_mood = app_state.current_mood
+        use_long_term_memory = app_state.use_long_term_memory
+        edging_start_time = app_state.edging_start_time
+        special_persona_mode = app_state.special_persona_mode
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
@@ -912,31 +898,35 @@ def get_current_context():
 
 def add_message_to_queue(text, add_to_history=True, queue_message=True):
     if queue_message:
-        messages_for_ui.append(text)
+        app_state.messages_for_ui.append(text)
     if add_to_history:
         clean_text = re.sub(r'<[^>]+>', '', text).strip()
-        if clean_text: chat_history.append({"role": "assistant", "content": clean_text})
+        if clean_text:
+            app_state.chat_history.append({"role": "assistant", "content": clean_text})
     threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
 def start_background_mode(mode_logic, initial_message, mode_name):
-    global auto_mode_active_task, edging_start_time
-    if auto_mode_active_task:
-        auto_mode_active_task.stop()
-        auto_mode_active_task.join(timeout=5)
+    with app_state.lock:
+        active_task = app_state.auto_mode_active_task
+    if active_task:
+        active_task.stop()
+        active_task.join(timeout=5)
     _stop_motion_training()
     _clear_motion_pause_state()
-    
-    user_signal_event.clear()
-    mode_message_event.clear()
-    mode_message_queue.clear()
+
+    app_state.user_signal_event.clear()
+    app_state.mode_message_event.clear()
+    app_state.mode_message_queue.clear()
     _set_runtime_active_mode(mode_name, reset_timer=True)
-    
+
     def on_stop():
-        global auto_mode_active_task, edging_start_time
-        auto_mode_active_task = None
+        with app_state.lock:
+            app_state.auto_mode_active_task = None
         _set_runtime_active_mode("")
 
-    def update_mood(m): global current_mood; current_mood = m
+    def update_mood(m):
+        with app_state.lock:
+            app_state.current_mood = m
     def get_timings(n):
         return {
             'auto': (settings.auto_min_time, settings.auto_max_time),
@@ -955,7 +945,7 @@ def start_background_mode(mode_logic, initial_message, mode_name):
             "stroke_range": getattr(target, "stroke_range", None),
         }
         return llm.get_mode_decision(
-            chat_history,
+            app_state.chat_history,
             context,
             mode=kwargs.get("mode", mode_name),
             event=kwargs.get("event", "start"),
@@ -967,9 +957,9 @@ def start_background_mode(mode_logic, initial_message, mode_name):
     callbacks = {
         'send_message': add_message_to_queue, 'get_context': get_current_context,
         'get_timings': get_timings, 'on_stop': on_stop, 'update_mood': update_mood,
-        'user_signal_event': user_signal_event,
-        'message_event': mode_message_event,
-        'message_queue': mode_message_queue,
+        'user_signal_event': app_state.user_signal_event,
+        'message_event': app_state.mode_message_event,
+        'message_queue': app_state.mode_message_queue,
         'remember_pattern': _remember_motion_pattern_from_target,
         'remember_pattern_id': _remember_live_motion_pattern_id,
         'freestyle_candidates': _freestyle_candidate_patterns,
@@ -977,8 +967,10 @@ def start_background_mode(mode_logic, initial_message, mode_name):
         'set_mode_name': set_mode_name,
         'mode_decision': mode_decision,
     }
-    auto_mode_active_task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
-    auto_mode_active_task.start()
+    task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
+    with app_state.lock:
+        app_state.auto_mode_active_task = task
+    task.start()
 
 # ─── FLASK ROUTES ──────────────────────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -1003,22 +995,23 @@ def _handle_chat_commands(text, allow_motion=True):
     intent = intent_matcher.parse(text, motion.current_target())
     if intent.kind == "stop":
         _clear_motion_pause_state()
-        if auto_mode_active_task: auto_mode_active_task.stop()
+        if app_state.auto_mode_active_task:
+            app_state.auto_mode_active_task.stop()
         _stop_motion_training()
         add_message_to_queue("Stopping.", add_to_history=False)
         return True, jsonify({"status": "stopped"})
     if "up up down down left right left right b a" in text:
         _konami_code_action()
         return True, jsonify({"status": "konami_code_activated"})
-    if intent.kind == "auto_on" and not auto_mode_active_task:
+    if intent.kind == "auto_on" and not app_state.auto_mode_active_task:
         start_background_mode(auto_mode_logic, "Okay, I'll take over...", mode_name='auto')
         return True, jsonify({"status": "auto_started"})
-    if intent.kind == "freestyle" and not auto_mode_active_task:
+    if intent.kind == "freestyle" and not app_state.auto_mode_active_task:
         start_background_mode(freestyle_mode_logic, "Starting adaptive Freestyle.", mode_name='freestyle')
         return True, jsonify({"status": "freestyle_started"})
-    if intent.kind == "auto_off" and auto_mode_active_task:
+    if intent.kind == "auto_off" and app_state.auto_mode_active_task:
         _clear_motion_pause_state()
-        auto_mode_active_task.stop()
+        app_state.auto_mode_active_task.stop()
         return True, jsonify({"status": "auto_stopped"})
     if intent.kind == "edging":
         start_background_mode(edging_mode_logic, "Let's play an edging game...", mode_name='edging')
@@ -1036,13 +1029,12 @@ def _handle_chat_commands(text, allow_motion=True):
     return False, None
 
 def _relay_message_to_active_mode(user_input):
-    mode_message_queue.append(user_input)
-    mode_message_event.set()
+    app_state.mode_message_queue.append(user_input)
+    app_state.mode_message_event.set()
     return jsonify({"status": "message_relayed_to_active_mode"})
 
 @app.route('/send_message', methods=['POST'])
 def handle_user_message():
-    global special_persona_mode, special_persona_interactions_left
     data = _request_json()
     user_input = data.get('message', '').strip()
 
@@ -1054,19 +1046,22 @@ def handle_user_message():
     if not handy.handy_key: return jsonify({"status": "no_key_set"})
     if not user_input: return jsonify({"status": "empty_message"})
 
-    chat_history.append({"role": "user", "content": user_input})
-    
-    handled, response = _handle_chat_commands(user_input.lower(), allow_motion=not auto_mode_active_task)
+    app_state.chat_history.append({"role": "user", "content": user_input})
+
+    handled, response = _handle_chat_commands(
+        user_input.lower(),
+        allow_motion=not app_state.auto_mode_active_task,
+    )
     if handled: return response
 
-    if auto_mode_active_task:
+    if app_state.auto_mode_active_task:
         return _relay_message_to_active_mode(user_input)
 
     context = get_current_context()
     current_before_llm = motion.current_target()
     motion_repaired = False
     try:
-        llm_response = llm.get_chat_response(chat_history, context)
+        llm_response = llm.get_chat_response(app_state.chat_history, context)
     except Exception as exc:
         print(f"[ERROR] LLM request failed: {exc}")
         llm_response = {
@@ -1088,11 +1083,16 @@ def handle_user_message():
         current_before_llm,
     )
     
-    if special_persona_mode is not None:
-        special_persona_interactions_left -= 1
-        if special_persona_interactions_left <= 0:
-            special_persona_mode = None
-            add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
+    with app_state.lock:
+        if app_state.special_persona_mode is not None:
+            app_state.special_persona_interactions_left -= 1
+            should_revert_persona = app_state.special_persona_interactions_left <= 0
+            if should_revert_persona:
+                app_state.special_persona_mode = None
+        else:
+            should_revert_persona = False
+    if should_revert_persona:
+        add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
 
     raw_chat_text = llm_response.get("chat")
     chat_text = str(raw_chat_text or "").strip()
@@ -1104,9 +1104,11 @@ def handle_user_message():
         add_to_history=bool(str(raw_chat_text or "").strip()),
         queue_message=True,
     )
-    if new_mood := llm_response.get("new_mood"): global current_mood; current_mood = new_mood
+    if new_mood := llm_response.get("new_mood"):
+        with app_state.lock:
+            app_state.current_mood = new_mood
     motion_applied = False
-    if not auto_mode_active_task:
+    if not app_state.auto_mode_active_task:
         target = _apply_llm_response_move(
             llm_response,
             current_before_llm,
@@ -1151,7 +1153,7 @@ def persist_local_voice_settings():
 
 @app.route('/get_updates')
 def get_ui_updates_route():
-    messages = [messages_for_ui.popleft() for _ in range(len(messages_for_ui))]
+    messages = [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
     return jsonify({
         "messages": messages,
         "audio_ready": audio.has_audio(),
@@ -1179,9 +1181,11 @@ def _timing_pair(data, min_key, max_key, default_min, default_max):
 def _rate_last_live_motion_pattern(rating, source="chat feedback"):
     if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
         return None
-    if not last_live_motion_pattern_id:
+    with app_state.lock:
+        pattern_id = app_state.last_live_motion_pattern_id
+    if not pattern_id:
         return None
-    return _record_motion_pattern_feedback(last_live_motion_pattern_id, rating, source=source)
+    return _record_motion_pattern_feedback(pattern_id, rating, source=source)
 
 
 from .blueprints import audio as audio_routes
@@ -1254,7 +1258,7 @@ stop_auto_route = modes_routes.stop_auto_route
 # ─── APP STARTUP ───────────────────────────────────────────────────────────────────────────────────
 def on_exit():
     print("[INFO] Saving settings on exit...")
-    settings.save(llm, chat_history)
+    settings.save(llm, app_state.chat_history)
     print("[OK] Settings saved.")
 
 def main():

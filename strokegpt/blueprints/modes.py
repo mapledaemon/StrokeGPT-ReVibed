@@ -13,10 +13,11 @@ def _web():
 @modes_blueprint.route('/signal_edge', methods=['POST'])
 def signal_edge_route():
     web = _web()
-    if web.auto_mode_active_task and web.auto_mode_active_task.name in {'edging', 'milking', 'freestyle'}:
-        web.user_signal_event.set()
-        web.mode_message_event.set()
-        return jsonify({"status": "signaled", "mode": web.auto_mode_active_task.name})
+    active_task = web.app_state.auto_mode_active_task
+    if active_task and active_task.name in {'edging', 'milking', 'freestyle'}:
+        web.app_state.user_signal_event.set()
+        web.app_state.mode_message_event.set()
+        return jsonify({"status": "signaled", "mode": active_task.name})
     return jsonify({"status": "ignored", "message": "Edge, milking, or Freestyle mode not active."}), 400
 
 
@@ -30,7 +31,7 @@ def toggle_motion_pause_route():
     elif action in {"resume", "play", "unpause", "running"}:
         paused = False
     else:
-        paused = not bool(web.motion_pause_active or getattr(web.motion, "is_paused", lambda: False)())
+        paused = not bool(web.app_state.motion_pause_active or getattr(web.motion, "is_paused", lambda: False)())
     snapshot = web._set_motion_paused(paused)
     return jsonify({
         "status": "success",
@@ -87,6 +88,7 @@ def start_freestyle_route():
 def stop_auto_route():
     web = _web()
     web._clear_motion_pause_state()
-    if web.auto_mode_active_task:
-        web.auto_mode_active_task.stop()
+    active_task = web.app_state.auto_mode_active_task
+    if active_task:
+        active_task.stop()
     return jsonify({"status": "auto_mode_stopped"})

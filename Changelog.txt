@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #50 - Move Web Runtime State Into AppState
+-----------------------------------------------------------
+
+Branch: codex-web-app-state
+
+- Added `strokegpt/app_state.py` with an `AppState` dataclass that owns the
+  mutable web runtime state and provides a shared `RLock` boundary for route,
+  chat, mode, Ollama-pull, and motion-training state.
+- Updated `strokegpt/web.py` to read and write runtime state through
+  `app_state` internally while preserving existing `strokegpt.web` attribute
+  access for tests and external callers through a compatibility module bridge.
+- Updated the settings, motion, and mode blueprints to use the shared app
+  state object for runtime coordination without changing URL paths, response
+  payloads, mode behavior, motion pause semantics, or setup/reset handling.
+- Added a compatibility regression test that verifies legacy
+  `strokegpt.web` runtime attributes still resolve to the new `AppState`
+  fields.
+
+
 2026-04-24 - PR #49 - Split Web Routes Into Domain Blueprints
 --------------------------------------------------------------
 
