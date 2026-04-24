@@ -8,8 +8,10 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Canonicalize motion pattern summary helper
---------------------------------------------------------
+2026-04-24 - PR #57 - Canonicalize Motion Pattern Summary Helper
+-----------------------------------------------------------------
+
+Branch: claude-motion-pattern-summary-canon
 
 - Moved the `_motion_pattern_summary()` catalog-enrichment helper from
   `strokegpt/web.py` into `strokegpt.payloads.motion_pattern_summary()` so
