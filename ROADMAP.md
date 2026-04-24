@@ -94,16 +94,14 @@ Adapter audit findings:
   `FreestyleCandidate`, but `freestyle._candidate_*()` still accepts both dicts
   and record-like objects. Pick one canonical candidate shape and remove the
   historical duck-typing after tests are migrated.
-- Review `web._motion_pattern_summary()` after the candidate cleanup. It
-  merges `PatternRecord.to_summary_dict()` with catalog weight/enabled fields;
-  this may be a real route payload boundary, but it may also be redundant once
-  the catalog summary shape is canonical.
+- Track `web._motion_pattern_summary()` as an open boundary decision before
+  changing Freestyle candidate handling. It merges
+  `PatternRecord.to_summary_dict()` with catalog weight/enabled fields; decide
+  whether that is a real route payload boundary or should be merged into the
+  canonical catalog summary shape.
 
 Concrete follow-up PRs:
 
-- Add explicit "Compatibility shim - do not extend" comments to the remaining
-  PR #48-#50 shim surfaces and update nearby tests to import canonical modules
-  where the change is mechanical.
 - Migrate `background_modes` helper tests that patch split Freestyle or
   mode-decision helpers to `strokegpt.freestyle` / `strokegpt.mode_decisions`,
   then shrink the `background_modes` re-export surface if no compatibility
@@ -113,7 +111,8 @@ Concrete follow-up PRs:
   payload/route aliases.
 - Normalize Freestyle candidate handling around the `FreestyleCandidate`
   contract and remove `_candidate_*` duck typing that only exists for
-  historical shapes.
+  historical shapes. Must follow the canonical helper-test migration and the
+  `web._motion_pattern_summary()` boundary decision.
 
 ### 3. Motion Vocabulary And Preset Semantics (S/M)
 
@@ -254,9 +253,10 @@ deeper, design-level audits that need a clean tree first.
   human-test feedback, because motion feel is subjective and easy to
   overfit. Likely too noisy without large-scale human input; treat as a
   research spike, not a roadmap commitment.
-- Defer lazy-loading the JSON pattern library and prepared-action cache until
-  pattern count grows enough to justify it; the cache exists, but eager loading
-  is still simpler and cheap at the current catalog size.
+- Pattern-library lazy-load parking lot: defer lazy-loading the JSON pattern
+  library and prepared-action cache until pattern count grows enough to justify
+  it; the cache exists, but eager loading is still simpler and cheap at the
+  current catalog size.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 
