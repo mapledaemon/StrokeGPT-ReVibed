@@ -52,25 +52,68 @@ mode controls still have rough edges that block daily use.
   fixed-size elements so neither can resize the other when text length
   changes.
 
-### 2. Code Reorganization Plan (M)
+### 2. Compatibility Shim Paydown And Adapter Boundary Cleanup (S/M)
 
-Why next: the recent run of motion/diagnostics PRs landed without any
-structural changes, so several modules have crossed the size at which
-maintenance starts to slow down. Fixing this before the next big feature
-program (Soft-Anchor authoring, voice control, story mode) keeps merge
-conflicts and review effort low. These splits are mechanical and should
-preserve behavior.
+Why next: PRs #48-#51 finished the structural code reorganization by splitting
+the biggest modules, moving web runtime state into `AppState`, and typing the
+mode service/callback boundary. The adapter audit found that most conversion
+layers are real safety or schema boundaries, but several compatibility shims
+were deliberately left in place so the mechanical splits stayed behavior
+preserving. Those shims should now be marked or paid down before new code
+starts treating them as permanent API.
 
-- Audit the codebase for translator/adapter layers that map between
-  overlapping schemas and decide whether each layer should be preserved,
-  simplified, or rewritten. Examples to start from: motion-target to handy
-  command, motion-pattern to frame, LLM JSON to motion-target, settings JSON
-  to runtime state, candidate dict to freestyle record. Rewrite the ones that
-  exist purely because of historical drift; document the ones that are real
-  abstraction boundaries.
-- Defer until pattern count grows: lazy-load the JSON pattern library and
-  cache prepared actions (the cache exists; the lazy-load is not justified
-  yet).
+Adapter audit findings:
+
+- Preserve the real safety boundaries:
+  `MotionSanitizer.from_llm_move()` parses LLM JSON into `MotionTarget`,
+  `MotionController.apply_generated_target()` chooses HAMP versus
+  position-frame playback while preserving smoothing/stop behavior, and
+  `HandyController.move()` / `move_to_depth()` translate relative app targets
+  into calibrated device commands with user speed/depth limits.
+- Preserve the pattern/compiler boundaries:
+  `motion_patterns.normalize_actions()`, `expand_motion_pattern()`, and
+  `expand_anchor_program()` turn pattern/action/anchor schemas into
+  `PatternFrame` sequences with blend, turn, step-limit, and tempo rules.
+  `motion_anchors.coerce_anchor_program*()` remains the anchor schema boundary.
+- Preserve the persistence and UI-payload boundaries:
+  `SettingsManager.default_settings_dict()`, `apply_dict()`, and `to_dict()`
+  own settings migration/reset/save behavior, while `payloads.py` owns the
+  browser-facing settings, Ollama, and motion-pattern payload shapes.
+- Treat PR #48 `background_modes` re-exports from `freestyle.py` and
+  `mode_decisions.py` as compatibility shims. Migrate tests and internal
+  callers to canonical modules where practical; otherwise mark the re-export
+  block "Compatibility shim - do not extend."
+- Treat PR #49 `strokegpt.web` blueprint route aliases and payload wrapper
+  names as compatibility shims. New code should import route handlers from
+  `strokegpt.blueprints.*` and payload builders from `strokegpt.payloads`.
+- Treat PR #50 `strokegpt.web` module-level `AppState` attribute bridge as a
+  compatibility shim for older tests/callers. New code should use
+  `web.app_state` or an explicit dependency, not add new bridged attributes.
+- Simplify the Freestyle candidate adapter once the shim pass starts:
+  `web._freestyle_candidate_patterns()` now returns a typed
+  `FreestyleCandidate`, but `freestyle._candidate_*()` still accepts both dicts
+  and record-like objects. Pick one canonical candidate shape and remove the
+  historical duck-typing after tests are migrated.
+- Review `web._motion_pattern_summary()` after the candidate cleanup. It
+  merges `PatternRecord.to_summary_dict()` with catalog weight/enabled fields;
+  this may be a real route payload boundary, but it may also be redundant once
+  the catalog summary shape is canonical.
+
+Concrete follow-up PRs:
+
+- Add explicit "Compatibility shim - do not extend" comments to the remaining
+  PR #48-#50 shim surfaces and update nearby tests to import canonical modules
+  where the change is mechanical.
+- Migrate `background_modes` helper tests that patch split Freestyle or
+  mode-decision helpers to `strokegpt.freestyle` / `strokegpt.mode_decisions`,
+  then shrink the `background_modes` re-export surface if no compatibility
+  caller remains.
+- Migrate web payload tests to `strokegpt.payloads` and route registration
+  tests to the blueprint modules before removing or freezing old `web.*`
+  payload/route aliases.
+- Normalize Freestyle candidate handling around the `FreestyleCandidate`
+  contract and remove `_candidate_*` duck typing that only exists for
+  historical shapes.
 
 ### 3. Motion Vocabulary And Preset Semantics (S/M)
 
@@ -211,6 +254,9 @@ deeper, design-level audits that need a clean tree first.
   human-test feedback, because motion feel is subjective and easy to
   overfit. Likely too noisy without large-scale human input; treat as a
   research spike, not a roadmap commitment.
+- Defer lazy-loading the JSON pattern library and prepared-action cache until
+  pattern count grows enough to justify it; the cache exists, but eager loading
+  is still simpler and cheap at the current catalog size.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 

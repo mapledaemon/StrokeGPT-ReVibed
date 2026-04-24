@@ -33,7 +33,14 @@ behavior, and route motion changes through the shared controller path.
 - `static/app.js`: browser UI entrypoint and polling orchestration.
 - `static/js/`: focused browser modules for shared context, settings, chat,
   audio, device controls, motion controls, and setup.
-- `strokegpt/web.py`: Flask routes, global app state, settings wiring, UI update polling.
+- `strokegpt/web.py`: Flask app composition, shared services, chat/update
+  runtime, and compatibility exports.
+- `strokegpt/app_state.py`: mutable web runtime state and shared `RLock`
+  boundary.
+- `strokegpt/blueprints/`: domain route modules for settings, motion, audio,
+  and preset/mode controls.
+- `strokegpt/payloads.py`: settings, Ollama status, and motion-pattern payload
+  builders for browser routes.
 - `strokegpt/settings.py`: JSON-backed user/app settings.
 - `strokegpt/handy.py`: The Handy API wrapper.
 - `strokegpt/llm.py`: Ollama API integration and prompt construction.
@@ -46,8 +53,14 @@ behavior, and route motion changes through the shared controller path.
 - `strokegpt/pattern_library.py`: shareable motion pattern schema, built-in
   pattern catalog, and user pattern file registry.
 - `strokegpt/motion_scripts.py`: longer scripted motion plans.
-- `strokegpt/background_modes.py`: auto, edging, milking, and freestyle
-  background modes.
+- `strokegpt/background_modes.py`: auto, edging, milking, and freestyle mode
+  orchestration.
+- `strokegpt/freestyle.py`: Freestyle pattern selection, scoring, and playback
+  helpers.
+- `strokegpt/mode_decisions.py`: mode-decision parsing, coercion, and
+  intensity helpers.
+- `strokegpt/mode_contracts.py`: typed service/callback contracts shared by
+  `web.py`, `background_modes.py`, and `mode_decisions.py`.
 - `strokegpt/audio.py`: ElevenLabs and local Chatterbox TTS providers.
 - `scripts/install_windows.ps1`: Windows install helper.
 - `tests/`: focused regression tests.
@@ -62,6 +75,13 @@ behavior, and route motion changes through the shared controller path.
 - PR #45 added the chat interface refactor plan, explicit Pause/Resume
   planning, profile-driven splash/profile-image planning, and the known
   problem for motion status log timecodes resetting on stop.
+- PR #48 split Freestyle planning and mode-decision helpers out of
+  `background_modes.py` while preserving compatibility re-exports.
+- PR #49 split web routes into domain blueprints and extracted payload
+  builders while preserving old `strokegpt.web` route and payload names.
+- PR #50 moved mutable web runtime state into `AppState` and preserved legacy
+  `strokegpt.web` attribute access through a module bridge.
+- PR #51 added typed contracts for long-running mode services and callbacks.
 - Agent guidance now lives in `AGENTS.md`, with `Codex.md` and `CLAUDE.md`
   kept as short compatibility pointers. If the current docs branch has an open
   PR, its changelog entry should use the PR number before merge.
@@ -101,6 +121,15 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - The app intentionally uses a deterministic motion layer between LLM output and hardware commands.
 - The motion layer is primarily for reliability: spatial language mapping, pattern expansion, configured speed limits, and consistent stop behavior.
 - The LLM may provide direct numeric moves or named zone/pattern cues, but hardware movement should still pass through `MotionController` and `HandyController`.
+- Behavior-preserving refactors should use the house compatibility pattern:
+  extract the new module, bridge old imports/attributes, add a regression test
+  for the bridge, then migrate callers in a follow-up PR. Mark compatibility
+  re-exports, aliases, and bridges with a comment such as "Compatibility shim -
+  do not extend" so new code imports from the canonical module instead of
+  expanding the shim surface.
+- When an extraction creates a new cross-module contract, define the
+  `TypedDict`/`Protocol` contract and a small contract regression test in the
+  same PR.
 - If the LLM claims or appears to need a motion change but sends no usable
   movement target, the web connector performs one repair prompt. The repair
   pass must still allow `move: null` for conversational or informational
@@ -187,9 +216,11 @@ Current Up Next targets are:
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
    diagnostics on-device, fix remaining stop/log/timer regressions, and verify
    the Pause/Resume and hotkey behavior on real hardware.
-2. Code Reorganization Plan: split `web.py` into domain blueprints, extract
-   freestyle and mode-decision helpers from `background_modes.py`, introduce an
-   `AppState` lock boundary, and type the services/callbacks contracts.
+2. Compatibility Shim Paydown And Adapter Boundary Cleanup: keep the completed
+   code reorganization stable by marking or retiring PR #48-#50 compatibility
+   shims, migrating callers to canonical modules, and preserving real
+   conversion boundaries for motion safety, pattern compilation, settings
+   persistence, and browser payloads.
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
@@ -214,7 +245,7 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 ```
 
 ```text
-Start the Code Reorganization Plan in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, and strokegpt/background_modes.py. Make one mechanical behavior-preserving split with tests, keep settings/reset paths intact, and update Changelog.txt before preparing a PR.
+Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/background_modes.py, strokegpt/freestyle.py, strokegpt/mode_decisions.py, strokegpt/web.py, and strokegpt/payloads.py. Mark or retire one compatibility shim surface at a time, migrate callers to canonical modules where practical, preserve behavior, and update Changelog.txt before preparing a PR.
 ```
 
 ```text

@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #52 - Audit Adapter Boundaries And Compatibility Shims
+-----------------------------------------------------------------------
+
+Branch: codex-adapter-layer-audit
+
+- Completed the Code Reorganization Plan adapter audit as a documentation
+  pass, classifying motion-to-device, LLM-to-target, pattern-to-frame,
+  settings persistence, payload, Freestyle candidate, and compatibility-shim
+  boundaries.
+- Updated `ROADMAP.md` with a concrete compatibility-shim paydown plan and
+  moved the deferred pattern-library lazy-load note out of Up Next.
+- Updated `AGENTS.md` with the current post-reorganization module layout and
+  codified the compatibility-bridge refactor pattern for future agents.
+
+
 2026-04-24 - PR #51 - Add Mode Callback Contracts
 --------------------------------------------------
 
