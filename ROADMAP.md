@@ -61,12 +61,6 @@ program (Soft-Anchor authoring, voice control, story mode) keeps merge
 conflicts and review effort low. These splits are mechanical and should
 preserve behavior.
 
-- Split `strokegpt/web.py` (~1.9k lines, all routes inline) into Flask
-  blueprints grouped by domain: `blueprints/settings.py`,
-  `blueprints/motion.py`, `blueprints/audio.py`, `blueprints/modes.py`.
-  Move payload-builder helpers (settings payload, Ollama status payload,
-  pattern catalog payload) into a `payloads.py` module so route handlers
-  stay short.
 - Wrap `web.py` global runtime state (active mode, edging start time,
   message queues, training lock, depth-test lock, ollama-pull lock) inside
   an `AppState` dataclass guarded by a single `RLock`, so multi-thread

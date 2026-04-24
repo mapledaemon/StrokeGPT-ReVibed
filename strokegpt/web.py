@@ -1,6 +1,5 @@
 import os
 import sys
-import io
 import json
 import re
 import atexit
@@ -10,10 +9,10 @@ import time
 from collections import deque
 from pathlib import Path
 import requests
-from flask import Flask, request, jsonify, render_template_string, send_file, send_from_directory
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 from werkzeug.utils import secure_filename
 
-from .settings import DIAGNOSTICS_LEVELS, SettingsManager, normalize_ollama_model
+from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
@@ -23,12 +22,11 @@ from .motion_patterns import PATTERNS, expand_motion_pattern
 from .motion_preferences import (
     THUMBS_DOWN_DISABLE_THRESHOLD,
     adjust_weight_for_feedback,
-    build_motion_preference_payload,
     clamp_weight,
-    enrich_catalog,
     feedback_weight,
     should_auto_disable,
 )
+from . import payloads
 from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
     PatternLibrary,
@@ -269,28 +267,10 @@ special_persona_mode = None
 special_persona_interactions_left = 0
 
 def get_ollama_models_for_ui():
-    models = list(settings.ollama_models)
-    if llm.model not in models:
-        models.insert(0, llm.model)
-    return models
+    return payloads.ollama_models_for_ui(settings, llm)
 
 def _format_bytes(value):
-    try:
-        value = int(value or 0)
-    except (TypeError, ValueError):
-        value = 0
-    if value <= 0:
-        return ""
-    units = ["B", "KB", "MB", "GB", "TB"]
-    size = float(value)
-    unit = units[0]
-    for unit in units:
-        if size < 1024 or unit == units[-1]:
-            break
-        size /= 1024
-    if unit == "B":
-        return f"{int(size)} {unit}"
-    return f"{size:.1f} {unit}"
+    return payloads.format_bytes(value)
 
 def _set_ollama_pull_state(**updates):
     with ollama_pull_lock:
@@ -301,16 +281,7 @@ def _ollama_pull_snapshot():
         return dict(ollama_pull_state)
 
 def _diagnostics_level_options():
-    labels = {
-        "compact": "Compact",
-        "status": "Status",
-        "debug": "Debug",
-    }
-    return [
-        {"id": level, "label": labels[level]}
-        for level in ("compact", "status", "debug")
-        if level in DIAGNOSTICS_LEVELS
-    ]
+    return payloads.diagnostics_level_options()
 
 def _ollama_installed_models():
     response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=0.5)
@@ -330,42 +301,13 @@ def _ollama_installed_models():
     return models
 
 def _ollama_status_payload():
-    current_model = normalize_ollama_model(llm.model)
-    diagnostics_level = settings.ollama_diagnostics_level
-    payload = {
-        "available": False,
-        "base_url": OLLAMA_BASE_URL,
-        "current_model": current_model,
-        "current_model_installed": False,
-        "installed_models": [],
-        "installed_model_names": [],
-        "download": _ollama_pull_snapshot(),
-        "diagnostics_level": diagnostics_level,
-        "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),
-        "message": "Ollama is not reachable. Start Ollama before downloading or using local models.",
-    }
-    try:
-        installed_models = _ollama_installed_models()
-    except requests.exceptions.RequestException as exc:
-        payload["error"] = str(exc)
-        return payload
-    except Exception as exc:
-        payload["error"] = str(exc)
-        return payload
-
-    names = [item["name"] for item in installed_models]
-    payload.update({
-        "available": True,
-        "installed_models": installed_models,
-        "installed_model_names": names,
-        "current_model_installed": current_model in names,
-        "message": (
-            f"Current model is installed: {current_model}"
-            if current_model in names
-            else f"Current model is not installed: {current_model}. Click Download Model before chatting."
-        ),
-    })
-    return payload
+    return payloads.ollama_status_payload(
+        settings=settings,
+        llm=llm,
+        base_url=OLLAMA_BASE_URL,
+        pull_snapshot=_ollama_pull_snapshot,
+        installed_models=_ollama_installed_models,
+    )
 
 def _run_ollama_pull(model):
     _set_ollama_pull_state(
@@ -461,73 +403,21 @@ def _start_ollama_pull(model):
     return True, f"Started downloading {model}."
 
 def get_persona_prompts_for_ui():
-    return settings.persona_prompt_options()
+    return payloads.persona_prompts_for_ui(settings)
 
 def settings_payload():
-    local_tts_status = audio.local_status()
-    return {
-        "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
-        "persona": settings.persona_desc,
-        "persona_prompts": get_persona_prompts_for_ui(),
-        "handy_key": settings.handy_key,
-        "ai_name": settings.ai_name,
-        "elevenlabs_key": settings.elevenlabs_api_key,
-        "ollama_model": llm.model,
-        "ollama_models": get_ollama_models_for_ui(),
-        "ollama_status": _ollama_status_payload(),
-        "audio_provider": settings.audio_provider,
-        "audio_enabled": settings.audio_enabled,
-        "elevenlabs_voice_id": settings.elevenlabs_voice_id,
-        "local_tts_status": local_tts_status,
-        "local_tts_engine": audio.local_engine,
-        "local_tts_engines": local_tts_status.get("engines", []),
-        "local_tts_style_presets": audio.CHATTERBOX_STYLE_PRESETS,
-        "local_tts_style": settings.local_tts_style,
-        "local_tts_prompt_path": settings.local_tts_prompt_path,
-        "local_tts_exaggeration": settings.local_tts_exaggeration,
-        "local_tts_cfg_weight": settings.local_tts_cfg_weight,
-        "local_tts_temperature": settings.local_tts_temperature,
-        "local_tts_top_p": settings.local_tts_top_p,
-        "local_tts_min_p": settings.local_tts_min_p,
-        "local_tts_repetition_penalty": settings.local_tts_repetition_penalty,
-        "min_depth": settings.min_depth,
-        "max_depth": settings.max_depth,
-        "min_speed": settings.min_speed,
-        "max_speed": settings.max_speed,
-        "motion_backend": settings.motion_backend,
-        "motion_diagnostics_level": settings.motion_diagnostics_level,
-        "ollama_diagnostics_level": settings.ollama_diagnostics_level,
-        "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
-        "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
-        "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
-        "use_long_term_memory": use_long_term_memory,
-        "diagnostics_levels": _diagnostics_level_options(),
-        "motion_backends": [
-            {
-                "id": "hamp",
-                "label": "HAMP continuous",
-                "description": "Recommended default for smooth ongoing app motion.",
-                "experimental": False,
-            },
-            {
-                "id": "position",
-                "label": "Flexible position/script",
-                "description": "Experimental path for pattern fidelity and spatial scripts.",
-                "experimental": True,
-            },
-        ],
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-        "pfp": settings.profile_picture_b64,
-        "timings": {
-            "auto_min": settings.auto_min_time,
-            "auto_max": settings.auto_max_time,
-            "milking_min": settings.milking_min_time,
-            "milking_max": settings.milking_max_time,
-            "edging_min": settings.edging_min_time,
-            "edging_max": settings.edging_max_time,
-        },
-    }
+    return payloads.settings_payload(
+        settings=settings,
+        llm=llm,
+        audio=audio,
+        use_long_term_memory=use_long_term_memory,
+        persona_prompts=get_persona_prompts_for_ui(),
+        ollama_models=get_ollama_models_for_ui(),
+        ollama_status=_ollama_status_payload(),
+        motion_patterns=_motion_pattern_catalog_payload(),
+        motion_preferences=_motion_preference_payload(),
+        diagnostics_levels=_diagnostics_level_options(),
+    )
 
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
@@ -562,12 +452,11 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
-    payload = enrich_catalog(
-        motion_pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback),
-        settings.motion_pattern_weights,
+    return payloads.motion_pattern_catalog_payload(
+        motion_pattern_library,
+        settings,
+        MOTION_FEEDBACK_HISTORY_LIMIT,
     )
-    payload["feedback_history"] = list(settings.motion_pattern_feedback_history[:MOTION_FEEDBACK_HISTORY_LIMIT])
-    return payload
 
 def _edge_pattern_ids():
     return {pattern_id for pattern_id in PATTERNS if pattern_id.startswith("edge-")}
@@ -576,7 +465,7 @@ def _motion_preference_payload():
     excluded = set()
     if not settings.allow_llm_edge_in_chat:
         excluded.update(_edge_pattern_ids())
-    return build_motion_preference_payload(_motion_pattern_catalog_payload(), excluded)
+    return payloads.motion_preference_payload(_motion_pattern_catalog_payload(), excluded)
 
 def _motion_pattern_record(pattern_id):
     return motion_pattern_library.get_record(
@@ -1233,61 +1122,6 @@ def handle_user_message():
         "motion_repaired": motion_repaired,
     })
 
-@app.route('/check_settings')
-def check_settings_route():
-    return jsonify(settings_payload())
-
-@app.route('/motion_patterns')
-def motion_patterns_route():
-    return jsonify(_motion_pattern_catalog_payload())
-
-@app.route('/motion_preferences')
-def motion_preferences_route():
-    payload = _motion_preference_payload()
-    payload["status"] = "success"
-    return jsonify(payload)
-
-@app.route('/motion_preferences/reset', methods=['POST'])
-def reset_motion_preferences_route():
-    settings.motion_pattern_feedback = {}
-    settings.motion_pattern_weights = {}
-    settings.save()
-    payload = _motion_preference_payload()
-    payload["status"] = "success"
-    return jsonify(payload)
-
-@app.route('/motion_feedback_options', methods=['POST'])
-def set_motion_feedback_options_route():
-    data = _request_json()
-    settings.motion_feedback_auto_disable = bool(data.get("auto_disable", False))
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-    })
-
-@app.route('/motion_patterns/<pattern_id>')
-def motion_pattern_detail_route(pattern_id):
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    return jsonify({"status": "success", "pattern": _motion_pattern_summary(record, include_actions=True)})
-
-@app.route('/motion_patterns/<pattern_id>/export')
-def export_motion_pattern_route(pattern_id):
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    payload = json.dumps(record.to_export_dict(), indent=2).encode("utf-8")
-    return send_file(
-        io.BytesIO(payload),
-        mimetype="application/json",
-        as_attachment=True,
-        download_name=f"{record.pattern_id}.strokegpt-pattern.json",
-    )
-
 def _read_uploaded_pattern_payload(upload):
     filename = secure_filename(upload.filename or "pattern.json")
     suffix = Path(filename).suffix.lower()
@@ -1300,416 +1134,6 @@ def _read_uploaded_pattern_payload(upload):
         return filename, json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PatternValidationError(f"Pattern file is not valid JSON: {exc}") from exc
-
-@app.route('/import_motion_pattern', methods=['POST'])
-def import_motion_pattern_route():
-    try:
-        if "pattern" in request.files:
-            filename, payload = _read_uploaded_pattern_payload(request.files["pattern"])
-        else:
-            payload = _request_json()
-            filename = (
-                secure_filename(payload.get("filename") or "pattern.json")
-                if isinstance(payload, dict)
-                else "pattern.json"
-            )
-        record = motion_pattern_library.import_payload(payload, filename=filename)
-    except PatternValidationError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
-    return jsonify({"status": "success", "pattern": _motion_pattern_summary(record, include_actions=True)})
-
-@app.route('/motion_patterns/save_generated', methods=['POST'])
-def save_generated_motion_pattern_route():
-    data = _request_json()
-    payload = data.get("pattern") if isinstance(data.get("pattern"), dict) else {}
-    filename_source = (
-        data.get("filename")
-        or payload.get("id")
-        or payload.get("name")
-        or "trained-pattern"
-    )
-    filename = secure_filename(f"{filename_source}.json")
-    try:
-        record = motion_pattern_library.import_payload(
-            payload,
-            filename=filename,
-            source_override="trained",
-        )
-    except PatternValidationError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
-    return jsonify({
-        "status": "success",
-        "pattern": _motion_pattern_summary(record, include_actions=True),
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-    })
-
-@app.route('/motion_patterns/<pattern_id>/enabled', methods=['POST'])
-def set_motion_pattern_enabled_route(pattern_id):
-    data = _request_json()
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    settings.motion_pattern_enabled[record.pattern_id] = bool(data.get("enabled", True))
-    settings.save()
-    updated = _motion_pattern_record(record.pattern_id)
-    return jsonify({
-        "status": "success",
-        "pattern": _motion_pattern_summary(updated, include_actions=True),
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-    })
-
-@app.route('/motion_patterns/<pattern_id>/weight', methods=['POST'])
-def set_motion_pattern_weight_route(pattern_id):
-    data = _request_json()
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    if record.source != "fixed":
-        return jsonify({"status": "error", "message": "Only fixed patterns have LLM weights."}), 400
-    settings.motion_pattern_weights[record.pattern_id] = clamp_weight(data.get("weight"))
-    settings.save()
-    updated = _motion_pattern_record(record.pattern_id)
-    return jsonify({
-        "status": "success",
-        "pattern": _motion_pattern_summary(updated, include_actions=True),
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-    })
-
-@app.route('/motion_patterns/<pattern_id>/feedback/reset', methods=['POST'])
-def reset_motion_pattern_feedback_route(pattern_id):
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    settings.motion_pattern_feedback.pop(record.pattern_id, None)
-    if record.source == "fixed":
-        settings.motion_pattern_weights.pop(record.pattern_id, None)
-    updated = _motion_pattern_record(record.pattern_id)
-    _append_motion_feedback_history(record, "reset", "settings reset", updated)
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "message": f"Reset feedback for {updated.name}.",
-        "pattern": _motion_pattern_summary(updated, include_actions=True),
-        "motion_patterns": _motion_pattern_catalog_payload(),
-        "motion_preferences": _motion_preference_payload(),
-    })
-
-@app.route('/motion_training/status')
-def motion_training_status_route():
-    return jsonify({"status": "success", "motion_training": _motion_training_snapshot()})
-
-@app.route('/motion_training/start', methods=['POST'])
-def start_motion_training_route():
-    data = _request_json()
-    pattern_id = data.get("pattern_id", "")
-    record = _motion_pattern_record(pattern_id)
-    if not record:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    return _start_motion_training_record(record, preview=False)
-
-@app.route('/motion_training/preview', methods=['POST'])
-def preview_motion_training_route():
-    data = _request_json()
-    try:
-        record = _training_payload_record(data)
-    except PatternValidationError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
-    return _start_motion_training_record(record, preview=True)
-
-@app.route('/motion_training/stop', methods=['POST'])
-def stop_motion_training_route():
-    snapshot = _stop_motion_training()
-    return jsonify({"status": "stopped", "motion_training": snapshot})
-
-@app.route('/motion_training/<pattern_id>/feedback', methods=['POST'])
-def motion_training_feedback_route(pattern_id):
-    data = _request_json()
-    rating = str(data.get("rating", "")).strip().lower()
-    if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
-        return jsonify({"status": "error", "message": "Feedback must be thumbs_up, neutral, or thumbs_down."}), 400
-    result = _record_motion_pattern_feedback(pattern_id, rating, source="motion training")
-    if not result:
-        return jsonify({"status": "error", "message": "Pattern not found."}), 404
-    updated = result["pattern"]
-    suffix = ""
-    if result["auto_disabled"]:
-        suffix = f" Disabled after {THUMBS_DOWN_DISABLE_THRESHOLD} thumbs down ratings."
-    _set_motion_training_state(
-        pattern_id=updated.pattern_id,
-        pattern_name=updated.name,
-        last_feedback=rating,
-        message=f"Saved {rating.replace('_', ' ')} feedback for {updated.name}.{suffix}",
-        preview=False,
-    )
-    return jsonify({
-        "status": "success",
-        "pattern": _motion_pattern_summary(updated, include_actions=True),
-        "motion_patterns": result["motion_patterns"],
-        "motion_preferences": result["motion_preferences"],
-        "motion_training": _motion_training_snapshot(),
-        "auto_disabled": result["auto_disabled"],
-    })
-
-@app.route('/reset_settings', methods=['POST'])
-def reset_settings_route():
-    data = _request_json()
-    if data.get("confirm") != "RESET":
-        return jsonify({"status": "error", "message": "Reset confirmation is required."}), 400
-    reset_runtime_state()
-    payload = settings_payload()
-    payload["status"] = "success"
-    return jsonify(payload)
-
-@app.route('/set_persona_prompt', methods=['POST'])
-def set_persona_prompt_route():
-    data = _request_json()
-    prompt = data.get('persona_desc', '')
-    save_prompt = data.get('save_prompt', True)
-    if not settings.set_persona_prompt(prompt, save_prompt=save_prompt):
-        return jsonify({"status": "error", "message": "Persona prompt is required."}), 400
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "persona": settings.persona_desc,
-        "persona_prompts": get_persona_prompts_for_ui(),
-    })
-
-@app.route('/set_ollama_model', methods=['POST'])
-def set_ollama_model_route():
-    data = _request_json()
-    model = normalize_ollama_model(data.get('model', ''))
-    if not model:
-        return jsonify({"status": "error", "message": "Model name is required."}), 400
-    if not llm.set_model(model):
-        return jsonify({"status": "error", "message": "Invalid model name."}), 400
-    settings.set_ollama_model(model)
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "ollama_model": llm.model,
-        "ollama_models": get_ollama_models_for_ui(),
-        "ollama_status": _ollama_status_payload(),
-    })
-
-@app.route('/ollama_status')
-def ollama_status_route():
-    return jsonify(_ollama_status_payload())
-
-@app.route('/set_diagnostics_levels', methods=['POST'])
-def set_diagnostics_levels_route():
-    data = _request_json()
-    motion_level = settings._normalize_diagnostics_level(
-        data.get("motion_diagnostics_level", settings.motion_diagnostics_level)
-    )
-    ollama_level = settings._normalize_diagnostics_level(
-        data.get("ollama_diagnostics_level", settings.ollama_diagnostics_level)
-    )
-    settings.motion_diagnostics_level = motion_level
-    settings.ollama_diagnostics_level = ollama_level
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "motion_diagnostics_level": motion_level,
-        "ollama_diagnostics_level": ollama_level,
-        "diagnostics_levels": _diagnostics_level_options(),
-        "ollama_status": _ollama_status_payload(),
-    })
-
-@app.route('/pull_ollama_model', methods=['POST'])
-def pull_ollama_model_route():
-    data = _request_json()
-    model = normalize_ollama_model(data.get('model') or llm.model)
-    if not model:
-        return jsonify({"status": "error", "message": "Model name is required."}), 400
-
-    settings.set_ollama_model(model)
-    llm.set_model(model)
-    settings.save()
-    ok, message = _start_ollama_pull(model)
-    return jsonify({
-        "status": "started" if ok else "error",
-        "message": message,
-        "ollama_model": llm.model,
-        "ollama_models": get_ollama_models_for_ui(),
-        "ollama_status": _ollama_status_payload(),
-    })
-
-@app.route('/set_ai_name', methods=['POST'])
-def set_ai_name_route():
-    global special_persona_mode, special_persona_interactions_left
-    data = _request_json()
-    name = data.get('name', 'BOT').strip()
-    if not name: name = 'BOT'
-    
-    if name.lower() == 'glados':
-        special_persona_mode = "GLaDOS"
-        special_persona_interactions_left = 5
-        settings.ai_name = "GLaDOS"
-        settings.save()
-        return jsonify({"status": "special_persona_activated", "persona": "GLaDOS", "message": "Oh, it's *you*."})
-
-    settings.ai_name = name; settings.save()
-    return jsonify({"status": "success", "name": name})
-
-@app.route('/toggle_memory', methods=['POST'])
-def toggle_memory_route():
-    global use_long_term_memory
-    data = _request_json()
-    if "enabled" in data:
-        enabled = data.get("enabled")
-        if isinstance(enabled, str):
-            use_long_term_memory = enabled.strip().lower() in {"1", "true", "yes", "on"}
-        else:
-            use_long_term_memory = bool(enabled)
-    else:
-        use_long_term_memory = not use_long_term_memory
-    return jsonify({"status": "success", "use_long_term_memory": use_long_term_memory})
-
-@app.route('/signal_edge', methods=['POST'])
-def signal_edge_route():
-    if auto_mode_active_task and auto_mode_active_task.name in {'edging', 'milking', 'freestyle'}:
-        user_signal_event.set()
-        mode_message_event.set()
-        return jsonify({"status": "signaled", "mode": auto_mode_active_task.name})
-    return jsonify({"status": "ignored", "message": "Edge, milking, or Freestyle mode not active."}), 400
-
-@app.route('/toggle_motion_pause', methods=['POST'])
-def toggle_motion_pause_route():
-    data = _request_json()
-    action = str(data.get("action") or "toggle").strip().lower()
-    if action in {"pause", "paused"}:
-        paused = True
-    elif action in {"resume", "play", "unpause", "running"}:
-        paused = False
-    else:
-        paused = not bool(motion_pause_active or getattr(motion, "is_paused", lambda: False)())
-    snapshot = _set_motion_paused(paused)
-    return jsonify({
-        "status": "success",
-        "paused": snapshot["motion_paused"],
-        "active_mode": snapshot["active_mode"],
-        "active_mode_paused": snapshot["active_mode_paused"],
-        "active_mode_elapsed_seconds": snapshot["active_mode_elapsed_seconds"],
-    })
-
-@app.route('/set_profile_picture', methods=['POST'])
-def set_pfp_route():
-    b64_data = _request_json().get('pfp_b64')
-    if not b64_data: return jsonify({"status": "error", "message": "Missing image data"}), 400
-    settings.profile_picture_b64 = b64_data; settings.save()
-    return jsonify({"status": "success"})
-
-@app.route('/set_handy_key', methods=['POST'])
-def set_handy_key_route():
-    key = _request_json().get('key')
-    if not key: return jsonify({"status": "error", "message": "Key is missing"}), 400
-    handy.set_api_key(key); settings.handy_key = key; settings.save()
-    return jsonify({"status": "success"})
-
-@app.route('/nudge', methods=['POST'])
-def nudge_route():
-    global calibration_pos_mm
-    if calibration_pos_mm == 0.0 and (pos := handy.get_position_mm()):
-        calibration_pos_mm = pos
-    direction = _request_json().get('direction')
-    calibration_pos_mm = handy.nudge(direction, 0, 100, calibration_pos_mm)
-    return jsonify({"status": "ok", "depth_percent": handy.mm_to_percent(calibration_pos_mm)})
-
-@app.route('/test_depth_range', methods=['POST'])
-def test_depth_range_route():
-    data = _request_json()
-    depth1 = _request_int(data, 'min_depth', 5)
-    depth2 = _request_int(data, 'max_depth', 100)
-    min_depth = max(0, min(100, min(depth1, depth2)))
-    max_depth = max(0, min(100, max(depth1, depth2)))
-    if not depth_test_lock.acquire(blocking=False):
-        return jsonify({"status": "busy", "min_depth": min_depth, "max_depth": max_depth})
-    motion.stop()
-
-    def run_depth_test():
-        try:
-            handy.test_depth_range(min_depth, max_depth)
-        finally:
-            depth_test_lock.release()
-
-    threading.Thread(
-        target=run_depth_test,
-        daemon=True,
-    ).start()
-    return jsonify({"status": "testing", "min_depth": min_depth, "max_depth": max_depth})
-
-@app.route('/setup_elevenlabs', methods=['POST'])
-def elevenlabs_setup_route():
-    api_key = _request_json().get('api_key')
-    if not api_key or not audio.set_api_key(api_key): return jsonify({"status": "error"}), 400
-    settings.elevenlabs_api_key = api_key; settings.save()
-    return jsonify(audio.fetch_available_voices())
-
-@app.route('/set_elevenlabs_voice', methods=['POST'])
-def set_elevenlabs_voice_route():
-    data = _request_json()
-    voice_id, enabled = data.get('voice_id'), data.get('enabled', False)
-    ok, message = audio.configure_voice(voice_id, enabled)
-    if ok:
-        settings.audio_provider = "elevenlabs"
-        settings.audio_enabled = bool(enabled)
-        settings.elevenlabs_voice_id = voice_id
-        settings.save()
-    return jsonify({"status": "ok" if ok else "error", "message": message})
-
-@app.route('/set_audio_provider', methods=['POST'])
-def set_audio_provider_route():
-    data = _request_json()
-    provider = data.get('provider', 'elevenlabs')
-    enabled = data.get('enabled', settings.audio_enabled)
-    ok, message = audio.set_provider(provider, enabled)
-    if ok:
-        settings.audio_provider = provider
-        settings.audio_enabled = bool(enabled)
-        settings.save()
-    return jsonify({"status": "ok" if ok else "error", "message": message, "local_tts_status": audio.local_status()})
-
-@app.route('/local_tts_status')
-def local_tts_status_route():
-    return jsonify(audio.local_status())
-
-@app.route('/preload_local_tts_model', methods=['POST'])
-def preload_local_tts_model_route():
-    started = audio.preload_local_model_async(force=True)
-    message = "Local voice model download/load started." if started else "Local voice model could not be started."
-    return jsonify({"status": "started" if started else "error", "message": message, "local_tts_status": audio.local_status()})
-
-@app.route('/set_local_tts_voice', methods=['POST'])
-def set_local_tts_voice_route():
-    data = _request_json()
-    enabled = data.get('enabled', False)
-    prompt_path = data.get('prompt_path', '')
-    style = data.get('style', settings.local_tts_style)
-    engine = data.get('engine', settings.local_tts_engine)
-    exaggeration = data.get('exaggeration', 0.65)
-    cfg_weight = data.get('cfg_weight', 0.35)
-    temperature = data.get('temperature', settings.local_tts_temperature)
-    top_p = data.get('top_p', settings.local_tts_top_p)
-    min_p = data.get('min_p', settings.local_tts_min_p)
-    repetition_penalty = data.get('repetition_penalty', settings.local_tts_repetition_penalty)
-    ok, message = audio.configure_local_voice(
-        enabled,
-        prompt_path,
-        exaggeration,
-        cfg_weight,
-        style,
-        temperature,
-        top_p,
-        min_p,
-        repetition_penalty,
-        engine,
-    )
-    if ok:
-        persist_local_voice_settings()
-    return jsonify({"status": "ok" if ok else "error", "message": message, "local_tts_status": audio.local_status()})
 
 def persist_local_voice_settings():
     settings.audio_provider = "local"
@@ -1725,71 +1149,6 @@ def persist_local_voice_settings():
     settings.local_tts_repetition_penalty = audio.local_repetition_penalty
     settings.save()
 
-@app.route('/upload_local_tts_sample', methods=['POST'])
-def upload_local_tts_sample_route():
-    uploaded = request.files.get('sample')
-    if not uploaded or not uploaded.filename:
-        return jsonify({"status": "error", "message": "Choose an audio file first."}), 400
-
-    original_name = secure_filename(uploaded.filename)
-    extension = Path(original_name).suffix.lower()
-    if extension not in ALLOWED_VOICE_SAMPLE_EXTENSIONS:
-        return jsonify({
-            "status": "error",
-            "message": "Sample must be WAV, MP3, FLAC, M4A, OGG, or AAC.",
-        }), 400
-
-    VOICE_SAMPLE_DIR.mkdir(exist_ok=True)
-    stem = Path(original_name).stem or "voice-sample"
-    filename = f"{int(time.time())}-{stem}{extension}"
-    target = (VOICE_SAMPLE_DIR / filename).resolve()
-    sample_root = VOICE_SAMPLE_DIR.resolve()
-    try:
-        target.relative_to(sample_root)
-    except ValueError:
-        return jsonify({"status": "error", "message": "Invalid sample filename."}), 400
-
-    uploaded.save(target)
-    audio.configure_local_voice(
-        audio.is_on,
-        str(target),
-        audio.local_exaggeration,
-        audio.local_cfg_weight,
-        audio.local_style,
-        audio.local_temperature,
-        audio.local_top_p,
-        audio.local_min_p,
-        audio.local_repetition_penalty,
-        audio.local_engine,
-    )
-    persist_local_voice_settings()
-    return jsonify({
-        "status": "success",
-        "prompt_path": str(target),
-        "message": "Sample audio saved.",
-        "local_tts_status": audio.local_status(),
-    })
-
-@app.route('/test_local_tts_voice', methods=['POST'])
-def test_local_tts_voice_route():
-    if not audio.local_model_loaded():
-        return jsonify({
-            "status": "needs_download",
-            "message": "Download / load the local Chatterbox model before testing voice. First use may download several GB.",
-            "local_tts_status": audio.local_status(),
-        })
-    threading.Thread(
-        target=audio.generate_audio_for_text,
-        args=("Local voice test.",),
-        kwargs={"force": True},
-        daemon=True,
-    ).start()
-    return jsonify({
-        "status": "queued",
-        "message": "Local voice test queued.",
-        "local_tts_status": audio.local_status(),
-    })
-
 @app.route('/get_updates')
 def get_ui_updates_route():
     messages = [messages_for_ui.popleft() for _ in range(len(messages_for_ui))]
@@ -1799,70 +1158,6 @@ def get_ui_updates_route():
         "audio_error": audio.consume_last_error(),
     })
 
-@app.route('/get_audio')
-def get_audio_route():
-    audio_chunk = audio.get_next_audio_chunk()
-    if not audio_chunk:
-        return ("", 204)
-    return send_file(io.BytesIO(audio_chunk["bytes"]), mimetype=audio_chunk["mimetype"])
-
-@app.route('/get_status')
-def get_status_route():
-    diagnostics = handy.diagnostics()
-    motion_observability = motion.observability_snapshot(diagnostics)
-    motion_observability["diagnostics_level"] = settings.motion_diagnostics_level
-    active_mode = _active_mode_snapshot()
-    return jsonify({
-        "mood": current_mood,
-        "speed": diagnostics["physical_speed"],
-        "relative_speed": diagnostics["relative_speed"],
-        "depth": diagnostics["depth"],
-        "range": diagnostics["range"],
-        "active_mode": active_mode["active_mode"],
-        "active_mode_elapsed_seconds": active_mode["active_mode_elapsed_seconds"],
-        "active_mode_paused": active_mode["active_mode_paused"],
-        "motion_paused": active_mode["motion_paused"],
-        "motion_diagnostics_level": settings.motion_diagnostics_level,
-        "motion_training": _motion_training_snapshot(),
-        "motion_observability": motion_observability,
-    })
-
-@app.route('/set_depth_limits', methods=['POST'])
-def set_depth_limits_route():
-    data = _request_json()
-    depth1 = _request_int(data, 'min_depth', 5)
-    depth2 = _request_int(data, 'max_depth', 100)
-    settings.min_depth = min(depth1, depth2); settings.max_depth = max(depth1, depth2)
-    handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
-    settings.save()
-    return jsonify({"status": "success"})
-
-@app.route('/set_speed_limits', methods=['POST'])
-def set_speed_limits_route():
-    data = _request_json()
-    speed1 = _request_int(data, 'min_speed', 10)
-    speed2 = _request_int(data, 'max_speed', 80)
-    settings.min_speed = max(0, min(100, min(speed1, speed2)))
-    settings.max_speed = max(0, min(100, max(speed1, speed2)))
-    handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "min_speed": settings.min_speed,
-        "max_speed": settings.max_speed,
-    })
-
-@app.route('/set_motion_backend', methods=['POST'])
-def set_motion_backend_route():
-    data = _request_json()
-    settings.motion_backend = settings._normalize_motion_backend(data.get("motion_backend"))
-    motion.set_backend(settings.motion_backend)
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "motion_backend": settings.motion_backend,
-    })
-
 def _request_bool_value(data, key, default):
     if key not in data:
         return bool(default)
@@ -1870,25 +1165,6 @@ def _request_bool_value(data, key, default):
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
-
-@app.route('/set_llm_edge_permissions', methods=['POST'])
-def set_llm_edge_permissions_route():
-    data = _request_json()
-    settings.allow_llm_edge_in_freestyle = _request_bool_value(data,
-        "allow_llm_edge_in_freestyle",
-        settings.allow_llm_edge_in_freestyle,
-    )
-    settings.allow_llm_edge_in_chat = _request_bool_value(data,
-        "allow_llm_edge_in_chat",
-        settings.allow_llm_edge_in_chat,
-    )
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
-        "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
-        "motion_preferences": _motion_preference_payload(),
-    })
 
 def _timing_pair(data, min_key, max_key, default_min, default_max):
     try:
@@ -1900,25 +1176,6 @@ def _timing_pair(data, min_key, max_key, default_min, default_max):
     second = max(1.0, min(60.0, second))
     return min(first, second), max(first, second)
 
-@app.route('/set_mode_timings', methods=['POST'])
-def set_mode_timings_route():
-    data = _request_json()
-    settings.auto_min_time, settings.auto_max_time = _timing_pair(data, 'auto_min', 'auto_max', 4.0, 7.0)
-    settings.edging_min_time, settings.edging_max_time = _timing_pair(data, 'edging_min', 'edging_max', 5.0, 8.0)
-    settings.milking_min_time, settings.milking_max_time = _timing_pair(data, 'milking_min', 'milking_max', 2.5, 4.5)
-    settings.save()
-    return jsonify({
-        "status": "success",
-        "timings": {
-            "auto_min": settings.auto_min_time,
-            "auto_max": settings.auto_max_time,
-            "edging_min": settings.edging_min_time,
-            "edging_max": settings.edging_max_time,
-            "milking_min": settings.milking_min_time,
-            "milking_max": settings.milking_max_time,
-        },
-    })
-
 def _rate_last_live_motion_pattern(rating, source="chat feedback"):
     if rating not in {"thumbs_up", "neutral", "thumbs_down"}:
         return None
@@ -1926,83 +1183,73 @@ def _rate_last_live_motion_pattern(rating, source="chat feedback"):
         return None
     return _record_motion_pattern_feedback(last_live_motion_pattern_id, rating, source=source)
 
-@app.route('/like_last_move', methods=['POST'])
-def like_last_move_route():
-    last_speed = handy.last_relative_speed; last_depth = handy.last_depth_pos
-    pattern_name = llm.name_this_move(last_speed, last_depth, current_mood)
-    sp_range = [max(0, last_speed - 5), min(100, last_speed + 5)]; dp_range = [max(0, last_depth - 5), min(100, last_depth + 5)]
-    new_pattern = {"name": pattern_name, "sp_range": [int(p) for p in sp_range], "dp_range": [int(p) for p in dp_range], "moods": [current_mood], "score": 1}
-    settings.session_liked_patterns.append(new_pattern)
-    result = _rate_last_live_motion_pattern("thumbs_up", source="chat thumbs up")
-    add_message_to_queue(f"(I'll remember that you like '{pattern_name}')", add_to_history=False)
-    response = {"status": "boosted", "name": pattern_name}
-    if result:
-        response.update({
-            "pattern": _motion_pattern_summary(result["pattern"]),
-            "motion_patterns": result["motion_patterns"],
-            "motion_preferences": result["motion_preferences"],
-        })
-    return jsonify(response)
 
-@app.route('/dislike_last_move', methods=['POST'])
-def dislike_last_move_route():
-    result = _rate_last_live_motion_pattern("thumbs_down", source="chat thumbs down")
-    if not result:
-        return jsonify({
-            "status": "no_pattern",
-            "message": "No fixed motion pattern is active to rate.",
-            "motion_preferences": _motion_preference_payload(),
-        })
-    pattern = result["pattern"]
-    message = f"Saved thumbs down feedback for {pattern.name}."
-    if result["auto_disabled"]:
-        message += f" Disabled after {THUMBS_DOWN_DISABLE_THRESHOLD} thumbs down ratings."
-    add_message_to_queue(f"({message})", add_to_history=False)
-    return jsonify({
-        "status": "success",
-        "message": message,
-        "pattern": _motion_pattern_summary(pattern),
-        "motion_patterns": result["motion_patterns"],
-        "motion_preferences": result["motion_preferences"],
-        "auto_disabled": result["auto_disabled"],
-    })
+from .blueprints import audio as audio_routes
+from .blueprints import modes as modes_routes
+from .blueprints import motion as motion_routes
+from .blueprints import register_blueprints
+from .blueprints import settings as settings_routes
 
-@app.route('/motion_feedback/last', methods=['POST'])
-def rate_last_motion_pattern_route():
-    data = _request_json()
-    rating = str(data.get("rating", "")).strip().lower()
-    result = _rate_last_live_motion_pattern(rating, source="chat feedback")
-    if not result:
-        return jsonify({"status": "error", "message": "No fixed motion pattern is active to rate."}), 400
-    pattern = result["pattern"]
-    return jsonify({
-        "status": "success",
-        "pattern": _motion_pattern_summary(pattern),
-        "motion_patterns": result["motion_patterns"],
-        "motion_preferences": result["motion_preferences"],
-        "auto_disabled": result["auto_disabled"],
-    })
 
-@app.route('/start_edging_mode', methods=['POST'])
-def start_edging_route():
-    start_background_mode(edging_mode_logic, "Let's play an edging game...", mode_name='edging')
-    return jsonify({"status": "edging_started"})
+register_blueprints(app)
 
-@app.route('/start_milking_mode', methods=['POST'])
-def start_milking_route():
-    start_background_mode(milking_mode_logic, "You're so close... I'm taking over completely now.", mode_name='milking')
-    return jsonify({"status": "milking_started"})
+# Preserve old strokegpt.web route-function names for tests and direct imports.
+check_settings_route = settings_routes.check_settings_route
+reset_settings_route = settings_routes.reset_settings_route
+set_persona_prompt_route = settings_routes.set_persona_prompt_route
+set_ollama_model_route = settings_routes.set_ollama_model_route
+ollama_status_route = settings_routes.ollama_status_route
+set_diagnostics_levels_route = settings_routes.set_diagnostics_levels_route
+pull_ollama_model_route = settings_routes.pull_ollama_model_route
+set_ai_name_route = settings_routes.set_ai_name_route
+toggle_memory_route = settings_routes.toggle_memory_route
+set_pfp_route = settings_routes.set_pfp_route
+set_handy_key_route = settings_routes.set_handy_key_route
 
-@app.route('/start_freestyle_mode', methods=['POST'])
-def start_freestyle_route():
-    start_background_mode(freestyle_mode_logic, "Starting adaptive Freestyle.", mode_name='freestyle')
-    return jsonify({"status": "freestyle_started"})
+motion_patterns_route = motion_routes.motion_patterns_route
+motion_preferences_route = motion_routes.motion_preferences_route
+reset_motion_preferences_route = motion_routes.reset_motion_preferences_route
+set_motion_feedback_options_route = motion_routes.set_motion_feedback_options_route
+motion_pattern_detail_route = motion_routes.motion_pattern_detail_route
+export_motion_pattern_route = motion_routes.export_motion_pattern_route
+import_motion_pattern_route = motion_routes.import_motion_pattern_route
+save_generated_motion_pattern_route = motion_routes.save_generated_motion_pattern_route
+set_motion_pattern_enabled_route = motion_routes.set_motion_pattern_enabled_route
+set_motion_pattern_weight_route = motion_routes.set_motion_pattern_weight_route
+reset_motion_pattern_feedback_route = motion_routes.reset_motion_pattern_feedback_route
+motion_training_status_route = motion_routes.motion_training_status_route
+start_motion_training_route = motion_routes.start_motion_training_route
+preview_motion_training_route = motion_routes.preview_motion_training_route
+stop_motion_training_route = motion_routes.stop_motion_training_route
+motion_training_feedback_route = motion_routes.motion_training_feedback_route
+nudge_route = motion_routes.nudge_route
+test_depth_range_route = motion_routes.test_depth_range_route
+get_status_route = motion_routes.get_status_route
+set_depth_limits_route = motion_routes.set_depth_limits_route
+set_speed_limits_route = motion_routes.set_speed_limits_route
+set_motion_backend_route = motion_routes.set_motion_backend_route
+set_llm_edge_permissions_route = motion_routes.set_llm_edge_permissions_route
+like_last_move_route = motion_routes.like_last_move_route
+dislike_last_move_route = motion_routes.dislike_last_move_route
+rate_last_motion_pattern_route = motion_routes.rate_last_motion_pattern_route
 
-@app.route('/stop_auto_mode', methods=['POST'])
-def stop_auto_route():
-    _clear_motion_pause_state()
-    if auto_mode_active_task: auto_mode_active_task.stop()
-    return jsonify({"status": "auto_mode_stopped"})
+elevenlabs_setup_route = audio_routes.elevenlabs_setup_route
+set_elevenlabs_voice_route = audio_routes.set_elevenlabs_voice_route
+set_audio_provider_route = audio_routes.set_audio_provider_route
+local_tts_status_route = audio_routes.local_tts_status_route
+preload_local_tts_model_route = audio_routes.preload_local_tts_model_route
+set_local_tts_voice_route = audio_routes.set_local_tts_voice_route
+upload_local_tts_sample_route = audio_routes.upload_local_tts_sample_route
+test_local_tts_voice_route = audio_routes.test_local_tts_voice_route
+get_audio_route = audio_routes.get_audio_route
+
+signal_edge_route = modes_routes.signal_edge_route
+toggle_motion_pause_route = modes_routes.toggle_motion_pause_route
+set_mode_timings_route = modes_routes.set_mode_timings_route
+start_edging_route = modes_routes.start_edging_route
+start_milking_route = modes_routes.start_milking_route
+start_freestyle_route = modes_routes.start_freestyle_route
+stop_auto_route = modes_routes.stop_auto_route
 
 # ─── APP STARTUP ───────────────────────────────────────────────────────────────────────────────────
 def on_exit():

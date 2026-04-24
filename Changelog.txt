@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-24 - PR #49 - Split Web Routes Into Domain Blueprints
+--------------------------------------------------------------
+
+Branch: codex-web-blueprint-split
+
+- Split settings, motion/pattern, audio, and mode-control route handlers out
+  of `strokegpt/web.py` into domain blueprint modules under
+  `strokegpt/blueprints/`, while keeping the existing URL paths and preserving
+  the old `strokegpt.web` route-function names as compatibility aliases.
+- Added `strokegpt/payloads.py` for the settings payload, Ollama status
+  payload, and motion-pattern catalog payload builders. The old
+  `web.settings_payload()`, `web._ollama_status_payload()`, and
+  `web._motion_pattern_catalog_payload()` names remain as thin wrappers so
+  tests and external callers can continue patching or importing them.
+- Kept `strokegpt/web.py` focused on app setup, shared services, runtime state,
+  chat/update routes, and compatibility exports. No route URLs, response
+  payload shapes, motion behavior, or settings reset semantics were changed.
+- Added a regression test that confirms the domain routes are registered
+  through the new blueprints while `strokegpt.web` compatibility aliases still
+  resolve.
+
+
 2026-04-23 - PR #48 - Extract Freestyle Planner And Mode Decision Helpers
 -------------------------------------------------------------------------
 
