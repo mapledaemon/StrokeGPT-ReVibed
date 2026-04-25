@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #64 - Extract Motion Sequence Log Module
+---------------------------------------------------------
+
+Branch: gpt-motion-sequence-log-split
+
+- Moved the motion sequence log formatting and rendering helpers out of
+  `static/js/motion-control.js` into `static/js/motion/sequence-log.js`, while
+  keeping `motion-control.js` as the top-level wiring boundary.
+- Kept compatibility exports for `resetMotionSequenceLog` and
+  `updateMotionSequenceIndicator` in `motion-control.js` with a
+  "Compatibility shim - do not extend" marker so future frontend code imports
+  the canonical module directly.
+- Added static-asset and frontend aggregation coverage for the new browser
+  module, plus a regression test that pins the extracted seam, log limit,
+  timecode source, and separation from Pause/Resume/Freestyle control code.
+
+
 2026-04-25 - PR #63 - Extract Built-In Pattern Data To JSON
 ------------------------------------------------------------
 
