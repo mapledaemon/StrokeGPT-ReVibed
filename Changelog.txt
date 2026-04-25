@@ -8,6 +8,38 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #67 - Extract Motion Feedback Controls Module
+--------------------------------------------------------------
+
+Branch: gpt-motion-feedback-controls-split
+
+- Moved motion feedback history rendering and the
+  `/motion_feedback_options` save handler out of
+  `static/js/motion-control.js` into
+  `static/js/motion/feedback-controls.js`. The new module exports
+  `configureMotionFeedbackControls` (binds the `renderMotionPatterns`
+  callback the auto-disable save handler needs without re-importing
+  across module seams), `renderMotionFeedbackHistory` (populates
+  `#motion-feedback-history` with the most recent five entries), and
+  `saveMotionFeedbackOptions` (POST `/motion_feedback_options` and
+  re-renders the catalog when the response carries a fresh
+  `motion_patterns` payload).
+- Kept `motion-control.js` as the top-level wiring boundary by binding
+  the extracted module through `configureMotionFeedbackControls
+  ({renderMotionPatterns})` at init, keeping the auto-disable checkbox
+  change listener, and re-exporting the three names behind a
+  "Compatibility shim - do not extend" marker for older imports.
+- Added `/static/js/motion/feedback-controls.js` to the frontend
+  aggregation in `tests/_web_support.py` plus a focused seam test in
+  `tests/test_web_static_assets.py` that pins the export names, the
+  wire-through, and that `renderMotionFeedbackHistory` plus
+  `saveMotionFeedbackOptions` no longer live in-line inside
+  `motion-control.js`.
+- Updated `ROADMAP.md` so the feedback-controls seam is marked as
+  split while motion-training editor utilities remain as the next
+  low-risk frontend split target.
+
+
 2026-04-25 - PR #66 - Extract Motion Pattern List Module
 ---------------------------------------------------------
 
