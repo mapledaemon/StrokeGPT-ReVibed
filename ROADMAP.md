@@ -114,24 +114,7 @@ around one monolithic frontend module.
 - Avoid broad UI restyling in the extraction PRs. The goal is to make later
   Chat Interface Refactor and Motion Training Editor Depth work safer.
 
-### 4. Built-In Pattern Data Extraction (S/M)
-
-Why next: a large share of `strokegpt/motion_patterns.py` is static built-in
-pattern data. Moving that data out of the normalization/expansion logic is a
-behavior-preserving readability win and is separate from the deferred lazy-load
-optimization.
-
-- Move the hardcoded built-in `PATTERNS` definitions into a dedicated data
-  source such as `strokegpt/patterns/builtin.json` or a small Python data
-  module organized by pattern family.
-- Keep eager loading for now. Do not combine this extraction with the parked
-  pattern-library lazy-load optimization or prepared-action cache changes.
-- Preserve pattern IDs, names, enabled defaults, action timestamps, positions,
-  interpolation settings, LLM visibility, and user-visible weight semantics.
-- Add a contract test that the built-in catalog produced from the extracted
-  data matches the current ids and representative action sequences.
-
-### 5. Motion Vocabulary And Preset Semantics (S/M)
+### 4. Motion Vocabulary And Preset Semantics (S/M)
 
 Why next: consistent terms make both deterministic commands and LLM outputs
 less surprising before deeper pattern generation work, and several of these
@@ -167,7 +150,7 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 - Let preset modes speak occasionally without turning mode timers into
   repeated narration.
 
-### 6. Persona Naming And Prompt Audit (S)
+### 5. Persona Naming And Prompt Audit (S)
 
 Why next: the persona name `GLaDOS` is referenced in the prompt-tightening
 work from PR #43, and it is not clear whether the local model sees it
@@ -183,7 +166,7 @@ larger Motion Style Preferences work.
 - Sweep chat, repair, naming, and memory-consolidation prompts for any
   other proper-noun handles that may be steering local-model behavior.
 
-### 7. Motion Style Preferences (M)
+### 6. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift, and it slots in after the persona audit so style preferences and
@@ -199,7 +182,7 @@ persona prompts stay separable.
 - Let users reset learned motion feedback and style preferences without a
   full settings reset.
 
-### 8. Chat Interface Refactor (M)
+### 7. Chat Interface Refactor (M)
 
 Why next: the chat panel and its surrounding toolbars/indicators are
 largely unchanged from the pre-fork code, and the recent diagnostics work
@@ -228,7 +211,7 @@ chat-shell work does not have to share a 1700-line motion frontend module.
 
 ## Queued
 
-### 9. Soft-Anchor Pattern Authoring (M/L)
+### 8. Soft-Anchor Pattern Authoring (M/L)
 
 Why later: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable, but should follow the code reorg so it
@@ -250,10 +233,10 @@ can land cleanly inside the new motion blueprints/modules.
   through targets smoothly, may slow down to hit a target, and should not
   snap or stop just because a target was reached.
 
-### 10. Architecture Audit And Strategic Refactor (M)
+### 9. Architecture Audit And Strategic Refactor (M)
 
 Why later: the immediate code reorg in Up Next #2, the frontend split in Up
-Next #3, and the chat shell refactor in Up Next #8 cover the obvious splits.
+Next #3, and the chat shell refactor in Up Next #7 cover the obvious splits.
 This entry is for the
 deeper, design-level audits that need a clean tree first.
 
@@ -285,7 +268,7 @@ deeper, design-level audits that need a clean tree first.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 
-### 11. Motion Training Editor Depth (M)
+### 10. Motion Training Editor Depth (M)
 
 Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
@@ -304,7 +287,7 @@ build on the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 12. User Profile And Preference Setup (M)
+### 11. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics, motion vocabulary
@@ -330,7 +313,7 @@ cleanup, and the persona naming audit.
 - Keep identity/preferences inspectable and resettable; do not bury them
   inside natural-language memory.
 
-### 13. Runtime And Setup Diagnostics (M)
+### 12. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice (PR #43) without turning the compact status UI into a
@@ -367,7 +350,7 @@ setup console.
 
 ## Backlog
 
-### 14. Tip And Base Calibration Research And Restoration (M/L)
+### 13. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the
 benefit should be confirmed against current stroke-range behavior before
@@ -393,7 +376,7 @@ adding another setup surface.
   the same calibration mapping without bypassing smoothing, stop behavior,
   or user speed limits.
 
-### 15. Reference Research Backlog (S/M)
+### 14. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs
 licensing, scope, and architecture review before implementation.
@@ -433,7 +416,7 @@ licensing, scope, and architecture review before implementation.
   device behavior, but avoid importing designs that add unnecessary
   pauses, stops, or other counterproductive playback behavior.
 
-### 16. Local Voice Control MVP (L)
+### 15. Local Voice Control MVP (L)
 
 Why later: voice control is the largest user-facing feature, but it should
 ship as push-to-talk before always-on listening.
@@ -468,7 +451,7 @@ Candidate local ASR providers:
   timestamps, and CC BY 4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 17. Story Mode (L/XL)
+### 16. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -485,7 +468,7 @@ editing.
 
 ## Long-Horizon
 
-### 18. Optional Runtime And Packaging Work (XL)
+### 17. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.

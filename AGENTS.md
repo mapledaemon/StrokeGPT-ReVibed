@@ -49,7 +49,11 @@ behavior, and route motion changes through the shared controller path.
   waypoint semantics.
 - `strokegpt/motion_preferences.py`: visible pattern weights and feedback
   summaries for LLM context.
-- `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes.
+- `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes
+  and the JSON loader that materializes the built-in catalog at import time.
+- `strokegpt/builtin_patterns.json`: pure data file holding the 34 built-in
+  `MotionPattern` definitions consumed by `motion_patterns._load_builtin
+  _patterns()`. Keeping the data in JSON keeps it free of Python imports.
 - `strokegpt/pattern_library.py`: shareable motion pattern schema, built-in
   pattern catalog, and user pattern file registry.
 - `strokegpt/motion_scripts.py`: longer scripted motion plans.
@@ -231,18 +235,15 @@ Current Up Next targets are:
 3. Frontend Motion-Control Module Split: split the oversized
    `static/js/motion-control.js` into focused motion modules before large chat
    or motion-training UI work grows it further.
-4. Built-In Pattern Data Extraction: move the hardcoded built-in pattern data
-   out of `strokegpt/motion_patterns.py` without changing eager loading,
-   pattern IDs, action timing, or the existing prepared-action cache.
-5. Motion Vocabulary And Preset Semantics: tighten deterministic versus
+4. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
-6. Persona Naming And Prompt Audit: check whether proper-noun persona handles
+5. Persona Naming And Prompt Audit: check whether proper-noun persona handles
    such as `GLaDOS` should reach the local model or be hidden behind neutral
    internal labels.
-7. Motion Style Preferences: add visible style controls and resettable learned
+6. Motion Style Preferences: add visible style controls and resettable learned
    preferences without burying motion behavior inside natural-language memory.
-8. Chat Interface Refactor: modernize the chat shell, indicator strip, message
+7. Chat Interface Refactor: modernize the chat shell, indicator strip, message
    rendering, and control layout while preserving chat-driven motion behavior.
 
 ## Continuation Prompts
