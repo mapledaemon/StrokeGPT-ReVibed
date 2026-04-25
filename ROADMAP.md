@@ -95,9 +95,6 @@ Concrete follow-up PRs:
 - Migrate web payload tests to `strokegpt.payloads` and route registration
   tests to the blueprint modules before removing or freezing old `web.*`
   payload/route aliases.
-- Split web tests out of `tests/test_web_static_assets.py` alongside the
-  production seams they cover so payload, blueprint, runtime-state, and static
-  asset tests stop sharing one catch-all file.
 
 ### 3. Frontend Motion-Control Module Split (M)
 
