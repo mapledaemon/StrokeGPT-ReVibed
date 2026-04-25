@@ -1,7 +1,9 @@
+import json
 import math
 import random
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from .motion_anchors import AnchorProgram, coerce_anchor_program
@@ -352,474 +354,50 @@ def prepare_anchor_actions(program: Any, rng: Optional[random.Random] = None) ->
     return limit_action_delta(actions, anchor_program.max_step_delta, interpolation="linear")
 
 
-PATTERNS = {
-    "stroke": MotionPattern(
-        "stroke",
-        (
-            PatternAction(0, 0),
-            PatternAction(450, 100),
-            PatternAction(900, 0),
-        ),
-        window_scale=0.35,
-        interpolation_ms=160,
-    ),
-    "flick": MotionPattern(
-        "flick",
-        (
-            PatternAction(0, 76),
-            PatternAction(90, 6),
-            PatternAction(430, 64),
-        ),
-        window_scale=0.18,
-        speed_scale=1.1,
-        depth_jitter=1.2,
-        range_jitter=1.0,
-        min_interval_ms=70,
-        interpolation_ms=80,
-        max_step_delta=26,
-    ),
-    "milk": MotionPattern(
-        "milk",
-        (
-            PatternAction(0, 4),
-            PatternAction(320, 94),
-            PatternAction(640, 8),
-            PatternAction(960, 100),
-            PatternAction(1280, 6),
-        ),
-        window_scale=0.92,
-        speed_scale=1.02,
-        interpolation_ms=130,
-        max_step_delta=34,
-    ),
-    "pulse": MotionPattern(
-        "pulse",
-        (
-            PatternAction(0, 55),
-            PatternAction(250, 82),
-            PatternAction(500, 58),
-            PatternAction(750, 88),
-            PatternAction(1000, 55),
-        ),
-        window_scale=0.25,
-        speed_scale=1.0,
-        depth_jitter=3.0,
-        range_jitter=2.0,
-        interpolation_ms=150,
-    ),
-    "hold": MotionPattern(
-        "hold",
-        (
-            PatternAction(0, 72),
-            PatternAction(350, 88),
-            PatternAction(700, 76),
-            PatternAction(1050, 90),
-            PatternAction(1400, 74),
-        ),
-        window_scale=0.16,
-        speed_scale=0.8,
-        depth_jitter=1.0,
-        interpolation_ms=175,
-    ),
-    "wave": MotionPattern(
-        "wave",
-        (
-            PatternAction(0, 0),
-            PatternAction(250, 55),
-            PatternAction(500, 100),
-            PatternAction(750, 45),
-            PatternAction(1000, 0),
-        ),
-        window_scale=0.4,
-        speed_scale=0.95,
-        interpolation_ms=125,
-    ),
-    "ramp": MotionPattern(
-        "ramp",
-        (
-            PatternAction(0, 20),
-            PatternAction(350, 45),
-            PatternAction(700, 70),
-            PatternAction(1000, 100),
-        ),
-        window_scale=0.35,
-        speed_scale=0.95,
-        interpolation_ms=150,
-    ),
-    "tease": MotionPattern(
-        "tease",
-        (
-            PatternAction(0, 15),
-            PatternAction(350, 35),
-            PatternAction(650, 10),
-            PatternAction(1000, 30),
-        ),
-        window_scale=0.22,
-        speed_scale=0.75,
-        depth_jitter=3.0,
-        range_jitter=2.0,
-        interpolation_ms=175,
-    ),
-    "flutter": MotionPattern(
-        "flutter",
-        (
-            PatternAction(0, 45),
-            PatternAction(80, 80),
-            PatternAction(160, 52),
-            PatternAction(240, 86),
-            PatternAction(320, 48),
-        ),
-        window_scale=0.14,
-        speed_scale=1.15,
-        depth_jitter=1.5,
-        range_jitter=1.0,
-        repeat=2,
-        min_interval_ms=55,
-        max_step_delta=28,
-    ),
-    "ladder": MotionPattern(
-        "ladder",
-        (
-            PatternAction(0, 20),
-            PatternAction(260, 42),
-            PatternAction(520, 62),
-            PatternAction(780, 82),
-            PatternAction(1040, 100),
-            PatternAction(1320, 35),
-        ),
-        window_scale=0.32,
-        speed_scale=1.0,
-        interpolation_ms=150,
-        max_step_delta=30,
-    ),
-    "surge": MotionPattern(
-        "surge",
-        (
-            PatternAction(0, 8),
-            PatternAction(420, 28),
-            PatternAction(880, 70),
-            PatternAction(1250, 100),
-            PatternAction(1600, 18),
-        ),
-        window_scale=0.38,
-        speed_scale=1.05,
-        interpolation_ms=140,
-        max_step_delta=32,
-    ),
-    "sway": MotionPattern(
-        "sway",
-        (
-            PatternAction(0, 12),
-            PatternAction(380, 58),
-            PatternAction(760, 92),
-            PatternAction(1140, 42),
-            PatternAction(1520, 12),
-        ),
-        window_scale=0.42,
-        speed_scale=0.9,
-        interpolation_ms=140,
-    ),
-    "milking-pressure-build": MotionPattern(
-        "Milking Pressure Build",
-        (
-            PatternAction(0, 12),
-            PatternAction(300, 34),
-            PatternAction(650, 62),
-            PatternAction(1000, 92),
-        ),
-        window_scale=0.48,
-        speed_scale=0.95,
-        interpolation_ms=150,
-        max_step_delta=28,
-    ),
-    "milking-wide-pressure": MotionPattern(
-        "Milking Wide Pressure",
-        (
-            PatternAction(0, 6),
-            PatternAction(340, 72),
-            PatternAction(680, 96),
-            PatternAction(1020, 28),
-            PatternAction(1360, 92),
-        ),
-        window_scale=0.55,
-        speed_scale=1.0,
-        interpolation_ms=140,
-        max_step_delta=32,
-    ),
-    "milking-deep-pulse": MotionPattern(
-        "Milking Deep Pulse",
-        (
-            PatternAction(0, 62),
-            PatternAction(180, 92),
-            PatternAction(360, 68),
-            PatternAction(540, 96),
-            PatternAction(720, 70),
-        ),
-        window_scale=0.24,
-        speed_scale=1.1,
-        repeat=2,
-        interpolation_ms=90,
-        max_step_delta=24,
-    ),
-    "milking-fast-middle": MotionPattern(
-        "Milking Fast Middle",
-        (
-            PatternAction(0, 35),
-            PatternAction(120, 65),
-            PatternAction(240, 42),
-            PatternAction(360, 70),
-            PatternAction(480, 38),
-        ),
-        window_scale=0.26,
-        speed_scale=1.18,
-        repeat=2,
-        min_interval_ms=55,
-        max_step_delta=24,
-    ),
-    "milking-deep-finish": MotionPattern(
-        "Milking Deep Finish",
-        (
-            PatternAction(0, 52),
-            PatternAction(260, 88),
-            PatternAction(520, 72),
-            PatternAction(780, 100),
-            PatternAction(1040, 60),
-        ),
-        window_scale=0.28,
-        speed_scale=1.05,
-        interpolation_ms=120,
-        max_step_delta=28,
-    ),
-    "milking-recover": MotionPattern(
-        "Milking Recover",
-        (
-            PatternAction(0, 70),
-            PatternAction(420, 38),
-            PatternAction(840, 18),
-            PatternAction(1260, 32),
-        ),
-        window_scale=0.2,
-        speed_scale=0.72,
-        interpolation_ms=180,
-        max_step_delta=24,
-    ),
-    "milking-steady-press": MotionPattern(
-        "Milking Steady Press",
-        (
-            PatternAction(0, 18),
-            PatternAction(380, 54),
-            PatternAction(760, 78),
-            PatternAction(1140, 48),
-            PatternAction(1520, 82),
-        ),
-        window_scale=0.38,
-        speed_scale=0.95,
-        interpolation_ms=150,
-        max_step_delta=28,
-    ),
-    "milking-short-burst": MotionPattern(
-        "Milking Short Burst",
-        (
-            PatternAction(0, 42),
-            PatternAction(90, 80),
-            PatternAction(180, 48),
-            PatternAction(270, 86),
-            PatternAction(360, 44),
-        ),
-        window_scale=0.18,
-        speed_scale=1.2,
-        repeat=2,
-        min_interval_ms=50,
-        max_step_delta=24,
-    ),
-    "milking-full-drive": MotionPattern(
-        "Milking Full Drive",
-        (
-            PatternAction(0, 4),
-            PatternAction(360, 94),
-            PatternAction(720, 10),
-            PatternAction(1080, 100),
-            PatternAction(1440, 8),
-        ),
-        window_scale=0.6,
-        speed_scale=1.0,
-        interpolation_ms=130,
-        max_step_delta=34,
-    ),
-    "milking-deep-squeeze": MotionPattern(
-        "Milking Deep Squeeze",
-        (
-            PatternAction(0, 72),
-            PatternAction(260, 96),
-            PatternAction(520, 82),
-            PatternAction(900, 100),
-        ),
-        window_scale=0.18,
-        speed_scale=0.95,
-        interpolation_ms=170,
-        max_step_delta=22,
-    ),
-    "milking-final-wave": MotionPattern(
-        "Milking Final Wave",
-        (
-            PatternAction(0, 12),
-            PatternAction(280, 60),
-            PatternAction(560, 96),
-            PatternAction(840, 42),
-            PatternAction(1120, 100),
-            PatternAction(1400, 18),
-        ),
-        window_scale=0.5,
-        speed_scale=1.02,
-        interpolation_ms=130,
-        max_step_delta=30,
-    ),
-    "edge-build-low": MotionPattern(
-        "Edge Build Low",
-        (
-            PatternAction(0, 10),
-            PatternAction(360, 34),
-            PatternAction(720, 18),
-            PatternAction(1080, 42),
-        ),
-        window_scale=0.28,
-        speed_scale=0.8,
-        interpolation_ms=160,
-        max_step_delta=22,
-    ),
-    "edge-build-mid": MotionPattern(
-        "Edge Build Mid",
-        (
-            PatternAction(0, 18),
-            PatternAction(380, 48),
-            PatternAction(760, 70),
-            PatternAction(1140, 36),
-        ),
-        window_scale=0.34,
-        speed_scale=0.9,
-        interpolation_ms=150,
-        max_step_delta=26,
-    ),
-    "edge-hold": MotionPattern(
-        "Edge Hold",
-        (
-            PatternAction(0, 42),
-            PatternAction(380, 58),
-            PatternAction(760, 48),
-            PatternAction(1140, 64),
-        ),
-        window_scale=0.18,
-        speed_scale=0.68,
-        interpolation_ms=180,
-        max_step_delta=18,
-    ),
-    "edge-tip-tease": MotionPattern(
-        "Edge Tip Tease",
-        (
-            PatternAction(0, 12),
-            PatternAction(240, 34),
-            PatternAction(480, 8),
-            PatternAction(720, 30),
-            PatternAction(960, 14),
-        ),
-        window_scale=0.18,
-        speed_scale=0.88,
-        interpolation_ms=150,
-        max_step_delta=20,
-    ),
-    "edge-recover": MotionPattern(
-        "Edge Recover",
-        (
-            PatternAction(0, 82),
-            PatternAction(420, 54),
-            PatternAction(840, 70),
-            PatternAction(1260, 48),
-        ),
-        window_scale=0.15,
-        speed_scale=0.62,
-        interpolation_ms=200,
-        max_step_delta=18,
-    ),
-    "edge-slow-wide": MotionPattern(
-        "Edge Slow Wide",
-        (
-            PatternAction(0, 8),
-            PatternAction(520, 82),
-            PatternAction(1040, 18),
-            PatternAction(1560, 88),
-        ),
-        window_scale=0.46,
-        speed_scale=0.74,
-        interpolation_ms=180,
-        max_step_delta=26,
-    ),
-    "edge-shallow-snap": MotionPattern(
-        "Edge Shallow Snap",
-        (
-            PatternAction(0, 20),
-            PatternAction(110, 58),
-            PatternAction(220, 24),
-            PatternAction(330, 62),
-            PatternAction(440, 22),
-        ),
-        window_scale=0.18,
-        speed_scale=1.12,
-        repeat=2,
-        min_interval_ms=55,
-        max_step_delta=22,
-    ),
-    "edge-middle-hold": MotionPattern(
-        "Edge Middle Hold",
-        (
-            PatternAction(0, 42),
-            PatternAction(420, 54),
-            PatternAction(840, 46),
-            PatternAction(1260, 58),
-        ),
-        window_scale=0.2,
-        speed_scale=0.76,
-        interpolation_ms=190,
-        max_step_delta=18,
-    ),
-    "edge-deeper-risk": MotionPattern(
-        "Edge Deeper Risk",
-        (
-            PatternAction(0, 40),
-            PatternAction(320, 78),
-            PatternAction(640, 56),
-            PatternAction(960, 88),
-        ),
-        window_scale=0.24,
-        speed_scale=0.98,
-        interpolation_ms=140,
-        max_step_delta=24,
-    ),
-    "edge-pull-back": MotionPattern(
-        "Edge Pull Back",
-        (
-            PatternAction(0, 82),
-            PatternAction(260, 96),
-            PatternAction(520, 88),
-        ),
-        window_scale=0.14,
-        speed_scale=0.6,
-        interpolation_ms=160,
-        max_step_delta=20,
-    ),
-    "edge-restart": MotionPattern(
-        "Edge Restart",
-        (
-            PatternAction(0, 12),
-            PatternAction(320, 34),
-            PatternAction(640, 52),
-            PatternAction(960, 26),
-        ),
-        window_scale=0.22,
-        speed_scale=0.82,
-        interpolation_ms=160,
-        max_step_delta=20,
-    ),
-}
+_BUILTIN_PATTERNS_PATH = Path(__file__).parent / "builtin_patterns.json"
+
+
+def _load_builtin_patterns() -> dict[str, MotionPattern]:
+    """Materialize the built-in motion pattern catalog from JSON.
+
+    The catalog data lives in ``builtin_patterns.json`` next to this
+    module. Keeping the data in JSON (and not as a Python literal) keeps
+    the data file free of Python imports, which avoids the circular
+    dependency a sibling Python data module would create with this
+    module's ``MotionPattern``/``PatternAction`` dataclasses. The loader
+    runs once at import time so callers see a stable dict on every
+    access, matching the previous in-line dict behavior.
+    """
+
+    with _BUILTIN_PATTERNS_PATH.open(encoding="utf-8") as handle:
+        raw = json.load(handle)
+
+    catalog: dict[str, MotionPattern] = {}
+    for pattern_id, payload in raw.items():
+        actions = tuple(
+            PatternAction(int(action["at"]), float(action["pos"]))
+            for action in payload["actions"]
+        )
+        fields: dict[str, Any] = {"name": payload.get("name", pattern_id), "actions": actions}
+        for field in (
+            "window_scale",
+            "speed_scale",
+            "tempo_scale",
+            "depth_jitter",
+            "range_jitter",
+            "repeat",
+            "min_interval_ms",
+            "interpolation_ms",
+            "interpolation",
+            "max_step_delta",
+        ):
+            if field in payload:
+                fields[field] = payload[field]
+        catalog[pattern_id] = MotionPattern(**fields)
+    return catalog
+
+
+PATTERNS: dict[str, MotionPattern] = _load_builtin_patterns()
 
 
 def pattern_names() -> tuple[str, ...]:

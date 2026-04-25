@@ -8,6 +8,41 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #63 - Extract Built-In Pattern Data To JSON
+------------------------------------------------------------
+
+Branch: claude-builtin-pattern-json
+
+- Moved the 468-line in-line `PATTERNS = { ... }` block (34 built-in
+  motion patterns) out of `strokegpt/motion_patterns.py` and into
+  `strokegpt/builtin_patterns.json`. The runtime catalog is now built
+  by `motion_patterns._load_builtin_patterns()` running once at import
+  time, matching the previous eager-load semantics. Pattern IDs,
+  names, action timing, position values, style fields, and
+  `MotionPattern.duration_ms` outputs are unchanged.
+- Picked JSON over a sibling Python data module because a Python
+  module would have to import `MotionPattern`/`PatternAction` from
+  `motion_patterns` to construct each entry, while `motion_patterns`
+  imports the data back, deadlocking any direct entry into the data
+  module. JSON has zero Python imports, so the data file cannot
+  participate in a cycle by construction. The dataclasses stay in
+  `motion_patterns.py` where every existing caller already imports
+  them from.
+- Added `tests/test_builtin_patterns.py` with 9 contract tests pinning
+  the 34 expected pattern IDs, the minimum action count, the loader's
+  fresh-dict semantics, the JSON file's pattern IDs matching loader
+  output, the locked endpoint shapes for `stroke` / `milk` /
+  `edge-build-low`, the `duration_ms` values for `stroke` (900) and
+  `milk` (1280), and a JSON-key allow-list that catches misspellings
+  like `windowscale` for `window_scale` before they ship.
+- `motion_patterns.py` shrank from 1114 to 691 lines (-423 net).
+- Resolved the matching `ROADMAP.md` Up Next #4 entry and renumbered
+  the remaining tiers (Up Next 5-8 → 4-7, Queued 9 → 8, items 10-18 →
+  9-17), fixed the cross-reference that pointed at the chat-shell
+  refactor's old #8 number, and updated the `AGENTS.md` Up Next list
+  plus the architecture listing to include the new JSON data file.
+
+
 2026-04-25 - PR #62 - Pay Down Web Payload/Route Alias Surface
 ---------------------------------------------------------------
 
