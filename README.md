@@ -145,7 +145,7 @@ Derived from [StrokeGPT](https://github.com/StrokeGPT/StrokeGPT). This fork pres
 
 This project is free and open source, developed and maintained in my spare time by [me](https://github.com/mapledaemon/). If you find pleasure in this program, please consider donating, no matter how small.
 
-Donations cover token costs, which currently limit development speed in the ongoing compute shortage, and help with hardware replacements. To request support for a different stroker or toy, open an issue and donate enough to cover the device. Any toys for men (including insertables) are fine, nothing as larger than a VacuGlide.
+Donations cover token costs, which currently limit development speed in the ongoing compute shortage, and help with hardware replacements. To request support for a different stroker or toy, open an issue and donate enough to cover the device. Any toys that work on men (including insertables) are fine, nothing larger than a VacuGlide.
 
 <p align="center">
   <strong>Ethereum</strong><br>
