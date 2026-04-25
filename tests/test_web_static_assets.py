@@ -16,6 +16,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/audio.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
+            "/static/js/motion/sequence-log.js": "text/javascript",
             "/static/js/setup.js": "text/javascript",
         }
 
@@ -354,6 +355,27 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("weight ${pattern.weight", script)
         self.assertIn("/set_diagnostics_levels", script)
         self.assertIn("function updateOllamaDiagnostics", script)
+
+    def test_motion_sequence_log_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        sequence_response = self.client.get("/static/js/motion/sequence-log.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            sequence_log_script = sequence_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/sequence-log.js'", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export { resetMotionSequenceLog, updateMotionSequenceIndicator }", motion_control_script)
+            self.assertIn("export function updateMotionSequenceIndicator", sequence_log_script)
+            self.assertIn("function appendMotionSequenceLogEntry", sequence_log_script)
+            self.assertIn("const MOTION_SEQUENCE_LOG_LIMIT = 40", sequence_log_script)
+            self.assertIn("formatClockElapsed(state.activeModeElapsedSeconds ?? 0)", sequence_log_script)
+            self.assertIn("el.motionSequenceIndicator.scrollTop", sequence_log_script)
+            self.assertNotIn("async function toggleMotionPause", sequence_log_script)
+            self.assertNotIn("function startFreestyleMode", sequence_log_script)
+        finally:
+            motion_response.close()
+            sequence_response.close()
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
