@@ -8,6 +8,36 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #61 - Split Web Tests By Seam
+----------------------------------------------
+
+Branch: claude-test-web-split
+
+- Split the 1493-line `tests/test_web_static_assets.py` (one
+  `WebStaticAssetTests` class with 48 methods covering blueprint
+  registration, runtime-state bridge, status payload routes, chat
+  routes, settings save routes, ollama routes, local TTS routes, and
+  the actual static-asset / HTML / CSS / JS content) into seam-aligned
+  files so each web seam owns its own test module.
+- Created `tests/_web_support.py` to host the shared `MISSING_MODULES`
+  Flask-dependency skip, `FRONTEND_SCRIPT_PATHS`, and a `WebTestCase`
+  base class with the existing `setUpClass` (Flask test client wiring)
+  and `frontend_scripts()` aggregation helper. The leading underscore
+  keeps unittest discovery from picking it up as a test file.
+- New layout: `tests/test_web_runtime_state.py` (4 tests),
+  `tests/test_web_status_routes.py` (5),
+  `tests/test_web_chat_routes.py` (10),
+  `tests/test_web_settings_routes.py` (11),
+  `tests/test_web_ollama_routes.py` (3),
+  `tests/test_web_local_tts_routes.py` (5), and the slimmed
+  `tests/test_web_static_assets.py` (10) — 48 tests total, names and
+  bodies preserved verbatim.
+- Removed the resolved bullet from the Compatibility Shim Paydown
+  follow-up PR list in `ROADMAP.md` and updated the matching
+  `AGENTS.md` Up Next #2 summary plus the continuation prompt to drop
+  the test-file split reference.
+
+
 2026-04-25 - PR #59 - Normalize Freestyle Candidate Shape
 ----------------------------------------------------------
 
