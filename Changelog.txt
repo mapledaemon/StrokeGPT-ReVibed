@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #65 - Extract Motion Pause Controls Module
+-----------------------------------------------------------
+
+Branch: gpt-motion-pause-hotkey-split
+
+- Moved Pause/Resume UI state, `/toggle_motion_pause`, close-signal handling,
+  stop-button wiring, media-key Pause/Resume, Stop media-key, and double-tap
+  Shift hotkey handling out of `static/js/motion-control.js` into
+  `static/js/motion/pause-controls.js`.
+- Kept `motion-control.js` as the top-level wiring boundary by binding the
+  extracted module through `bindMotionPauseControls()` and keeping compatibility
+  exports marked "Compatibility shim - do not extend" for older imports.
+- Added static-asset and frontend aggregation coverage for the new browser
+  module, plus a regression test that pins the safety route URLs, media hotkey
+  strings, emergency stop message path, and separation from Freestyle/training
+  preview code.
+
+
 2026-04-25 - PR #64 - Extract Motion Sequence Log Module
 ---------------------------------------------------------
 
