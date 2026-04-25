@@ -17,6 +17,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
             "/static/js/motion/pause-controls.js": "text/javascript",
+            "/static/js/motion/pattern-list.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
             "/static/js/setup.js": "text/javascript",
         }
@@ -406,6 +407,36 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             motion_response.close()
             pause_response.close()
+
+    def test_motion_pattern_list_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        pattern_response = self.client.get("/static/js/motion/pattern-list.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            pattern_list_script = pattern_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/pattern-list.js'", motion_control_script)
+            self.assertIn("configureMotionPatternList({renderMotionPatterns, setMotionTrainingDetail})", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function renderCompactMotionPatternList", pattern_list_script)
+            self.assertIn("export function configureMotionPatternList", pattern_list_script)
+            self.assertIn("export function formatPatternMetadata", pattern_list_script)
+            self.assertIn("export async function setMotionPatternEnabled", pattern_list_script)
+            self.assertIn("export async function setMotionPatternWeight", pattern_list_script)
+            self.assertIn("export async function resetMotionPatternFeedback", pattern_list_script)
+            self.assertIn("motionPatternList.replaceChildren", pattern_list_script)
+            self.assertIn("motion-pattern-weight-control", pattern_list_script)
+            self.assertIn("motion-pattern-feedback-reset", pattern_list_script)
+            self.assertIn("/motion_patterns/${encodeURIComponent(patternId)}/enabled", pattern_list_script)
+            self.assertIn("/motion_patterns/${encodeURIComponent(patternId)}/weight", pattern_list_script)
+            self.assertIn("/motion_patterns/${encodeURIComponent(patternId)}/feedback/reset", pattern_list_script)
+            self.assertNotIn("function renderCompactMotionPatternList", motion_control_script)
+            self.assertNotIn("async function setMotionPatternWeight", motion_control_script)
+            self.assertNotIn("/motion_training/preview", pattern_list_script)
+            self.assertNotIn("async function startMotionTraining", pattern_list_script)
+        finally:
+            motion_response.close()
+            pattern_response.close()
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
