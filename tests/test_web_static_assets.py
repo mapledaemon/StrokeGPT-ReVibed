@@ -16,6 +16,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/audio.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
+            "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
             "/static/js/setup.js": "text/javascript",
         }
@@ -376,6 +377,35 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             motion_response.close()
             sequence_response.close()
+
+    def test_motion_pause_controls_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        pause_response = self.client.get("/static/js/motion/pause-controls.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            pause_controls_script = pause_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/pause-controls.js'", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function bindMotionPauseControls", pause_controls_script)
+            self.assertIn("export function updatePauseResumeUi", pause_controls_script)
+            self.assertIn("export async function toggleMotionPause", pause_controls_script)
+            self.assertIn("export function handleMotionHotkey", pause_controls_script)
+            self.assertIn("const SHIFT_DOUBLE_TAP_MS = 350", pause_controls_script)
+            self.assertIn("/toggle_motion_pause", pause_controls_script)
+            self.assertIn("/stop_auto_mode", pause_controls_script)
+            self.assertIn("/signal_edge", pause_controls_script)
+            self.assertIn("MediaPlayPause", pause_controls_script)
+            self.assertIn("MediaStop", pause_controls_script)
+            self.assertIn("sendUserMessage('stop')", pause_controls_script)
+            self.assertIn("closeMotionTrainingWorkspace", pause_controls_script)
+            self.assertNotIn("function handleMotionHotkey", motion_control_script)
+            self.assertNotIn("async function toggleMotionPause", motion_control_script)
+            self.assertNotIn("/motion_training/preview", pause_controls_script)
+            self.assertNotIn("function startFreestyleMode", pause_controls_script)
+        finally:
+            motion_response.close()
+            pause_response.close()
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
