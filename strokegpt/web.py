@@ -291,9 +291,12 @@ def _ollama_installed_models():
     return models
 
 def _ollama_status_payload():
-    # Compatibility shim - do not extend. The canonical payload builder lives
-    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
-    # points while route blueprints still compose through ``web.py`` services.
+    # Service-bound adapter for ``payloads.ollama_status_payload()``: binds the
+    # live ``settings``/``llm`` services and the local pull/installation helpers
+    # so blueprint routes (and tests via ``mock.patch`` on the canonical
+    # ``strokegpt.payloads.ollama_status_payload``) can reuse one entry point.
+    # Do not add new ``web.*`` payload wrappers; extend ``strokegpt.payloads``
+    # instead and bind services here.
     return payloads.ollama_status_payload(
         settings=settings,
         llm=llm,
@@ -397,9 +400,11 @@ def get_persona_prompts_for_ui():
     return payloads.persona_prompts_for_ui(settings)
 
 def settings_payload():
-    # Compatibility shim - do not extend. The canonical payload builder lives
-    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
-    # points while route blueprints still compose through ``web.py`` services.
+    # Service-bound adapter for ``payloads.settings_payload()``: bundles the
+    # runtime ``settings``/``llm``/``audio`` services and composed helpers so
+    # blueprint routes can fetch the full settings dialog payload in one call.
+    # Do not add new ``web.*`` payload wrappers; extend ``strokegpt.payloads``
+    # instead and bind services here.
     return payloads.settings_payload(
         settings=settings,
         llm=llm,
@@ -446,9 +451,11 @@ def apply_settings_to_services():
         )
 
 def _motion_pattern_catalog_payload():
-    # Compatibility shim - do not extend. The canonical payload builder lives
-    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` patch
-    # points while route blueprints still compose through ``web.py`` services.
+    # Service-bound adapter for ``payloads.motion_pattern_catalog_payload()``:
+    # binds the live ``motion_pattern_library`` and ``settings`` so blueprint
+    # routes can compose the catalog without rethreading services. Do not add
+    # new ``web.*`` payload wrappers; extend ``strokegpt.payloads`` instead and
+    # bind services here.
     return payloads.motion_pattern_catalog_payload(
         motion_pattern_library,
         settings,
@@ -472,9 +479,13 @@ def _motion_pattern_record(pattern_id):
     )
 
 def _motion_pattern_summary(record, include_actions=False):
-    # Compatibility shim - do not extend. The canonical summary builder lives
-    # in ``strokegpt.payloads``; this wrapper preserves old ``web.*`` import
-    # points while route blueprints import the canonical helper directly.
+    # Service-bound adapter for ``payloads.motion_pattern_summary()``: binds
+    # the live ``settings.motion_pattern_weights`` so internal feedback-history
+    # appenders can summarize a record without threading the override map.
+    # Blueprint routes call ``payloads.motion_pattern_summary`` directly via
+    # the local ``_pattern_summary(web, ...)`` helper and do not need this
+    # wrapper. Do not add new ``web.*`` payload wrappers; extend
+    # ``strokegpt.payloads`` instead and bind services here.
     return payloads.motion_pattern_summary(
         record,
         settings.motion_pattern_weights,
@@ -1209,66 +1220,6 @@ from .blueprints import settings as settings_routes
 
 
 register_blueprints(app)
-
-# Compatibility shim - do not extend. Preserve old ``strokegpt.web``
-# route-function names for tests and direct imports; new code should import
-# route handlers from ``strokegpt.blueprints.*``.
-check_settings_route = settings_routes.check_settings_route
-reset_settings_route = settings_routes.reset_settings_route
-set_persona_prompt_route = settings_routes.set_persona_prompt_route
-set_ollama_model_route = settings_routes.set_ollama_model_route
-ollama_status_route = settings_routes.ollama_status_route
-set_diagnostics_levels_route = settings_routes.set_diagnostics_levels_route
-pull_ollama_model_route = settings_routes.pull_ollama_model_route
-set_ai_name_route = settings_routes.set_ai_name_route
-toggle_memory_route = settings_routes.toggle_memory_route
-set_pfp_route = settings_routes.set_pfp_route
-set_handy_key_route = settings_routes.set_handy_key_route
-
-motion_patterns_route = motion_routes.motion_patterns_route
-motion_preferences_route = motion_routes.motion_preferences_route
-reset_motion_preferences_route = motion_routes.reset_motion_preferences_route
-set_motion_feedback_options_route = motion_routes.set_motion_feedback_options_route
-motion_pattern_detail_route = motion_routes.motion_pattern_detail_route
-export_motion_pattern_route = motion_routes.export_motion_pattern_route
-import_motion_pattern_route = motion_routes.import_motion_pattern_route
-save_generated_motion_pattern_route = motion_routes.save_generated_motion_pattern_route
-set_motion_pattern_enabled_route = motion_routes.set_motion_pattern_enabled_route
-set_motion_pattern_weight_route = motion_routes.set_motion_pattern_weight_route
-reset_motion_pattern_feedback_route = motion_routes.reset_motion_pattern_feedback_route
-motion_training_status_route = motion_routes.motion_training_status_route
-start_motion_training_route = motion_routes.start_motion_training_route
-preview_motion_training_route = motion_routes.preview_motion_training_route
-stop_motion_training_route = motion_routes.stop_motion_training_route
-motion_training_feedback_route = motion_routes.motion_training_feedback_route
-nudge_route = motion_routes.nudge_route
-test_depth_range_route = motion_routes.test_depth_range_route
-get_status_route = motion_routes.get_status_route
-set_depth_limits_route = motion_routes.set_depth_limits_route
-set_speed_limits_route = motion_routes.set_speed_limits_route
-set_motion_backend_route = motion_routes.set_motion_backend_route
-set_llm_edge_permissions_route = motion_routes.set_llm_edge_permissions_route
-like_last_move_route = motion_routes.like_last_move_route
-dislike_last_move_route = motion_routes.dislike_last_move_route
-rate_last_motion_pattern_route = motion_routes.rate_last_motion_pattern_route
-
-elevenlabs_setup_route = audio_routes.elevenlabs_setup_route
-set_elevenlabs_voice_route = audio_routes.set_elevenlabs_voice_route
-set_audio_provider_route = audio_routes.set_audio_provider_route
-local_tts_status_route = audio_routes.local_tts_status_route
-preload_local_tts_model_route = audio_routes.preload_local_tts_model_route
-set_local_tts_voice_route = audio_routes.set_local_tts_voice_route
-upload_local_tts_sample_route = audio_routes.upload_local_tts_sample_route
-test_local_tts_voice_route = audio_routes.test_local_tts_voice_route
-get_audio_route = audio_routes.get_audio_route
-
-signal_edge_route = modes_routes.signal_edge_route
-toggle_motion_pause_route = modes_routes.toggle_motion_pause_route
-set_mode_timings_route = modes_routes.set_mode_timings_route
-start_edging_route = modes_routes.start_edging_route
-start_milking_route = modes_routes.start_milking_route
-start_freestyle_route = modes_routes.start_freestyle_route
-stop_auto_route = modes_routes.stop_auto_route
 
 # ─── APP STARTUP ───────────────────────────────────────────────────────────────────────────────────
 def on_exit():

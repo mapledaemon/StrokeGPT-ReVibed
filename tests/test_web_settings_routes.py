@@ -259,7 +259,7 @@ class WebSettingsRouteTests(WebTestCase):
         original_ollama_level = settings.ollama_diagnostics_level
         try:
             with mock.patch.object(settings, "save"), \
-                    mock.patch("strokegpt.web._ollama_status_payload", return_value={"diagnostics_level": "debug"}):
+                    mock.patch("strokegpt.payloads.ollama_status_payload", return_value={"diagnostics_level": "debug"}):
                 response = self.client.post("/set_diagnostics_levels", json={
                     "motion_diagnostics_level": "verbose",
                     "ollama_diagnostics_level": "debug",
