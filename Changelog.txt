@@ -8,8 +8,10 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Normalize Freestyle Candidate Shape
--------------------------------------------------
+2026-04-25 - PR #59 - Normalize Freestyle Candidate Shape
+----------------------------------------------------------
+
+Branch: claude-freestyle-candidate-canon
 
 - Made the `FreestyleCandidate` TypedDict in `strokegpt/mode_contracts.py`
   the canonical shape consumed by `freestyle._choose_freestyle_pattern()`,
