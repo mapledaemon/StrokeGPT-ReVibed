@@ -132,20 +132,21 @@ def _apply_freestyle_edge_reaction(
     return False, edge_steps, resume_choices
 
 
-def _candidate_value(candidate, key, default=None):
-    if isinstance(candidate, dict):
-        return candidate.get(key, default)
-    return getattr(candidate, key, default)
-
-
+# Freestyle candidate helpers expect the canonical ``FreestyleCandidate``
+# dict shape produced by ``web._freestyle_candidate_patterns()`` (see
+# ``strokegpt.mode_contracts.FreestyleCandidate``): a mapping with at least
+# an ``id``/``record`` pair plus optional ``name``, ``enabled``, ``weight``,
+# and ``feedback`` fields. Callers passing a bare record-like object are no
+# longer supported — the historical duck-typing fallback was removed once
+# every caller produced the canonical dict.
 def _candidate_record(candidate):
-    return _candidate_value(candidate, "record", candidate)
+    return candidate.get("record")
 
 
 def _candidate_id(candidate, record):
     return _slug_pattern_id(
-        _candidate_value(candidate, "id")
-        or _candidate_value(candidate, "pattern_id")
+        candidate.get("id")
+        or candidate.get("pattern_id")
         or getattr(record, "pattern_id", "")
         or getattr(record, "name", "")
     )
@@ -153,15 +154,15 @@ def _candidate_id(candidate, record):
 
 def _candidate_name(candidate, record, pattern_id):
     return str(
-        _candidate_value(candidate, "name")
+        candidate.get("name")
         or getattr(record, "name", "")
         or pattern_id
     ).strip()
 
 
 def _candidate_weight(candidate, record):
-    weight = _candidate_value(candidate, "weight", None)
-    feedback = _candidate_value(candidate, "feedback", None) or getattr(record, "feedback", None) or {}
+    weight = candidate.get("weight")
+    feedback = candidate.get("feedback") or getattr(record, "feedback", None) or {}
     if weight is None and isinstance(feedback, dict):
         weight = 50 + int(feedback.get("thumbs_up") or 0) * 12
         weight += int(feedback.get("neutral") or 0) * 2
@@ -173,7 +174,7 @@ def _candidate_weight(candidate, record):
 
 
 def _candidate_enabled(candidate, record):
-    if _candidate_value(candidate, "enabled", getattr(record, "enabled", True)) is False:
+    if candidate.get("enabled", getattr(record, "enabled", True)) is False:
         return False
     if _candidate_weight(candidate, record) <= 0:
         return False
@@ -282,6 +283,10 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
     rng = rng or random.Random()
     choices = []
     for candidate in candidates or ():
+        if not isinstance(candidate, dict):
+            # ``FreestyleCandidate`` is the canonical shape; reject anything
+            # else (e.g., bare records) instead of silently mishandling it.
+            continue
         record = _candidate_record(candidate)
         pattern_id = _candidate_id(candidate, record)
         if not pattern_id or not record or not _candidate_enabled(candidate, record):
