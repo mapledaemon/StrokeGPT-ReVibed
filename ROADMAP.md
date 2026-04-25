@@ -103,9 +103,10 @@ around one monolithic frontend module.
 
 - Continue extracting one focused module at a time under `static/js/motion/`.
   PR #64 split the motion sequence log, and PR #65 split Pause/Resume plus
-  hotkey wiring. The current pattern-list split moves motion-pattern list
-  controls into a focused module; remaining low-risk seams include motion
-  settings/feedback controls and motion-training editor utilities.
+  hotkey wiring, and PR #66 split motion-pattern list controls. The current
+  feedback-controls split moves motion feedback history and settings controls
+  into a focused module; motion-training editor utilities remain as the next
+  low-risk seam.
 - Keep `static/js/motion-control.js` as the top-level wiring boundary until
   callers are migrated. Use small compatibility exports where needed, and add
   regression tests for each extracted browser module seam.

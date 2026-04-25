@@ -16,6 +16,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/audio.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
+            "/static/js/motion/feedback-controls.js": "text/javascript",
             "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/pattern-list.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
@@ -437,6 +438,33 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             motion_response.close()
             pattern_response.close()
+
+    def test_motion_feedback_controls_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        feedback_response = self.client.get("/static/js/motion/feedback-controls.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            feedback_controls_script = feedback_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/feedback-controls.js'", motion_control_script)
+            self.assertIn("configureMotionFeedbackControls({renderMotionPatterns})", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function configureMotionFeedbackControls", feedback_controls_script)
+            self.assertIn("export function renderMotionFeedbackHistory", feedback_controls_script)
+            self.assertIn("export async function saveMotionFeedbackOptions", feedback_controls_script)
+            self.assertIn("/motion_feedback_options", feedback_controls_script)
+            self.assertIn("motionFeedbackAutoDisableCheckbox", feedback_controls_script)
+            self.assertIn("Repeated thumbs down can disable patterns", feedback_controls_script)
+            self.assertIn("Repeated thumbs down will not disable patterns", feedback_controls_script)
+            self.assertIn("motionFeedbackHistory.replaceChildren", feedback_controls_script)
+            self.assertIn("No recent pattern feedback", feedback_controls_script)
+            self.assertNotIn("function renderMotionFeedbackHistory", motion_control_script)
+            self.assertNotIn("async function saveMotionFeedbackOptions", motion_control_script)
+            self.assertNotIn("/motion_training/preview", feedback_controls_script)
+            self.assertNotIn("async function setMotionPatternWeight", feedback_controls_script)
+        finally:
+            motion_response.close()
+            feedback_response.close()
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")
