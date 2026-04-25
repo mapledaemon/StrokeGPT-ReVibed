@@ -139,7 +139,7 @@ GitHub Actions runs the same tests on Python 3.11 for pushes to `master` or `mai
 
 ## Attribution
 
-Derived from [StrokeGPT](https://github.com/StrokeGPT/StrokeGPT). This fork preserves attribution and repository history but is not affiliated with the original maintainers. The original repository did not include a local license file at the time this fork was prepared.
+Derived from [StrokeGPT](https://github.com/StrokeGPT/StrokeGPT), but has diverged radically at this point. This fork preserves attribution and repository history but is not affiliated with the original maintainers. The original repository did not include a local license file at the time this fork was prepared.
 
 ## Support Development
 
