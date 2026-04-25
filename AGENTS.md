@@ -225,8 +225,7 @@ Current Up Next targets are:
    the Pause/Resume and hotkey behavior on real hardware.
 2. Compatibility Shim Paydown And Adapter Boundary Cleanup: keep the completed
    code reorganization stable by finishing the remaining web payload/route
-   alias paydown and then normalizing Freestyle candidates around the canonical
-   typed shape.
+   alias paydown and the lingering test-file split work.
 3. Frontend Motion-Control Module Split: split the oversized
    `static/js/motion-control.js` into focused motion modules before large chat
    or motion-training UI work grows it further.
@@ -257,7 +256,7 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 ```
 
 ```text
-Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/blueprints/, strokegpt/freestyle.py, and tests/test_web_static_assets.py. Focus on the remaining web payload/route alias paydown before Freestyle candidate normalization. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
+Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/blueprints/, and tests/test_web_static_assets.py. Focus on the remaining web payload/route alias paydown and the test-file split. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
 ```
 
 ```text

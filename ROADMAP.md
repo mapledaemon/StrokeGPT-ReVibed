@@ -89,11 +89,7 @@ Adapter audit findings:
 - Treat PR #50 `strokegpt.web` module-level `AppState` attribute bridge as a
   compatibility shim for older tests/callers. New code should use
   `web.app_state` or an explicit dependency, not add new bridged attributes.
-- Simplify the Freestyle candidate adapter once the shim pass starts:
-  `web._freestyle_candidate_patterns()` now returns a typed
-  `FreestyleCandidate`, but `freestyle._candidate_*()` still accepts both dicts
-  and record-like objects. Pick one canonical candidate shape and remove the
-  historical duck-typing after tests are migrated.
+
 Concrete follow-up PRs:
 
 - Migrate web payload tests to `strokegpt.payloads` and route registration
@@ -102,9 +98,6 @@ Concrete follow-up PRs:
 - Split web tests out of `tests/test_web_static_assets.py` alongside the
   production seams they cover so payload, blueprint, runtime-state, and static
   asset tests stop sharing one catch-all file.
-- Normalize Freestyle candidate handling around the `FreestyleCandidate`
-  contract and remove `_candidate_*` duck typing that only exists for
-  historical shapes. Must follow the canonical helper-test migration.
 
 ### 3. Frontend Motion-Control Module Split (M)
 

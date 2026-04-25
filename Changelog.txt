@@ -8,6 +8,32 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Normalize Freestyle Candidate Shape
+-------------------------------------------------
+
+- Made the `FreestyleCandidate` TypedDict in `strokegpt/mode_contracts.py`
+  the canonical shape consumed by `freestyle._choose_freestyle_pattern()`,
+  `_freestyle_choice_chain()`, and the helpers they call; the previous
+  duck-typing fallback that accepted bare record-like objects has been
+  removed now that every caller (web `_freestyle_candidate_patterns()` and
+  the freestyle background-mode tests) produces the canonical dict shape.
+- Replaced the `_candidate_value()` dual-shape accessor with direct
+  `dict.get(...)` reads inside `_candidate_record()`, `_candidate_id()`,
+  `_candidate_name()`, `_candidate_weight()`, and `_candidate_enabled()`,
+  and added a small `isinstance(candidate, dict)` guard to
+  `_choose_freestyle_pattern()` so a non-dict candidate is skipped instead
+  of silently treated as a record. Behavior for the existing dict shape is
+  unchanged.
+- Added a `test_freestyle_selector_skips_non_dict_and_recordless_candidates`
+  regression test pinning the new contract: a bare record-like candidate is
+  ignored, a dict missing a `record` key is ignored, and the surrounding
+  valid `FreestyleCandidate` is still selected.
+- Removed the resolved Freestyle candidate adapter bullets from the
+  Compatibility Shim Paydown section in `ROADMAP.md` (Up Next #2 and the
+  Concrete follow-up PRs list) and updated the matching `AGENTS.md` summary
+  and continuation prompt.
+
+
 2026-04-24 - PR #57 - Canonicalize Motion Pattern Summary Helper
 -----------------------------------------------------------------
 

@@ -801,6 +801,24 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(choice.pattern_id, "flick")
         self.assertIn("Flick", choice.reason)
 
+    def test_freestyle_selector_skips_non_dict_and_recordless_candidates(self):
+        current = MotionTarget(30, 40, 50)
+        usable_record = FakePatternRecord("sway", "Sway")
+        bare_record = FakePatternRecord("flick", "Flick")
+
+        choice = freestyle._choose_freestyle_pattern(
+            [
+                bare_record,  # historical record-like shape, no longer accepted
+                {"id": "ghost", "name": "Ghost", "source": "fixed", "enabled": True, "weight": 80},  # missing record
+                {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 60, "record": usable_record},
+            ],
+            current,
+            rng=random.Random(0),
+        )
+
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice.pattern_id, "sway")
+
 
 class CoerceModeDecisionTests(unittest.TestCase):
     def test_start_event_drops_stop_action_for_milking(self):
