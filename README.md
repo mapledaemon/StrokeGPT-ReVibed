@@ -147,6 +147,8 @@ This project is free and open source, developed and maintained in my spare time.
 
 Donations cover token costs, which currently limit development speed in the ongoing compute shortage, and help with hardware replacements. To request support for a different stroker or toy, open an issue and donate enough to cover the device. Any toys that work on men (including insertables) are fine, nothing larger than a VacuGlide.
 
+These wallets are only for this project, so I will know what it is for.
+
 <p align="center">
   <strong>Ethereum</strong><br>
   <img src="./static/ethereum-qr.svg" alt="Ethereum donation QR code" width="132" height="132"><br>
