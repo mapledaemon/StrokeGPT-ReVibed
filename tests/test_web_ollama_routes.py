@@ -58,7 +58,7 @@ class WebOllamaRouteTests(WebTestCase):
         }
         try:
             with mock.patch("strokegpt.web._start_ollama_pull", return_value=(True, "Started.")) as start_pull, \
-                    mock.patch("strokegpt.web._ollama_status_payload", return_value=fake_status):
+                    mock.patch("strokegpt.payloads.ollama_status_payload", return_value=fake_status):
                 response = self.client.post("/pull_ollama_model", json={"model": " custom / model : tag "})
 
             self.assertEqual(response.status_code, 200)

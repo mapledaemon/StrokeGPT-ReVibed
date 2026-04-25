@@ -223,9 +223,11 @@ Current Up Next targets are:
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
    diagnostics on-device, fix remaining stop/log/timer regressions, and verify
    the Pause/Resume and hotkey behavior on real hardware.
-2. Compatibility Shim Paydown And Adapter Boundary Cleanup: keep the completed
-   code reorganization stable by finishing the remaining web payload/route
-   alias paydown.
+2. Compatibility Shim Paydown And Adapter Boundary Cleanup: most of the
+   shim-paydown sequence has landed; the remaining `strokegpt.web` payload
+   wrappers are now documented as the canonical service-binding adapter, and
+   the `AppState` attribute bridge stays as a compatibility shim for older
+   tests/callers.
 3. Frontend Motion-Control Module Split: split the oversized
    `static/js/motion-control.js` into focused motion modules before large chat
    or motion-training UI work grows it further.
@@ -256,7 +258,7 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 ```
 
 ```text
-Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, and strokegpt/blueprints/. Focus on the remaining web payload/route alias paydown. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
+Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, and strokegpt/blueprints/. The web payload wrappers now serve as the canonical service-binding adapter; further moves should extend `strokegpt.payloads` or migrate the `AppState` attribute bridge rather than reintroduce wrappers. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
 ```
 
 ```text

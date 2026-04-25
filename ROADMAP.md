@@ -83,18 +83,16 @@ Adapter audit findings:
   `mode_decisions.py` as compatibility shims. Migrate tests and internal
   callers to canonical modules where practical; otherwise mark the re-export
   block "Compatibility shim - do not extend."
-- Treat PR #49 `strokegpt.web` blueprint route aliases and payload wrapper
-  names as compatibility shims. New code should import route handlers from
-  `strokegpt.blueprints.*` and payload builders from `strokegpt.payloads`.
+- Treat the remaining ``strokegpt.web`` payload wrappers
+  (``settings_payload``, ``_ollama_status_payload``,
+  ``_motion_pattern_catalog_payload``, ``_motion_pattern_summary``) as the
+  canonical service-binding adapter for the runtime ``settings``/``llm``/
+  ``audio``/pattern-library services rather than as shims slated for removal.
+  New code should still extend ``strokegpt.payloads`` and bind services via
+  these adapters, not introduce additional ``web.*`` payload wrappers.
 - Treat PR #50 `strokegpt.web` module-level `AppState` attribute bridge as a
   compatibility shim for older tests/callers. New code should use
   `web.app_state` or an explicit dependency, not add new bridged attributes.
-
-Concrete follow-up PRs:
-
-- Migrate web payload tests to `strokegpt.payloads` and route registration
-  tests to the blueprint modules before removing or freezing old `web.*`
-  payload/route aliases.
 
 ### 3. Frontend Motion-Control Module Split (M)
 

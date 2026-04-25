@@ -8,6 +8,43 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #62 - Pay Down Web Payload/Route Alias Surface
+---------------------------------------------------------------
+
+Branch: claude-web-alias-paydown
+
+- Removed the ~50-line `strokegpt/web.py` route-alias block that re-bound
+  every blueprint route function (`check_settings_route`,
+  `get_status_route`, `start_edging_route`, etc.) at module level for
+  legacy `from strokegpt.web import <route>` style imports. A grep
+  confirmed the only callers were two `assertIs(web.X, web.Y_routes.X)`
+  bridge-identity lines in
+  `test_domain_routes_are_registered_through_blueprints`, which were
+  dropped in favor of the existing `app.url_map.iter_rules()` blueprint
+  endpoint asserts in the same test.
+- Reframed the four `strokegpt/web.py` payload wrappers
+  (`settings_payload`, `_ollama_status_payload`,
+  `_motion_pattern_catalog_payload`, `_motion_pattern_summary`) from
+  "compatibility shim - do not extend" to "service-bound adapter for
+  `strokegpt.payloads.*`". They still bind the live
+  `settings`/`llm`/`audio`/`motion_pattern_library` services so blueprint
+  routes can compose payloads in one call, but the comments now describe
+  that role plus a "extend `strokegpt.payloads` and bind services here,
+  do not add new `web.*` wrappers" instruction.
+- Migrated two Ollama status test mocks from the old
+  `strokegpt.web._ollama_status_payload` patch point to the canonical
+  `strokegpt.payloads.ollama_status_payload` seam in
+  `tests/test_web_settings_routes.py` and `tests/test_web_ollama_routes.py`
+  so the tests no longer reach into `web.py` internals.
+- Replaced the resolved adapter-paydown bullets in `ROADMAP.md` Up Next
+  #2 (the "Treat PR #49 ... as compatibility shims" item and the
+  Concrete follow-up PRs entry) with the documented service-binding
+  adapter framing, and updated the matching `AGENTS.md` Up Next #2
+  summary plus continuation prompt to point future work at extending
+  `strokegpt.payloads` or migrating the `AppState` attribute bridge
+  rather than reintroducing wrappers.
+
+
 2026-04-25 - PR #61 - Split Web Tests By Seam
 ----------------------------------------------
 
