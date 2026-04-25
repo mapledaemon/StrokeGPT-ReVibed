@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #66 - Extract Motion Pattern List Module
+---------------------------------------------------------
+
+Branch: gpt-motion-pattern-list-split
+
+- Moved compact motion-pattern list rendering, pattern display/metadata
+  helpers, normalized action/stat helpers, export buttons, feedback reset
+  buttons, fixed-pattern weight controls, and enable/weight/feedback-reset
+  route calls out of `static/js/motion-control.js` into
+  `static/js/motion/pattern-list.js`.
+- Kept `motion-control.js` as the top-level wiring boundary by binding the
+  extracted module through `configureMotionPatternList()` and keeping
+  compatibility exports marked "Compatibility shim - do not extend" for older
+  imports.
+- Added static-asset and frontend aggregation coverage for the new browser
+  module, plus a regression test that pins the pattern route URLs, weight/reset
+  controls, extracted seam, and separation from motion-training playback code.
+- Updated `ROADMAP.md` so the pattern-list seam is marked as split while motion
+  settings/feedback controls and motion-training editor utilities remain queued.
+
+
 2026-04-25 - PR #65 - Extract Motion Pause Controls Module
 -----------------------------------------------------------
 
