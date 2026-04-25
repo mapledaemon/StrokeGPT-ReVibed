@@ -34,6 +34,7 @@ FRONTEND_SCRIPT_PATHS = (
     "/static/js/audio.js",
     "/static/js/device-control.js",
     "/static/js/motion-control.js",
+    "/static/js/motion/pause-controls.js",
     "/static/js/motion/sequence-log.js",
     "/static/js/setup.js",
 )
