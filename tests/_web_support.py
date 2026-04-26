@@ -38,6 +38,7 @@ FRONTEND_SCRIPT_PATHS = (
     "/static/js/motion/pause-controls.js",
     "/static/js/motion/pattern-list.js",
     "/static/js/motion/sequence-log.js",
+    "/static/js/motion/training-editor.js",
     "/static/js/setup.js",
 )
 

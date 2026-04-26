@@ -20,6 +20,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/pattern-list.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
+            "/static/js/motion/training-editor.js": "text/javascript",
             "/static/js/setup.js": "text/javascript",
         }
 
@@ -465,6 +466,62 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             motion_response.close()
             feedback_response.close()
+
+    def test_motion_training_editor_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        editor_response = self.client.get("/static/js/motion/training-editor.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            training_editor_script = editor_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/training-editor.js'", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function patternTempoScale", training_editor_script)
+            self.assertIn("export function updateMotionTrainingTimingReadouts", training_editor_script)
+            self.assertIn("export function syncRangeInputsFromPattern", training_editor_script)
+            self.assertIn("export function stepMotionTrainingRangeInput", training_editor_script)
+            self.assertIn("export function setMotionEditStatus", training_editor_script)
+            self.assertIn("export function updateMotionTrainingEditButtons", training_editor_script)
+            self.assertIn("export function editablePatternPayload", training_editor_script)
+            self.assertIn("export function refreshMotionTrainingDetail", training_editor_script)
+            self.assertIn("export function smoothEditedPattern", training_editor_script)
+            self.assertIn("export function harshenEditedPattern", training_editor_script)
+            self.assertIn("export function setEditedPatternTempo", training_editor_script)
+            self.assertIn("export function setEditedPatternDuration", training_editor_script)
+            self.assertIn("export function remapEditedPatternRange", training_editor_script)
+            self.assertIn("export function resetEditedPattern", training_editor_script)
+            self.assertIn("export function drawPatternPreviewCanvas", training_editor_script)
+            self.assertIn("export function drawMotionTrainingPreview", training_editor_script)
+            self.assertIn("export function setMotionTrainingDetail", training_editor_script)
+            self.assertIn("export function setMotionTrainingLoadingDetail", training_editor_script)
+            self.assertIn("export function drawOpenMotionTrainingPreview", training_editor_script)
+            self.assertIn("motionTrainingEditedPattern", training_editor_script)
+            self.assertIn("motionTrainingPreviewCanvas", training_editor_script)
+            self.assertIn("motionTrainingOriginalPreviewCanvas", training_editor_script)
+            # Editor utilities are pure UI; route calls and the workspace
+            # open/close orchestration stay in motion-control.js.
+            self.assertNotIn("/motion_training/start", training_editor_script)
+            self.assertNotIn("/motion_training/stop", training_editor_script)
+            self.assertNotIn("/motion_training/preview", training_editor_script)
+            self.assertNotIn("/motion_patterns/save_generated", training_editor_script)
+            self.assertNotIn("openMotionTrainingWorkspace", training_editor_script)
+            self.assertNotIn("renderMotionTrainingPatternList", training_editor_script)
+            # The relocated definitions must no longer live in motion-control.js.
+            self.assertNotIn("function smoothEditedPattern", motion_control_script)
+            self.assertNotIn("function harshenEditedPattern", motion_control_script)
+            self.assertNotIn("function setEditedPatternDuration", motion_control_script)
+            self.assertNotIn("function setEditedPatternTempo", motion_control_script)
+            self.assertNotIn("function remapEditedPatternRange", motion_control_script)
+            self.assertNotIn("function resetEditedPattern", motion_control_script)
+            self.assertNotIn("function drawPatternPreviewCanvas", motion_control_script)
+            self.assertNotIn("function drawMotionTrainingPreview", motion_control_script)
+            self.assertNotIn("function setMotionTrainingDetail", motion_control_script)
+            self.assertNotIn("function setMotionTrainingLoadingDetail", motion_control_script)
+            self.assertNotIn("function editablePatternPayload", motion_control_script)
+            self.assertNotIn("function refreshMotionTrainingDetail", motion_control_script)
+        finally:
+            motion_response.close()
+            editor_response.close()
 
     def test_frontend_js_is_split_into_domain_modules(self):
         response = self.client.get("/static/app.js")

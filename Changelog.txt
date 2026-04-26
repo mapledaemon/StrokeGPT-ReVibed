@@ -8,6 +8,58 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-25 - PR #68 - Extract Motion Training Editor Module
+------------------------------------------------------------
+
+Branch: claude-motion-training-editor-split
+
+- Finished the Up Next #3 frontend module split by moving the
+  motion-training editor utilities out of `static/js/motion-control.js`
+  into `static/js/motion/training-editor.js`. After PRs #64 (sequence
+  log), #65 (pause/hotkey), #66 (pattern list), and #67 (feedback
+  controls), this slice covers the last low-risk seam called out in
+  `ROADMAP.md`.
+- The new module owns the pure UI/state side of the training workspace:
+  edit-button gating (`updateMotionTrainingEditButtons`), edit status
+  text (`setMotionEditStatus`), tempo/duration/range readouts and
+  inputs (`patternTempoScale`, `updateMotionTrainingTimingReadouts`,
+  `syncRangeInputsFromPattern`, `stepMotionTrainingRangeInput`), the
+  six pattern-shape transforms (`smoothEditedPattern`,
+  `harshenEditedPattern`, `setEditedPatternTempo`,
+  `setEditedPatternDuration`, `remapEditedPatternRange`,
+  `resetEditedPattern`, plus the internal `interpolatePosition` and
+  `setEditedPatternActions` helpers), the preview canvas drawing path
+  (`drawPatternPreviewCanvas`, `drawMotionTrainingPreview`,
+  `drawOpenMotionTrainingPreview`), the editable-payload builder used
+  by the play-preview and save routes (`editablePatternPayload`), and
+  the workspace detail setters that wire the editor up when a pattern
+  is loaded (`setMotionTrainingDetail`, `setMotionTrainingLoadingDetail`,
+  `refreshMotionTrainingDetail`).
+- `motion-control.js` retains the route calls
+  (`/motion_training/start`, `/preview`, `/stop`, `/feedback`,
+  `/motion_patterns/save_generated`), the list rendering, the status
+  update fan-out, and the workspace open/close orchestration. The
+  editor symbols are imported back for event-handler wiring and
+  re-exported behind a "Compatibility shim - do not extend" comment so
+  existing consumers can still pull them off `motion-control.js`.
+  `motion-control.js` shrank 1259 -> 953 lines (-306 net).
+- Added `/static/js/motion/training-editor.js` to
+  `tests/_web_support.py` `FRONTEND_SCRIPT_PATHS` plus a focused seam
+  test in `tests/test_web_static_assets.py` that pins every exported
+  function name, the wire-through, that the moved definitions no
+  longer live in `motion-control.js`, and that the editor module is
+  free of `/motion_training/*` route calls or workspace open/close
+  orchestration.
+- Removed the completed "Frontend Motion-Control Module Split" tier
+  from `ROADMAP.md`, renumbered the remaining items (4-17 -> 3-16),
+  and rewrote the Architecture Audit "Why later" cross-reference to
+  mention the recently completed split instead of pointing at an Up
+  Next item that no longer exists. Updated `AGENTS.md` Up Next list
+  (items 4-7 -> 3-6), dropped the now-stale Frontend Motion-Control
+  Module Split continuation prompt, and added a short note about the
+  `static/js/motion/` split sub-modules to the architecture listing.
+
+
 2026-04-25 - PR #67 - Extract Motion Feedback Controls Module
 --------------------------------------------------------------
 
