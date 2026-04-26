@@ -80,6 +80,43 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             response.close()
 
+    def test_settings_dialog_contains_system_prompts_visibility_tab(self):
+        response = self.client.get("/")
+        try:
+            page = response.get_data(as_text=True)
+
+            self.assertIn('data-settings-tab="prompts"', page)
+            self.assertIn('id="settings-tab-prompts"', page)
+            self.assertIn('id="refresh-system-prompts-btn"', page)
+            self.assertIn('id="system-prompts-status"', page)
+            self.assertIn('id="system-prompt-chat"', page)
+            self.assertIn('id="system-prompt-repair"', page)
+            self.assertIn('id="system-prompt-name-this-move"', page)
+            self.assertIn('id="system-prompt-name-this-move-sample"', page)
+            self.assertIn('id="system-prompt-profile-consolidation"', page)
+            # The Prompts tab sits between Motion and Advanced so the
+            # tab order matches the architecture note in AGENTS.md.
+            motion_tab = page.find('data-settings-tab="motion"')
+            prompts_tab = page.find('data-settings-tab="prompts"')
+            advanced_tab = page.find('data-settings-tab="advanced"')
+            self.assertGreater(prompts_tab, motion_tab)
+            self.assertGreater(advanced_tab, prompts_tab)
+        finally:
+            response.close()
+
+    def test_frontend_js_wires_system_prompts_tab(self):
+        scripts = self.frontend_scripts()
+
+        self.assertIn("async function refreshSystemPrompts", scripts)
+        self.assertIn("/system_prompts", scripts)
+        self.assertIn("systemPromptsLoadedOnce", scripts)
+        self.assertIn("name_this_move_sample_inputs", scripts)
+        self.assertIn("refreshSystemPromptsBtn", scripts)
+        self.assertIn("systemPromptChat", scripts)
+        self.assertIn("systemPromptRepair", scripts)
+        self.assertIn("systemPromptNameThisMove", scripts)
+        self.assertIn("systemPromptProfileConsolidation", scripts)
+
     def test_settings_dialog_contains_device_and_speed_controls(self):
         response = self.client.get("/")
         try:

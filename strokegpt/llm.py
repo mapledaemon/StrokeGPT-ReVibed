@@ -4,6 +4,20 @@ import requests
 
 DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
 
+# Static repair instructions appended to the chat system prompt when the
+# connector retries an LLM response that claimed motion but produced no
+# usable target. Lives at module level so ``LLMService.repair_prompt``
+# and the Settings > Prompts visibility route can render the same text
+# the model receives without duplicating the literal.
+REPAIR_PROMPT_SUFFIX = """
+### MOTION RESPONSE REPAIR
+Fix only the latest JSON response.
+- If the latest user message asks for physical motion, `move` must be non-null and specify a real change with numeric fields, zone/pattern cues, or `motion:"anchor_loop"`.
+- If it is conversational, return `move:null` and make clear no physical motion is changing.
+- Tip, shaft, and base are regions. Prefer `rng` 50-95 through adjacent regions unless the latest message asks for tiny, short, tight, flicking, fluttering, holding, or edging.
+- Preserve direct erotic language when it fits. Do not invent unrelated motion.
+"""
+
 
 def _safe_speed_limit(value, default):
     try:
@@ -248,15 +262,7 @@ State:
         return self._talk_to_llm(messages, temperature=0.2)
 
     def repair_motion_response(self, user_input, original_response, context):
-        prompt = self._build_system_prompt(context)
-        prompt += """
-### MOTION RESPONSE REPAIR
-Fix only the latest JSON response.
-- If the latest user message asks for physical motion, `move` must be non-null and specify a real change with numeric fields, zone/pattern cues, or `motion:"anchor_loop"`.
-- If it is conversational, return `move:null` and make clear no physical motion is changing.
-- Tip, shaft, and base are regions. Prefer `rng` 50-95 through adjacent regions unless the latest message asks for tiny, short, tight, flicking, fluttering, holding, or edging.
-- Preserve direct erotic language when it fits. Do not invent unrelated motion.
-"""
+        prompt = self.repair_prompt(context)
         messages = [
             {"role": "system", "content": prompt},
             {
@@ -273,17 +279,42 @@ Fix only the latest JSON response.
         return self._talk_to_llm(messages, temperature=0.0)
 
     def name_this_move(self, speed, depth, mood):
-        prompt = f"""
-Name the liked move. Context: relative speed {speed}%, depth {depth}%, mood '{mood}'.
-Return JSON only: {{"pattern_name":"<short direct name>"}}
-"""
+        prompt = self.name_this_move_prompt(speed, depth, mood)
         response = self._talk_to_llm([{"role": "system", "content": prompt}], temperature=0.8)
         return response.get("pattern_name", "Unnamed Move")
 
     def consolidate_user_profile(self, chat_chunk, current_profile):
         print("[INFO] Updating user profile...")
+        system_prompt = self.profile_consolidation_prompt(chat_chunk, current_profile)
+        try:
+            response = self._talk_to_llm([{"role": "system", "content": system_prompt}], temperature=0.0)
+            print("[OK] Profile updated.")
+            return response
+        except Exception as e:
+            print(f"[WARN] Profile update failed: {e}")
+            return current_profile
+
+    # ─── Prompt visibility helpers ─────────────────────────────────────
+    # Public helpers used both by the LLM call paths above and by the
+    # Settings > Prompts visibility route. Keeping a single source of
+    # truth means what the user sees in Settings is exactly what the
+    # model receives at request time (modulo chat history, which is
+    # appended outside these prompt strings).
+    def system_prompt(self, context):
+        return self._build_system_prompt(context)
+
+    def repair_prompt(self, context):
+        return self._build_system_prompt(context) + REPAIR_PROMPT_SUFFIX
+
+    def name_this_move_prompt(self, speed, depth, mood):
+        return f"""
+Name the liked move. Context: relative speed {speed}%, depth {depth}%, mood '{mood}'.
+Return JSON only: {{"pattern_name":"<short direct name>"}}
+"""
+
+    def profile_consolidation_prompt(self, chat_chunk, current_profile):
         chat_log_text = "\n".join(f'role: {x["role"]}, content: {x["content"]}' for x in chat_chunk)
-        system_prompt = f"""
+        return f"""
 Update the JSON profile for the HUMAN user only.
 Rules:
 - 'user' is the human. 'assistant' is the persona; ignore assistant claims about itself.
@@ -297,10 +328,3 @@ EXISTING PROFILE JSON:
 NEW CONVERSATION LOG:
 {chat_log_text}
 """
-        try:
-            response = self._talk_to_llm([{"role": "system", "content": system_prompt}], temperature=0.0)
-            print("[OK] Profile updated.")
-            return response
-        except Exception as e:
-            print(f"[WARN] Profile update failed: {e}")
-            return current_profile
