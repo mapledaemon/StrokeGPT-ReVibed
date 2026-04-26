@@ -32,7 +32,10 @@ behavior, and route motion changes through the shared controller path.
 - `static/app.css`: browser UI styles.
 - `static/app.js`: browser UI entrypoint and polling orchestration.
 - `static/js/`: focused browser modules for shared context, settings, chat,
-  audio, device controls, motion controls, and setup.
+  audio, device controls, motion controls, and setup. `static/js/motion/`
+  holds the split motion sub-modules (sequence log, pause/hotkey controls,
+  pattern list, feedback controls, training editor); `motion-control.js`
+  stays as the top-level wiring boundary with compatibility re-exports.
 - `strokegpt/web.py`: Flask app composition, shared services, chat/update
   runtime, and compatibility exports.
 - `strokegpt/app_state.py`: mutable web runtime state and shared `RLock`
@@ -232,18 +235,15 @@ Current Up Next targets are:
    wrappers are now documented as the canonical service-binding adapter, and
    the `AppState` attribute bridge stays as a compatibility shim for older
    tests/callers.
-3. Frontend Motion-Control Module Split: split the oversized
-   `static/js/motion-control.js` into focused motion modules before large chat
-   or motion-training UI work grows it further.
-4. Motion Vocabulary And Preset Semantics: tighten deterministic versus
+3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
-5. Persona Naming And Prompt Audit: check whether proper-noun persona handles
+4. Persona Naming And Prompt Audit: check whether proper-noun persona handles
    such as `GLaDOS` should reach the local model or be hidden behind neutral
    internal labels.
-6. Motion Style Preferences: add visible style controls and resettable learned
+5. Motion Style Preferences: add visible style controls and resettable learned
    preferences without burying motion behavior inside natural-language memory.
-7. Chat Interface Refactor: modernize the chat shell, indicator strip, message
+6. Chat Interface Refactor: modernize the chat shell, indicator strip, message
    rendering, and control layout while preserving chat-driven motion behavior.
 
 ## Continuation Prompts
@@ -260,10 +260,6 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 
 ```text
 Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, and strokegpt/blueprints/. The web payload wrappers now serve as the canonical service-binding adapter; further moves should extend `strokegpt.payloads` or migrate the `AppState` attribute bridge rather than reintroduce wrappers. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
-```
-
-```text
-Continue the Frontend Motion-Control Module Split in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, index.html, static/app.js, static/js/motion-control.js, and tests/test_web_static_assets.py. Extract one focused module at a time under static/js/motion/ while keeping top-level wiring stable, preserving pause/resume/stop behavior, motion-pattern management, training preview controls, and existing route payloads.
 ```
 
 ```text
