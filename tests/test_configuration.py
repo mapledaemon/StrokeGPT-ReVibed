@@ -285,17 +285,57 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"as fast as you can on the base": `{"sp": 50', prompt)
         self.assertNotIn('"sp": 88', prompt)
 
-    def test_glados_prompt_speed_guidance_uses_configured_speed_ceiling(self):
+    def test_snarky_scientist_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")
 
         prompt = service._build_system_prompt({
-            "special_persona_mode": "GLaDOS",
+            "special_persona_mode": "snarky_scientist",
             "min_speed": 12,
             "max_speed": 44,
         })
 
         self.assertIn('{"chat":"<sarcastic reply>"', prompt)
         self.assertIn("Current configured speed range is `12-44`", prompt)
+
+    def test_snarky_scientist_prompt_does_not_leak_proper_noun_handles(self):
+        # Persona Naming And Prompt Audit (ROADMAP Up Next #4): the
+        # snarky-scientist persona must describe its voice without
+        # naming any proper-noun character so the local model is not
+        # anchored to its trained associations with that character.
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "special_persona_mode": "snarky_scientist",
+            "min_speed": 5,
+            "max_speed": 80,
+        })
+
+        self.assertNotIn("GLaDOS", prompt)
+        self.assertNotIn("Portal", prompt)
+        # The voice keywords still come from the prompt body itself.
+        self.assertIn("sarcastic", prompt)
+        self.assertIn("passive-aggressive", prompt)
+        self.assertIn("test subject", prompt)
+
+    def test_legacy_glados_routing_key_does_not_match_snarky_scientist_branch(self):
+        # The previous routing key ``GLaDOS`` was a literal proper-noun
+        # token. After the audit it must no longer activate the
+        # snarky-scientist branch; only the neutral
+        # ``snarky_scientist`` key should. The default branch is taken
+        # for every other value (and produces a different shape with
+        # the full mood list) so an exact-match check on the legacy
+        # token is enough to pin the rename.
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        legacy_prompt = service._build_system_prompt({
+            "special_persona_mode": "GLaDOS",
+            "min_speed": 5,
+            "max_speed": 80,
+            "persona_desc": "an erotic partner",
+        })
+
+        self.assertNotIn('"chat":"<sarcastic reply>"', legacy_prompt)
+        self.assertIn("Curious, Teasing, Playful", legacy_prompt)
 
     def test_mode_decision_prompt_includes_bounded_edge_context(self):
         service = LLMService(url="http://localhost:11434/api/chat")

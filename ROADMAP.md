@@ -130,23 +130,7 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 - Let preset modes speak occasionally without turning mode timers into
   repeated narration.
 
-### 4. Persona Naming And Prompt Audit (S)
-
-Why next: the persona name `GLaDOS` is referenced in the prompt-tightening
-work from PR #43, and it is not clear whether the local model sees it
-literally and copies its style. This is a small targeted audit before the
-larger Motion Style Preferences work.
-
-- Locate every place the persona name `GLaDOS` (or any other proper noun
-  persona handle) is interpolated into prompts, settings, or memory.
-- Decide whether the literal name should reach the model. If yes, document
-  why; if no, replace it with a neutral placeholder and verify the persona
-  voice continues to come from the prompt body, not from the model's
-  trained associations with the name.
-- Sweep chat, repair, naming, and memory-consolidation prompts for any
-  other proper-noun handles that may be steering local-model behavior.
-
-### 5. Motion Style Preferences (M)
+### 4. Motion Style Preferences (M)
 
 Why next: this is a clean way to steer model behavior without hidden prompt
 drift, and it slots in after the persona audit so style preferences and
@@ -162,7 +146,7 @@ persona prompts stay separable.
 - Let users reset learned motion feedback and style preferences without a
   full settings reset.
 
-### 6. Chat Interface Refactor (M)
+### 5. Chat Interface Refactor (M)
 
 Why next: the chat panel and its surrounding toolbars/indicators are
 largely unchanged from the pre-fork code, and the recent diagnostics work
@@ -191,7 +175,7 @@ chat-shell work does not have to share a 1700-line motion frontend module.
 
 ## Queued
 
-### 7. Soft-Anchor Pattern Authoring (M/L)
+### 6. Soft-Anchor Pattern Authoring (M/L)
 
 Why later: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable, but should follow the code reorg so it
@@ -213,11 +197,11 @@ can land cleanly inside the new motion blueprints/modules.
   through targets smoothly, may slow down to hit a target, and should not
   snap or stop just because a target was reached.
 
-### 8. Architecture Audit And Strategic Refactor (M)
+### 7. Architecture Audit And Strategic Refactor (M)
 
 Why later: the immediate code reorg in Up Next #2, the recently completed
 `static/js/motion-control.js` module split (PRs #64-#67 plus the training
-editor extraction), and the chat shell refactor in Up Next #6 cover the
+editor extraction), and the chat shell refactor in Up Next #5 cover the
 obvious splits. This entry is for the deeper, design-level audits that need
 a clean tree first.
 
@@ -249,7 +233,7 @@ a clean tree first.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 
-### 9. Motion Training Editor Depth (M)
+### 8. Motion Training Editor Depth (M)
 
 Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
@@ -268,7 +252,7 @@ build on the current surface without crowding Settings.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 10. User Profile And Preference Setup (M)
+### 9. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics, motion vocabulary
@@ -294,7 +278,7 @@ cleanup, and the persona naming audit.
 - Keep identity/preferences inspectable and resettable; do not bury them
   inside natural-language memory.
 
-### 11. Runtime And Setup Diagnostics (M)
+### 10. Runtime And Setup Diagnostics (M)
 
 Why later: broader setup checks should build on the completed diagnostics
 verbosity slice (PR #43) without turning the compact status UI into a
@@ -331,7 +315,7 @@ setup console.
 
 ## Backlog
 
-### 12. Tip And Base Calibration Research And Restoration (M/L)
+### 11. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the
 benefit should be confirmed against current stroke-range behavior before
@@ -357,7 +341,7 @@ adding another setup surface.
   the same calibration mapping without bypassing smoothing, stop behavior,
   or user speed limits.
 
-### 13. Reference Research Backlog (S/M)
+### 12. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs
 licensing, scope, and architecture review before implementation.
@@ -397,7 +381,7 @@ licensing, scope, and architecture review before implementation.
   device behavior, but avoid importing designs that add unnecessary
   pauses, stops, or other counterproductive playback behavior.
 
-### 14. Local Voice Control MVP (L)
+### 13. Local Voice Control MVP (L)
 
 Why later: voice control is the largest user-facing feature, but it should
 ship as push-to-talk before always-on listening.
@@ -432,7 +416,7 @@ Candidate local ASR providers:
   timestamps, and CC BY 4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 15. Story Mode (L/XL)
+### 14. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -449,7 +433,7 @@ editing.
 
 ## Long-Horizon
 
-### 16. Optional Runtime And Packaging Work (XL)
+### 15. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
