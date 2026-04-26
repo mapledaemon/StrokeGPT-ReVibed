@@ -115,6 +115,7 @@
                 <button class="settings-tab active" data-settings-tab="voice">Voice</button>
                 <button class="settings-tab" data-settings-tab="device">Device</button>
                 <button class="settings-tab" data-settings-tab="motion">Motion</button>
+                <button class="settings-tab" data-settings-tab="prompts">Prompts</button>
                 <button class="settings-tab" data-settings-tab="advanced">Advanced</button>
             </div>
             <div id="settings-tab-persona" class="settings-panel">
@@ -262,6 +263,31 @@
                         <button id="test-motion-depth-range" class="my-button">Test Range</button>
                         <button id="save-motion-depth-range" class="my-button">Save Range</button>
                     </div>
+                </div>
+            </div>
+            <div id="settings-tab-prompts" class="settings-panel">
+                <div class="settings-subsection">
+                    <h4>System Prompts</h4>
+                    <p class="settings-help">
+                        Read-only snapshot of every system prompt the local model can receive.
+                        The Chat and Repair prompts are rendered against your current persona,
+                        speed limits, edge permissions, and special-persona mode; Name Move and
+                        Profile Consolidation use representative sample inputs because they only
+                        run on demand. Chat history and the per-request user message are appended
+                        outside these prompts and are not shown here.
+                    </p>
+                    <div class="settings-checkbox-line">
+                        <button id="refresh-system-prompts-btn" class="my-button">Refresh</button>
+                        <span id="system-prompts-status" style="font-size: 0.85em; color: var(--comment);"></span>
+                    </div>
+                    <h5>Chat</h5>
+                    <pre id="system-prompt-chat" class="diagnostics-output">Open this tab to load the current chat prompt.</pre>
+                    <h5>Motion Repair</h5>
+                    <pre id="system-prompt-repair" class="diagnostics-output">Open this tab to load the motion repair prompt.</pre>
+                    <h5>Name This Move <span id="system-prompt-name-this-move-sample" style="font-size: 0.8em; color: var(--comment);"></span></h5>
+                    <pre id="system-prompt-name-this-move" class="diagnostics-output">Open this tab to load the name-this-move prompt.</pre>
+                    <h5>Profile Consolidation</h5>
+                    <pre id="system-prompt-profile-consolidation" class="diagnostics-output">Open this tab to load the profile consolidation prompt.</pre>
                 </div>
             </div>
             <div id="settings-tab-advanced" class="settings-panel">

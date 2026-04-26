@@ -4,6 +4,31 @@ import { updateAudioProviderUi } from './audio.js';
 export function setSettingsTab(tabName) {
     el.settingsTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.settingsTab === tabName));
     el.settingsPanels.forEach(panel => panel.classList.toggle('active', panel.id === `settings-tab-${tabName}`));
+    if (tabName === 'prompts' && !state.systemPromptsLoadedOnce) {
+        refreshSystemPrompts();
+    }
+}
+
+export async function refreshSystemPrompts() {
+    if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Loading...';
+    const data = await apiCall('/system_prompts');
+    if (!data) {
+        if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Could not load system prompts.';
+        return;
+    }
+    if (el.systemPromptChat) el.systemPromptChat.textContent = data.chat || '';
+    if (el.systemPromptRepair) el.systemPromptRepair.textContent = data.repair || '';
+    if (el.systemPromptNameThisMove) el.systemPromptNameThisMove.textContent = data.name_this_move || '';
+    if (el.systemPromptProfileConsolidation) el.systemPromptProfileConsolidation.textContent = data.profile_consolidation || '';
+    if (el.systemPromptNameThisMoveSample) {
+        const sample = data.name_this_move_sample_inputs || {};
+        const speed = sample.speed ?? 0;
+        const depth = sample.depth ?? 0;
+        const mood = sample.mood || '';
+        el.systemPromptNameThisMoveSample.textContent = `(sample inputs: speed ${speed}%, depth ${depth}%, mood '${mood}')`;
+    }
+    state.systemPromptsLoadedOnce = true;
+    if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = `Loaded at ${new Date().toLocaleTimeString()}.`;
 }
 
 export function openSettings(tabName = 'voice') {
@@ -319,6 +344,9 @@ export function initSettingsControls({addChatMessage}) {
     el.settingsTabs.forEach(tab => {
         tab.addEventListener('click', () => setSettingsTab(tab.dataset.settingsTab));
     });
+    if (el.refreshSystemPromptsBtn) {
+        el.refreshSystemPromptsBtn.addEventListener('click', refreshSystemPrompts);
+    }
     D.getElementById('use-selected-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelSelect.value));
     D.getElementById('refresh-model-field-btn').addEventListener('click', () => {
         el.ollamaModelInput.value = el.ollamaModelSelect.value;

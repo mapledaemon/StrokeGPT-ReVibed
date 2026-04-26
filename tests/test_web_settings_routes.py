@@ -295,6 +295,62 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.motion_feedback_auto_disable = original
 
+    def test_system_prompts_route_returns_all_four_prompt_kinds(self):
+        from strokegpt.web import settings
+
+        original_min = settings.min_speed
+        original_max = settings.max_speed
+        try:
+            settings.min_speed = 18
+            settings.max_speed = 62
+
+            response = self.client.get("/system_prompts")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            for key in ("chat", "repair", "name_this_move", "profile_consolidation",
+                        "name_this_move_sample_inputs"):
+                self.assertIn(key, data)
+
+            # The chat prompt is rendered against live context, so the
+            # configured speed range must round-trip through it.
+            self.assertIn("18-62", data["chat"])
+
+            # Repair prompt is the chat system prompt + a static suffix
+            # block; the suffix must be appended (not replaced).
+            self.assertIn("18-62", data["repair"])
+            self.assertIn("MOTION RESPONSE REPAIR", data["repair"])
+            self.assertNotIn("MOTION RESPONSE REPAIR", data["chat"])
+
+            # Name-this-move prompt embeds the sample speed/depth/mood
+            # so the user can see the shape at a glance.
+            sample = data["name_this_move_sample_inputs"]
+            self.assertIn(f"speed {sample['speed']}%", data["name_this_move"])
+            self.assertIn(f"depth {sample['depth']}%", data["name_this_move"])
+            self.assertIn(f"mood '{sample['mood']}'", data["name_this_move"])
+
+            # Profile consolidation prompt must include the user-profile
+            # JSON anchor so the model can actually edit it.
+            self.assertIn("EXISTING PROFILE JSON", data["profile_consolidation"])
+            self.assertIn("NEW CONVERSATION LOG", data["profile_consolidation"])
+        finally:
+            settings.min_speed = original_min
+            settings.max_speed = original_max
+
+    def test_system_prompts_route_does_not_leak_proper_noun_handles_in_default_branch(self):
+        # Persona Naming And Prompt Audit follow-up: the Prompts tab is
+        # the first user-visible surface that exposes the rendered chat
+        # prompt to non-developers, so the default (non-special-persona)
+        # branch must not leak any proper-noun character handles into
+        # the model.
+        response = self.client.get("/system_prompts")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        for prompt_kind in ("chat", "repair"):
+            self.assertNotIn("GLaDOS", data[prompt_kind])
+            self.assertNotIn("Portal", data[prompt_kind])
+
 
 if __name__ == "__main__":
     unittest.main()

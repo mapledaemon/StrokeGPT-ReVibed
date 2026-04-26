@@ -126,6 +126,10 @@ The unified settings popup has tabs:
 - Voice
 - Device
 - Motion
+- Prompts (read-only visibility into the system prompts the local model
+  can receive: chat, motion repair, name-this-move, profile
+  consolidation. Lazy-loaded on first open; refresh button re-renders
+  against the current context.)
 - Advanced
 
 Do not move detailed settings back into the sidebar unless there is a strong usability reason.

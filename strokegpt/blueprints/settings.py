@@ -170,6 +170,37 @@ def set_pfp_route():
     return jsonify({"status": "success"})
 
 
+_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE = {"speed": 60, "depth": 40, "mood": "Teasing"}
+_PROMPT_VISIBILITY_SAMPLE_PROFILE_LOG = (
+    {"role": "user", "content": "[example user turn for prompt visibility only]"},
+    {"role": "assistant", "content": "[example bot turn for prompt visibility only]"},
+)
+
+
+@settings_blueprint.route('/system_prompts')
+def system_prompts_route():
+    """Read-only snapshot of every system prompt the local model can
+    receive. The chat and repair prompts use live ``get_current_context``
+    so the user sees what would actually be sent right now; the
+    name-this-move and profile-consolidation prompts use representative
+    sample inputs because they are only built on demand. Chat history
+    and the per-request user message are appended outside these prompt
+    strings and are not part of the snapshot.
+    """
+    web = _web()
+    context = web.get_current_context()
+    return jsonify({
+        "chat": web.llm.system_prompt(context),
+        "repair": web.llm.repair_prompt(context),
+        "name_this_move": web.llm.name_this_move_prompt(**_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),
+        "profile_consolidation": web.llm.profile_consolidation_prompt(
+            chat_chunk=list(_PROMPT_VISIBILITY_SAMPLE_PROFILE_LOG),
+            current_profile=web.settings.user_profile,
+        ),
+        "name_this_move_sample_inputs": dict(_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),
+    })
+
+
 @settings_blueprint.route('/set_handy_key', methods=['POST'])
 def set_handy_key_route():
     web = _web()
