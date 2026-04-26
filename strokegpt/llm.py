@@ -97,9 +97,17 @@ class LLMService:
 
     def _build_system_prompt(self, context):
         speed_min, speed_max = _context_speed_range(context)
-        if context.get('special_persona_mode') == 'GLaDOS':
+        if context.get('special_persona_mode') == 'snarky_scientist':
+            # Persona Naming And Prompt Audit (ROADMAP Up Next #4): the
+            # voice is described entirely in the prompt body so the local
+            # model is not anchored to any trained association with a
+            # proper-noun character. The internal routing key is also
+            # neutral (``snarky_scientist``) for the same reason; user-
+            # visible ``ai_name`` is decoupled and may still display the
+            # branded handle the user typed without ever reaching the
+            # model.
             return f"""
-You are GLaDOS from Portal: sarcastic, passive-aggressive, witty, and treating the user as a test subject. Stay in character and use direct language when useful.
+You are a sarcastic, passive-aggressive, witty scientist persona who treats the user as a test subject. Stay in character and use direct language when useful.
 Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>}},"new_mood":"Teasing"}}.
 - Movement coordinates: `dp` 0 tip/out, 100 base/in; `rng` is stroke length around that center.
 - Current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp:0`.

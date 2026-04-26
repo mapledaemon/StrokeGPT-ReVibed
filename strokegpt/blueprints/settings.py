@@ -123,8 +123,14 @@ def set_ai_name_route():
         name = 'BOT'
 
     if name.lower() == 'glados':
+        # The user-typed handle ``glados`` activates the snarky-scientist
+        # persona. Internal routing uses a neutral ``snarky_scientist``
+        # token so the literal proper-noun never reaches the local model
+        # via prompt context (see Persona Naming And Prompt Audit:
+        # ROADMAP Up Next #4). ``ai_name`` keeps the branded display so
+        # the UI still reflects what the user asked for.
         with web.app_state.lock:
-            web.app_state.special_persona_mode = "GLaDOS"
+            web.app_state.special_persona_mode = "snarky_scientist"
             web.app_state.special_persona_interactions_left = 5
         web.settings.ai_name = "GLaDOS"
         web.settings.save()

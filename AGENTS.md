@@ -238,12 +238,9 @@ Current Up Next targets are:
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
-4. Persona Naming And Prompt Audit: check whether proper-noun persona handles
-   such as `GLaDOS` should reach the local model or be hidden behind neutral
-   internal labels.
-5. Motion Style Preferences: add visible style controls and resettable learned
+4. Motion Style Preferences: add visible style controls and resettable learned
    preferences without burying motion behavior inside natural-language memory.
-6. Chat Interface Refactor: modernize the chat shell, indicator strip, message
+5. Chat Interface Refactor: modernize the chat shell, indicator strip, message
    rendering, and control layout while preserving chat-driven motion behavior.
 
 ## Continuation Prompts
