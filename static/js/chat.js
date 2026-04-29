@@ -73,6 +73,20 @@ function handleSendMessageStatus(data) {
         clearTypingIndicator(statusMessages[data.status]);
         return false;
     }
+    const actionStatusMessages = {
+        stopped: 'Stopping.',
+        auto_started: 'Auto mode started.',
+        auto_stopped: 'Auto mode stopped.',
+        freestyle_started: 'Freestyle started.',
+        edging_started: 'Edging mode started.',
+        milking_started: 'Milking mode started.',
+        move_applied: 'Motion command applied.',
+        konami_code_activated: 'Special pattern started.',
+    };
+    if (actionStatusMessages[data.status]) {
+        clearTypingIndicator(data.message || actionStatusMessages[data.status]);
+        return true;
+    }
     if (data.status && data.status !== 'ok') {
         clearTypingIndicator(data.message || `Message failed: ${data.status}`);
         return false;
