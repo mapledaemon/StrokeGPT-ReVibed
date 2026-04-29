@@ -16,7 +16,7 @@ import unittest
 REQUIRED_MODULES = ("flask", "requests", "elevenlabs")
 
 # Keep JavaScript response assertions stable across Windows MIME registry
-defaults and Werkzeug/Python mimetype table differences.
+# defaults and Werkzeug/Python mimetype table differences.
 mimetypes.add_type("text/javascript", ".js")
 
 
