@@ -300,7 +300,7 @@ class MotionPatternRouteTests(unittest.TestCase):
             message="Motion training idle.",
             last_feedback="",
         )
-        self.web.motion_training_stop_event.clear()
+        self.web.app_state.motion_training_stop_event.clear()
 
     def tearDown(self):
         self.web._stop_motion_training()
@@ -485,7 +485,7 @@ class MotionPatternRouteTests(unittest.TestCase):
                     break
                 time.sleep(0.02)
             for _ in range(20):
-                thread = self.web.motion_training_thread
+                thread = self.web.app_state.motion_training_thread
                 if not thread or not thread.is_alive():
                     break
                 time.sleep(0.02)
