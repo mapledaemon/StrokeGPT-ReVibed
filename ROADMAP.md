@@ -36,6 +36,13 @@ mode controls still have rough edges that block daily use.
 - Use the PR #42 trace fields and the expanded status/debug diagnostics UI
   during manual Freestyle testing to identify whether stops are planner-side,
   API-side, or Handy position-mode behavior.
+- Treat regular Freestyle stops, end-of-sequence stalls, and the
+  Auto-to-Freestyle no-action case as the current major reliability bug
+  cluster. Reproduce the cases where the motion indicator advances but the
+  device does not move before tuning planner behavior.
+- Reproduce and classify `Message failed: auto_started` so the UI can show a
+  meaningful mode-start failure instead of leaving the user to infer what
+  happened.
 - Validate the active-mode elapsed timer and detached vertical
   recent-sequence log across Auto, Edge, Milk, Freestyle, and mode
   transitions, and tune the displayed timing/label detail if on-device
@@ -52,15 +59,15 @@ mode controls still have rough edges that block daily use.
   fixed-size elements so neither can resize the other when text length
   changes.
 
-### 2. Compatibility Shim Paydown And Adapter Boundary Cleanup (S/M)
+### 2. Adapter Boundary Guardrails And Translation Audit (S/M)
 
-Why next: PRs #48-#51 finished the structural code reorganization by splitting
-the biggest modules, moving web runtime state into `AppState`, and typing the
-mode service/callback boundary. The adapter audit found that most conversion
-layers are real safety or schema boundaries, but several compatibility shims
-were deliberately left in place so the mechanical splits stayed behavior
-preserving. Those shims should now be marked or paid down before new code
-starts treating them as permanent API.
+Why next: PRs #48-#75 paid down most of the compatibility-shim surface by
+splitting the biggest modules, moving web runtime state into `AppState`,
+typing the mode service/callback boundary, and migrating routine tests away
+from direct `strokegpt.web` runtime-state bridge writes. The remaining work is
+smaller: preserve the real schema/safety adapters, prevent new compatibility
+bridge usage from creeping back in, and audit any remaining hand-written
+translation layers before the next motion-backend changes.
 
 Adapter audit findings:
 
@@ -79,10 +86,9 @@ Adapter audit findings:
   `SettingsManager.default_settings_dict()`, `apply_dict()`, and `to_dict()`
   own settings migration/reset/save behavior, while `payloads.py` owns the
   browser-facing settings, Ollama, and motion-pattern payload shapes.
-- Treat PR #48 `background_modes` re-exports from `freestyle.py` and
-  `mode_decisions.py` as compatibility shims. Migrate tests and internal
-  callers to canonical modules where practical; otherwise mark the re-export
-  block "Compatibility shim - do not extend."
+- Keep the PR #48 `background_modes` re-exports from `freestyle.py` and
+  `mode_decisions.py` frozen as compatibility shims. New tests and internal
+  callers should import canonical modules directly.
 - Treat the remaining ``strokegpt.web`` payload wrappers
   (``settings_payload``, ``_ollama_status_payload``,
   ``_motion_pattern_catalog_payload``, ``_motion_pattern_summary``) as the
@@ -90,9 +96,17 @@ Adapter audit findings:
   ``audio``/pattern-library services rather than as shims slated for removal.
   New code should still extend ``strokegpt.payloads`` and bind services via
   these adapters, not introduce additional ``web.*`` payload wrappers.
-- Treat PR #50 `strokegpt.web` module-level `AppState` attribute bridge as a
-  compatibility shim for older tests/callers. New code should use
-  `web.app_state` or an explicit dependency, not add new bridged attributes.
+- Keep the PR #50 `strokegpt.web` module-level `AppState` attribute bridge as
+  legacy compatibility only. Dedicated bridge tests may cover it, but routine
+  route and mode tests should use `web.app_state` or explicit dependencies.
+- Add a lightweight guard test or static check that fails when new routine
+  tests write directly through the `strokegpt.web` runtime-state bridge
+  outside the dedicated compatibility coverage.
+- Audit code that translates between app-specific schemas, LLM JSON, pattern
+  actions, UI payloads, and Handy API calls. Delete redundant wrappers only
+  when they do not enforce validation, migration, user limits, smoothing, or
+  persistence boundaries; otherwise document the boundary so future work does
+  not flatten a real safety adapter by mistake.
 
 ### 3. Motion Vocabulary And Preset Semantics (S/M)
 
@@ -102,6 +116,10 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 
 - Define remaining named motion semantics for deterministic speed ranges,
   full-range behavior, and optional LLM-controlled auto timing.
+- Add an experimental "LLM-controlled auto timing" setting only if the timing
+  handler can stay bounded, visible, and reversible. If implemented, expose
+  the current timing/mood bias in diagnostics instead of hiding it in prompt
+  text.
 - Confirm Milk Me and natural-language milk requests actually use most or
   all of the safe calibrated range unless the user explicitly asks for
   short/tight motion. PR #38 added milk vocabulary; the on-device check
@@ -127,8 +145,14 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 - Allow the LLM to request visible modes such as Freestyle, Edge Me, and
   Milk Me through the same guard rails as the UI buttons, making sure chat
   edge-blocking settings also affect model-requested mode changes.
+- Let the LLM activate an auto mode with a visible preference for motion
+  type/style, using the same settings limits and mode-start error handling as
+  manual mode buttons.
 - Let preset modes speak occasionally without turning mode timers into
   repeated narration.
+- Make preset-mode speech natural-language narration rather than raw motion
+  sequence readouts, so TTS does not describe internal pattern commands unless
+  a debug verbosity level explicitly asks for that.
 
 ### 4. Motion Style Preferences (M)
 
@@ -151,8 +175,8 @@ persona prompts stay separable.
 Why next: the chat panel and its surrounding toolbars/indicators are
 largely unchanged from the pre-fork code, and the recent diagnostics work
 (PR #43) keeps adding compact indicators around a chat surface that was
-not designed for them. Do the `static/js/motion-control.js` split first so
-chat-shell work does not have to share a 1700-line motion frontend module.
+not designed for them. The `static/js/motion-control.js` split is now done,
+so chat-shell work can proceed without sharing one oversized frontend module.
 
 - Audit the existing chat panel against modern local-LLM front-ends
   (Ollama UI, Open WebUI, LM Studio, etc.) for layout, message styling,
@@ -167,6 +191,14 @@ chat-shell work does not have to share a 1700-line motion frontend module.
   responses, so the chat-emit path stays in lockstep with the TTS-enqueue
   path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
   Voice Plays").
+- Add an explicit top-bar voice on/off toggle that pauses voice generation
+  without changing chat, motion, or model settings.
+- Investigate TTS clips that cut off at the end, especially when local voice
+  generation, chunk playback, or rapid mode narration overlaps with chat
+  updates.
+- Make local LLM and voice divergence visible: if text delivery fails while
+  voice playback has a usable message, surface the text/path mismatch instead
+  of failing silently.
 - Keep markdown/code rendering opt-in and predictable; do not regress
   copy/paste, scrollback, or screen-reader behavior while restyling.
 - Preserve the existing chat-driven motion contract (chat-driven
@@ -196,6 +228,12 @@ can land cleanly inside the new motion blueprints/modules.
 - Treat the anchors like pattern-matching notes: movement should slide
   through targets smoothly, may slow down to hit a target, and should not
   snap or stop just because a target was reached.
+- Explore whether three- and four-point soft waypoint loops feel less jerky
+  than simple two-point bouncing, while still giving the LLM a small,
+  inspectable control surface.
+- Ignore long inactive gaps from video-synced example funscripts when using
+  them as pattern examples; those gaps usually describe source media timing,
+  not useful standalone motion intent.
 
 ### 7. Architecture Audit And Strategic Refactor (M)
 
@@ -208,10 +246,20 @@ a clean tree first.
 - Before changing the default motion backend, audit the flexible
   position/script path against chat control, Freestyle, motion training,
   Edge/Milk mode scripts, stop behavior, and real-device smoothness.
+- Start any move toward the newer flexible motion schema behind a visible
+  backend/settings selector. Keep the current HAMP continuous path available
+  until flexible playback is smoother, recoverable, and verified on device.
 - When the new schema becomes the only motion backend, preserve the
   current shared backend guard rails: pass-through final targets for
   continuous planners, user-speed-relative XAVA velocity caps, depth-jump
   splitting, and turn-apex smoothing for all position/script callers.
+- Prototype inertia-aware direction changes and stops for the flexible
+  schema, so interpolated output does not expose obvious step boundaries or
+  abrupt reversals. This should not change HAMP behavior until the flexible
+  path is validated.
+- Review current Handy API and firmware behavior, including Handy 2 and
+  Handy 2 Pro-specific constraints, before raising speed limits or adding
+  overclock-style settings.
 - Evaluate whether Python remains adequate for the app's runtime, UI, and
   local model-control constraints before considering any rewrite.
 - Evaluate fuzzy-logic style controllers only as an experiment with clear
@@ -225,7 +273,9 @@ a clean tree first.
 - Split `strokegpt/audio.py` provider concerns only after higher-ROI motion and
   web refactors land. A future extraction should keep the public `AudioService`
   entry point stable while moving ElevenLabs and Chatterbox provider details
-  into focused modules.
+  into focused modules. Do the voice-generation refactor after the chat/UI
+  refactor so TTS cutoffs and text/voice mismatch bugs can be separated from
+  chat-pipeline bugs first.
 - Pattern-library lazy-load parking lot: defer lazy-loading the JSON pattern
   library and prepared-action cache until pattern count grows enough to justify
   it; the cache exists, but eager loading is still simpler and cheap at the
@@ -261,6 +311,9 @@ cleanup, and the persona naming audit.
 - Add a user profile picture and custom user display name.
 - Use the user profile control as the settings entry point in the
   upper-right area.
+- Add Personality Presets to Settings and include the GLaDOS-style prompt as
+  a selectable preset. Keep persona presets separate from motion style and
+  user identity preferences.
 - Drive the splash screen and the default profile image from the profile
   wizard selections (identity, interested-in, custom values) so the first
   visible app surface reflects the user's chosen preferences instead of a
@@ -290,12 +343,18 @@ setup console.
 - Add a visible Handy connection indicator and reconnect button below the
   sidebar visualizer, using the same connection state as diagnostics
   rather than a separate hidden device path.
+- Add device-profile controls for Handy 1 versus Handy 2 speed-limit behavior,
+  and only expose Handy 2 Pro overclock options if current documentation
+  supports a clear warning, limit, and fallback path.
 - Double-check frontend modules against backend save routes so settings
   changes show clear success/failure states and do not fail silently when
   the tab stays open after the app shuts down.
 - Tighten spacing in the right-side/collapsible UI, settings panels, and
   compact control rows so new diagnostics, reconnect, pause/resume, and
   mode buttons fit without adding unnecessary boundaries or dead space.
+- Add a test button beside initial-setup and Settings min/max speed sliders
+  that moves the device at the selected speed over the configured safe range
+  for a short, bounded duration.
 - Add optional live Handy position polling where it is useful and does not
   create excessive device/API traffic, so the sidebar position indicator
   can compare reported position against commanded targets.
@@ -310,6 +369,9 @@ setup console.
   supports it.
 - Add startup checks that warn without blocking when optional dependencies
   are missing.
+- Track noisy third-party deprecation warnings, such as the diffusers LoRA to
+  PEFT warning, only when they are user-visible or indicate a future breakage
+  risk. Do not add new dependencies just to silence a warning.
 - Keep optional model downloads as explicit UI actions with visible
   status.
 
@@ -350,8 +412,10 @@ licensing, scope, and architecture review before implementation.
   https://github.com/defucilis/thehandy,
   https://github.com/fredtungsten/scriptplayerthe,
   https://github.com/Yazui1/handy-companion,
-  https://github.com/KarilChan/handy-koikatsu-server, and
-  https://thehandyapp.ddns.net/#/voice-commands-page.
+  https://github.com/KarilChan/handy-koikatsu-server,
+  https://github.com/Glavi0us/scripts-control,
+  https://thehandyapp.ddns.net/#/voice-commands-page, and
+  https://www.reddit.com/r/theHandy/comments/upuo98/create_a_slider_for_live_control/.
 - Review funscript and editor references:
   https://github.com/throwaway734/Simple-Funscript-Editor,
   https://github.com/michael-mueller-git/Python-Funscript-Editor,
@@ -368,6 +432,9 @@ licensing, scope, and architecture review before implementation.
   https://github.com/FredTungsten/Scripts/tree/master,
   https://github.com/Aguy1724/thehandy_resources, and
   https://github.com/Amethyst-Sysadmin/Howl.
+- Review feature and UX ideas from https://theedgy.app/changelog#v1.5.1
+  only for workflow inspiration; do not copy interaction patterns that add
+  avoidable playback stops or hidden state.
 - Evaluate whether longer example funscript libraries can help remap
   existing patterns or train pattern-generation heuristics, filtering out
   long inactive gaps that were video-synchronization artifacts rather
@@ -439,8 +506,9 @@ Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
 
 - Consider an LLM backend abstraction so Ollama remains the default local
-  path while other runtimes, such as SGLang, can be evaluated without
-  rewriting chat and motion logic.
+  path while other runtimes, such as SGLang, TurboQuant, or vLLM-backed
+  TurboQuant experiments, can be evaluated without rewriting chat and motion
+  logic.
 - Compare optional local runtimes on actual app metrics: first-token
   latency, JSON reliability, model setup friction, GPU memory behavior,
   and recovery after failed requests.
@@ -470,6 +538,11 @@ runtime shows a clear app-level benefit.
   become the default until those paths are validated on the physical
   device without boundary stutter, unexpected stops, or speed-limit
   escapes.
+- Any motion-backend switch must be user-visible and reversible until the new
+  flexible schema can match or beat HAMP reliability on physical hardware.
+- Settings saves, feedback actions, reconnect attempts, and mode starts should
+  report success or failure in the UI. A browser tab that remains open after
+  the app shuts down must not appear to keep saving settings silently.
 - Voice control should use local speech-to-text models. Hosted
   transcription would change the privacy and setup assumptions of the
   project.
