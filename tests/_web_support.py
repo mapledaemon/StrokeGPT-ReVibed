@@ -9,10 +9,15 @@ on the monolithic :class:`WebStaticAssetTests`.
 """
 
 import importlib.util
+import mimetypes
 import unittest
 
 
 REQUIRED_MODULES = ("flask", "requests", "elevenlabs")
+
+# Keep JavaScript response assertions stable across Windows MIME registry
+# defaults and Werkzeug/Python mimetype table differences.
+mimetypes.add_type("text/javascript", ".js")
 
 
 def module_available(name):

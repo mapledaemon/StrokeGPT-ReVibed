@@ -1,9 +1,10 @@
 import importlib.util
 import io
 import json
-import tempfile
+import shutil
 import time
 import unittest
+import uuid
 from pathlib import Path
 
 from strokegpt import payloads
@@ -28,10 +29,38 @@ def module_available(name):
 
 MISSING_WEB_MODULES = [name for name in REQUIRED_WEB_MODULES if not module_available(name)]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+PATTERN_TEST_TEMP_ROOT = WORKSPACE_ROOT / "user_data" / "test-pattern-library"
+
+
+class PatternTestTempDir:
+    def __init__(self):
+        self._created_user_data_root = not PATTERN_TEST_TEMP_ROOT.parent.exists()
+        PATTERN_TEST_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+        self.path = PATTERN_TEST_TEMP_ROOT / f"case-{uuid.uuid4().hex}"
+        self.path.mkdir()
+        self.name = str(self.path)
+
+    def cleanup(self):
+        shutil.rmtree(self.path)
+        try:
+            PATTERN_TEST_TEMP_ROOT.rmdir()
+        except OSError:
+            pass
+        if self._created_user_data_root:
+            try:
+                PATTERN_TEST_TEMP_ROOT.parent.rmdir()
+            except OSError:
+                pass
+
+    def __enter__(self):
+        return self.name
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.cleanup()
 
 
 def temporary_pattern_dir():
-    return tempfile.TemporaryDirectory(dir=WORKSPACE_ROOT)
+    return PatternTestTempDir()
 
 
 class PatternLibraryTests(unittest.TestCase):
