@@ -232,20 +232,21 @@ branch, remove any roadmap item that has already landed and is covered in
 Current Up Next targets are:
 
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
-   diagnostics on-device, fix remaining stop/log/timer regressions, and verify
-   the Pause/Resume and hotkey behavior on real hardware.
-2. Compatibility Shim Paydown And Adapter Boundary Cleanup: most of the
-   shim-paydown sequence has landed; the remaining `strokegpt.web` payload
-   wrappers are now documented as the canonical service-binding adapter, and
-   the `AppState` attribute bridge stays as a compatibility shim for older
-   tests/callers.
+   diagnostics on-device, reproduce regular Freestyle stops, classify
+   `Message failed: auto_started`, fix Auto-to-Freestyle no-action cases, and
+   verify Pause/Resume and hotkey behavior on real hardware.
+2. Adapter Boundary Guardrails And Translation Audit: PRs #48-#75 paid down
+   most compatibility shims; preserve real schema/safety adapters, keep legacy
+   bridges frozen, and add a small guard against new routine `strokegpt.web`
+   runtime-state bridge writes.
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
 4. Motion Style Preferences: add visible style controls and resettable learned
    preferences without burying motion behavior inside natural-language memory.
 5. Chat Interface Refactor: modernize the chat shell, indicator strip, message
-   rendering, and control layout while preserving chat-driven motion behavior.
+   rendering, voice toggle, TTS/chat synchronization, and control layout while
+   preserving chat-driven motion behavior.
 
 ## Continuation Prompts
 
@@ -256,11 +257,11 @@ Continue stabilizing StrokeGPT-ReVibed. First read AGENTS.md, README.md, Changel
 ```
 
 ```text
-Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeGPT-ReVibed. First read AGENTS.md, Changelog.txt, ROADMAP.md, KNOWN_PROBLEMS.md, static/js/motion-control.js, strokegpt/background_modes.py, and strokegpt/motion.py. Preserve HAMP as the default backend, keep stop behavior and speed limits non-negotiable, and add focused tests before preparing a PR.
+Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeGPT-ReVibed. First read AGENTS.md, Changelog.txt, ROADMAP.md, KNOWN_PROBLEMS.md, static/js/motion-control.js, strokegpt/background_modes.py, and strokegpt/motion.py. Reproduce regular Freestyle stops, `Message failed: auto_started`, and Auto-to-Freestyle no-action cases. Preserve HAMP as the default backend, keep stop behavior and speed limits non-negotiable, and add focused tests before preparing a PR.
 ```
 
 ```text
-Continue the Compatibility Shim Paydown And Adapter Boundary Cleanup stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, and strokegpt/blueprints/. The web payload wrappers now serve as the canonical service-binding adapter; further moves should extend `strokegpt.payloads` or migrate the `AppState` attribute bridge rather than reintroduce wrappers. Preserve behavior, keep compatibility shims frozen unless callers have migrated, and update Changelog.txt before preparing a PR.
+Continue the Adapter Boundary Guardrails And Translation Audit stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/app_state.py, and strokegpt/blueprints/. The web payload wrappers now serve as the canonical service-binding adapter; further moves should extend `strokegpt.payloads` and keep the `AppState` attribute bridge as legacy compatibility only. Add a guard against new routine tests writing through the `strokegpt.web` runtime-state bridge, preserve behavior, and update Changelog.txt before preparing a PR.
 ```
 
 ```text
