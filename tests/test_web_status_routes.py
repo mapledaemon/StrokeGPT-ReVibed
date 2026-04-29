@@ -6,11 +6,11 @@ from tests._web_support import WebTestCase
 
 class WebStatusRouteTests(WebTestCase):
     def test_updates_and_audio_are_separate_browser_endpoints(self):
-        from strokegpt.web import audio, messages_for_ui
+        from strokegpt.web import app_state, audio
 
-        messages_for_ui.clear()
+        app_state.messages_for_ui.clear()
         audio.audio_output_queue.clear()
-        messages_for_ui.append("hello")
+        app_state.messages_for_ui.append("hello")
         audio.audio_output_queue.append({"bytes": b"RIFFtest", "mimetype": "audio/wav"})
 
         updates = self.client.get("/get_updates")
@@ -91,16 +91,16 @@ class WebStatusRouteTests(WebTestCase):
         import strokegpt.web as web
 
         original_state = (
-            web.auto_mode_active_task,
-            web.active_mode_name,
-            web.active_mode_started_at,
-            web.edging_start_time,
+            web.app_state.auto_mode_active_task,
+            web.app_state.active_mode_name,
+            web.app_state.active_mode_started_at,
+            web.app_state.edging_start_time,
         )
         try:
-            web.auto_mode_active_task = None
-            web.active_mode_name = "freestyle"
-            web.active_mode_started_at = time.time() - 12.2
-            web.edging_start_time = None
+            web.app_state.auto_mode_active_task = None
+            web.app_state.active_mode_name = "freestyle"
+            web.app_state.active_mode_started_at = time.time() - 12.2
+            web.app_state.edging_start_time = None
 
             response = self.client.get("/get_status")
             try:
@@ -113,33 +113,33 @@ class WebStatusRouteTests(WebTestCase):
             self.assertGreaterEqual(payload["active_mode_elapsed_seconds"], 12)
         finally:
             (
-                web.auto_mode_active_task,
-                web.active_mode_name,
-                web.active_mode_started_at,
-                web.edging_start_time,
+                web.app_state.auto_mode_active_task,
+                web.app_state.active_mode_name,
+                web.app_state.active_mode_started_at,
+                web.app_state.edging_start_time,
             ) = original_state
 
     def test_status_payload_reports_motion_pause_state_and_frozen_timer(self):
         import strokegpt.web as web
 
         original_state = (
-            web.auto_mode_active_task,
-            web.active_mode_name,
-            web.active_mode_started_at,
-            web.active_mode_paused_at,
-            web.active_mode_paused_total,
-            web.motion_pause_active,
-            web.edging_start_time,
+            web.app_state.auto_mode_active_task,
+            web.app_state.active_mode_name,
+            web.app_state.active_mode_started_at,
+            web.app_state.active_mode_paused_at,
+            web.app_state.active_mode_paused_total,
+            web.app_state.motion_pause_active,
+            web.app_state.edging_start_time,
         )
         try:
             now = time.time()
-            web.auto_mode_active_task = None
-            web.active_mode_name = "freestyle"
-            web.active_mode_started_at = now - 20
-            web.active_mode_paused_at = now - 5
-            web.active_mode_paused_total = 0
-            web.motion_pause_active = True
-            web.edging_start_time = None
+            web.app_state.auto_mode_active_task = None
+            web.app_state.active_mode_name = "freestyle"
+            web.app_state.active_mode_started_at = now - 20
+            web.app_state.active_mode_paused_at = now - 5
+            web.app_state.active_mode_paused_total = 0
+            web.app_state.motion_pause_active = True
+            web.app_state.edging_start_time = None
 
             response = self.client.get("/get_status")
             try:
@@ -155,13 +155,13 @@ class WebStatusRouteTests(WebTestCase):
             self.assertLessEqual(payload["active_mode_elapsed_seconds"], 16)
         finally:
             (
-                web.auto_mode_active_task,
-                web.active_mode_name,
-                web.active_mode_started_at,
-                web.active_mode_paused_at,
-                web.active_mode_paused_total,
-                web.motion_pause_active,
-                web.edging_start_time,
+                web.app_state.auto_mode_active_task,
+                web.app_state.active_mode_name,
+                web.app_state.active_mode_started_at,
+                web.app_state.active_mode_paused_at,
+                web.app_state.active_mode_paused_total,
+                web.app_state.motion_pause_active,
+                web.app_state.edging_start_time,
             ) = original_state
             web.motion.resume()
 
@@ -181,23 +181,23 @@ class WebStatusRouteTests(WebTestCase):
                 self.paused = False
 
         original_state = (
-            web.auto_mode_active_task,
-            web.active_mode_name,
-            web.active_mode_started_at,
-            web.active_mode_paused_at,
-            web.active_mode_paused_total,
-            web.motion_pause_active,
-            web.edging_start_time,
+            web.app_state.auto_mode_active_task,
+            web.app_state.active_mode_name,
+            web.app_state.active_mode_started_at,
+            web.app_state.active_mode_paused_at,
+            web.app_state.active_mode_paused_total,
+            web.app_state.motion_pause_active,
+            web.app_state.edging_start_time,
         )
         task = FakeTask()
         try:
-            web.auto_mode_active_task = task
-            web.active_mode_name = "freestyle"
-            web.active_mode_started_at = time.time() - 10
-            web.active_mode_paused_at = None
-            web.active_mode_paused_total = 0
-            web.motion_pause_active = False
-            web.edging_start_time = None
+            web.app_state.auto_mode_active_task = task
+            web.app_state.active_mode_name = "freestyle"
+            web.app_state.active_mode_started_at = time.time() - 10
+            web.app_state.active_mode_paused_at = None
+            web.app_state.active_mode_paused_total = 0
+            web.app_state.motion_pause_active = False
+            web.app_state.edging_start_time = None
 
             response = self.client.post("/toggle_motion_pause", json={"action": "pause"})
             try:
@@ -209,7 +209,7 @@ class WebStatusRouteTests(WebTestCase):
             self.assertTrue(paused_payload["paused"])
             self.assertTrue(paused_payload["active_mode_paused"])
             self.assertTrue(task.paused)
-            self.assertIsNotNone(web.active_mode_paused_at)
+            self.assertIsNotNone(web.app_state.active_mode_paused_at)
 
             response = self.client.post("/toggle_motion_pause", json={"action": "resume"})
             try:
@@ -221,17 +221,17 @@ class WebStatusRouteTests(WebTestCase):
             self.assertFalse(resumed_payload["paused"])
             self.assertFalse(resumed_payload["active_mode_paused"])
             self.assertFalse(task.paused)
-            self.assertIsNone(web.active_mode_paused_at)
-            self.assertGreaterEqual(web.active_mode_paused_total, 0)
+            self.assertIsNone(web.app_state.active_mode_paused_at)
+            self.assertGreaterEqual(web.app_state.active_mode_paused_total, 0)
         finally:
             (
-                web.auto_mode_active_task,
-                web.active_mode_name,
-                web.active_mode_started_at,
-                web.active_mode_paused_at,
-                web.active_mode_paused_total,
-                web.motion_pause_active,
-                web.edging_start_time,
+                web.app_state.auto_mode_active_task,
+                web.app_state.active_mode_name,
+                web.app_state.active_mode_started_at,
+                web.app_state.active_mode_paused_at,
+                web.app_state.active_mode_paused_total,
+                web.app_state.motion_pause_active,
+                web.app_state.edging_start_time,
             ) = original_state
             web.motion.resume()
 
