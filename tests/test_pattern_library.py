@@ -270,7 +270,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_allow_llm_edge_in_chat = self.web.settings.allow_llm_edge_in_chat
         self.original_settings_save = self.web.settings.save
         self.original_audio_generate = self.web.audio.generate_audio_for_text
-        self.original_last_live_pattern = self.web.last_live_motion_pattern_id
+        self.original_last_live_pattern = self.web.app_state.last_live_motion_pattern_id
         self.original_handy_key = self.web.handy.handy_key
         self.original_handy_state = (
             self.web.handy.last_stroke_speed,
@@ -291,7 +291,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.allow_llm_edge_in_chat = True
         self.web.settings.save = lambda *args, **kwargs: None
         self.web.audio.generate_audio_for_text = lambda *args, **kwargs: None
-        self.web.last_live_motion_pattern_id = ""
+        self.web.app_state.last_live_motion_pattern_id = ""
         self.web.motion.stop = lambda: self.stop_calls.append("stopped")
         self.web._set_motion_training_state(
             state="idle",
@@ -313,7 +313,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.allow_llm_edge_in_chat = self.original_allow_llm_edge_in_chat
         self.web.settings.save = self.original_settings_save
         self.web.audio.generate_audio_for_text = self.original_audio_generate
-        self.web.last_live_motion_pattern_id = self.original_last_live_pattern
+        self.web.app_state.last_live_motion_pattern_id = self.original_last_live_pattern
         self.web.handy.handy_key = self.original_handy_key
         (
             self.web.handy.last_stroke_speed,
@@ -615,7 +615,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(sway["weight"], 88)
 
     def test_chat_thumbs_down_rates_last_live_fixed_pattern(self):
-        self.web.last_live_motion_pattern_id = "tease"
+        self.web.app_state.last_live_motion_pattern_id = "tease"
 
         for _ in range(3):
             response = self.client.post("/dislike_last_move")
