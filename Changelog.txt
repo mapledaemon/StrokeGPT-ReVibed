@@ -8,8 +8,33 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-04-30 - Unreleased - Lock Backend-Required Controls On Connection Loss
-----------------------------------------------------------------------------
+2026-04-30 - Unreleased - Add Responsive UI And Chat Shell Foundation
+----------------------------------------------------------------------
+
+Branch: codex/ui-scaling-chat-foundation
+
+- Added shared CSS layout tokens for shell gutters, sidebar width,
+  chat width, chat message width, control height, and the compact
+  motion/status strip so future UI refactors do not keep reintroducing
+  hard-coded desktop dimensions.
+- Switched the main app shell to a dynamic viewport-height grid with a
+  clamped sidebar, min-width guards, and centered chat/input/status
+  surfaces. The chat scrollback keeps the existing rendering behavior but
+  now has a stable maximum line length and a foundation for later message
+  restyling.
+- Made the bottom motion/status strip responsive without changing motion
+  behavior: it uses the same chat-width limit as the composer, stacks at a
+  medium-width breakpoint before crowding the input area, and keeps the
+  phone layout compact.
+- Updated the roadmap's Chat Interface Refactor entry into a staged
+  chat-and-responsive-UI refactor plan, including the screen-size and
+  high-DPI constraints that should guide follow-up PRs.
+- Updated frontend static-asset tests to pin the new responsive layout
+  invariants.
+
+
+2026-04-30 - PR #83 - Lock Backend-Required Controls On Connection Loss
+-----------------------------------------------------------------------
 
 Branch: codex/backend-required-control-lock
 
