@@ -236,9 +236,11 @@ Current Up Next targets are:
    `Message failed: auto_started`, fix Auto-to-Freestyle no-action cases, and
    verify Pause/Resume and hotkey behavior on real hardware.
 2. Adapter Boundary Guardrails And Translation Audit: PRs #48-#75 paid down
-   most compatibility shims; preserve real schema/safety adapters, keep legacy
-   bridges frozen, and add a small guard against new routine `strokegpt.web`
-   runtime-state bridge writes.
+   most compatibility shims; preserve real schema/safety adapters and keep
+   legacy bridges frozen. The `strokegpt.web` runtime-state bridge is now
+   guarded by `tests/test_web_bridge_guardrails.py` and the `payloads.*`
+   binding surface by `tests/test_web_payload_guardrails.py`; extend either
+   allowlist only when intentionally adding new compatibility coverage.
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
@@ -261,7 +263,7 @@ Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeG
 ```
 
 ```text
-Continue the Adapter Boundary Guardrails And Translation Audit stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/app_state.py, and strokegpt/blueprints/. The web payload wrappers now serve as the canonical service-binding adapter; further moves should extend `strokegpt.payloads` and keep the `AppState` attribute bridge as legacy compatibility only. Add a guard against new routine tests writing through the `strokegpt.web` runtime-state bridge, preserve behavior, and update Changelog.txt before preparing a PR.
+Continue the Adapter Boundary Guardrails And Translation Audit stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/app_state.py, strokegpt/blueprints/, tests/test_web_bridge_guardrails.py, and tests/test_web_payload_guardrails.py. The web payload wrappers now serve as the canonical service-binding adapter and the bridge/payload guardrails enforce the legacy compatibility boundaries automatically; further moves should extend `strokegpt.payloads` rather than introducing new `web.*` wrappers, and routine tests should use `web.app_state` instead of the `strokegpt.web` runtime-state bridge. The remaining work in this stage is the schema/translation audit (LLM JSON ↔ pattern actions ↔ UI payloads ↔ Handy API): document real safety adapters, delete only wrappers that enforce no validation/migration/limit/smoothing/persistence, and update Changelog.txt before preparing a PR.
 ```
 
 ```text
