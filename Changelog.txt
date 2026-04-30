@@ -8,8 +8,43 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-04-29 - Unreleased - Document Web Bridge And Payload Guardrails
----------------------------------------------------------------------
+2026-04-30 - PR #81 - Freeze Motion Status Log Timecode Across Stop
+--------------------------------------------------------------------
+
+Branch: claude-motion-status-log-stop-timecode
+
+- Fixed the KNOWN_PROBLEMS "Motion Status Log Timecode Resets On Stop"
+  rough edge. Previously, hitting Stop set `state.activeModeElapsedSeconds`
+  to `null`; the next `/get_status` poll's motion observability payload
+  appended a fresh sequence-log entry whose timecode was computed via
+  `formatClockElapsed(state.activeModeElapsedSeconds ?? 0)` and so
+  rendered as `00:00`, making it look like the most recent action had
+  been rewritten.
+- `updateActiveModeTimer` in `static/js/motion-control.js` now hides the
+  timer UI on stop without nulling `state.activeModeElapsedSeconds`. The
+  cached elapsed value stays frozen so any sequence-log entries appended
+  while the device is idle keep the real elapsed timecode of the prior
+  mode session. The log and elapsed counter still reset to `00:00` when
+  a new mode starts, because the existing `timerStarted` detection
+  triggers on the `'' -> mode` transition via `state.activeModeName`.
+- Added `tests/test_motion_status_log_timecodes.py` with focused
+  source-level invariants: the stop branch must not null the elapsed
+  cache, the elapsed cache must have exactly one writer (the active-mode
+  branch), the log reset must be gated on `timerStarted`, the
+  mode-transition detection covers the `'' -> mode` case, and the
+  sequence-log timecode source remains `state.activeModeElapsedSeconds`.
+  Verified the new tests fail without the fix and pass with it; the
+  full `python -m unittest discover -s tests` suite stays green
+  (259 tests, 80 skipped baseline).
+- Added a new Backlog item (#13 "Frontend Test Runner For Behavioral
+  JavaScript Tests") to `ROADMAP.md` motivated by the source-text-only
+  test approach this branch uses; renumbered downstream Backlog and
+  Long-Horizon items.
+- Removed the resolved entry from `KNOWN_PROBLEMS.md`.
+
+
+2026-04-30 - PR #80 - Document Web Bridge And Payload Guardrails
+-----------------------------------------------------------------
 
 Branch: claude-up-next-2-bridge-guardrail-audit
 

@@ -762,7 +762,10 @@ function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.motionPa
     if (timerStarted) resetMotionSequenceLog();
 
     if (!normalizedMode) {
-        state.activeModeElapsedSeconds = null;
+        // Hide the timer UI on stop, but keep state.activeModeElapsedSeconds
+        // frozen at its last value so any sequence-log entries appended after
+        // stop keep their real elapsed timecode instead of rewriting to 00:00.
+        // The elapsed counter (and the log) only reset when a new mode starts.
         el.edgingTimer.style.display = 'none';
         el.edgingTimer.textContent = '';
         el.edgingTimer.title = '';

@@ -454,7 +454,44 @@ licensing, scope, and architecture review before implementation.
   device behavior, but avoid importing designs that add unnecessary
   pauses, stops, or other counterproductive playback behavior.
 
-### 13. Local Voice Control MVP (L)
+### 13. Frontend Test Runner For Behavioral JavaScript Tests (M)
+
+Why later: existing frontend tests pin structural invariants by reading
+JS source as text (see `tests/test_frontend_chat_statuses.py` and
+`tests/test_motion_status_log_timecodes.py`). That style locks in the
+shape of a fix but cannot drive runtime behavior. The recent
+motion-status-log timecode-reset fix could only be verified by toggling
+source between buggy and clean states and re-running text assertions,
+not by simulating a stop event and inspecting the resulting log DOM.
+The gap will widen as the Chat Interface Refactor (Up Next #5) lands
+more behavior-heavy frontend code, so a real runner should land before
+that work picks up.
+
+- Pick a runner that can exercise the existing ES modules with minimal
+  changes. Candidates: Vitest + jsdom, Jest + jsdom, or a Python-embedded
+  JS runtime such as `py_mini_racer` or `quickjs`. Constraints: the repo
+  currently has no Node toolchain, no `package.json`, and Windows install
+  goes through a PowerShell helper rather than a package-manager workflow.
+- Decide whether the runner runs inside `python -m unittest` (single-suite
+  AGENTS.md workflow preserved) or as a sibling step that
+  `scripts/test_and_run.ps1` invokes after the Python suite. Both are
+  workable; the choice affects how the validation gate is wired and how
+  Windows users install the runtime.
+- Add a small initial proof: a behavioral test for `updateActiveModeTimer`
+  that drives stop -> idle -> new-mode transitions through the function
+  and asserts the sequence-log DOM holds frozen timecodes after stop and
+  resets to `00:00` only on the mode-start transition. Mirror the spec
+  the recent text-only test pins (`tests/test_motion_status_log_timecodes.py`).
+- Keep existing source-text tests as-is. Only port them to behavioral
+  tests when a future bug retests the same surface and a runtime
+  assertion would have caught it; do not bulk-migrate up front.
+- Hook the runner into the same gate as the Python suite so a failing
+  behavioral test breaks `scripts/test_and_run.ps1` and any future CI
+  run, rather than living as an opt-in side suite.
+- Document the runner choice, how to add a behavioral test, and the
+  source-text vs behavioral test guidance in `AGENTS.md`.
+
+### 14. Local Voice Control MVP (L)
 
 Why later: voice control is the largest user-facing feature, but it should
 ship as push-to-talk before always-on listening.
@@ -489,7 +526,7 @@ Candidate local ASR providers:
   timestamps, and CC BY 4.0 licensing. Source:
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-### 14. Story Mode (L/XL)
+### 15. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -506,7 +543,7 @@ editing.
 
 ## Long-Horizon
 
-### 15. Optional Runtime And Packaging Work (XL)
+### 16. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
