@@ -113,6 +113,7 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: translateY(-50%) rotate(
 .my-button:active { transform: translateY(0); box-shadow: 0 2px 4px var(--shadow); }
 .my-button:disabled { cursor: not-allowed; opacity: 0.55; transform: none; box-shadow: none; }
 .my-button:disabled:hover { background-color: #2a313b; transform: none; box-shadow: none; }
+[data-backend-locked="true"] { cursor: not-allowed; opacity: 0.6; }
 .control-action-stack { display: flex; flex-direction: column; gap: 10px; }
 .preset-mode-stack, .experimental-mode-stack { display: flex; flex-direction: column; gap: 10px; }
 .experimental-mode-section { border-color: rgba(189, 147, 249, 0.42); }

@@ -122,43 +122,38 @@ class ConnectionLostBannerSourceTests(unittest.TestCase):
         # writer must guard for that without throwing.
         self.assertIn("if (el.connectionLostBanner)", body)
         self.assertIn("el.connectionLostBanner.hidden = !next", body)
+        self.assertIn("syncBackendRequiredControls()", body)
 
     def test_api_call_distinguishes_network_failure_from_http_error(self):
         body = _function_body(self.context_js, "export async function apiCall(")
+        fetch_body = _function_body(self.context_js, "export async function fetchWithConnectionState(")
 
-        # The three load-bearing positions inside apiCall.
-        catch_index = body.find("catch (error)")
-        success_clear_index = body.find("setConnectionLost(false)")
+        # apiCall delegates the raw fetch to fetchWithConnectionState so direct
+        # fetch users and JSON callers share the same connection-lost behavior.
+        self.assertIn("fetchWithConnectionState(endpoint, options)", body)
+
+        # The three load-bearing positions across the fetch helper and apiCall.
+        catch_index = fetch_body.find("catch (error)")
+        success_clear_index = fetch_body.find("setConnectionLost(false)")
         http_error_index = body.find("if (!response.ok)")
         for label, index in (
             ("catch (error)", catch_index),
             ("setConnectionLost(false)", success_clear_index),
             ("if (!response.ok)", http_error_index),
         ):
-            self.assertGreaterEqual(index, 0, f"expected {label!r} in apiCall body")
+            self.assertGreaterEqual(index, 0, f"expected {label!r} in connection-aware fetch path")
 
         # Network failure path: a setConnectionLost(true) call must live inside
-        # the catch block, before the success-clear and the HTTP error branch.
-        set_lost_true_index = body.find("setConnectionLost(true)")
+        # the catch block, while successful fetches clear the banner before
+        # apiCall inspects HTTP status codes.
+        set_lost_true_index = fetch_body.find("setConnectionLost(true)")
         self.assertGreater(
             set_lost_true_index,
             catch_index,
             "setConnectionLost(true) must live inside the catch block",
         )
-        self.assertLess(
-            set_lost_true_index,
-            success_clear_index,
-            "setConnectionLost(true) must run before the success branch clears it",
-        )
 
-        # The success-clear must come before the HTTP error branch so a non-OK
-        # response from a reachable backend keeps the banner hidden.
-        self.assertLess(
-            success_clear_index,
-            http_error_index,
-            "setConnectionLost(false) must run before the HTTP error branch so "
-            "a reachable backend with a non-OK response keeps the banner hidden",
-        )
+        self.assertLess(success_clear_index, fetch_body.find("return response"))
 
         # HTTP error branch must return undefined without flipping the banner
         # back on; extract it by brace-matching from the if header.

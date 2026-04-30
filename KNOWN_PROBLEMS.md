@@ -107,21 +107,23 @@ Follow-up work:
 
 Status: Partial
 
-A persistent connection-lost banner is now in place: any `apiCall` whose
-`fetch()` raises (backend unreachable) flips a fixed top-of-viewport banner
-visible, and the next successful response hides it again. Routes that
-return HTTP errors from a reachable backend keep the banner hidden so the
-caller can surface its own message. This closes the "no indicator that the
-backend never received the change" half of the problem. The remaining
-audits below are still open: a banner tells the user the connection is
-gone, but it does not yet make the actual write endpoints surface their
-own success/failure state inline.
+A persistent connection-lost banner and backend-required control lock are now
+in place: any connection-aware `fetch()` failure flips a fixed top-of-viewport
+banner visible and disables controls marked `data-requires-backend`; the next
+successful response hides the banner and restores those controls without
+unlocking controls that were already disabled. Routes that return HTTP errors
+from a reachable backend keep the banner hidden so the caller can surface its
+own message. This closes the "no indicator that the backend never received the
+change" half of the problem. The remaining audits below are still open: the UI
+now prevents backend-gone edits, but many write endpoints still do not surface
+their own success/failure state inline when the backend is reachable but the
+request itself fails.
 
 Follow-up work:
 
 - Audit settings-write endpoints for explicit success/failure indicators in the
   GUI, especially for toggles that currently rely on optimistic local state.
-  The banner only catches network-level failure; per-write success state is
+  The banner and lock catch network-level failure; per-write success state is
   still implicit for many toggles.
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the

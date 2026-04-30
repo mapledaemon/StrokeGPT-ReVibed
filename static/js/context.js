@@ -184,32 +184,105 @@ export const state = {
     motionObservability: null,
     motionCylinderAnimationStarted: false,
     connectionLost: false,
+    backendControlGuardInitialized: false,
 };
+
+export const BACKEND_REQUIRED_SELECTOR = '[data-requires-backend]';
+
+export function applyBackendRequiredControlState(control) {
+    if (!control || !('disabled' in control)) return control;
+    if (state.connectionLost) {
+        if (control.dataset.backendLocked !== 'true') {
+            control.dataset.backendPreviousDisabled = control.disabled ? 'true' : 'false';
+        }
+        control.disabled = true;
+        control.dataset.backendLocked = 'true';
+        control.setAttribute('aria-disabled', 'true');
+        return control;
+    }
+    if (control.dataset.backendLocked === 'true') {
+        if (control.dataset.backendPreviousDisabled === 'false') control.disabled = false;
+        delete control.dataset.backendLocked;
+        delete control.dataset.backendPreviousDisabled;
+        control.removeAttribute('aria-disabled');
+    }
+    return control;
+}
+
+export function syncBackendRequiredControls(root = D) {
+    if (root.matches?.(BACKEND_REQUIRED_SELECTOR)) applyBackendRequiredControlState(root);
+    root.querySelectorAll?.(BACKEND_REQUIRED_SELECTOR).forEach(applyBackendRequiredControlState);
+}
+
+export function markRequiresBackend(control) {
+    if (!control) return control;
+    control.dataset.requiresBackend = 'true';
+    return applyBackendRequiredControlState(control);
+}
+
+function blockBackendRequiredInteraction(event) {
+    if (!state.connectionLost) return;
+    const control = event.target?.closest?.(BACKEND_REQUIRED_SELECTOR);
+    if (!control) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (el.statusText) el.statusText.textContent = 'Connection lost. Reconnect before changing settings or sending commands.';
+}
+
+export function initBackendRequiredControlGuard() {
+    if (state.backendControlGuardInitialized) return;
+    state.backendControlGuardInitialized = true;
+    ['click', 'change', 'submit', 'keydown'].forEach(type => {
+        D.addEventListener(type, blockBackendRequiredInteraction, true);
+    });
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) syncBackendRequiredControls(node);
+            });
+        });
+    });
+    observer.observe(D.body, {childList: true, subtree: true});
+    syncBackendRequiredControls();
+}
 
 export function setConnectionLost(isLost) {
     const next = Boolean(isLost);
-    if (state.connectionLost === next) return;
+    if (state.connectionLost === next) {
+        syncBackendRequiredControls();
+        return;
+    }
     state.connectionLost = next;
     if (el.connectionLostBanner) el.connectionLostBanner.hidden = !next;
+    syncBackendRequiredControls();
+}
+
+export async function fetchWithConnectionState(endpoint, options = {}) {
+    try {
+        const response = await fetch(endpoint, options);
+        setConnectionLost(false);
+        return response;
+    } catch (error) {
+        console.error(`API call to ${endpoint} failed:`, error);
+        setConnectionLost(true);
+        if (el.statusText) el.statusText.textContent = 'Error: Cannot connect to server.';
+        throw error;
+    }
 }
 
 export async function apiCall(endpoint, options = {}) {
     let response;
     try {
-        response = await fetch(endpoint, options);
+        response = await fetchWithConnectionState(endpoint, options);
     } catch (error) {
         // Network failure: backend unreachable. Surface the persistent
         // connection-lost banner so the user does not silently keep editing
         // settings, sliders, or feedback that will not save.
-        console.error(`API call to ${endpoint} failed:`, error);
-        setConnectionLost(true);
-        if (el.statusText) el.statusText.textContent = 'Error: Cannot connect to server.';
         return undefined;
     }
     // The backend answered, so the connection is alive even if this specific
     // request returned an HTTP error. Hide the banner and let the caller
     // surface its own error message for the non-OK case.
-    setConnectionLost(false);
     if (!response.ok) {
         console.error(`API call to ${endpoint} returned HTTP ${response.status}`);
         if (el.statusText) el.statusText.textContent = `Error: server returned ${response.status}.`;

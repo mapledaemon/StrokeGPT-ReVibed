@@ -19,7 +19,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
 
     function displayStep() {
         if (step === 1) {
-            el.setupBox.innerHTML = `<h2>Step 1: Handy Key</h2><p>Please enter your connection key from handyfeeling.com</p><input type="password" id="setup-key" class="input-text" placeholder="Handy Key"><br><button id="setup-next" class="my-button">Next</button>`;
+            el.setupBox.innerHTML = `<h2>Step 1: Handy Key</h2><p>Please enter your connection key from handyfeeling.com</p><input type="password" id="setup-key" class="input-text" placeholder="Handy Key" data-requires-backend><br><button id="setup-next" class="my-button" data-requires-backend>Next</button>`;
             D.getElementById('setup-next').onclick = async () => {
                 const key = D.getElementById('setup-key').value.trim();
                 if (!key) return;
@@ -36,7 +36,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
                 displayStep();
             };
         } else if (step === 2) {
-            el.setupBox.innerHTML = `<h2>Step 2: Persona</h2><p>Choose or edit the AI prompt for this session.</p><select id="setup-persona-select" class="select-box"></select><input type="text" id="setup-persona" class="input-text" placeholder="Describe persona"><div class="voice-actions"><button id="setup-save-persona" class="my-button">Save Prompt</button><button id="setup-next" class="my-button">Continue</button></div>`;
+            el.setupBox.innerHTML = `<h2>Step 2: Persona</h2><p>Choose or edit the AI prompt for this session.</p><select id="setup-persona-select" class="select-box"></select><input type="text" id="setup-persona" class="input-text" placeholder="Describe persona"><div class="voice-actions"><button id="setup-save-persona" class="my-button" data-requires-backend>Save Prompt</button><button id="setup-next" class="my-button" data-requires-backend>Continue</button></div>`;
             const setupPersonaSelect = D.getElementById('setup-persona-select');
             const setupPersonaInput = D.getElementById('setup-persona');
             const currentPrompt = data.persona || el.personaInput.value || state.personaPrompts[0] || 'An energetic and passionate girlfriend';
@@ -67,7 +67,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
         } else if (step === 3) {
             const defaultMinDepth = data.min_depth ?? 5;
             const defaultMaxDepth = data.max_depth ?? 100;
-            el.setupBox.innerHTML = `<h2>Step 3: Stroke Range</h2><p>Choose the safe travel range. Release either slider or press Test to run one pass.</p><div class="slider-container"><label for="depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="${defaultMinDepth}" id="depth-min-slider"><span id="depth-min-val">${defaultMinDepth}%</span></div><div class="slider-container"><label for="depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="${defaultMaxDepth}" id="depth-max-slider"><span id="depth-max-val">${defaultMaxDepth}%</span></div><div class="setup-actions"><button id="test-depth-range" class="my-button">Test</button><button id="set-depth-range" class="my-button">Next</button></div>`;
+            el.setupBox.innerHTML = `<h2>Step 3: Stroke Range</h2><p>Choose the safe travel range. Release either slider or press Test to run one pass.</p><div class="slider-container"><label for="depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="${defaultMinDepth}" id="depth-min-slider" data-requires-backend><span id="depth-min-val">${defaultMinDepth}%</span></div><div class="slider-container"><label for="depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="${defaultMaxDepth}" id="depth-max-slider" data-requires-backend><span id="depth-max-val">${defaultMaxDepth}%</span></div><div class="setup-actions"><button id="test-depth-range" class="my-button" data-requires-backend>Test</button><button id="set-depth-range" class="my-button" data-requires-backend>Next</button></div>`;
             const minSlider = D.getElementById('depth-min-slider');
             const maxSlider = D.getElementById('depth-max-slider');
             const minVal = D.getElementById('depth-min-val');
@@ -111,7 +111,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
         } else if (step === 4 || step === 5) {
             const title = step === 4 ? 'Minimum Speed' : 'Maximum Speed';
             const defaultVal = step === 4 ? setupMinSpeed : (data.max_speed ?? 80);
-            el.setupBox.innerHTML = `<h2>Step ${step}: Set ${title}</h2><p>Choose your preferred ${title.toLowerCase()}.</p><div class="slider-container setup-slider"><input type="range" min="0" max="100" value="${defaultVal}" id="speed-slider"><span id="speed-val">${defaultVal}%</span></div><button id="set-speed" class="my-button">Next</button>`;
+            el.setupBox.innerHTML = `<h2>Step ${step}: Set ${title}</h2><p>Choose your preferred ${title.toLowerCase()}.</p><div class="slider-container setup-slider"><input type="range" min="0" max="100" value="${defaultVal}" id="speed-slider" data-requires-backend><span id="speed-val">${defaultVal}%</span></div><button id="set-speed" class="my-button" data-requires-backend>Next</button>`;
             const slider = D.getElementById('speed-slider');
             slider.oninput = () => { D.getElementById('speed-val').textContent = `${slider.value}%`; };
             D.getElementById('set-speed').onclick = async () => {

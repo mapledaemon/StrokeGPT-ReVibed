@@ -52,16 +52,16 @@
                             </div>
                         </div>
                         <div id="motion-feedback-buttons">
-                            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern">&#128078;</button>
-                            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move">&#128077;</button>
+                            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern" data-requires-backend>&#128078;</button>
+                            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move" data-requires-backend>&#128077;</button>
                         </div>
                     </div>
                     <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                 </div>
             </div>
             <div id="message-input-line">
-                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command...">
-                <button id="send-chat-btn" class="my-button">Send</button>
+                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." data-requires-backend>
+                <button id="send-chat-btn" class="my-button" data-requires-backend>Send</button>
             </div>
              <div id="status-text">Status: Checking for saved settings...</div>
         </div>
@@ -71,24 +71,24 @@
         <div class="setting-section">
             <h3>Control Actions</h3>
             <div class="control-action-stack">
-                <button id="pause-resume-btn" class="my-button" title="Hotkey: Play/Pause media key">Resume/Pause</button>
-                <button id="start-auto-btn" class="my-button">Start Auto</button>
-                <button id="stop-auto-btn" class="my-button" title="Hotkey: Stop media key">Stop Auto</button>
-                <button id="toggle-memory-btn" class="my-button">Memories: ON</button>
-                <button id="im-close-btn" class="my-button sidebar-button milking" style="display: none;" title="Hotkey: double-tap Shift">I'm Close!</button>
+                <button id="pause-resume-btn" class="my-button" title="Hotkey: Play/Pause media key" data-requires-backend>Resume/Pause</button>
+                <button id="start-auto-btn" class="my-button" data-requires-backend>Start Auto</button>
+                <button id="stop-auto-btn" class="my-button" title="Hotkey: Stop media key" data-requires-backend>Stop Auto</button>
+                <button id="toggle-memory-btn" class="my-button" data-requires-backend>Memories: ON</button>
+                <button id="im-close-btn" class="my-button sidebar-button milking" style="display: none;" title="Hotkey: double-tap Shift" data-requires-backend>I'm Close!</button>
             </div>
         </div>
         <div class="setting-section">
             <h3>Preset Modes</h3>
             <div class="preset-mode-stack">
-                <button id="edging-mode-btn" class="my-button sidebar-button edging">Edge Me</button>
-                <button id="milking-mode-btn" class="my-button sidebar-button milking">Milk Me</button>
+                <button id="edging-mode-btn" class="my-button sidebar-button edging" data-requires-backend>Edge Me</button>
+                <button id="milking-mode-btn" class="my-button sidebar-button milking" data-requires-backend>Milk Me</button>
             </div>
         </div>
         <div class="setting-section experimental-mode-section">
             <h3>Experimental Modes</h3>
             <div class="experimental-mode-stack">
-                <button id="freestyle-mode-btn" class="my-button sidebar-button experimental" title="Adaptive pattern selection using enabled motion patterns.">Freestyle</button>
+                <button id="freestyle-mode-btn" class="my-button sidebar-button experimental" title="Adaptive pattern selection using enabled motion patterns." data-requires-backend>Freestyle</button>
             </div>
         </div>
         <div id="sidebar-motion-indicator">
@@ -102,7 +102,7 @@
             </div>
         </div>
         <div class="sidebar-stop-section">
-            <button id="emergency-stop-all-btn" class="my-button sidebar-button stop" title="Hotkey: Stop media key">STOP EVERYTHING</button>
+            <button id="emergency-stop-all-btn" class="my-button sidebar-button stop" title="Hotkey: Stop media key" data-requires-backend>STOP EVERYTHING</button>
         </div>
     </div>
     <div id="setup-overlay"><div id="setup-box"></div></div>
@@ -125,29 +125,29 @@
                 <label for="pfp-upload" style="cursor: pointer; display: block;">
                     <img id="ai-pfp-preview" src="/static/default-pfp.png" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 10px auto; display: block; border: 2px solid var(--comment);">
                 </label>
-                <input type="file" id="pfp-upload" accept="image/*" style="display: none;">
+                <input type="file" id="pfp-upload" accept="image/*" style="display: none;" data-requires-backend>
                 <input type="text" id="ai-name-input" class="input-text" placeholder="AI's Name...">
-                <button id="set-ai-name-btn" class="my-button">Set Name</button>
+                <button id="set-ai-name-btn" class="my-button" data-requires-backend>Set Name</button>
                 <select id="persona-prompt-select" class="select-box"></select>
                 <input type="text" id="persona-input" class="input-text" placeholder="Describe the AI's persona...">
                 <div class="voice-actions">
-                    <button id="set-persona-btn" class="my-button">Use Prompt</button>
-                    <button id="save-persona-prompt-btn" class="my-button">Save Prompt</button>
+                    <button id="set-persona-btn" class="my-button" data-requires-backend>Use Prompt</button>
+                    <button id="save-persona-prompt-btn" class="my-button" data-requires-backend>Save Prompt</button>
                 </div>
             </div>
             <div id="settings-tab-model" class="settings-panel">
                 <div class="settings-subsection">
                     <h4>Ollama Model</h4>
-                    <select id="ollama-model-select" class="select-box"></select>
+                    <select id="ollama-model-select" class="select-box" data-requires-backend></select>
                     <div class="model-actions">
-                        <button id="use-selected-model-btn" class="my-button">Use Selected</button>
+                        <button id="use-selected-model-btn" class="my-button" data-requires-backend>Use Selected</button>
                         <button id="refresh-model-field-btn" class="my-button">Edit Selected</button>
                     </div>
                     <input type="text" id="ollama-model-input" class="input-text" placeholder="namespace/model:tag">
                     <div class="model-actions model-actions-wide">
-                        <button id="save-ollama-model-btn" class="my-button">Add and Use Model</button>
-                        <button id="download-ollama-model-btn" class="my-button">Download Model</button>
-                        <button id="refresh-ollama-status-btn" class="my-button">Refresh</button>
+                        <button id="save-ollama-model-btn" class="my-button" data-requires-backend>Add and Use Model</button>
+                        <button id="download-ollama-model-btn" class="my-button" data-requires-backend>Download Model</button>
+                        <button id="refresh-ollama-status-btn" class="my-button" data-requires-backend>Refresh</button>
                     </div>
                     <div id="ollama-model-status" style="font-size: 0.85em; color: var(--comment);">Current model not loaded yet.</div>
                 </div>
@@ -158,21 +158,21 @@
                         <option value="status">Status</option>
                         <option value="debug">Debug</option>
                     </select>
-                    <button id="save-ollama-diagnostics-level-btn" class="my-button">Save Ollama Diagnostics</button>
+                    <button id="save-ollama-diagnostics-level-btn" class="my-button" data-requires-backend>Save Ollama Diagnostics</button>
                     <pre id="ollama-diagnostics-output" class="diagnostics-output">No Ollama requests recorded.</pre>
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
-                <select id="audio-provider-select" class="select-box">
+                <select id="audio-provider-select" class="select-box" data-requires-backend>
                     <option value="elevenlabs">ElevenLabs API</option>
                     <option value="local">Local Chatterbox</option>
                 </select>
-                <div class="audio-toggle-line"><input type="checkbox" id="enable-audio-checkbox"><label for="enable-audio-checkbox">Enable Audio</label></div>
+                <div class="audio-toggle-line"><input type="checkbox" id="enable-audio-checkbox" data-requires-backend><label for="enable-audio-checkbox">Enable Audio</label></div>
                 <div id="local-tts-status" style="font-size: 0.85em; color: var(--comment);">Local voice dependencies not checked.</div>
                 <div id="elevenlabs-settings-panel" class="voice-panel">
                     <input type="password" id="elevenlabs-key-input" class="input-text" placeholder="ElevenLabs API Key">
-                    <button id="set-elevenlabs-key-button" class="my-button">Set API Key</button>
-                    <select id="elevenlabs-voice-select-box" class="select-box" disabled><option>Set API key to load voices...</option></select>
+                    <button id="set-elevenlabs-key-button" class="my-button" data-requires-backend>Set API Key</button>
+                    <select id="elevenlabs-voice-select-box" class="select-box" disabled data-requires-backend><option>Set API key to load voices...</option></select>
                 </div>
                 <div id="local-tts-settings-panel" class="voice-panel" style="display: none;">
                     <select id="local-tts-engine-select" class="select-box">
@@ -182,9 +182,9 @@
                     <select id="local-tts-style-select" class="select-box"></select>
                     <div class="browse-line">
                         <input type="text" id="local-tts-prompt-path" class="input-text" placeholder="Optional reference sample path">
-                        <button id="browse-local-tts-sample-btn" class="my-button">Browse</button>
+                        <button id="browse-local-tts-sample-btn" class="my-button" data-requires-backend>Browse</button>
                     </div>
-                    <input type="file" id="local-tts-sample-upload" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.aac" style="display: none;">
+                    <input type="file" id="local-tts-sample-upload" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.aac" style="display: none;" data-requires-backend>
                     <div class="slider-container"><label for="local-tts-exaggeration">Emotion</label><input type="range" min="0.25" max="2" step="0.05" value="0.65" id="local-tts-exaggeration"><span id="local-tts-exaggeration-val">0.65</span></div>
                     <div class="slider-container"><label for="local-tts-cfg">Pace / adherence</label><input type="range" min="0" max="1" step="0.05" value="0.35" id="local-tts-cfg"><span id="local-tts-cfg-val">0.35</span></div>
                     <div class="slider-container"><label for="local-tts-temperature">Variation</label><input type="range" min="0.05" max="5" step="0.05" value="0.85" id="local-tts-temperature"><span id="local-tts-temperature-val">0.85</span></div>
@@ -192,9 +192,9 @@
                     <div class="slider-container"><label for="local-tts-min-p">Min P</label><input type="range" min="0" max="1" step="0.01" value="0.05" id="local-tts-min-p"><span id="local-tts-min-p-val">0.05</span></div>
                     <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
                     <div class="voice-actions">
-                        <button id="set-local-tts-button" class="my-button">Save Local Voice</button>
-                        <button id="download-local-tts-model-button" class="my-button">Download / Load Local Voice Model</button>
-                        <button id="test-local-tts-button" class="my-button">Test Voice</button>
+                        <button id="set-local-tts-button" class="my-button" data-requires-backend>Save Local Voice</button>
+                        <button id="download-local-tts-model-button" class="my-button" data-requires-backend>Download / Load Local Voice Model</button>
+                        <button id="test-local-tts-button" class="my-button" data-requires-backend>Test Voice</button>
                     </div>
                 </div>
             </div>
@@ -205,7 +205,7 @@
                         <option value="hamp">HAMP continuous (recommended)</option>
                         <option value="position">Flexible position/script (experimental)</option>
                     </select>
-                    <button id="save-motion-backend-btn" class="my-button">Save Motion Backend</button>
+                    <button id="save-motion-backend-btn" class="my-button" data-requires-backend>Save Motion Backend</button>
                     <div id="motion-backend-status" class="settings-help">Current backend: HAMP continuous.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
@@ -215,38 +215,38 @@
                         <option value="status">Status</option>
                         <option value="debug">Debug</option>
                     </select>
-                    <button id="save-motion-diagnostics-level-btn" class="my-button">Save Motion Diagnostics</button>
+                    <button id="save-motion-diagnostics-level-btn" class="my-button" data-requires-backend>Save Motion Diagnostics</button>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Speed Limits</h4>
-                    <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider"><span id="motion-speed-min-val">10%</span></div>
-                    <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider"><span id="motion-speed-max-val">80%</span></div>
-                    <button id="save-motion-speed-limits" class="my-button">Save Speed Limits</button>
+                    <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider" data-requires-backend><span id="motion-speed-min-val">10%</span></div>
+                    <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider" data-requires-backend><span id="motion-speed-max-val">80%</span></div>
+                    <button id="save-motion-speed-limits" class="my-button" data-requires-backend>Save Speed Limits</button>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Mode Timings (Seconds)</h4>
                     <div class="timing-row"><label for="auto-min-time">Auto:</label><input type="number" id="auto-min-time" min="1" max="60" step="1" value="4"><span>-</span><input type="number" id="auto-max-time" min="1" max="60" step="1" value="7"></div>
                     <div class="timing-row"><label for="edging-min-time">Edging:</label><input type="number" id="edging-min-time" min="1" max="60" step="1" value="5"><span>-</span><input type="number" id="edging-max-time" min="1" max="60" step="1" value="8"></div>
                     <div class="timing-row"><label for="milking-min-time">Milking:</label><input type="number" id="milking-min-time" min="1" max="60" step="1" value="2"><span>-</span><input type="number" id="milking-max-time" min="1" max="60" step="1" value="5"></div>
-                    <button id="save-timings-btn" class="my-button">Save Timings</button>
+                    <button id="save-timings-btn" class="my-button" data-requires-backend>Save Timings</button>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>LLM Edge Permissions</h4>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-freestyle-checkbox" checked> Allow LLM to edge in freestyle</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
-                    <button id="save-llm-edge-permissions-btn" class="my-button">Save LLM Edge Permissions</button>
+                    <button id="save-llm-edge-permissions-btn" class="my-button" data-requires-backend>Save LLM Edge Permissions</button>
                     <div id="llm-edge-permissions-status" class="settings-help">LLM edge permissions not saved yet.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Patterns</h4>
-                    <label class="settings-checkbox-line"><input type="checkbox" id="motion-feedback-auto-disable-checkbox"> Auto-disable repeated dislikes</label>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="motion-feedback-auto-disable-checkbox" data-requires-backend> Auto-disable repeated dislikes</label>
                     <div id="motion-feedback-history" class="motion-feedback-history">No recent pattern feedback.</div>
                     <div class="motion-pattern-actions">
-                        <button id="refresh-motion-patterns-btn" class="my-button">Refresh Patterns</button>
-                        <button id="import-motion-pattern-btn" class="my-button">Import Pattern</button>
+                        <button id="refresh-motion-patterns-btn" class="my-button" data-requires-backend>Refresh Patterns</button>
+                        <button id="import-motion-pattern-btn" class="my-button" data-requires-backend>Import Pattern</button>
                         <button id="open-motion-training-btn" class="my-button">Open Motion Training</button>
                     </div>
-                    <input type="file" id="motion-pattern-import-input" accept=".json,.funscript,application/json" style="display: none;">
+                    <input type="file" id="motion-pattern-import-input" accept=".json,.funscript,application/json" style="display: none;" data-requires-backend>
                     <div id="motion-pattern-status" style="font-size: 0.85em; color: var(--comment);">Pattern list not loaded yet.</div>
                     <div id="motion-pattern-list" class="motion-pattern-list"></div>
                 </div>
@@ -254,17 +254,17 @@
             <div id="settings-tab-device" class="settings-panel">
                 <div class="settings-subsection device-panel">
                     <h4>Handy Connection</h4>
-                    <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key">
-                    <button id="save-handy-key-btn" class="my-button">Save Connection Key</button>
+                    <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key" data-requires-backend>
+                    <button id="save-handy-key-btn" class="my-button" data-requires-backend>Save Connection Key</button>
                     <div id="handy-key-status" style="font-size: 0.85em; color: var(--comment);">Connection key is saved locally.</div>
                 </div>
                 <div class="settings-subsection device-panel">
                     <h4>Stroke Range</h4>
-                    <div class="slider-container"><label for="motion-depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="5" id="motion-depth-min-slider"><span id="motion-depth-min-val">5%</span></div>
-                    <div class="slider-container"><label for="motion-depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="100" id="motion-depth-max-slider"><span id="motion-depth-max-val">100%</span></div>
+                    <div class="slider-container"><label for="motion-depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="5" id="motion-depth-min-slider" data-requires-backend><span id="motion-depth-min-val">5%</span></div>
+                    <div class="slider-container"><label for="motion-depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="100" id="motion-depth-max-slider" data-requires-backend><span id="motion-depth-max-val">100%</span></div>
                     <div class="motion-actions">
-                        <button id="test-motion-depth-range" class="my-button">Test Range</button>
-                        <button id="save-motion-depth-range" class="my-button">Save Range</button>
+                        <button id="test-motion-depth-range" class="my-button" data-requires-backend>Test Range</button>
+                        <button id="save-motion-depth-range" class="my-button" data-requires-backend>Save Range</button>
                     </div>
                 </div>
             </div>
@@ -280,7 +280,7 @@
                         outside these prompts and are not shown here.
                     </p>
                     <div class="settings-checkbox-line">
-                        <button id="refresh-system-prompts-btn" class="my-button">Refresh</button>
+                        <button id="refresh-system-prompts-btn" class="my-button" data-requires-backend>Refresh</button>
                         <span id="system-prompts-status" style="font-size: 0.85em; color: var(--comment);"></span>
                     </div>
                     <h5>Chat</h5>
@@ -296,7 +296,7 @@
             <div id="settings-tab-advanced" class="settings-panel">
                 <div class="settings-subsection">
                     <h4>Settings Data</h4>
-                    <button id="reset-settings-btn" class="my-button stop">Reset All Settings</button>
+                    <button id="reset-settings-btn" class="my-button stop" data-requires-backend>Reset All Settings</button>
                     <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>
                 </div>
             </div>
@@ -312,7 +312,7 @@
                 <div class="motion-training-list-pane">
                     <div class="motion-training-toolbar">
                         <div id="motion-training-status" class="motion-training-status">Training player idle.</div>
-                        <button id="stop-motion-training-btn" class="my-button stop" disabled>Stop Preview</button>
+                        <button id="stop-motion-training-btn" class="my-button stop" disabled data-requires-backend>Stop Preview</button>
                     </div>
                     <div id="motion-training-pattern-list" class="motion-pattern-list motion-training-pattern-list"></div>
                 </div>
@@ -390,15 +390,15 @@
                         </div>
                         <div class="motion-training-save-row">
                             <input type="text" id="motion-training-save-name" class="input-text" placeholder="New pattern name">
-                            <button id="play-motion-training-preview-btn" class="my-button" disabled>Play Preview</button>
-                            <button id="save-motion-training-pattern-btn" class="my-button" disabled>Save As New Pattern</button>
+                            <button id="play-motion-training-preview-btn" class="my-button" disabled data-requires-backend>Play Preview</button>
+                            <button id="save-motion-training-pattern-btn" class="my-button" disabled data-requires-backend>Save As New Pattern</button>
                         </div>
                         <div id="motion-training-edit-status" class="motion-training-edit-status">Select a pattern to edit a temporary copy.</div>
                     </div>
                     <div class="motion-training-feedback-row">
-                        <button id="motion-training-feedback-up" class="my-button" disabled>Thumbs Up</button>
-                        <button id="motion-training-feedback-neutral" class="my-button" disabled>Neutral</button>
-                        <button id="motion-training-feedback-down" class="my-button" disabled>Thumbs Down</button>
+                        <button id="motion-training-feedback-up" class="my-button" disabled data-requires-backend>Thumbs Up</button>
+                        <button id="motion-training-feedback-neutral" class="my-button" disabled data-requires-backend>Neutral</button>
+                        <button id="motion-training-feedback-down" class="my-button" disabled data-requires-backend>Thumbs Down</button>
                     </div>
                 </div>
             </div>

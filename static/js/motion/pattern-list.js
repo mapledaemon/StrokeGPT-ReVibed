@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, el, state } from '../context.js';
+import { D, apiCall, clampNumber, el, markRequiresBackend, state } from '../context.js';
 
 let renderMotionPatternsCallback = () => {};
 let setMotionTrainingDetailCallback = () => {};
@@ -96,6 +96,7 @@ export function createPatternFeedbackResetButton(pattern) {
     resetButton.type = 'button';
     resetButton.className = 'my-button motion-pattern-feedback-reset';
     resetButton.textContent = 'Reset';
+    markRequiresBackend(resetButton);
     resetButton.addEventListener('click', event => {
         event.stopPropagation();
         resetMotionPatternFeedback(pattern.id);
@@ -122,6 +123,7 @@ function createPatternWeightControl(pattern) {
     input.step = '1';
     input.value = clampNumber(pattern.weight, 0, 100, 50);
     input.setAttribute('aria-label', `${patternDisplayName(pattern)} LLM weight`);
+    markRequiresBackend(input);
     input.addEventListener('change', () => setMotionPatternWeight(pattern.id, input.value));
     input.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
@@ -141,6 +143,7 @@ function createPatternWeightControl(pattern) {
         button.type = 'button';
         button.className = `motion-training-number-step ${className}`;
         button.setAttribute('aria-label', `${ariaLabel} for ${patternDisplayName(pattern)}`);
+        markRequiresBackend(button);
         button.addEventListener('click', () => {
             input.value = Math.round(clampNumber(Number(input.value) + delta, 0, 100, 50));
             setMotionPatternWeight(pattern.id, input.value);
@@ -203,6 +206,7 @@ export function renderCompactMotionPatternList(patterns) {
         checkbox.type = 'checkbox';
         checkbox.checked = Boolean(pattern.enabled);
         checkbox.dataset.patternId = pattern.id;
+        markRequiresBackend(checkbox);
         checkbox.addEventListener('change', async () => {
             checkbox.disabled = true;
             await setMotionPatternEnabled(pattern.id, checkbox.checked);
