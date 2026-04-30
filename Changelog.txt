@@ -8,6 +8,50 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-30 - PR #82 - Surface Connection-Lost Banner For Backend Outages
+-------------------------------------------------------------------------
+
+Branch: claude-connection-lost-banner
+
+- Closes the network-level half of the KNOWN_PROBLEMS "Web UI Stays
+  Functional After Backend Shutdown" rough edge. Previously, when the
+  Flask backend stopped while a browser tab was open, `apiCall` set
+  `el.statusText.textContent = 'Error: Cannot connect to server.'` and
+  returned `undefined`. The status text was overwritten by the next mood
+  poll or chat update within a second, so users could keep dragging
+  sliders, toggling checkboxes, and clicking thumbs without any visible
+  signal that none of it was reaching the backend.
+- Added a persistent `<div id="connection-lost-banner" role="alert"
+  aria-live="assertive" hidden>` element near the top of `<body>` in
+  `index.html` and a fixed-position styled rule in `static/app.css` (red
+  background, top-of-viewport, z-index above main content but below the
+  splash screen).
+- Refactored `apiCall` in `static/js/context.js` to distinguish network
+  failure from HTTP error. The `fetch()` is now in its own try/catch:
+  the catch branch (network unreachable) calls a new
+  `setConnectionLost(true)` helper which flips `state.connectionLost` and
+  unhides the banner. After a successful `fetch()` the helper is called
+  with `false`, so the banner clears even if the response itself returned
+  a non-OK HTTP status from a reachable backend. HTTP errors continue to
+  surface through `el.statusText` with the actual status code rather than
+  the generic "Cannot connect" string.
+- `setConnectionLost` is idempotent and guards against a missing
+  `connectionLostBanner` element so early-init or test paths cannot throw.
+- Added `tests/test_connection_lost_banner.py` covering: the banner is
+  declared in `index.html` with `role="alert"`, `aria-live="assertive"`,
+  and `hidden`; `app.css` styles the banner as `position: fixed` and
+  honors the `[hidden]` selector; `context.js` declares the
+  `connectionLost` state, the `connectionLostBanner` element binding, an
+  idempotent `setConnectionLost` writer, and an `apiCall` whose catch
+  block sets the banner true before the success branch sets it false and
+  whose `if (!response.ok)` branch returns undefined without flipping the
+  banner back on. A second `WebTestCase` class asserts that the rendered
+  `/` page still contains the banner markup.
+- Updated `KNOWN_PROBLEMS.md`: status changed from `Open` to `Partial`,
+  the banner bullet removed, the per-write success/failure audit and the
+  feedback-numeric-display audit kept as open follow-ups.
+
+
 2026-04-30 - PR #81 - Freeze Motion Status Log Timecode Across Stop
 --------------------------------------------------------------------
 
