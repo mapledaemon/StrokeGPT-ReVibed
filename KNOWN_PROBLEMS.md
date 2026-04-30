@@ -105,21 +105,24 @@ Follow-up work:
 
 ## Web UI Stays Functional After Backend Shutdown
 
-Status: Open
+Status: Partial
 
-When the Flask backend is stopped while a browser tab is still open, much of
-the UI continues to look responsive even though writes silently fail. Settings
-toggles, sliders, and feedback buttons can appear to save without any indicator
-that the backend never received the change, which makes it easy to lose user
-edits and hard to tell when a setting actually persisted.
+A persistent connection-lost banner is now in place: any `apiCall` whose
+`fetch()` raises (backend unreachable) flips a fixed top-of-viewport banner
+visible, and the next successful response hides it again. Routes that
+return HTTP errors from a reachable backend keep the banner hidden so the
+caller can surface its own message. This closes the "no indicator that the
+backend never received the change" half of the problem. The remaining
+audits below are still open: a banner tells the user the connection is
+gone, but it does not yet make the actual write endpoints surface their
+own success/failure state inline.
 
 Follow-up work:
 
-- Surface a connection-lost banner or disabled state when `/get_status` or the
-  matching write endpoints stop responding so the UI cannot quietly accept
-  changes that will not persist.
 - Audit settings-write endpoints for explicit success/failure indicators in the
   GUI, especially for toggles that currently rely on optimistic local state.
+  The banner only catches network-level failure; per-write success state is
+  still implicit for many toggles.
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.

@@ -145,6 +145,7 @@ export const el = {
     freestyleModeBtn: D.getElementById('freestyle-mode-btn'),
     edgingTimer: D.getElementById('edging-timer'),
     easterEggOverlay: D.getElementById('easter-egg-overlay'),
+    connectionLostBanner: D.getElementById('connection-lost-banner'),
 };
 
 export const state = {
@@ -182,20 +183,41 @@ export const state = {
     motionTrainingDirty: false,
     motionObservability: null,
     motionCylinderAnimationStarted: false,
+    connectionLost: false,
 };
 
+export function setConnectionLost(isLost) {
+    const next = Boolean(isLost);
+    if (state.connectionLost === next) return;
+    state.connectionLost = next;
+    if (el.connectionLostBanner) el.connectionLostBanner.hidden = !next;
+}
+
 export async function apiCall(endpoint, options = {}) {
+    let response;
     try {
-        const response = await fetch(endpoint, options);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('audio/')) return response.blob();
-        return response.json();
+        response = await fetch(endpoint, options);
     } catch (error) {
+        // Network failure: backend unreachable. Surface the persistent
+        // connection-lost banner so the user does not silently keep editing
+        // settings, sliders, or feedback that will not save.
         console.error(`API call to ${endpoint} failed:`, error);
-        el.statusText.textContent = 'Error: Cannot connect to server.';
+        setConnectionLost(true);
+        if (el.statusText) el.statusText.textContent = 'Error: Cannot connect to server.';
         return undefined;
     }
+    // The backend answered, so the connection is alive even if this specific
+    // request returned an HTTP error. Hide the banner and let the caller
+    // surface its own error message for the non-OK case.
+    setConnectionLost(false);
+    if (!response.ok) {
+        console.error(`API call to ${endpoint} returned HTTP ${response.status}`);
+        if (el.statusText) el.statusText.textContent = `Error: server returned ${response.status}.`;
+        return undefined;
+    }
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('audio/')) return response.blob();
+    return response.json();
 }
 
 export function clampNumber(value, min, max, fallback) {
