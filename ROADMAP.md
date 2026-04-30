@@ -99,9 +99,15 @@ Adapter audit findings:
 - Keep the PR #50 `strokegpt.web` module-level `AppState` attribute bridge as
   legacy compatibility only. Dedicated bridge tests may cover it, but routine
   route and mode tests should use `web.app_state` or explicit dependencies.
-- Add a lightweight guard test or static check that fails when new routine
-  tests write directly through the `strokegpt.web` runtime-state bridge
-  outside the dedicated compatibility coverage.
+  This boundary is enforced by `tests/test_web_bridge_guardrails.py`, which
+  AST-walks every `test_*.py` and fails on plain assigns, augmented assigns,
+  annotated assigns, tuple/list unpacking, and `setattr()` calls that target
+  `strokegpt.web.<APP_STATE_EXPORTS-name>`; only `test_web_runtime_state.py`
+  is allowlisted. Likewise, `tests/test_web_payload_guardrails.py` pins the
+  set of `web.py` functions that may reference `payloads.*` to an explicit
+  allowlist so new payload work has to extend `strokegpt.payloads` instead
+  of growing a new `web.*` wrapper. Extend either allowlist only when
+  intentionally adding new compatibility-bridge or service-binding coverage.
 - Audit code that translates between app-specific schemas, LLM JSON, pattern
   actions, UI payloads, and Handy API calls. Delete redundant wrappers only
   when they do not enforce validation, migration, user limits, smoothing, or

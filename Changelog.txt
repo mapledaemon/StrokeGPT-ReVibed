@@ -8,6 +8,43 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-29 - Unreleased - Document Web Bridge And Payload Guardrails
+---------------------------------------------------------------------
+
+Branch: claude-up-next-2-bridge-guardrail-audit
+
+- `tests/test_web_bridge_guardrails.py` and
+  `tests/test_web_payload_guardrails.py` already existed but were not
+  credited in this changelog and the `Up Next #2` roadmap entry still
+  asked for the bridge guard test to be written. This branch closes the
+  documentation loop without changing test or production code.
+- Audited the bridge guardrail by injecting a temporary
+  `tests/test__guardrail_probe.py` containing one of each violation form
+  (plain `web.X = Y`, `+=`, annotated assign, `setattr(web, "X", Y)`,
+  and tuple-unpacking write through the bridge). The
+  `WebBridgeGuardrailTests` AST visitor flagged all six target writes by
+  file/line/exported-name; the probe was deleted without commit. The
+  visitor walks `Assign`, `AugAssign`, `AnnAssign`, and `Call` (for
+  `setattr`), recurses into tuple/list unpacking, and only allowlists
+  `tests/test_web_runtime_state.py` as legitimate compatibility coverage.
+- Audited the payload guardrail. `WebPayloadGuardrailTests` parses
+  `strokegpt/web.py` and asserts that the exact set of functions which
+  reference `payloads.*` matches `ALLOWED_PAYLOAD_BINDING_FUNCTIONS`, so
+  any new `web.*` wrapper that imports the payload module fails the
+  test. This is the active enforcement of the "extend
+  `strokegpt.payloads`, do not add new `web.*` payload wrappers"
+  guidance.
+- Replaced the `Up Next #2` "Add a lightweight guard test or static
+  check..." bullet in `ROADMAP.md` with an explicit reference to the two
+  guardrail tests and their allowlist semantics, so future work knows
+  the boundary is enforced rather than aspirational. Updated the
+  matching `AGENTS.md` `Suggested Next Tasks` summary and the Adapter
+  Boundary continuation prompt to point at the existing guardrails and
+  reframe the remaining stage work as the schema/translation audit.
+- No production code changes. Full `python -m unittest discover -s tests`
+  remains green.
+
+
 2026-04-25 - PR #68 - Extract Motion Training Editor Module
 ------------------------------------------------------------
 
