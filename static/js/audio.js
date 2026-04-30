@@ -1,4 +1,4 @@
-import { D, apiCall, el, formatElapsed, setSliderValue, state } from './context.js';
+import { D, apiCall, el, fetchWithConnectionState, formatElapsed, setSliderValue, state } from './context.js';
 
 export function updateAudioProviderUi() {
     const provider = el.audioProviderSelect.value;
@@ -142,7 +142,7 @@ async function uploadLocalTtsSample(file) {
     try {
         el.localTtsStatus.textContent = 'Uploading sample audio...';
         el.localTtsStatus.style.color = 'var(--comment)';
-        const response = await fetch('/upload_local_tts_sample', {method: 'POST', body: formData});
+        const response = await fetchWithConnectionState('/upload_local_tts_sample', {method: 'POST', body: formData});
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || `HTTP error! status: ${response.status}`);
         el.localTtsPromptPath.value = data.prompt_path;
@@ -188,7 +188,7 @@ export async function playQueuedAudio() {
     if (state.audioFetchInProgress) return;
     state.audioFetchInProgress = true;
     try {
-        const response = await fetch('/get_audio');
+        const response = await fetchWithConnectionState('/get_audio');
         if (response.status === 204) return;
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const audioUrl = URL.createObjectURL(await response.blob());

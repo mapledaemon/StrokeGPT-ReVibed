@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, el, setSliderValue, state } from './context.js';
+import { D, apiCall, clampNumber, el, fetchWithConnectionState, markRequiresBackend, setSliderValue, state } from './context.js';
 import {
     formatBackendName,
     formatClockElapsed,
@@ -307,7 +307,7 @@ function updateMotionTrainingStatus(status = {}) {
 
 async function fetchJsonWithMessage(endpoint, options = {}) {
     try {
-        const response = await fetch(endpoint, options);
+        const response = await fetchWithConnectionState(endpoint, options);
         const data = await response.json().catch(() => ({}));
         if (!response.ok || data.status === 'error') {
             const message = data.message || `Request failed: ${response.status}`;
@@ -377,6 +377,7 @@ function renderMotionTrainingPatternList(patterns) {
         playButton.type = 'button';
         playButton.className = 'my-button motion-pattern-play';
         playButton.textContent = 'Play';
+        markRequiresBackend(playButton);
         playButton.addEventListener('click', event => {
             event.stopPropagation();
             startMotionTraining(pattern.id);
@@ -504,7 +505,7 @@ async function importMotionPatternFile(file) {
     const body = new FormData();
     body.append('pattern', file);
     try {
-        const response = await fetch('/import_motion_pattern', {method: 'POST', body});
+        const response = await fetchWithConnectionState('/import_motion_pattern', {method: 'POST', body});
         const data = await response.json().catch(() => ({}));
         if (!response.ok || data.status !== 'success') {
             const message = data.message || `Could not import ${file.name}.`;

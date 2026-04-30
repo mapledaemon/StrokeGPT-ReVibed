@@ -1,4 +1,4 @@
-import { D, state } from './js/context.js';
+import { D, initBackendRequiredControlGuard, state } from './js/context.js';
 import { initAudioControls, refreshLocalTtsStatus, updateAudioProviderUi } from './js/audio.js';
 import { addChatMessage, initChatControls, pollChatUpdates, sendUserMessage } from './js/chat.js';
 import { initDeviceControls } from './js/device-control.js';
@@ -16,6 +16,7 @@ function startPollingLoops() {
 }
 
 function initApp() {
+    initBackendRequiredControlGuard();
     resizeCanvas();
     updateAudioProviderUi();
     initChatControls();

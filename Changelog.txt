@@ -8,6 +8,35 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-04-30 - Unreleased - Lock Backend-Required Controls On Connection Loss
+----------------------------------------------------------------------------
+
+Branch: codex/backend-required-control-lock
+
+- Extended the connection-lost state from PR #82 into a shared
+  backend-required control guard. Controls marked with
+  `data-requires-backend` are disabled when a connection-aware `fetch()`
+  fails and restored after the next successful backend response.
+- Added `initBackendRequiredControlGuard()`, `syncBackendRequiredControls()`,
+  `markRequiresBackend()`, and `fetchWithConnectionState()` in
+  `static/js/context.js`. The guard blocks late click/change/submit/key
+  events while disconnected, observes dynamically inserted controls, and
+  preserves controls that were already disabled before the connection loss.
+- Marked backend-dependent chat, motion, voice, model, device, setup, motion
+  training, pattern feedback, pattern weight, and reset controls while leaving
+  read-only navigation such as settings tabs, sidebar collapse, modal close,
+  and local edit-selection buttons usable.
+- Routed direct browser `fetch()` paths for local voice sample upload, queued
+  audio playback, motion-training JSON requests, and motion-pattern imports
+  through the shared connection-state wrapper so they also show the banner and
+  lock controls on network failure.
+- Added `tests/test_backend_required_controls.py` and updated
+  `tests/test_connection_lost_banner.py` to pin the shared lock helpers,
+  critical static and dynamic control markers, direct-fetch wrapper usage, and
+  the updated connection-state split between raw fetch and JSON response
+  handling.
+
+
 2026-04-30 - PR #82 - Surface Connection-Lost Banner For Backend Outages
 -------------------------------------------------------------------------
 
