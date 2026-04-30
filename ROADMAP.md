@@ -176,14 +176,28 @@ persona prompts stay separable.
 - Let users reset learned motion feedback and style preferences without a
   full settings reset.
 
-### 5. Chat Interface Refactor (M)
+### 5. Chat And Responsive UI Refactor (M)
 
 Why next: the chat panel and its surrounding toolbars/indicators are
 largely unchanged from the pre-fork code, and the recent diagnostics work
 (PR #43) keeps adding compact indicators around a chat surface that was
 not designed for them. The `static/js/motion-control.js` split is now done,
 so chat-shell work can proceed without sharing one oversized frontend module.
+The first slice should keep behavior stable while making the visible app
+scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 
+- Start with a behavior-preserving responsive foundation: shared spacing,
+  control-height, sidebar-width, chat-width, and motion-strip tokens;
+  dynamic viewport height; centered chat/input/status surfaces; and a
+  medium-width breakpoint that stacks the motion strip before it crowds the
+  chat input.
+- Prefer rem/token-based dimensions and explicit min/max constraints over
+  fixed-pixel layout assumptions. Do not scale font size with viewport
+  width; text should remain readable and controls should remain stable on
+  high-DPI displays.
+- Refactor the visible app shell in small stages: top bar, chat scrollback,
+  bottom composer, motion/status strip, and right-side controls should each
+  have clear layout responsibilities before deeper visual restyling.
 - Audit the existing chat panel against modern local-LLM front-ends
   (Ollama UI, Open WebUI, LM Studio, etc.) for layout, message styling,
   scroll/auto-scroll behavior, streaming render, and accessible focus
