@@ -103,29 +103,6 @@ Follow-up work:
   prior message is mid-render or while a mode transition is updating the
   status strip.
 
-## Motion Status Log Timecode Resets On Stop Instead Of Mode Start
-
-Status: Open
-
-When a stop is requested, the most recent action in the motion status log
-is rewritten to `00:00`. The expected behavior is for the log timecodes to
-remain frozen at the elapsed time at which each entry was recorded, and
-for the active-mode elapsed timer (and the log) to reset to `00:00` only
-when a new mode is started.
-
-Follow-up work:
-
-- Trace the log-update path on stop and confirm whether the reset is being
-  triggered by the active-mode timer reset, by the sequence-log
-  duplicate-suppression layer, or by a stale frame still being processed
-  after the stop event.
-- Defer the log/timer reset until the next mode actually starts, so the
-  final action of the previous session keeps its real elapsed timestamp
-  while the device is idle.
-- Add a regression test that ends a mode, asserts the last log entry
-  keeps its elapsed timecode, then starts a new mode and asserts the
-  timer and log both reset to `00:00`.
-
 ## Web UI Stays Functional After Backend Shutdown
 
 Status: Open
