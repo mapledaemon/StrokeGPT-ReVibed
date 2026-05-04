@@ -186,15 +186,19 @@ so chat-shell work can proceed without sharing one oversized frontend module.
 The first slice should keep behavior stable while making the visible app
 scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 
-- Start with a behavior-preserving responsive foundation: shared spacing,
-  control-height, sidebar-width, chat-width, and motion-strip tokens;
-  dynamic viewport height; centered chat/input/status surfaces; and a
-  medium-width breakpoint that stacks the motion strip before it crowds the
-  chat input.
+- Continue the behavior-preserving responsive foundation started in PR #84:
+  shared spacing, control-height, sidebar-width, chat-width, and
+  motion-strip tokens; dynamic viewport height; centered chat/input/status
+  surfaces; and a medium-width breakpoint that stacks the motion strip
+  before it crowds the chat input.
 - Prefer rem/token-based dimensions and explicit min/max constraints over
   fixed-pixel layout assumptions. Do not scale font size with viewport
   width; text should remain readable and controls should remain stable on
   high-DPI displays.
+- Refine the chat surface before behavior work: labeled conversation/log
+  regions, stable full-width message rows with bounded text measure,
+  tokenized bubble/avatar sizing, and a composer that keeps predictable hit
+  targets across desktop and phone layouts.
 - Refactor the visible app shell in small stages: top bar, chat scrollback,
   bottom composer, motion/status strip, and right-side controls should each
   have clear layout responsibilities before deeper visual restyling.

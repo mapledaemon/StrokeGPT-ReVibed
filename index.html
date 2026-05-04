@@ -23,8 +23,8 @@
             </div>
             <button id="toggle-sidebar-btn">&laquo;</button>
         </div>
-        <div id="chat-view">
-            <div id="chat-messages-container">
+        <div id="chat-view" aria-label="Chat conversation">
+            <div id="chat-messages-container" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages">
                 <div id="typing-indicator" class="chat-message-container bot-bubble" style="display: none;">
                     <img class="chat-pfp" id="typing-indicator-pfp" src="/static/default-pfp.png" alt="pfp">
                     <div class="message-content">
@@ -60,10 +60,10 @@
                 </div>
             </div>
             <div id="message-input-line">
-                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." data-requires-backend>
-                <button id="send-chat-btn" class="my-button" data-requires-backend>Send</button>
+                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off" data-requires-backend>
+                <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
             </div>
-             <div id="status-text">Status: Checking for saved settings...</div>
+             <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
         </div>
     </div>
     <div id="sidebar">

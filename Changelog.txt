@@ -8,8 +8,29 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-04-30 - Unreleased - Add Responsive UI And Chat Shell Foundation
-----------------------------------------------------------------------
+2026-04-30 - Unreleased - Refine Chat Surface Layout And Semantics
+-------------------------------------------------------------------
+
+Branch: codex/chat-surface-refinement
+
+- Added accessible chat-surface semantics without changing the send/poll
+  behavior: the conversation area is labeled, the message list is a polite
+  live log, the composer input has an explicit label and autocomplete off,
+  and status text now announces updates politely.
+- Refined chat layout CSS so each message row spans the feed while the
+  message content keeps a stable readable maximum width. Bot and user
+  messages now use explicit row justification/alignment, tokenized avatar
+  sizing, tokenized bubble padding, and zero margin-based row spacing in
+  favor of the feed gap.
+- Framed the message composer as a stable two-column control with a fixed
+  minimum height, safe-area-aware bottom padding, and a one-column phone
+  layout where the Send button becomes full width.
+- Updated frontend static-asset tests to pin the new chat log semantics,
+  composer attributes, message-row layout, and mobile composer behavior.
+
+
+2026-04-30 - PR #84 - Add Responsive UI And Chat Shell Foundation
+------------------------------------------------------------------
 
 Branch: codex/ui-scaling-chat-foundation
 
