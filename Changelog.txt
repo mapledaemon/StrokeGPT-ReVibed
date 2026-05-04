@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-04 - Unreleased - Refine Top Bar Shell Layout
-------------------------------------------------------
+2026-05-04 - Unreleased - Refine App Shell And Chat Density
+------------------------------------------------------------
 
 Branch: codex/top-bar-shell-refinement
 
@@ -25,7 +25,12 @@ Branch: codex/top-bar-shell-refinement
   resize the header unpredictably.
 - Updated the narrow-screen header layout so title/toggle stay on the first
   row and timer/mood chips wrap into a full-width second row.
-- Updated roadmap and static-asset coverage for the top-bar shell contract.
+- Expanded the central chat surface so it uses more of the available app
+  width, tightened the chat/composer vertical gutters, and framed the
+  scrollback and motion strip with subtle borders/fill so unused space reads
+  as part of the chat workspace instead of empty canvas.
+- Updated roadmap and static-asset coverage for the app-shell and chat
+  density contracts.
 
 
 2026-04-30 - PR #85 - Refine Chat Surface Layout And Semantics

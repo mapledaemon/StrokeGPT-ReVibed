@@ -199,6 +199,11 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   regions, stable full-width message rows with bounded text measure,
   tokenized bubble/avatar sizing, and a composer that keeps predictable hit
   targets across desktop and phone layouts.
+- Keep the central chat area visually dense before changing behavior:
+  prefer wider chat/composer/status surfaces, compact chat-only gutters, and
+  subtle borders/fill around the scrollback and motion strip so the primary
+  workspace uses available space without adding pressure to the already full
+  right sidebar.
 - Refine the app-shell top bar so title, timer/mood chips, and the sidebar
   toggle have stable grid areas and predictable wrapping before adding more
   chat controls or a voice toggle.
