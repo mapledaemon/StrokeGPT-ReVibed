@@ -35,7 +35,7 @@
             </div>
         </div>
         <div id="bottom-input-area">
-            <div id="motion-status-strip">
+            <div id="motion-status-strip" role="group" aria-label="Motion status">
                 <div id="motion-sequence-indicator" class="motion-sequence-indicator motion-sequence-log" role="log" aria-live="polite" aria-label="Motion sequence log">Idle</div>
                 <div id="visualizer-box">
                     <div id="motion-quick-status-row">
@@ -59,11 +59,19 @@
                     <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                 </div>
             </div>
-            <div id="message-input-line">
-                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off" data-requires-backend>
-                <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
+            <div id="chat-compose-row">
+                <div id="message-input-line">
+                    <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off" data-requires-backend>
+                    <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
+                </div>
+                <div id="voice-control-buttons" role="group" aria-label="Voice controls">
+                    <button id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Voice input backend not implemented yet" aria-label="Voice input menu (backend pending)" aria-haspopup="menu" aria-expanded="false" aria-disabled="true" disabled>
+                        <span class="voice-control-mic-icon" aria-hidden="true"></span>
+                        <span class="voice-control-caret" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
             </div>
-             <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
         </div>
     </div>
     <div id="sidebar">
@@ -163,38 +171,52 @@
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
-                <select id="audio-provider-select" class="select-box" data-requires-backend>
-                    <option value="elevenlabs">ElevenLabs API</option>
-                    <option value="local">Local Chatterbox</option>
-                </select>
-                <div class="audio-toggle-line"><input type="checkbox" id="enable-audio-checkbox" data-requires-backend><label for="enable-audio-checkbox">Enable Audio</label></div>
-                <div id="local-tts-status" style="font-size: 0.85em; color: var(--comment);">Local voice dependencies not checked.</div>
-                <div id="elevenlabs-settings-panel" class="voice-panel">
-                    <input type="password" id="elevenlabs-key-input" class="input-text" placeholder="ElevenLabs API Key">
-                    <button id="set-elevenlabs-key-button" class="my-button" data-requires-backend>Set API Key</button>
-                    <select id="elevenlabs-voice-select-box" class="select-box" disabled data-requires-backend><option>Set API key to load voices...</option></select>
-                </div>
-                <div id="local-tts-settings-panel" class="voice-panel" style="display: none;">
-                    <select id="local-tts-engine-select" class="select-box">
-                        <option value="chatterbox_turbo">Chatterbox Turbo</option>
-                        <option value="chatterbox">Chatterbox Standard</option>
+                <div class="settings-subsection voice-input-settings">
+                    <h4>Voice Input</h4>
+                    <select id="voice-input-provider-select" class="select-box" title="Voice input backend not implemented yet" aria-disabled="true" disabled>
+                        <option value="disabled">Disabled (backend pending)</option>
+                        <option value="browser_microphone">Browser microphone</option>
+                        <option value="local_asr">Local speech recognition</option>
                     </select>
-                    <select id="local-tts-style-select" class="select-box"></select>
-                    <div class="browse-line">
-                        <input type="text" id="local-tts-prompt-path" class="input-text" placeholder="Optional reference sample path">
-                        <button id="browse-local-tts-sample-btn" class="my-button" data-requires-backend>Browse</button>
-                    </div>
-                    <input type="file" id="local-tts-sample-upload" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.aac" style="display: none;" data-requires-backend>
-                    <div class="slider-container"><label for="local-tts-exaggeration">Emotion</label><input type="range" min="0.25" max="2" step="0.05" value="0.65" id="local-tts-exaggeration"><span id="local-tts-exaggeration-val">0.65</span></div>
-                    <div class="slider-container"><label for="local-tts-cfg">Pace / adherence</label><input type="range" min="0" max="1" step="0.05" value="0.35" id="local-tts-cfg"><span id="local-tts-cfg-val">0.35</span></div>
-                    <div class="slider-container"><label for="local-tts-temperature">Variation</label><input type="range" min="0.05" max="5" step="0.05" value="0.85" id="local-tts-temperature"><span id="local-tts-temperature-val">0.85</span></div>
-                    <div class="slider-container"><label for="local-tts-top-p">Top P</label><input type="range" min="0.05" max="1" step="0.05" value="1" id="local-tts-top-p"><span id="local-tts-top-p-val">1</span></div>
-                    <div class="slider-container"><label for="local-tts-min-p">Min P</label><input type="range" min="0" max="1" step="0.01" value="0.05" id="local-tts-min-p"><span id="local-tts-min-p-val">0.05</span></div>
-                    <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
                     <div class="voice-actions">
-                        <button id="set-local-tts-button" class="my-button" data-requires-backend>Save Local Voice</button>
-                        <button id="download-local-tts-model-button" class="my-button" data-requires-backend>Download / Load Local Voice Model</button>
-                        <button id="test-local-tts-button" class="my-button" data-requires-backend>Test Voice</button>
+                        <button id="save-voice-input-btn" class="my-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled>Save Voice Input</button>
+                    </div>
+                </div>
+                <div class="settings-subsection voice-output-settings">
+                    <h4>Voice Output</h4>
+                    <select id="audio-provider-select" class="select-box" data-requires-backend>
+                        <option value="elevenlabs">ElevenLabs API</option>
+                        <option value="local">Local Chatterbox</option>
+                    </select>
+                    <div class="audio-toggle-line"><input type="checkbox" id="enable-audio-checkbox" data-requires-backend><label for="enable-audio-checkbox">Enable Audio</label></div>
+                    <div id="local-tts-status" style="font-size: 0.85em; color: var(--comment);">Local voice dependencies not checked.</div>
+                    <div id="elevenlabs-settings-panel" class="voice-panel">
+                        <input type="password" id="elevenlabs-key-input" class="input-text" placeholder="ElevenLabs API Key">
+                        <button id="set-elevenlabs-key-button" class="my-button" data-requires-backend>Set API Key</button>
+                        <select id="elevenlabs-voice-select-box" class="select-box" disabled data-requires-backend><option>Set API key to load voices...</option></select>
+                    </div>
+                    <div id="local-tts-settings-panel" class="voice-panel" style="display: none;">
+                        <select id="local-tts-engine-select" class="select-box">
+                            <option value="chatterbox_turbo">Chatterbox Turbo</option>
+                            <option value="chatterbox">Chatterbox Standard</option>
+                        </select>
+                        <select id="local-tts-style-select" class="select-box"></select>
+                        <div class="browse-line">
+                            <input type="text" id="local-tts-prompt-path" class="input-text" placeholder="Optional reference sample path">
+                            <button id="browse-local-tts-sample-btn" class="my-button" data-requires-backend>Browse</button>
+                        </div>
+                        <input type="file" id="local-tts-sample-upload" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.aac" style="display: none;" data-requires-backend>
+                        <div class="slider-container"><label for="local-tts-exaggeration">Emotion</label><input type="range" min="0.25" max="2" step="0.05" value="0.65" id="local-tts-exaggeration"><span id="local-tts-exaggeration-val">0.65</span></div>
+                        <div class="slider-container"><label for="local-tts-cfg">Pace / adherence</label><input type="range" min="0" max="1" step="0.05" value="0.35" id="local-tts-cfg"><span id="local-tts-cfg-val">0.35</span></div>
+                        <div class="slider-container"><label for="local-tts-temperature">Variation</label><input type="range" min="0.05" max="5" step="0.05" value="0.85" id="local-tts-temperature"><span id="local-tts-temperature-val">0.85</span></div>
+                        <div class="slider-container"><label for="local-tts-top-p">Top P</label><input type="range" min="0.05" max="1" step="0.05" value="1" id="local-tts-top-p"><span id="local-tts-top-p-val">1</span></div>
+                        <div class="slider-container"><label for="local-tts-min-p">Min P</label><input type="range" min="0" max="1" step="0.01" value="0.05" id="local-tts-min-p"><span id="local-tts-min-p-val">0.05</span></div>
+                        <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
+                        <div class="voice-actions">
+                            <button id="set-local-tts-button" class="my-button" data-requires-backend>Save Local Voice</button>
+                            <button id="download-local-tts-model-button" class="my-button" data-requires-backend>Download / Load Local Voice Model</button>
+                            <button id="test-local-tts-button" class="my-button" data-requires-backend>Test Voice</button>
+                        </div>
                     </div>
                 </div>
             </div>
