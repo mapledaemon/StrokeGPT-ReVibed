@@ -199,6 +199,9 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   regions, stable full-width message rows with bounded text measure,
   tokenized bubble/avatar sizing, and a composer that keeps predictable hit
   targets across desktop and phone layouts.
+- Refine the app-shell top bar so title, timer/mood chips, and the sidebar
+  toggle have stable grid areas and predictable wrapping before adding more
+  chat controls or a voice toggle.
 - Refactor the visible app shell in small stages: top bar, chat scrollback,
   bottom composer, motion/status strip, and right-side controls should each
   have clear layout responsibilities before deeper visual restyling.
