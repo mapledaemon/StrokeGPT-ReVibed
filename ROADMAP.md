@@ -209,9 +209,10 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   crowd each other, and keep live-status feedback visible without consuming
   a separate full-width row when the message is short.
 - Reserve visible UI slots for future voice input during the chat refactor:
-  disabled chat-shelf controls and a disabled Settings > Voice input provider
-  selector can land before the backend, but they must stay inert and clearly
-  blocked until push-to-talk/transcription routes exist.
+  a disabled multi-purpose microphone menu button and a disabled Settings >
+  Voice input provider selector can land before the backend, but they must
+  stay inert, clearly blocked, and visually separated from the existing Voice
+  Output settings until push-to-talk/transcription routes exist.
 - Refine the app-shell top bar so title, timer/mood chips, and the sidebar
   toggle have stable grid areas and predictable wrapping before adding more
   chat controls or a voice toggle.

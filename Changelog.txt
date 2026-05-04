@@ -19,9 +19,12 @@ Branch: codex/chat-control-shelf-refinement
 - Reframed status text as a bordered live-status panel with the same height
   contract as the composer, reducing wasted vertical space under the chat
   input without changing JavaScript selectors or send behavior.
-- Added disabled voice-input controls to the chat shelf and a disabled voice
-  input provider selector to the Settings > Voice popup so the UI has a
-  reserved place for voice control before the backend exists.
+- Added a disabled multi-purpose microphone menu button to the chat shelf and
+  a disabled voice input provider selector to the Settings > Voice popup so
+  the UI has a reserved place for voice control before the backend exists.
+- Moved the existing voice output controls into their own bordered Voice
+  Output subsection so Voice input and output read as parallel settings
+  groups instead of leaving output controls visually unframed.
 - Added an accessible group label to the motion status strip and updated the
   roadmap/static-asset coverage for the compose-row and blocked voice-input
   layout contracts.

@@ -167,8 +167,12 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }
 #message-input-line { width: 100%; min-height: var(--composer-min-height); margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: stretch; padding: var(--space-1); border: 1px solid #2d333d; border-radius: 8px; background: rgba(14, 15, 18, 0.68); }
 #message-input-line .my-button { width: auto; min-width: 5.75rem; flex-shrink: 0; }
 #message-input-line .input-text { min-width: 0; min-height: var(--control-min-height); flex-grow: 1; }
-#voice-control-buttons { min-height: var(--composer-min-height); display: grid; grid-template-columns: repeat(2, minmax(4rem, auto)); gap: var(--space-1); align-items: stretch; }
-.voice-control-button { width: auto; min-width: 4rem; padding-inline: var(--space-2); }
+#voice-control-buttons { width: var(--composer-min-height); min-height: var(--composer-min-height); display: grid; grid-template-columns: auto; gap: var(--space-1); align-items: stretch; }
+.voice-control-menu-button { width: var(--composer-min-height); min-width: var(--composer-min-height); min-height: var(--composer-min-height); padding: 0; display: flex; align-items: center; justify-content: center; gap: 0.18rem; }
+.voice-control-mic-icon { position: relative; display: inline-block; width: 0.9rem; height: 1.55rem; background: linear-gradient(currentColor, currentColor) 50% 1.22rem / 2px 0.22rem no-repeat, linear-gradient(currentColor, currentColor) 50% 1.45rem / 0.58rem 2px no-repeat; }
+.voice-control-mic-icon::before { content: ""; position: absolute; left: 50%; top: 0.1rem; width: 0.54rem; height: 0.72rem; transform: translateX(-50%); border: 2px solid currentColor; border-radius: 999px; }
+.voice-control-mic-icon::after { content: ""; position: absolute; left: 50%; top: 0.86rem; width: 0.78rem; height: 0.42rem; transform: translateX(-50%); border: 2px solid currentColor; border-top: 0; border-radius: 0 0 999px 999px; }
+.voice-control-caret { width: 0; height: 0; transform: translateY(0.03rem); border-left: 0.2rem solid transparent; border-right: 0.2rem solid transparent; border-top: 0.28rem solid currentColor; }
 
 .audio-toggle-line { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
 .settings-summary-line { display: flex; gap: 10px; align-items: center; }
