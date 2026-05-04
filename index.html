@@ -35,7 +35,7 @@
             </div>
         </div>
         <div id="bottom-input-area">
-            <div id="motion-status-strip">
+            <div id="motion-status-strip" role="group" aria-label="Motion status">
                 <div id="motion-sequence-indicator" class="motion-sequence-indicator motion-sequence-log" role="log" aria-live="polite" aria-label="Motion sequence log">Idle</div>
                 <div id="visualizer-box">
                     <div id="motion-quick-status-row">
@@ -59,11 +59,17 @@
                     <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                 </div>
             </div>
-            <div id="message-input-line">
-                <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off" data-requires-backend>
-                <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
+            <div id="chat-compose-row">
+                <div id="message-input-line">
+                    <input type="text" id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off" data-requires-backend>
+                    <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
+                </div>
+                <div id="voice-control-buttons" role="group" aria-label="Voice controls">
+                    <button id="start-voice-input-btn" class="my-button voice-control-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled>Talk</button>
+                    <button id="stop-voice-input-btn" class="my-button voice-control-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled>Stop</button>
+                </div>
+                <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
             </div>
-             <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
         </div>
     </div>
     <div id="sidebar">
@@ -163,6 +169,17 @@
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
+                <div class="settings-subsection voice-input-settings">
+                    <h4>Voice Input</h4>
+                    <select id="voice-input-provider-select" class="select-box" title="Voice input backend not implemented yet" aria-disabled="true" disabled>
+                        <option value="disabled">Disabled (backend pending)</option>
+                        <option value="browser_microphone">Browser microphone</option>
+                        <option value="local_asr">Local speech recognition</option>
+                    </select>
+                    <div class="voice-actions">
+                        <button id="save-voice-input-btn" class="my-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled>Save Voice Input</button>
+                    </div>
+                </div>
                 <select id="audio-provider-select" class="select-box" data-requires-backend>
                     <option value="elevenlabs">ElevenLabs API</option>
                     <option value="local">Local Chatterbox</option>

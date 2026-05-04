@@ -8,8 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-04 - Unreleased - Refine App Shell And Chat Density
-------------------------------------------------------------
+2026-05-04 - Unreleased - Refine Chat Control Shelf
+----------------------------------------------------
+
+Branch: codex/chat-control-shelf-refinement
+
+- Added a responsive chat compose row that lets the message composer and
+  status text share horizontal space on desktop, then stack before the
+  central chat area gets cramped.
+- Reframed status text as a bordered live-status panel with the same height
+  contract as the composer, reducing wasted vertical space under the chat
+  input without changing JavaScript selectors or send behavior.
+- Added disabled voice-input controls to the chat shelf and a disabled voice
+  input provider selector to the Settings > Voice popup so the UI has a
+  reserved place for voice control before the backend exists.
+- Added an accessible group label to the motion status strip and updated the
+  roadmap/static-asset coverage for the compose-row and blocked voice-input
+  layout contracts.
+
+
+2026-05-04 - PR #86 - Refine App Shell And Chat Density
+-------------------------------------------------------
 
 Branch: codex/top-bar-shell-refinement
 

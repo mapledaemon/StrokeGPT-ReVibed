@@ -120,6 +120,20 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             with self.subTest(element_id=element_id):
                 self.assertNotIn("data-requires-backend", _opening_tag(self.index_html, element_id))
 
+    def test_future_voice_input_controls_stay_disabled_until_backend_exists(self):
+        pending_ids = [
+            "start-voice-input-btn",
+            "stop-voice-input-btn",
+            "voice-input-provider-select",
+            "save-voice-input-btn",
+        ]
+        for element_id in pending_ids:
+            with self.subTest(element_id=element_id):
+                tag = _opening_tag(self.index_html, element_id)
+                self.assertIn("disabled", tag)
+                self.assertIn('aria-disabled="true"', tag)
+                self.assertNotIn("data-requires-backend", tag)
+
     def test_dynamic_backend_controls_are_marked_when_created(self):
         self.assertIn("markRequiresBackend(resetButton)", self.pattern_list_js)
         self.assertIn("markRequiresBackend(input)", self.pattern_list_js)
