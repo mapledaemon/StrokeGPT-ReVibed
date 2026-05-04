@@ -8,8 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-04 - Unreleased - Refine Chat Control Shelf
-----------------------------------------------------
+2026-05-04 - Unreleased - Refine Chat Scrollback And Availability
+------------------------------------------------------------------
+
+Branch: codex/chat-scrollback-autoscroll
+
+- Added a local `Latest` jump button inside the chat view for new messages
+  that arrive while the user is reading older scrollback.
+- Updated chat autoscroll behavior so user-sent messages and immediate
+  direct replies still force-scroll, while background/polled bot messages
+  only stick to the bottom when the user is already near the latest message.
+- Added an explicit blocked chat state when Ollama is offline, downloading,
+  or missing the selected model: the composer is disabled, status text
+  explains the problem, and the chat surface picks up warning styling.
+- Styled LLM connection/timeout failures as centered model-error system
+  messages instead of normal bot chat and kept those operational failures
+  out of assistant history, TTS generation, motion repair, and persona flow.
+- Updated frontend static-asset and backend-control-lock coverage for the
+  local scrollback, Ollama availability, and model-error affordances.
+
+
+2026-05-04 - PR #87 - Refine Chat Control Shelf
+------------------------------------------------
 
 Branch: codex/chat-control-shelf-refinement
 

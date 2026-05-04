@@ -920,14 +920,19 @@ def get_current_context():
             context['edging_elapsed_time'] = f"{minutes}m {seconds}s"
     return context
 
-def add_message_to_queue(text, add_to_history=True, queue_message=True):
+def _is_llm_transport_error_text(text):
+    clean = str(text or "").strip().lower()
+    return clean.startswith(("llm connection error:", "llm request failed:"))
+
+def add_message_to_queue(text, add_to_history=True, queue_message=True, generate_audio=True):
     if queue_message:
         app_state.messages_for_ui.append(text)
     if add_to_history:
         clean_text = re.sub(r'<[^>]+>', '', text).strip()
         if clean_text:
             app_state.chat_history.append({"role": "assistant", "content": clean_text})
-    threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
+    if generate_audio:
+        threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
     with app_state.lock:
@@ -1100,39 +1105,43 @@ def handle_user_message():
             "move": None,
             "new_mood": None,
         }
-    llm_response, motion_repaired = _repair_llm_motion_response_if_needed(
-        user_input,
-        llm_response,
-        context,
-        current_before_llm,
-    )
-    
-    with app_state.lock:
-        if app_state.special_persona_mode is not None:
-            app_state.special_persona_interactions_left -= 1
-            should_revert_persona = app_state.special_persona_interactions_left <= 0
-            if should_revert_persona:
-                app_state.special_persona_mode = None
-        else:
-            should_revert_persona = False
-    if should_revert_persona:
-        add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
+    if not _is_llm_transport_error_text(llm_response.get("chat")):
+        llm_response, motion_repaired = _repair_llm_motion_response_if_needed(
+            user_input,
+            llm_response,
+            context,
+            current_before_llm,
+        )
 
     raw_chat_text = llm_response.get("chat")
     chat_text = str(raw_chat_text or "").strip()
     if not chat_text:
         print(f"[WARN] LLM response did not include chat text: {llm_response!r}")
         chat_text = "The local model returned movement data but no chat text. Check Ollama model status and try again."
+    is_llm_transport_error = _is_llm_transport_error_text(chat_text)
+
+    should_revert_persona = False
+    if not is_llm_transport_error:
+        with app_state.lock:
+            if app_state.special_persona_mode is not None:
+                app_state.special_persona_interactions_left -= 1
+                should_revert_persona = app_state.special_persona_interactions_left <= 0
+                if should_revert_persona:
+                    app_state.special_persona_mode = None
+    if should_revert_persona:
+        add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
+
     add_message_to_queue(
         chat_text,
-        add_to_history=bool(str(raw_chat_text or "").strip()),
+        add_to_history=bool(str(raw_chat_text or "").strip()) and not is_llm_transport_error,
         queue_message=True,
+        generate_audio=not is_llm_transport_error,
     )
-    if new_mood := llm_response.get("new_mood"):
+    if not is_llm_transport_error and (new_mood := llm_response.get("new_mood")):
         with app_state.lock:
             app_state.current_mood = new_mood
     motion_applied = False
-    if not app_state.auto_mode_active_task:
+    if not is_llm_transport_error and not app_state.auto_mode_active_task:
         target = _apply_llm_response_move(
             llm_response,
             current_before_llm,
