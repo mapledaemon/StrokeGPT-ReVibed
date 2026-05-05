@@ -24,12 +24,44 @@ export function appendMessageText(parent, text) {
     appendPlainMessageText(parent, raw.slice(cursor));
 }
 
-export function addChatMessage(sender, text) {
-    const speaker = sender === 'BOT' ? state.aiName : 'YOU';
-    const messageEl = D.createElement('div');
-    messageEl.className = `chat-message-container ${sender === 'BOT' ? 'bot-bubble' : 'user-bubble'}`;
+export const CHAT_BOTTOM_THRESHOLD_PX = 96;
 
-    if (sender === 'BOT') {
+export function isChatNearBottom() {
+    return el.chatView.scrollHeight - el.chatView.scrollTop - el.chatView.clientHeight <= CHAT_BOTTOM_THRESHOLD_PX;
+}
+
+function setJumpToLatestVisible(visible) {
+    if (el.jumpToLatestBtn) el.jumpToLatestBtn.hidden = !visible;
+}
+
+export function scrollChatToLatest({force = false} = {}) {
+    if (force || isChatNearBottom()) {
+        el.chatView.scrollTop = el.chatView.scrollHeight;
+        setJumpToLatestVisible(false);
+        return true;
+    }
+    setJumpToLatestVisible(true);
+    return false;
+}
+
+function updateJumpToLatestVisibility() {
+    setJumpToLatestVisible(!isChatNearBottom());
+}
+
+export function chatMessageKind(sender, text) {
+    const value = String(text || '');
+    if (sender === 'BOT' && /^(LLM Connection Error|LLM request failed):/i.test(value)) return 'model-error';
+    return sender === 'BOT' ? 'bot' : 'user';
+}
+
+export function addChatMessage(sender, text, {forceScroll = false} = {}) {
+    const shouldScroll = forceScroll || isChatNearBottom();
+    const kind = chatMessageKind(sender, text);
+    const speaker = kind === 'model-error' ? 'MODEL ERROR' : (sender === 'BOT' ? state.aiName : 'YOU');
+    const messageEl = D.createElement('div');
+    messageEl.className = `chat-message-container ${kind === 'user' ? 'user-bubble' : kind === 'model-error' ? 'system-bubble error-bubble' : 'bot-bubble'}`;
+
+    if (kind === 'bot') {
         const pfp = D.createElement('img');
         pfp.className = 'chat-pfp';
         pfp.src = el.pfpPreview.src;
@@ -50,7 +82,11 @@ export function addChatMessage(sender, text) {
     messageEl.appendChild(content);
 
     el.chatMessagesContainer.insertBefore(messageEl, el.typingIndicator);
-    el.chatView.scrollTop = el.chatView.scrollHeight;
+    if (shouldScroll) {
+        scrollChatToLatest({force: true});
+    } else {
+        setJumpToLatestVisible(true);
+    }
 }
 
 function clearTypingIndicator(statusMessage = '') {
@@ -93,7 +129,7 @@ function handleSendMessageStatus(data) {
     }
     if (data.chat && data.chat_queued !== true) {
         clearTypingIndicator();
-        addChatMessage('BOT', data.chat);
+        addChatMessage('BOT', data.chat, {forceScroll: true});
         return true;
     }
     if (data.chat_queued === true) {
@@ -110,12 +146,12 @@ function handleSendMessageStatus(data) {
 export async function sendUserMessage(message) {
     const persona = el.personaInput.value.trim();
     if (message.trim() || persona !== state.myPersonaDescription) {
-        if (message.trim()) addChatMessage('YOU', message);
+        if (message.trim()) addChatMessage('YOU', message, {forceScroll: true});
         state.myPersonaDescription = persona;
         el.userChatInput.value = '';
         D.querySelector('#typing-indicator .speaker-name').textContent = state.aiName;
         el.typingIndicator.style.display = 'flex';
-        el.chatView.scrollTop = el.chatView.scrollHeight;
+        scrollChatToLatest({force: true});
         const data = await apiCall('/send_message', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -145,6 +181,8 @@ export async function pollChatUpdates() {
 
 export function initChatControls() {
     D.getElementById('send-chat-btn').addEventListener('click', () => sendUserMessage(el.userChatInput.value));
+    el.jumpToLatestBtn.addEventListener('click', () => scrollChatToLatest({force: true}));
+    el.chatView.addEventListener('scroll', updateJumpToLatestVisibility, {passive: true});
     el.userChatInput.addEventListener('keypress', event => {
         if (event.key === 'Enter') sendUserMessage(el.userChatInput.value);
     });

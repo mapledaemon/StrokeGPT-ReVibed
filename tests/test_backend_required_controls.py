@@ -112,6 +112,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "toggle-sidebar-btn",
             "open-settings-btn",
             "close-settings-btn",
+            "jump-to-latest-btn",
             "refresh-model-field-btn",
             "open-motion-training-btn",
             "close-motion-training-btn",

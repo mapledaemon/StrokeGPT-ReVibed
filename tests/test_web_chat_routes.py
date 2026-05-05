@@ -84,6 +84,52 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_send_message_keeps_llm_transport_error_out_of_dialogue_state(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            error_text = "LLM Connection Error: HTTPConnectionPool read timed out"
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": error_text,
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(llm, "repair_motion_response") as repair_motion_response, \
+                    mock.patch.object(audio, "generate_audio_for_text") as generate_audio:
+                response = self.client.post("/send_message", json={
+                    "message": "switch to another rhythm",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["chat"], error_text)
+            self.assertTrue(data["chat_queued"])
+            self.assertFalse(data["motion_repaired"])
+            self.assertFalse(data["motion_applied"])
+
+            updates = self.client.get("/get_updates")
+            try:
+                queued = updates.get_json()["messages"]
+            finally:
+                updates.close()
+            self.assertEqual(queued, [error_text])
+            self.assertEqual(list(app_state.chat_history), [{"role": "user", "content": "switch to another rhythm"}])
+            repair_motion_response.assert_not_called()
+            generate_audio.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_send_message_repairs_motion_claim_without_move(self):
         from strokegpt.web import app_state, audio, handy, llm, motion, settings
 

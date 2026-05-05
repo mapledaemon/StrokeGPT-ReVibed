@@ -129,7 +129,48 @@ export function updateOllamaStatus(status) {
         el.downloadOllamaModelBtn.disabled = state.ollamaDownloadPolling;
         el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
     }
+    updateChatModelAvailability(status);
     updateOllamaDiagnostics(status);
+}
+
+function chatModelBlockedMessage(status = {}) {
+    const download = status.download || {};
+    if (download.state === 'downloading') {
+        return `Ollama is downloading ${download.model || 'the selected model'} - chat is paused until it finishes.`;
+    }
+    if (!status.available) {
+        return 'Ollama offline - start Ollama before chatting.';
+    }
+    if (!status.current_model_installed) {
+        return `Model not installed - download ${status.current_model || 'the selected model'} in Settings > Model before chatting.`;
+    }
+    return '';
+}
+
+export function updateChatModelAvailability(status = {}) {
+    const previousMessage = state.chatModelBlockedMessage;
+    const message = chatModelBlockedMessage(status);
+    const blocked = Boolean(message);
+    state.chatModelBlockedMessage = message;
+    D.body.classList.toggle('chat-model-unavailable', blocked);
+    if (el.userChatInput) {
+        el.userChatInput.disabled = blocked;
+        if (blocked) el.userChatInput.setAttribute('aria-disabled', 'true');
+        else el.userChatInput.removeAttribute('aria-disabled');
+        el.userChatInput.placeholder = blocked ? message : 'Type a message or command...';
+        el.userChatInput.title = message;
+    }
+    if (el.sendChatBtn) {
+        el.sendChatBtn.disabled = blocked;
+        if (blocked) el.sendChatBtn.setAttribute('aria-disabled', 'true');
+        else el.sendChatBtn.removeAttribute('aria-disabled');
+        el.sendChatBtn.title = blocked ? message : 'Send message';
+    }
+    if (blocked) {
+        el.statusText.textContent = message;
+    } else if (el.statusText.textContent === previousMessage) {
+        el.statusText.textContent = 'Ready to chat.';
+    }
 }
 
 export async function refreshOllamaStatus() {
