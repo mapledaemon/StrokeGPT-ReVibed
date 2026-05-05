@@ -14,6 +14,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/settings.js": "text/javascript",
             "/static/js/chat.js": "text/javascript",
             "/static/js/audio.js": "text/javascript",
+            "/static/js/voice-input.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
             "/static/js/motion/feedback-controls.js": "text/javascript",
@@ -54,9 +55,11 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off"', page)
             self.assertIn('id="send-chat-btn" class="my-button" title="Send message"', page)
             self.assertIn('id="voice-control-buttons" role="group" aria-label="Voice controls"', page)
-            self.assertIn('id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Voice input backend not implemented yet" aria-label="Voice input menu (backend pending)" aria-haspopup="menu" aria-expanded="false" aria-disabled="true" disabled', page)
+            self.assertIn('id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Start voice input" aria-label="Start voice input" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-requires-backend', page)
             self.assertIn('class="voice-control-mic-icon" aria-hidden="true"', page)
             self.assertIn('class="voice-control-caret" aria-hidden="true"', page)
+            self.assertIn('id="voice-transcript-preview" class="voice-transcript-preview" hidden', page)
+            self.assertIn('id="send-voice-transcript-btn"', page)
             self.assertIn('id="status-text" aria-live="polite"', page)
             self.assertIn('id="toggle-sidebar-btn" title="Toggle settings panel" aria-label="Toggle settings panel"', page)
             self.assertIn('id="motion-sequence-indicator"', page)
@@ -196,10 +199,16 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="download-local-tts-model-button"', page)
             self.assertIn('class="settings-subsection voice-output-settings"', page)
             self.assertIn("<h4>Voice Output</h4>", page)
-            self.assertIn('id="voice-input-provider-select" class="select-box" title="Voice input backend not implemented yet" aria-disabled="true" disabled', page)
-            self.assertIn('value="browser_microphone"', page)
-            self.assertIn('value="local_asr"', page)
-            self.assertIn('id="save-voice-input-btn" class="my-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled', page)
+            self.assertIn('id="voice-input-provider-select" class="select-box" data-requires-backend', page)
+            self.assertIn('value="local_faster_whisper"', page)
+            self.assertIn('id="voice-input-mode-select" class="select-box" data-requires-backend', page)
+            self.assertIn('value="hands_free"', page)
+            self.assertIn('id="voice-input-submit-mode-select" class="select-box" data-requires-backend', page)
+            self.assertIn('value="auto_submit"', page)
+            self.assertIn('id="voice-input-model-input"', page)
+            self.assertIn('id="voice-input-language-input"', page)
+            self.assertIn('id="save-voice-input-btn" class="my-button" data-requires-backend', page)
+            self.assertIn('id="download-voice-input-model-btn" class="my-button" data-requires-backend', page)
             self.assertLess(
                 page.index('class="settings-subsection voice-input-settings"'),
                 page.index('class="settings-subsection voice-output-settings"'),
@@ -276,10 +285,14 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("grid-template-columns: auto;", css)
             self.assertIn(".voice-control-menu-button { width: var(--composer-min-height); min-width: var(--composer-min-height);", css)
             self.assertIn("padding: 0; display: flex; align-items: center; justify-content: center;", css)
+            self.assertIn(".voice-control-menu-button.is-recording", css)
+            self.assertIn(".voice-control-menu-button.is-listening", css)
             self.assertIn(".voice-control-mic-icon { position: relative;", css)
             self.assertIn("height: 1.55rem", css)
             self.assertIn(".voice-control-mic-icon::before", css)
             self.assertIn(".voice-control-caret { width: 0; height: 0;", css)
+            self.assertIn(".voice-transcript-preview { width: min(var(--chat-max-width), 100%);", css)
+            self.assertIn(".voice-transcript-preview[hidden] { display: none; }", css)
             self.assertIn("#message-input-line { grid-template-columns: 1fr; align-items: stretch; }", css)
             self.assertIn("#status-text { width: 100%; min-height: var(--composer-min-height); margin: 0;", css)
             self.assertIn("display: flex; align-items: center; justify-content: center;", css)
@@ -362,6 +375,21 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("generation_elapsed_seconds", script)
         self.assertIn("audio.onended", script)
         self.assertIn("new Promise", script)
+
+    def test_frontend_js_wires_flexible_voice_input(self):
+        script = self.frontend_scripts()
+
+        self.assertIn("initVoiceInputControls({sendUserMessage})", script)
+        self.assertIn("export function populateVoiceInputSettings", script)
+        self.assertIn("export async function refreshVoiceInputStatus", script)
+        self.assertIn("/set_voice_input", script)
+        self.assertIn("/preload_voice_input_model", script)
+        self.assertIn("/transcribe_voice", script)
+        self.assertIn("MediaRecorder", script)
+        self.assertIn("HANDS_FREE_RMS_THRESHOLD", script)
+        self.assertIn("state.voiceInputMode === 'hands_free'", script)
+        self.assertIn("auto_submit", script)
+        self.assertIn("await submitVoiceTranscript(transcript)", script)
 
     def test_chat_messages_are_rendered_as_text_nodes(self):
         script = self.frontend_scripts()

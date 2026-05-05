@@ -538,11 +538,21 @@ that work picks up.
 
 ### 14. Local Voice Control MVP (L)
 
-Why later: voice control is the largest user-facing feature, but it should
-ship as push-to-talk before always-on listening.
+Why later: voice control is the largest user-facing feature. It should start
+with explicit push-to-talk, but the architecture must also support flexible
+hands-free control without bypassing the existing chat, motion, and stop
+safety paths.
 
 - Add a provider-neutral speech recognition service interface.
 - Add push-to-talk browser capture with `MediaRecorder`.
+- Keep voice-input model downloads and model loads behind an explicit
+  user action, the same way local voice-output model loading works.
+- Support a hands-free armed mode that uses browser-side voice activity
+  detection to capture short speech segments after the user explicitly turns
+  listening on.
+- Let transcript handling be configurable: preview before send for safer
+  setup and optional auto-submit for hands-free control, always routed through
+  the existing `/send_message` path.
 - Add a `/transcribe_voice` route that accepts short recorded audio
   clips.
 - Preview transcripts before submitting them through the existing

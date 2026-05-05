@@ -110,6 +110,7 @@ def settings_payload(
     motion_patterns,
     motion_preferences,
     diagnostics_levels,
+    voice_input_status,
 ):
     local_tts_status = audio.local_status()
     return {
@@ -137,6 +138,14 @@ def settings_payload(
         "local_tts_top_p": settings.local_tts_top_p,
         "local_tts_min_p": settings.local_tts_min_p,
         "local_tts_repetition_penalty": settings.local_tts_repetition_penalty,
+        "voice_input_status": voice_input_status,
+        "voice_input_provider": settings.voice_input_provider,
+        "voice_input_enabled": settings.voice_input_enabled,
+        "voice_input_model": settings.voice_input_model,
+        "voice_input_language": settings.voice_input_language,
+        "voice_input_mode": settings.voice_input_mode,
+        "voice_input_submit_mode": settings.voice_input_submit_mode,
+        "voice_input_preview_required": settings.voice_input_preview_required,
         "min_depth": settings.min_depth,
         "max_depth": settings.max_depth,
         "min_speed": settings.min_speed,

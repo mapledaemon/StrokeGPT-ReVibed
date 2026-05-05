@@ -17,6 +17,7 @@ from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
+from .asr import VoiceInputService
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
@@ -41,8 +42,22 @@ from .pattern_library import (
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
+VOICE_INPUT_UPLOAD_DIR = USER_DATA_DIR / "voice_input"
 MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
+ALLOWED_VOICE_INPUT_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"}
+ALLOWED_VOICE_INPUT_MIMETYPES = {
+    "audio/aac",
+    "audio/flac",
+    "audio/m4a",
+    "audio/mp3",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/webm",
+    "video/webm",
+}
+MAX_VOICE_INPUT_BYTES = 12_000_000
 MAX_PATTERN_IMPORT_BYTES = 1_000_000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
@@ -114,6 +129,7 @@ motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
 llm = LLMService(url=LLM_URL, model=ollama_model)
 audio = AudioService()
+voice_input = VoiceInputService()
 audio.set_provider(settings.audio_provider, settings.audio_enabled)
 if settings.elevenlabs_api_key:
     if audio.set_api_key(settings.elevenlabs_api_key):
@@ -133,6 +149,14 @@ if settings.audio_provider == "local":
         settings.local_tts_repetition_penalty,
         settings.local_tts_engine,
     )
+voice_input.configure(
+    provider=settings.voice_input_provider,
+    enabled=settings.voice_input_enabled,
+    model=settings.voice_input_model,
+    language=settings.voice_input_language,
+    mode=settings.voice_input_mode,
+    submit_mode=settings.voice_input_submit_mode,
+)
 
 # In-Memory State
 app_state = AppState()
@@ -416,6 +440,7 @@ def settings_payload():
         motion_patterns=_motion_pattern_catalog_payload(),
         motion_preferences=_motion_preference_payload(),
         diagnostics_levels=_diagnostics_level_options(),
+        voice_input_status=voice_input.status(),
     )
 
 def apply_settings_to_services():
@@ -425,6 +450,14 @@ def apply_settings_to_services():
     llm.set_model(settings.ollama_model)
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
+    voice_input.configure(
+        provider=settings.voice_input_provider,
+        enabled=settings.voice_input_enabled,
+        model=settings.voice_input_model,
+        language=settings.voice_input_language,
+        mode=settings.voice_input_mode,
+        submit_mode=settings.voice_input_submit_mode,
+    )
     audio.api_key = ""
     audio.voice_id = ""
     audio.client = None
