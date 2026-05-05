@@ -469,6 +469,24 @@ class ModelConfigurationTests(unittest.TestCase):
 
         self.assertEqual(settings.to_dict(), default_settings_dict())
 
+    def test_voice_input_settings_are_normalized_for_hands_free_control(self):
+        settings = SettingsManager("settings.json")
+        settings.apply_dict({
+            "voice_input_provider": "local_asr",
+            "voice_input_enabled": True,
+            "voice_input_mode": "always-on",
+            "voice_input_submit_mode": "auto-send",
+            "voice_input_model": "base.en",
+            "voice_input_language": "en",
+        })
+
+        self.assertEqual(settings.voice_input_provider, "local_faster_whisper")
+        self.assertTrue(settings.voice_input_enabled)
+        self.assertEqual(settings.voice_input_mode, "hands_free")
+        self.assertEqual(settings.voice_input_submit_mode, "auto_submit")
+        self.assertFalse(settings.voice_input_preview_required)
+        self.assertEqual(settings.to_dict()["voice_input_model"], "base.en")
+
 
 if __name__ == "__main__":
     unittest.main()

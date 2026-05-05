@@ -66,12 +66,20 @@
                     <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
                 </div>
                 <div id="voice-control-buttons" role="group" aria-label="Voice controls">
-                    <button id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Voice input backend not implemented yet" aria-label="Voice input menu (backend pending)" aria-haspopup="menu" aria-expanded="false" aria-disabled="true" disabled>
+                    <button id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Start voice input" aria-label="Start voice input" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-requires-backend>
                         <span class="voice-control-mic-icon" aria-hidden="true"></span>
                         <span class="voice-control-caret" aria-hidden="true"></span>
                     </button>
                 </div>
                 <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
+            </div>
+            <div id="voice-transcript-preview" class="voice-transcript-preview" hidden>
+                <div id="voice-transcript-text" class="voice-transcript-text"></div>
+                <div class="voice-transcript-actions">
+                    <button id="send-voice-transcript-btn" class="my-button" type="button" data-requires-backend>Send</button>
+                    <button id="retry-voice-transcript-btn" class="my-button" type="button" data-requires-backend>Retry</button>
+                    <button id="cancel-voice-transcript-btn" class="my-button" type="button">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
@@ -174,13 +182,24 @@
             <div id="settings-tab-voice" class="settings-panel active">
                 <div class="settings-subsection voice-input-settings">
                     <h4>Voice Input</h4>
-                    <select id="voice-input-provider-select" class="select-box" title="Voice input backend not implemented yet" aria-disabled="true" disabled>
-                        <option value="disabled">Disabled (backend pending)</option>
-                        <option value="browser_microphone">Browser microphone</option>
-                        <option value="local_asr">Local speech recognition</option>
+                    <select id="voice-input-provider-select" class="select-box" data-requires-backend>
+                        <option value="disabled">Disabled</option>
+                        <option value="local_faster_whisper">Local faster-whisper</option>
                     </select>
+                    <select id="voice-input-mode-select" class="select-box" data-requires-backend>
+                        <option value="push_to_talk">Push to talk</option>
+                        <option value="hands_free">Hands-free</option>
+                    </select>
+                    <select id="voice-input-submit-mode-select" class="select-box" data-requires-backend>
+                        <option value="preview">Preview before send</option>
+                        <option value="auto_submit">Auto-send transcript</option>
+                    </select>
+                    <input type="text" id="voice-input-model-input" class="input-text" value="tiny.en" placeholder="faster-whisper model" data-requires-backend>
+                    <input type="text" id="voice-input-language-input" class="input-text" value="auto" placeholder="Language, e.g. auto or en" data-requires-backend>
+                    <div id="voice-input-status" class="settings-help">Voice input is disabled.</div>
                     <div class="voice-actions">
-                        <button id="save-voice-input-btn" class="my-button" title="Voice input backend not implemented yet" aria-disabled="true" disabled>Save Voice Input</button>
+                        <button id="save-voice-input-btn" class="my-button" data-requires-backend>Save Voice Input</button>
+                        <button id="download-voice-input-model-btn" class="my-button" data-requires-backend>Download / Load Voice Input Model</button>
                     </div>
                 </div>
                 <div class="settings-subsection voice-output-settings">

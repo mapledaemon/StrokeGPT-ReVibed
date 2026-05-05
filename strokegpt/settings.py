@@ -22,6 +22,16 @@ DEFAULT_MOTION_BACKEND = "hamp"
 MOTION_BACKENDS = {"hamp", "position"}
 DEFAULT_DIAGNOSTICS_LEVEL = "compact"
 DIAGNOSTICS_LEVELS = {"compact", "status", "debug"}
+VOICE_INPUT_PROVIDER_DISABLED = "disabled"
+VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER = "local_faster_whisper"
+VOICE_INPUT_PROVIDERS = {VOICE_INPUT_PROVIDER_DISABLED, VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER}
+DEFAULT_VOICE_INPUT_MODEL = "tiny.en"
+VOICE_INPUT_MODE_PUSH_TO_TALK = "push_to_talk"
+VOICE_INPUT_MODE_HANDS_FREE = "hands_free"
+VOICE_INPUT_MODES = {VOICE_INPUT_MODE_PUSH_TO_TALK, VOICE_INPUT_MODE_HANDS_FREE}
+VOICE_INPUT_SUBMIT_PREVIEW = "preview"
+VOICE_INPUT_SUBMIT_AUTO = "auto_submit"
+VOICE_INPUT_SUBMIT_MODES = {VOICE_INPUT_SUBMIT_PREVIEW, VOICE_INPUT_SUBMIT_AUTO}
 
 
 def normalize_ollama_model(model):
@@ -57,6 +67,13 @@ def default_settings_dict():
         "local_tts_top_p": 1.0,
         "local_tts_min_p": 0.05,
         "local_tts_repetition_penalty": 1.2,
+        "voice_input_provider": VOICE_INPUT_PROVIDER_DISABLED,
+        "voice_input_enabled": False,
+        "voice_input_model": DEFAULT_VOICE_INPUT_MODEL,
+        "voice_input_language": "auto",
+        "voice_input_mode": VOICE_INPUT_MODE_PUSH_TO_TALK,
+        "voice_input_submit_mode": VOICE_INPUT_SUBMIT_PREVIEW,
+        "voice_input_preview_required": True,
         "patterns": [],
         "milking_patterns": [],
         "motion_pattern_enabled": {},
@@ -207,6 +224,36 @@ class SettingsManager:
             2.0,
             defaults["local_tts_repetition_penalty"],
         )
+        self.voice_input_provider = self._normalize_voice_input_provider(
+            data.get("voice_input_provider", defaults["voice_input_provider"])
+        )
+        self.voice_input_enabled = (
+            bool(data.get("voice_input_enabled", defaults["voice_input_enabled"]))
+            and self.voice_input_provider != VOICE_INPUT_PROVIDER_DISABLED
+        )
+        self.voice_input_model = str(
+            data.get("voice_input_model", defaults["voice_input_model"])
+            or defaults["voice_input_model"]
+        ).strip() or defaults["voice_input_model"]
+        self.voice_input_language = str(
+            data.get("voice_input_language", defaults["voice_input_language"]) or "auto"
+        ).strip() or "auto"
+        self.voice_input_mode = self._normalize_voice_input_mode(
+            data.get("voice_input_mode", defaults["voice_input_mode"])
+        )
+        self.voice_input_submit_mode = self._normalize_voice_input_submit_mode(
+            data.get("voice_input_submit_mode", defaults["voice_input_submit_mode"])
+        )
+        self.voice_input_preview_required = bool(
+            data.get("voice_input_preview_required", defaults["voice_input_preview_required"])
+        )
+        if "voice_input_submit_mode" not in data:
+            self.voice_input_submit_mode = (
+                VOICE_INPUT_SUBMIT_PREVIEW
+                if self.voice_input_preview_required
+                else VOICE_INPUT_SUBMIT_AUTO
+            )
+        self.voice_input_preview_required = self.voice_input_submit_mode != VOICE_INPUT_SUBMIT_AUTO
 
         depth_low = _clamp_int(data.get("min_depth"), 0, 100, defaults["min_depth"])
         depth_high = _clamp_int(data.get("max_depth"), 0, 100, defaults["max_depth"])
@@ -257,6 +304,13 @@ class SettingsManager:
             "local_tts_top_p": self.local_tts_top_p,
             "local_tts_min_p": self.local_tts_min_p,
             "local_tts_repetition_penalty": self.local_tts_repetition_penalty,
+            "voice_input_provider": self._normalize_voice_input_provider(self.voice_input_provider),
+            "voice_input_enabled": bool(self.voice_input_enabled),
+            "voice_input_model": self.voice_input_model,
+            "voice_input_language": self.voice_input_language,
+            "voice_input_mode": self._normalize_voice_input_mode(self.voice_input_mode),
+            "voice_input_submit_mode": self._normalize_voice_input_submit_mode(self.voice_input_submit_mode),
+            "voice_input_preview_required": bool(self.voice_input_preview_required),
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
@@ -404,6 +458,30 @@ class SettingsManager:
         if cleaned in {"position", "position_script", "position-script", "flexible_position", "flexible"}:
             return "position"
         return DEFAULT_MOTION_BACKEND
+
+    def _normalize_voice_input_provider(self, value):
+        cleaned = str(value or "").strip().lower()
+        if cleaned in {"local_asr", "browser_microphone", "faster_whisper", "faster-whisper"}:
+            return VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER
+        if cleaned in VOICE_INPUT_PROVIDERS:
+            return cleaned
+        return VOICE_INPUT_PROVIDER_DISABLED
+
+    def _normalize_voice_input_mode(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_")
+        if cleaned in {"handsfree", "always_on", "continuous"}:
+            return VOICE_INPUT_MODE_HANDS_FREE
+        if cleaned in VOICE_INPUT_MODES:
+            return cleaned
+        return VOICE_INPUT_MODE_PUSH_TO_TALK
+
+    def _normalize_voice_input_submit_mode(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_")
+        if cleaned in {"auto", "autosend", "auto_send", "submit"}:
+            return VOICE_INPUT_SUBMIT_AUTO
+        if cleaned in VOICE_INPUT_SUBMIT_MODES:
+            return cleaned
+        return VOICE_INPUT_SUBMIT_PREVIEW
 
     def _normalize_diagnostics_level(self, value):
         cleaned = str(value or "").strip().lower()

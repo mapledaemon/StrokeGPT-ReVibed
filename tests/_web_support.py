@@ -37,6 +37,7 @@ FRONTEND_SCRIPT_PATHS = (
     "/static/js/settings.js",
     "/static/js/chat.js",
     "/static/js/audio.js",
+    "/static/js/voice-input.js",
     "/static/js/device-control.js",
     "/static/js/motion-control.js",
     "/static/js/motion/feedback-controls.js",

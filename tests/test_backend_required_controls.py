@@ -9,6 +9,7 @@ APP_JS = PROJECT_ROOT / "static" / "app.js"
 APP_CSS = PROJECT_ROOT / "static" / "app.css"
 CONTEXT_JS = PROJECT_ROOT / "static" / "js" / "context.js"
 AUDIO_JS = PROJECT_ROOT / "static" / "js" / "audio.js"
+VOICE_INPUT_JS = PROJECT_ROOT / "static" / "js" / "voice-input.js"
 MOTION_CONTROL_JS = PROJECT_ROOT / "static" / "js" / "motion-control.js"
 PATTERN_LIST_JS = PROJECT_ROOT / "static" / "js" / "motion" / "pattern-list.js"
 SETUP_JS = PROJECT_ROOT / "static" / "js" / "setup.js"
@@ -40,6 +41,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
         self.app_css = _read(APP_CSS)
         self.context_js = _read(CONTEXT_JS)
         self.audio_js = _read(AUDIO_JS)
+        self.voice_input_js = _read(VOICE_INPUT_JS)
         self.motion_control_js = _read(MOTION_CONTROL_JS)
         self.pattern_list_js = _read(PATTERN_LIST_JS)
         self.setup_js = _read(SETUP_JS)
@@ -102,6 +104,16 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "motion-training-feedback-neutral",
             "motion-training-feedback-down",
             "reset-settings-btn",
+            "voice-input-menu-btn",
+            "voice-input-provider-select",
+            "voice-input-mode-select",
+            "voice-input-submit-mode-select",
+            "voice-input-model-input",
+            "voice-input-language-input",
+            "save-voice-input-btn",
+            "download-voice-input-model-btn",
+            "send-voice-transcript-btn",
+            "retry-voice-transcript-btn",
         ]
         for element_id in required_ids:
             with self.subTest(element_id=element_id):
@@ -121,18 +133,20 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             with self.subTest(element_id=element_id):
                 self.assertNotIn("data-requires-backend", _opening_tag(self.index_html, element_id))
 
-    def test_future_voice_input_controls_stay_disabled_until_backend_exists(self):
-        pending_ids = [
+    def test_voice_input_controls_are_backend_required_but_not_hard_disabled(self):
+        voice_ids = [
             "voice-input-menu-btn",
             "voice-input-provider-select",
+            "voice-input-mode-select",
+            "voice-input-submit-mode-select",
             "save-voice-input-btn",
+            "download-voice-input-model-btn",
         ]
-        for element_id in pending_ids:
+        for element_id in voice_ids:
             with self.subTest(element_id=element_id):
                 tag = _opening_tag(self.index_html, element_id)
-                self.assertIn("disabled", tag)
-                self.assertIn('aria-disabled="true"', tag)
-                self.assertNotIn("data-requires-backend", tag)
+                self.assertIn("data-requires-backend", tag)
+                self.assertNotIn("disabled", tag)
         self.assertIn('aria-haspopup="menu"', _opening_tag(self.index_html, "voice-input-menu-btn"))
         self.assertIn('aria-expanded="false"', _opening_tag(self.index_html, "voice-input-menu-btn"))
 
@@ -149,6 +163,9 @@ class BackendRequiredControlLockTests(unittest.TestCase):
     def test_direct_fetch_paths_update_connection_state(self):
         self.assertIn("fetchWithConnectionState('/upload_local_tts_sample'", self.audio_js)
         self.assertIn("fetchWithConnectionState('/get_audio'", self.audio_js)
+        self.assertIn("fetchWithConnectionState('/transcribe_voice'", self.voice_input_js)
+        self.assertIn("fetchWithConnectionState('/set_voice_input'", self.voice_input_js)
+        self.assertIn("fetchWithConnectionState('/preload_voice_input_model'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState(endpoint, options)", self.motion_control_js)
         self.assertIn("fetchWithConnectionState('/import_motion_pattern'", self.motion_control_js)
 

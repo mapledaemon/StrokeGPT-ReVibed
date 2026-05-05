@@ -2,6 +2,7 @@ import { D, apiCall, el, state } from './context.js';
 import { populateAudioSettings, populateLocalEngineOptions, populateLocalStyleOptions, updateAudioProviderUi, updateLocalTtsStatus } from './audio.js';
 import { populateDeviceSettings } from './device-control.js';
 import { populateMotionSettings } from './motion-control.js';
+import { populateVoiceInputSettings } from './voice-input.js';
 import {
     fillPersonaPromptSelect,
     normalizePersonaPrompt,
@@ -159,6 +160,7 @@ export async function startupCheck() {
         populateDeviceSettings(data);
         populateMotionSettings(data);
         populateAudioSettings(data);
+        populateVoiceInputSettings(data);
         if (data.elevenlabs_key) {
             el.elevenLabsKeyInput.value = data.elevenlabs_key;
             el.elevenLabsVoiceSelect.dataset.savedVoiceId = data.elevenlabs_voice_id || '';
@@ -183,6 +185,7 @@ export async function startupCheck() {
         );
         updateLocalTtsStatus(data && data.local_tts_status);
         updateAudioProviderUi();
+        populateVoiceInputSettings(data || {});
         const startHandler = event => {
             if (event.key === 'Enter') {
                 D.removeEventListener('keydown', startHandler);

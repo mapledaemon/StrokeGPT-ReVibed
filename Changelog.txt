@@ -8,8 +8,29 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-04 - Unreleased - Refine Chat Scrollback And Availability
-------------------------------------------------------------------
+2026-05-05 - Unreleased - Add Flexible Voice Input Foundation
+-------------------------------------------------------------
+
+Branch: codex/voice-control-mvp
+
+- Added persistent voice-input settings for provider, model, language,
+  recording mode, and transcript handling, including push-to-talk and
+  hands-free modes plus preview or auto-submit handling.
+- Added a provider-neutral ASR service with a local faster-whisper backend
+  that loads on first transcription and reports dependency/model status.
+- Added `/voice_input_status`, `/set_voice_input`,
+  `/preload_voice_input_model`, and `/transcribe_voice` routes for local
+  microphone clips without sending transcripts into chat until the frontend
+  explicitly submits them.
+- Enabled the microphone control shelf with browser `MediaRecorder` capture,
+  transcript preview, optional auto-submit through the existing chat path,
+  and a hands-free armed mode with browser-side voice activity detection.
+- Added route, settings, static-asset, and backend-control-lock coverage for
+  flexible voice input.
+
+
+2026-05-04 - PR #88 - Refine Chat Scrollback And Availability
+--------------------------------------------------------------
 
 Branch: codex/chat-scrollback-autoscroll
 
