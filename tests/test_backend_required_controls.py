@@ -106,8 +106,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "reset-settings-btn",
             "voice-input-menu-btn",
             "voice-input-provider-select",
-            "voice-input-mode-select",
-            "voice-input-submit-mode-select",
+            "voice-input-mode-control",
+            "voice-input-submit-mode-control",
             "voice-input-model-input",
             "voice-input-language-input",
             "save-voice-input-btn",
@@ -137,8 +137,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
         voice_ids = [
             "voice-input-menu-btn",
             "voice-input-provider-select",
-            "voice-input-mode-select",
-            "voice-input-submit-mode-select",
+            "voice-input-mode-control",
+            "voice-input-submit-mode-control",
             "save-voice-input-btn",
             "download-voice-input-model-btn",
         ]

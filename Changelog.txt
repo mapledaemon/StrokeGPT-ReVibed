@@ -8,8 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-07 - Unreleased - Harden Voice Input Model Loading
------------------------------------------------------------
+2026-05-07 - Unreleased - Add Voice Input Diagnostics
+------------------------------------------------------
+
+Branch: codex/voice-input-diagnostics
+
+- Added a compact Voice Input diagnostics readout that shows dependency/model
+  state, repo-local cache path, browser recording duration, upload round-trip,
+  recorded clip size, model-load timing, ASR timing, and transcript length.
+- Updated the browser voice-input flow to record local capture/upload timings
+  alongside backend `last_timings` so push-to-talk and hands-free testing can
+  identify whether latency is in capture, upload, model load, or ASR.
+- Added explicit labels for Voice Input controls and replaced the recording
+  mode and transcript handling dropdowns with segmented radio controls.
+- Updated static-asset coverage for the diagnostics DOM, CSS, and frontend
+  timing/state wiring.
+
+
+2026-05-07 - PR #90 - Harden Voice Input Model Loading
+------------------------------------------------------
 
 Branch: codex/voice-input-hardening
 

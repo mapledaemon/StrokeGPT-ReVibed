@@ -557,8 +557,9 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
 - Keep the physical stop button and explicit stop command independent from
   recording, upload, transcription, LLM response, TTS generation, and motion
   dispatch latency.
-- Add visible latency diagnostics for recording, upload, transcription, LLM
-  response, voice generation, and motion dispatch.
+- Extend the initial voice-input diagnostics into full end-to-end latency
+  diagnostics for LLM response, voice generation, and motion dispatch, so
+  delays after transcription are visible during hands-free testing.
 - Add clearer microphone/model failure states for missing browser permission,
   missing `faster-whisper`, model download/load failure, empty transcript, and
   slow transcription on CPU-only machines.
