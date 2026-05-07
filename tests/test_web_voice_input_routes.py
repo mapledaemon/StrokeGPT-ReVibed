@@ -1,4 +1,5 @@
 import io
+import os
 import unittest
 from unittest import mock
 
@@ -16,6 +17,11 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("provider_options", data["voice_input_status"])
             self.assertIn("mode_options", data["voice_input_status"])
             self.assertIn("submit_options", data["voice_input_status"])
+            model_cache_dir = data["voice_input_status"]["model_cache_dir"]
+            self.assertTrue(model_cache_dir)
+            if "STROKEGPT_ASR_CACHE_DIR" not in os.environ:
+                self.assertIn("user_data", model_cache_dir)
+                self.assertIn("voice_input_hf_cache", model_cache_dir)
         finally:
             response.close()
 

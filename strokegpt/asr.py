@@ -11,6 +11,13 @@ from .settings import (
 )
 
 
+_HF_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_flag_enabled(name):
+    return os.environ[name].lower() in _HF_TRUE_VALUES
+
+
 class VoiceInputError(RuntimeError):
     pass
 
@@ -57,10 +64,11 @@ class VoiceInputService:
         },
     ]
 
-    def __init__(self):
+    def __init__(self, model_cache_dir=None):
         self.provider = VOICE_INPUT_PROVIDER_DISABLED
         self.enabled = False
         self.model_name = DEFAULT_VOICE_INPUT_MODEL
+        self.model_cache_dir = str(model_cache_dir or "").strip()
         self.language = "auto"
         self.mode = VOICE_INPUT_MODE_PUSH_TO_TALK
         self.submit_mode = VOICE_INPUT_SUBMIT_PREVIEW
@@ -100,6 +108,9 @@ class VoiceInputService:
     def dependency_available(self):
         return importlib.util.find_spec("faster_whisper") is not None
 
+    def effective_model_cache_dir(self):
+        return str(os.getenv("STROKEGPT_ASR_CACHE_DIR", self.model_cache_dir) or "").strip()
+
     def status(self):
         dependency_available = self.dependency_available()
         can_load_model = (
@@ -122,6 +133,7 @@ class VoiceInputService:
             "provider": self.provider,
             "enabled": self.enabled,
             "model": self.model_name,
+            "model_cache_dir": self.effective_model_cache_dir(),
             "language": self.language,
             "mode": self.mode,
             "submit_mode": self.submit_mode,
@@ -147,17 +159,47 @@ class VoiceInputService:
         if not self.dependency_available():
             raise VoiceInputUnavailable("Install faster-whisper before using local voice input.")
 
+    def _prepare_model_cache(self):
+        cache_dir = self.effective_model_cache_dir()
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+            os.environ.setdefault("HF_XET_CACHE", os.path.join(cache_dir, "xet"))
+
+        # Hugging Face's default cache uses symlinks and Xet integration when
+        # available. On normal Windows user accounts that can fail or log access
+        # errors, so default local ASR loads to a copy-based cache.
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+        os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+        try:
+            import huggingface_hub.constants as hf_constants
+        except Exception:
+            return cache_dir
+
+        hf_constants.HF_HUB_DISABLE_SYMLINKS = _env_flag_enabled("HF_HUB_DISABLE_SYMLINKS")
+        hf_constants.HF_HUB_DISABLE_SYMLINKS_WARNING = _env_flag_enabled("HF_HUB_DISABLE_SYMLINKS_WARNING")
+        hf_constants.HF_HUB_DISABLE_XET = _env_flag_enabled("HF_HUB_DISABLE_XET")
+        hf_constants.HF_XET_CACHE = os.environ.get("HF_XET_CACHE", hf_constants.HF_XET_CACHE)
+        return cache_dir
+
     def _load_model(self):
         self._require_ready()
         key = (self.provider, self.model_name)
         if self._model is not None and self._model_key == key:
             return 0
         started = time.perf_counter()
+        cache_dir = self._prepare_model_cache()
         from faster_whisper import WhisperModel
 
         device = os.getenv("STROKEGPT_ASR_DEVICE", "cpu").strip() or "cpu"
         compute_type = os.getenv("STROKEGPT_ASR_COMPUTE_TYPE", "int8").strip() or "int8"
-        self._model = WhisperModel(self.model_name, device=device, compute_type=compute_type)
+        self._model = WhisperModel(
+            self.model_name,
+            device=device,
+            compute_type=compute_type,
+            download_root=cache_dir or None,
+        )
         self._model_key = key
         return int((time.perf_counter() - started) * 1000)
 

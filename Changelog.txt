@@ -8,8 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-05 - Unreleased - Add Flexible Voice Input Foundation
--------------------------------------------------------------
+2026-05-07 - Unreleased - Harden Voice Input Model Loading
+-----------------------------------------------------------
+
+Branch: codex/voice-input-hardening
+
+- Moved local faster-whisper downloads into the repo-local
+  `user_data/voice_input_hf_cache` path and disable Hugging Face symlink/Xet
+  defaults before model import so normal Windows accounts do not hit cache
+  permission failures during first model load.
+- Exposed the effective voice-input model cache path in voice-input status
+  and verified a real `tiny.en` preload plus silent WAV transcription through
+  the backend service path.
+- Hardened the frontend voice-capture lifecycle by retaining the
+  `MediaStreamAudioSourceNode`, disconnecting the audio graph on stop,
+  stopping active capture when provider or mode settings change, and handling
+  voice-status refresh failures without an unhandled promise rejection.
+- Added ASR cache-contract coverage plus route/static-asset tests for the
+  voice-input cache and capture lifecycle behavior.
+
+
+2026-05-05 - PR #89 - Add Flexible Voice Input Foundation
+---------------------------------------------------------
 
 Branch: codex/voice-control-mvp
 

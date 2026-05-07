@@ -43,6 +43,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
 VOICE_INPUT_UPLOAD_DIR = USER_DATA_DIR / "voice_input"
+VOICE_INPUT_MODEL_DIR = USER_DATA_DIR / "voice_input_hf_cache"
 MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
 ALLOWED_VOICE_INPUT_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"}
@@ -129,7 +130,7 @@ motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
 llm = LLMService(url=LLM_URL, model=ollama_model)
 audio = AudioService()
-voice_input = VoiceInputService()
+voice_input = VoiceInputService(model_cache_dir=VOICE_INPUT_MODEL_DIR)
 audio.set_provider(settings.audio_provider, settings.audio_enabled)
 if settings.elevenlabs_api_key:
     if audio.set_api_key(settings.elevenlabs_api_key):

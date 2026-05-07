@@ -94,11 +94,16 @@ export function populateVoiceInputSettings(data = {}) {
 }
 
 export async function refreshVoiceInputStatus() {
-    const response = await fetchWithConnectionState('/voice_input_status');
-    if (!response.ok) return null;
-    const data = await response.json();
-    populateVoiceInputSettings(data);
-    return data;
+    try {
+        const response = await fetchWithConnectionState('/voice_input_status');
+        if (!response.ok) return null;
+        const data = await response.json();
+        populateVoiceInputSettings(data);
+        return data;
+    } catch (error) {
+        voiceStatusMessage(`Voice input status unavailable: ${error.message}`, 'var(--yellow)');
+        return null;
+    }
 }
 
 async function saveVoiceInputSettings() {
@@ -161,11 +166,30 @@ function stopMicrophoneStream() {
         state.voiceInputStream.getTracks().forEach(track => track.stop());
         state.voiceInputStream = null;
     }
+    state.voiceInputAudioSource?.disconnect?.();
+    state.voiceInputAudioSource = null;
+    state.voiceInputAnalyser?.disconnect?.();
+    state.voiceInputAnalyser = null;
     if (state.voiceInputAudioContext) {
         state.voiceInputAudioContext.close();
         state.voiceInputAudioContext = null;
     }
-    state.voiceInputAnalyser = null;
+}
+
+function stopActiveVoiceInput(message = '') {
+    if (state.voiceInputHandsFreeArmed) {
+        stopHandsFree(message || 'Hands-free listening stopped.');
+    } else if (state.voiceInputRecording) {
+        stopRecording();
+        if (message) voiceStatusMessage(message);
+    } else {
+        stopMicrophoneStream();
+    }
+}
+
+function cancelHandsFreeMonitor() {
+    if (state.voiceInputMonitorFrame) cancelAnimationFrame(state.voiceInputMonitorFrame);
+    state.voiceInputMonitorFrame = null;
 }
 
 function recordingDurationMs() {
@@ -241,7 +265,13 @@ async function startRecording(source = 'manual') {
         voiceStatusMessage(source === 'hands_free' ? 'Speech detected. Recording...' : 'Recording voice input...');
         setVoiceButtonState();
     } catch (error) {
+        if (source === 'hands_free') {
+            state.voiceInputHandsFreeArmed = false;
+            cancelHandsFreeMonitor();
+        }
+        stopMicrophoneStream();
         voiceStatusMessage(`Microphone unavailable: ${error.message}`, 'var(--yellow)');
+        setVoiceButtonState();
     }
 }
 
@@ -289,26 +319,26 @@ async function startHandsFree() {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) throw new Error('This browser does not support audio level monitoring.');
         state.voiceInputAudioContext = state.voiceInputAudioContext || new AudioContextClass();
-        const source = state.voiceInputAudioContext.createMediaStreamSource(stream);
+        state.voiceInputAudioSource = state.voiceInputAudioContext.createMediaStreamSource(stream);
         state.voiceInputAnalyser = state.voiceInputAudioContext.createAnalyser();
         state.voiceInputAnalyser.fftSize = 512;
-        source.connect(state.voiceInputAnalyser);
+        state.voiceInputAudioSource.connect(state.voiceInputAnalyser);
         state.voiceInputHandsFreeArmed = true;
         state.voiceInputMonitorFrame = requestAnimationFrame(monitorHandsFree);
         voiceStatusMessage('Hands-free listening armed.');
         setVoiceButtonState();
     } catch (error) {
+        stopMicrophoneStream();
         voiceStatusMessage(`Hands-free listening unavailable: ${error.message}`, 'var(--yellow)');
     }
 }
 
-function stopHandsFree() {
+function stopHandsFree(message = 'Hands-free listening stopped.') {
     state.voiceInputHandsFreeArmed = false;
-    if (state.voiceInputMonitorFrame) cancelAnimationFrame(state.voiceInputMonitorFrame);
-    state.voiceInputMonitorFrame = null;
+    cancelHandsFreeMonitor();
     if (state.voiceInputRecording) stopRecording();
     else stopMicrophoneStream();
-    voiceStatusMessage('Hands-free listening stopped.');
+    if (message) voiceStatusMessage(message);
     setVoiceButtonState();
 }
 
@@ -355,6 +385,9 @@ export function initVoiceInputControls({sendUserMessage}) {
     el.downloadVoiceInputModelBtn?.addEventListener('click', downloadVoiceInputModel);
     el.voiceInputMenuBtn?.addEventListener('click', toggleVoiceInput);
     el.voiceInputModeSelect?.addEventListener('change', event => {
+        if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
+            stopActiveVoiceInput('Voice input stopped because settings changed.');
+        }
         state.voiceInputMode = event.target.value;
         setVoiceButtonState();
     });
@@ -362,6 +395,9 @@ export function initVoiceInputControls({sendUserMessage}) {
         state.voiceInputSubmitMode = event.target.value;
     });
     el.voiceInputProviderSelect?.addEventListener('change', event => {
+        if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
+            stopActiveVoiceInput('Voice input stopped because settings changed.');
+        }
         state.voiceInputProvider = event.target.value;
         state.voiceInputEnabled = event.target.value !== 'disabled';
         setVoiceButtonState();

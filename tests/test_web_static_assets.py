@@ -388,6 +388,11 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("MediaRecorder", script)
         self.assertIn("HANDS_FREE_RMS_THRESHOLD", script)
         self.assertIn("state.voiceInputMode === 'hands_free'", script)
+        self.assertIn("state.voiceInputAudioSource", script)
+        self.assertIn("state.voiceInputAudioSource = state.voiceInputAudioContext.createMediaStreamSource(stream)", script)
+        self.assertIn("state.voiceInputAudioSource?.disconnect?.()", script)
+        self.assertIn("stopActiveVoiceInput('Voice input stopped because settings changed.')", script)
+        self.assertIn("Voice input status unavailable", script)
         self.assertIn("auto_submit", script)
         self.assertIn("await submitVoiceTranscript(transcript)", script)
 
