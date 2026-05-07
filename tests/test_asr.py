@@ -14,6 +14,39 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class VoiceInputServiceTests(unittest.TestCase):
+    def test_status_reports_actionable_state_codes(self):
+        service = VoiceInputService()
+
+        self.assertEqual(service.status()["status_code"], "disabled")
+
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="en",
+        )
+        with mock.patch.object(service, "dependency_available", return_value=False):
+            status = service.status()
+        self.assertEqual(status["status_code"], "dependency_missing")
+        self.assertIn("Install dependencies", status["message"])
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            status = service.status()
+        self.assertEqual(status["status_code"], "model_not_loaded")
+        self.assertIn("Download / Load Voice Input Model", status["message"])
+
+        service._model = object()
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            status = service.status()
+        self.assertEqual(status["status_code"], "ready")
+        self.assertTrue(status["can_transcribe"])
+
+        service.last_error = "download failed"
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            status = service.status()
+        self.assertEqual(status["status_code"], "error")
+        self.assertIn("download failed", status["message"])
+
     def test_model_load_uses_windows_safe_local_cache(self):
         calls = {}
         fake_module = types.ModuleType("faster_whisper")

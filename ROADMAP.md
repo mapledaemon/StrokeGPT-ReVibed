@@ -560,9 +560,9 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
 - Extend the initial voice-input diagnostics into full end-to-end latency
   diagnostics for LLM response, voice generation, and motion dispatch, so
   delays after transcription are visible during hands-free testing.
-- Add clearer microphone/model failure states for missing browser permission,
-  missing `faster-whisper`, model download/load failure, empty transcript, and
-  slow transcription on CPU-only machines.
+- Continue failure-state tuning after real microphone testing: refine
+  browser-specific permission handling, noisy/empty clip copy, model-load
+  recovery guidance, and CPU-latency thresholds.
 - Decide whether the microphone menu should expose sensitivity, clip length,
   language, and submit-mode controls directly or keep those in Settings >
   Voice once real hands-free testing shows which controls users need during

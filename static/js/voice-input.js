@@ -4,15 +4,19 @@ const HANDS_FREE_RMS_THRESHOLD = 0.035;
 const HANDS_FREE_SILENCE_MS = 900;
 const MIN_RECORDING_MS = 450;
 const MAX_RECORDING_MS = 8000;
+const SLOW_ASR_WARNING_MS = 2500;
 
 let submitVoiceTranscript = async () => {};
 
-function voiceStatusMessage(message, color = 'var(--comment)') {
+function voiceStatusMessage(message, color = 'var(--comment)', {issue = false, clearIssue = false} = {}) {
+    if (issue) state.voiceInputLastIssue = message;
+    else if (clearIssue) state.voiceInputLastIssue = '';
     if (el.voiceInputStatus) {
         el.voiceInputStatus.textContent = message;
         el.voiceInputStatus.style.color = color;
     }
     if (el.statusText) el.statusText.textContent = message;
+    updateVoiceInputDiagnostics();
 }
 
 function formatMs(value) {
@@ -45,11 +49,50 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const loaded = status.model_loaded ? 'loaded' : 'not loaded';
     const model = status.model || 'unknown';
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
+    const issue = state.voiceInputLastIssue || status.last_error || '-';
     el.voiceInputDiagnostics.textContent = [
-        `Dependency: ${dependency} | Model: ${loaded} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
+        `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+        `Issue: ${issue}`,
     ].join('\n');
+}
+
+function microphoneErrorMessage(error) {
+    const name = error?.name || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+        return 'Microphone permission is blocked. Allow microphone access for this site, then try voice input again.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        return 'No microphone was found. Connect or select a microphone, then try voice input again.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+        return 'Microphone is busy or unavailable. Close other apps using it, then try again.';
+    }
+    if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+        return 'The selected microphone settings are not available. Check your browser audio input settings.';
+    }
+    return `Microphone unavailable: ${error?.message || 'unknown browser error'}`;
+}
+
+function voicePayloadFailureMessage(payload, fallback) {
+    const status = payload?.voice_input_status || {};
+    if (status.status_code === 'dependency_missing') {
+        return 'Voice input dependency is missing. Install faster-whisper, then restart the app.';
+    }
+    if (status.status_code === 'model_not_loaded') {
+        return 'Voice input model is not loaded. Use Download / Load Voice Input Model before recording.';
+    }
+    if (status.status_code === 'error' && status.last_error) {
+        return `Voice input model error: ${status.last_error}`;
+    }
+    return payload?.message || fallback;
+}
+
+function slowAsrWarning(payload) {
+    const transcribeMs = Number(payload?.timings?.transcribe_ms ?? payload?.voice_input_status?.last_timings?.transcribe_ms);
+    if (!Number.isFinite(transcribeMs) || transcribeMs < SLOW_ASR_WARNING_MS) return '';
+    return `ASR took ${formatMs(transcribeMs)}. On CPU-only machines, use tiny.en or a GPU for lower latency.`;
 }
 
 function preferredMimeType() {
@@ -142,6 +185,7 @@ export function populateVoiceInputSettings(data = {}) {
         el.voiceInputStatus.textContent = status.message || 'Voice input status unavailable.';
         el.voiceInputStatus.style.color = status.can_transcribe ? 'var(--cyan)' : 'var(--comment)';
     }
+    if (!status.last_error && status.status_code === 'ready') state.voiceInputLastIssue = '';
     if (el.downloadVoiceInputModelBtn) {
         el.downloadVoiceInputModelBtn.disabled = !status.can_load_model || status.model_loaded;
         el.downloadVoiceInputModelBtn.textContent = status.model_loaded ? 'Voice Input Model Loaded' : 'Download / Load Voice Input Model';
@@ -184,7 +228,7 @@ async function saveVoiceInputSettings() {
     }
     const payload = await response.json();
     populateVoiceInputSettings(payload);
-    voiceStatusMessage(payload.message || 'Voice input settings saved.', payload.can_transcribe ? 'var(--cyan)' : 'var(--comment)');
+    voiceStatusMessage(payload.message || 'Voice input settings saved.', payload.can_transcribe ? 'var(--cyan)' : 'var(--comment)', {clearIssue: true});
     return payload;
 }
 
@@ -198,15 +242,23 @@ async function downloadVoiceInputModel() {
         el.downloadVoiceInputModelBtn.textContent = 'Loading...';
     }
     voiceStatusMessage('Loading voice input model...');
-    const response = await fetchWithConnectionState('/preload_voice_input_model', {method: 'POST'});
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-        voiceStatusMessage(payload?.message || `Voice input model load failed: HTTP ${response.status}`, 'var(--yellow)');
-        if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
-        return;
+    try {
+        const response = await fetchWithConnectionState('/preload_voice_input_model', {method: 'POST'});
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+            voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice input model load failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
+            if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
+            return;
+        }
+        populateVoiceInputSettings(payload);
+        voiceStatusMessage(payload.message || 'Voice input model loaded.', 'var(--cyan)', {clearIssue: true});
+    } catch (error) {
+        voiceStatusMessage(`Voice input model load failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
+        if (el.downloadVoiceInputModelBtn) {
+            el.downloadVoiceInputModelBtn.disabled = false;
+            el.downloadVoiceInputModelBtn.textContent = 'Download / Load Voice Input Model';
+        }
     }
-    populateVoiceInputSettings(payload);
-    voiceStatusMessage(payload.message || 'Voice input model loaded.', 'var(--cyan)');
 }
 
 async function ensureMicrophoneStream() {
@@ -257,7 +309,7 @@ async function transcribeVoiceBlob(blob) {
     state.voiceInputLastBlobBytes = blob?.size || 0;
     updateVoiceInputDiagnostics();
     if (!blob || blob.size === 0) {
-        voiceStatusMessage('Recorded audio was empty.', 'var(--yellow)');
+        voiceStatusMessage('Recorded audio was empty. Check microphone permission and input level, then try again.', 'var(--yellow)', {issue: true});
         return;
     }
     voiceStatusMessage('Transcribing voice input...');
@@ -270,7 +322,7 @@ async function transcribeVoiceBlob(blob) {
         state.voiceInputLastUploadMs = performance.now() - uploadStartedAt;
         payload = await response.json().catch(() => null);
         if (!response.ok) {
-            voiceStatusMessage(payload?.message || `Voice transcription failed: HTTP ${response.status}`, 'var(--yellow)');
+            voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice transcription failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
             if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
             else updateVoiceInputDiagnostics();
             return;
@@ -278,22 +330,23 @@ async function transcribeVoiceBlob(blob) {
     } catch (error) {
         state.voiceInputLastUploadMs = null;
         updateVoiceInputDiagnostics();
-        voiceStatusMessage(`Voice transcription failed: ${error.message}`, 'var(--yellow)');
+        voiceStatusMessage(`Voice transcription failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
         return;
     }
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
     if (!transcript) {
-        voiceStatusMessage(payload?.message || 'No speech detected.', 'var(--yellow)');
+        voiceStatusMessage(payload?.message || 'No speech detected. Try speaking closer to the microphone, reducing background noise, or using push-to-talk.', 'var(--yellow)', {issue: true});
         return;
     }
+    const slowWarning = slowAsrWarning(payload);
     if (state.voiceInputSubmitMode === 'auto_submit') {
         hideTranscriptPreview();
         await submitVoiceTranscript(transcript);
-        voiceStatusMessage('Voice transcript sent.', 'var(--cyan)');
+        voiceStatusMessage(slowWarning || 'Voice transcript sent.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     } else {
         showTranscriptPreview(transcript);
-        voiceStatusMessage('Transcript ready to review.', 'var(--cyan)');
+        voiceStatusMessage(slowWarning || 'Transcript ready to review.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     }
 }
 
@@ -318,7 +371,7 @@ async function startRecording(source = 'manual') {
                 const blob = new Blob(state.voiceInputChunks, {type: state.voiceInputRecorder.mimeType || 'audio/webm'});
                 await transcribeVoiceBlob(blob);
             } else if (source !== 'hands_free') {
-                voiceStatusMessage('Recording was too short.', 'var(--yellow)');
+                voiceStatusMessage('Recording was too short. Hold the microphone button long enough to capture a full command.', 'var(--yellow)', {issue: true});
             }
             state.voiceInputChunks = [];
             if (!state.voiceInputHandsFreeArmed) stopMicrophoneStream();
@@ -335,7 +388,7 @@ async function startRecording(source = 'manual') {
             cancelHandsFreeMonitor();
         }
         stopMicrophoneStream();
-        voiceStatusMessage(`Microphone unavailable: ${error.message}`, 'var(--yellow)');
+        voiceStatusMessage(microphoneErrorMessage(error), 'var(--yellow)', {issue: true});
         setVoiceButtonState();
     }
 }
@@ -390,11 +443,11 @@ async function startHandsFree() {
         state.voiceInputAudioSource.connect(state.voiceInputAnalyser);
         state.voiceInputHandsFreeArmed = true;
         state.voiceInputMonitorFrame = requestAnimationFrame(monitorHandsFree);
-        voiceStatusMessage('Hands-free listening armed.');
+        voiceStatusMessage('Hands-free listening armed.', 'var(--comment)', {clearIssue: true});
         setVoiceButtonState();
     } catch (error) {
         stopMicrophoneStream();
-        voiceStatusMessage(`Hands-free listening unavailable: ${error.message}`, 'var(--yellow)');
+        voiceStatusMessage(microphoneErrorMessage(error), 'var(--yellow)', {issue: true});
     }
 }
 

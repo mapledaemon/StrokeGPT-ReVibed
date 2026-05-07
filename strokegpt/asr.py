@@ -120,16 +120,22 @@ class VoiceInputService:
         )
         can_transcribe = can_load_model and self._model is not None
         if self.provider == VOICE_INPUT_PROVIDER_DISABLED or not self.enabled:
+            status_code = "disabled"
             message = "Voice input is disabled."
         elif not dependency_available:
-            message = "Install faster-whisper before using local voice input."
+            status_code = "dependency_missing"
+            message = "Voice input needs faster-whisper. Install dependencies, then restart the app."
         elif self._model is None:
-            message = f"Click Download / Load Voice Input Model before recording. First load may download {self.model_name}."
+            status_code = "model_not_loaded"
+            message = f"Voice input model is not loaded. Use Download / Load Voice Input Model before recording. First load may download {self.model_name}."
         else:
+            status_code = "ready"
             message = f"Voice input model loaded: {self.model_name}."
         if self.last_error:
+            status_code = "error"
             message = f"{message} Last error: {self.last_error}"
         return {
+            "status_code": status_code,
             "provider": self.provider,
             "enabled": self.enabled,
             "model": self.model_name,

@@ -199,6 +199,7 @@ export const state = {
     voiceInputLastRecordingMs: null,
     voiceInputLastUploadMs: null,
     voiceInputLastBlobBytes: null,
+    voiceInputLastIssue: '',
     voiceInputRecording: false,
     voiceInputHandsFreeArmed: false,
     voiceInputStream: null,
