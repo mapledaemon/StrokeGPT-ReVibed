@@ -8,8 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-07 - Unreleased - Add Voice Input Diagnostics
-------------------------------------------------------
+2026-05-07 - Unreleased - Clarify Voice Input Failure States
+-------------------------------------------------------------
+
+Branch: codex/voice-input-failure-states
+
+- Added structured voice-input status codes for disabled, dependency missing,
+  model not loaded, ready, and error states.
+- Replaced raw microphone/browser/model error strings with action-oriented
+  voice-input messages and kept the latest issue visible in diagnostics.
+- Added a slow-ASR warning when transcription crosses the CPU-latency
+  threshold.
+- Updated route, static-asset, and ASR tests for the new status and
+  failure-state contract.
+
+
+2026-05-07 - PR #91 - Add Voice Input Diagnostics
+-------------------------------------------------
 
 Branch: codex/voice-input-diagnostics
 
