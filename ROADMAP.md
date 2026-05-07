@@ -536,34 +536,39 @@ that work picks up.
 - Document the runner choice, how to add a behavioral test, and the
   source-text vs behavioral test guidance in `AGENTS.md`.
 
-### 14. Local Voice Control MVP (L)
+### 14. Local Voice Control Hardening (L)
 
-Why later: voice control is the largest user-facing feature. It should start
-with explicit push-to-talk, but the architecture must also support flexible
-hands-free control without bypassing the existing chat, motion, and stop
-safety paths.
+Why later: PR #89 landed the provider-neutral service, browser
+`MediaRecorder` capture, faster-whisper transcription route, explicit
+model-load action, transcript preview, and initial hands-free mode. The
+remaining work is reliability and ergonomics: voice control has to feel
+hands-free without bypassing the existing chat, motion, and stop safety paths.
 
-- Add a provider-neutral speech recognition service interface.
-- Add push-to-talk browser capture with `MediaRecorder`.
-- Keep voice-input model downloads and model loads behind an explicit
-  user action, the same way local voice-output model loading works.
-- Support a hands-free armed mode that uses browser-side voice activity
-  detection to capture short speech segments after the user explicitly turns
-  listening on.
-- Let transcript handling be configurable: preview before send for safer
-  setup and optional auto-submit for hands-free control, always routed through
-  the existing `/send_message` path.
-- Add a `/transcribe_voice` route that accepts short recorded audio
-  clips.
-- Preview transcripts before submitting them through the existing
-  `/send_message` path.
-- Route recognized movement requests through the deterministic motion
-  layer. Do not bypass speed limits, smoothing, stop handling, or
-  user-visible preferences.
-- Keep the physical stop button and explicit stop command independent
-  from recording, upload, transcription, LLM response, and TTS latency.
-- Add latency diagnostics for recording, upload, transcription, LLM
+- Verify push-to-talk and hands-free recognition with real microphones on a
+  slow Windows laptop and a faster desktop, including empty/noisy clips,
+  short commands, and longer natural-language movement requests.
+- Tune the hands-free voice-activity threshold, silence timeout, minimum
+  recording length, and maximum clip length so normal commands are captured
+  without repeated false starts or clipped transcripts.
+- Keep recognized movement requests routed through the existing
+  `/send_message` path and deterministic motion layer. Do not bypass speed
+  limits, smoothing, stop handling, chat edge-blocking, or user-visible
+  preferences.
+- Keep the physical stop button and explicit stop command independent from
+  recording, upload, transcription, LLM response, TTS generation, and motion
+  dispatch latency.
+- Add visible latency diagnostics for recording, upload, transcription, LLM
   response, voice generation, and motion dispatch.
+- Add clearer microphone/model failure states for missing browser permission,
+  missing `faster-whisper`, model download/load failure, empty transcript, and
+  slow transcription on CPU-only machines.
+- Decide whether the microphone menu should expose sensitivity, clip length,
+  language, and submit-mode controls directly or keep those in Settings >
+  Voice once real hands-free testing shows which controls users need during
+  operation.
+- Evaluate whether whisper.cpp or Parakeet should be added after the
+  faster-whisper baseline is measured. Keep provider-specific setup isolated
+  behind the ASR service contract.
 
 Candidate local ASR providers:
 

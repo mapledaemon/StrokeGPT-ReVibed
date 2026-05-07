@@ -202,6 +202,7 @@ export const state = {
     voiceInputRecordingStartedAt: 0,
     voiceInputStopTimer: null,
     voiceInputAudioContext: null,
+    voiceInputAudioSource: null,
     voiceInputAnalyser: null,
     voiceInputMonitorFrame: null,
     voiceInputSilenceStartedAt: 0,
