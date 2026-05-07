@@ -15,6 +15,43 @@ function voiceStatusMessage(message, color = 'var(--comment)') {
     if (el.statusText) el.statusText.textContent = message;
 }
 
+function formatMs(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '-';
+    return `${Math.max(0, Math.round(number))} ms`;
+}
+
+function formatBytes(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return '-';
+    if (number >= 1024 * 1024) return `${(number / (1024 * 1024)).toFixed(1)} MB`;
+    if (number >= 1024) return `${Math.round(number / 1024)} KB`;
+    return `${Math.round(number)} B`;
+}
+
+function compactCachePath(path = '') {
+    const normalized = String(path || '').trim().replaceAll('\\', '/');
+    if (!normalized) return '-';
+    const marker = 'user_data/';
+    const markerIndex = normalized.lastIndexOf(marker);
+    if (markerIndex >= 0) return normalized.slice(markerIndex);
+    return normalized.split('/').filter(Boolean).slice(-2).join('/') || normalized;
+}
+
+function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || {}) {
+    if (!el.voiceInputDiagnostics) return;
+    const timings = status.last_timings || {};
+    const dependency = status.dependency_available ? 'available' : 'missing';
+    const loaded = status.model_loaded ? 'loaded' : 'not loaded';
+    const model = status.model || 'unknown';
+    const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
+    el.voiceInputDiagnostics.textContent = [
+        `Dependency: ${dependency} | Model: ${loaded} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
+        `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
+        `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+    ].join('\n');
+}
+
 function preferredMimeType() {
     if (!window.MediaRecorder) return '';
     const options = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -32,6 +69,24 @@ function populateSelect(selectEl, options = [], fallbackOptions = []) {
         selectEl.appendChild(node);
     });
     if ([...selectEl.options].some(option => option.value === selected)) selectEl.value = selected;
+}
+
+function populateChoiceLabels(inputs, options = [], fallbackOptions = []) {
+    const labelById = new Map((options.length ? options : fallbackOptions).map(option => [option.id, option.label]));
+    [...inputs].forEach(input => {
+        const label = D.querySelector(`[data-choice-label="${input.id}"]`);
+        if (labelById.has(input.value) && label) label.textContent = labelById.get(input.value);
+    });
+}
+
+function setCheckedRadioValue(inputs, value) {
+    [...inputs].forEach(input => {
+        input.checked = input.value === value;
+    });
+}
+
+function getCheckedRadioValue(inputs, fallback) {
+    return [...inputs].find(input => input.checked)?.value || fallback;
 }
 
 function setVoiceButtonState() {
@@ -58,15 +113,16 @@ function setVoiceButtonState() {
 
 export function populateVoiceInputSettings(data = {}) {
     const status = data.voice_input_status || data || {};
+    state.voiceInputStatusSnapshot = status;
     populateSelect(el.voiceInputProviderSelect, status.provider_options, [
         {id: 'disabled', label: 'Disabled'},
         {id: 'local_faster_whisper', label: 'Local faster-whisper'},
     ]);
-    populateSelect(el.voiceInputModeSelect, status.mode_options, [
+    populateChoiceLabels(el.voiceInputModeInputs, status.mode_options, [
         {id: 'push_to_talk', label: 'Push to talk'},
         {id: 'hands_free', label: 'Hands-free'},
     ]);
-    populateSelect(el.voiceInputSubmitModeSelect, status.submit_options, [
+    populateChoiceLabels(el.voiceInputSubmitModeInputs, status.submit_options, [
         {id: 'preview', label: 'Preview before send'},
         {id: 'auto_submit', label: 'Auto-send transcript'},
     ]);
@@ -78,8 +134,8 @@ export function populateVoiceInputSettings(data = {}) {
     state.voiceInputCanTranscribe = Boolean(status.can_transcribe);
 
     if (el.voiceInputProviderSelect) el.voiceInputProviderSelect.value = state.voiceInputProvider;
-    if (el.voiceInputModeSelect) el.voiceInputModeSelect.value = state.voiceInputMode;
-    if (el.voiceInputSubmitModeSelect) el.voiceInputSubmitModeSelect.value = state.voiceInputSubmitMode;
+    setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
+    setCheckedRadioValue(el.voiceInputSubmitModeInputs, state.voiceInputSubmitMode);
     if (el.voiceInputModelInput) el.voiceInputModelInput.value = status.model || data.voice_input_model || 'tiny.en';
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
@@ -90,6 +146,7 @@ export function populateVoiceInputSettings(data = {}) {
         el.downloadVoiceInputModelBtn.disabled = !status.can_load_model || status.model_loaded;
         el.downloadVoiceInputModelBtn.textContent = status.model_loaded ? 'Voice Input Model Loaded' : 'Download / Load Voice Input Model';
     }
+    updateVoiceInputDiagnostics(status);
     setVoiceButtonState();
 }
 
@@ -111,8 +168,8 @@ async function saveVoiceInputSettings() {
     const data = {
         provider,
         enabled: provider !== 'disabled',
-        mode: el.voiceInputModeSelect?.value || 'push_to_talk',
-        submit_mode: el.voiceInputSubmitModeSelect?.value || 'preview',
+        mode: getCheckedRadioValue(el.voiceInputModeInputs, 'push_to_talk'),
+        submit_mode: getCheckedRadioValue(el.voiceInputSubmitModeInputs, 'preview'),
         model: el.voiceInputModelInput?.value || 'tiny.en',
         language: el.voiceInputLanguageInput?.value || 'auto',
     };
@@ -197,6 +254,8 @@ function recordingDurationMs() {
 }
 
 async function transcribeVoiceBlob(blob) {
+    state.voiceInputLastBlobBytes = blob?.size || 0;
+    updateVoiceInputDiagnostics();
     if (!blob || blob.size === 0) {
         voiceStatusMessage('Recorded audio was empty.', 'var(--yellow)');
         return;
@@ -206,14 +265,19 @@ async function transcribeVoiceBlob(blob) {
     formData.append('audio', blob, `voice-${Date.now()}.webm`);
     let payload = null;
     try {
+        const uploadStartedAt = performance.now();
         const response = await fetchWithConnectionState('/transcribe_voice', {method: 'POST', body: formData});
+        state.voiceInputLastUploadMs = performance.now() - uploadStartedAt;
         payload = await response.json().catch(() => null);
         if (!response.ok) {
             voiceStatusMessage(payload?.message || `Voice transcription failed: HTTP ${response.status}`, 'var(--yellow)');
             if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
+            else updateVoiceInputDiagnostics();
             return;
         }
     } catch (error) {
+        state.voiceInputLastUploadMs = null;
+        updateVoiceInputDiagnostics();
         voiceStatusMessage(`Voice transcription failed: ${error.message}`, 'var(--yellow)');
         return;
     }
@@ -246,6 +310,7 @@ async function startRecording(source = 'manual') {
         });
         state.voiceInputRecorder.addEventListener('stop', async () => {
             const duration = recordingDurationMs();
+            state.voiceInputLastRecordingMs = duration;
             state.voiceInputRecording = false;
             clearTimeout(state.voiceInputStopTimer);
             setVoiceButtonState();
@@ -384,15 +449,19 @@ export function initVoiceInputControls({sendUserMessage}) {
     el.saveVoiceInputBtn?.addEventListener('click', saveVoiceInputSettings);
     el.downloadVoiceInputModelBtn?.addEventListener('click', downloadVoiceInputModel);
     el.voiceInputMenuBtn?.addEventListener('click', toggleVoiceInput);
-    el.voiceInputModeSelect?.addEventListener('change', event => {
-        if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
-            stopActiveVoiceInput('Voice input stopped because settings changed.');
-        }
-        state.voiceInputMode = event.target.value;
-        setVoiceButtonState();
+    el.voiceInputModeInputs?.forEach(input => {
+        input.addEventListener('change', event => {
+            if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
+                stopActiveVoiceInput('Voice input stopped because settings changed.');
+            }
+            state.voiceInputMode = event.target.value;
+            setVoiceButtonState();
+        });
     });
-    el.voiceInputSubmitModeSelect?.addEventListener('change', event => {
-        state.voiceInputSubmitMode = event.target.value;
+    el.voiceInputSubmitModeInputs?.forEach(input => {
+        input.addEventListener('change', event => {
+            state.voiceInputSubmitMode = event.target.value;
+        });
     });
     el.voiceInputProviderSelect?.addEventListener('change', event => {
         if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {

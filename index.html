@@ -182,21 +182,31 @@
             <div id="settings-tab-voice" class="settings-panel active">
                 <div class="settings-subsection voice-input-settings">
                     <h4>Voice Input</h4>
+                    <label class="settings-field-label" for="voice-input-provider-select">Provider</label>
                     <select id="voice-input-provider-select" class="select-box" data-requires-backend>
                         <option value="disabled">Disabled</option>
                         <option value="local_faster_whisper">Local faster-whisper</option>
                     </select>
-                    <select id="voice-input-mode-select" class="select-box" data-requires-backend>
-                        <option value="push_to_talk">Push to talk</option>
-                        <option value="hands_free">Hands-free</option>
-                    </select>
-                    <select id="voice-input-submit-mode-select" class="select-box" data-requires-backend>
-                        <option value="preview">Preview before send</option>
-                        <option value="auto_submit">Auto-send transcript</option>
-                    </select>
+                    <fieldset id="voice-input-mode-control" class="voice-input-choice-group" data-requires-backend>
+                        <legend>Recording Mode</legend>
+                        <div class="segmented-control">
+                            <label><input type="radio" id="voice-input-mode-push-to-talk" name="voice-input-mode" value="push_to_talk" checked><span data-choice-label="voice-input-mode-push-to-talk">Push to talk</span></label>
+                            <label><input type="radio" id="voice-input-mode-hands-free" name="voice-input-mode" value="hands_free"><span data-choice-label="voice-input-mode-hands-free">Hands-free</span></label>
+                        </div>
+                    </fieldset>
+                    <fieldset id="voice-input-submit-mode-control" class="voice-input-choice-group" data-requires-backend>
+                        <legend>Transcript Handling</legend>
+                        <div class="segmented-control">
+                            <label><input type="radio" id="voice-input-submit-preview" name="voice-input-submit-mode" value="preview" checked><span data-choice-label="voice-input-submit-preview">Preview before send</span></label>
+                            <label><input type="radio" id="voice-input-submit-auto" name="voice-input-submit-mode" value="auto_submit"><span data-choice-label="voice-input-submit-auto">Auto-send transcript</span></label>
+                        </div>
+                    </fieldset>
+                    <label class="settings-field-label" for="voice-input-model-input">Recognition Model</label>
                     <input type="text" id="voice-input-model-input" class="input-text" value="tiny.en" placeholder="faster-whisper model" data-requires-backend>
+                    <label class="settings-field-label" for="voice-input-language-input">Language</label>
                     <input type="text" id="voice-input-language-input" class="input-text" value="auto" placeholder="Language, e.g. auto or en" data-requires-backend>
                     <div id="voice-input-status" class="settings-help">Voice input is disabled.</div>
+                    <pre id="voice-input-diagnostics" class="diagnostics-output voice-input-diagnostics" aria-live="polite">No voice input activity recorded.</pre>
                     <div class="voice-actions">
                         <button id="save-voice-input-btn" class="my-button" data-requires-backend>Save Voice Input</button>
                         <button id="download-voice-input-model-btn" class="my-button" data-requires-backend>Download / Load Voice Input Model</button>
