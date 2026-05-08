@@ -41,12 +41,16 @@ class VoiceInputServiceTests(unittest.TestCase):
         with mock.patch.object(service, "dependency_available", return_value=True):
             status = service.status()
         self.assertEqual(status["status_code"], "model_not_loaded")
+        self.assertFalse(status["model_cached"])
+        self.assertTrue(status["load_requires_download"])
         self.assertIn("Download / Load Voice Input Model", status["message"])
 
         service._model = object()
         with mock.patch.object(service, "dependency_available", return_value=True):
             status = service.status()
         self.assertEqual(status["status_code"], "ready")
+        self.assertTrue(status["model_cached"])
+        self.assertFalse(status["load_requires_download"])
         self.assertTrue(status["can_transcribe"])
 
         service.last_error = "download failed"
@@ -112,6 +116,46 @@ class VoiceInputServiceTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_status_distinguishes_cached_model_files_from_uncached_download(self):
+        cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"
+        cache_parent.mkdir(parents=True, exist_ok=True)
+        temp_dir = tempfile.mkdtemp(prefix="cached_model_", dir=cache_parent)
+        try:
+            service = VoiceInputService(model_cache_dir=temp_dir)
+            service.configure(
+                provider="local_faster_whisper",
+                enabled=True,
+                model="tiny.en",
+                language="en",
+            )
+
+            with mock.patch.object(service, "dependency_available", return_value=True):
+                status = service.status()
+            self.assertEqual(status["status_code"], "model_not_loaded")
+            self.assertFalse(status["model_cached"])
+            self.assertTrue(status["load_requires_download"])
+            self.assertIn("not downloaded", status["message"])
+
+            cached_model_dir = Path(temp_dir) / "faster-whisper-tiny-en" / "snapshots" / "abc123"
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr.os.walk", return_value=[(str(cached_model_dir), [], ["model.bin"])]),
+            ):
+                status = service.status()
+            self.assertEqual(status["status_code"], "model_not_loaded")
+            self.assertTrue(status["model_cached"])
+            self.assertFalse(status["load_requires_download"])
+            self.assertIn("cached but not loaded", status["message"])
+
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr.os.walk", return_value=[(str(cached_model_dir), [], ["model.bin"])]),
+            ):
+                with self.assertRaisesRegex(Exception, "Load the cached voice input model"):
+                    service.transcribe_file(Path(temp_dir) / "speech.webm")
+        finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 

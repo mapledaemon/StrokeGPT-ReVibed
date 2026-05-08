@@ -22,6 +22,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("hands_free_silence_ms", data["voice_input_status"])
             self.assertIn("min_recording_ms", data["voice_input_status"])
             self.assertIn("max_recording_ms", data["voice_input_status"])
+            self.assertIn("model_cached", data["voice_input_status"])
+            self.assertIn("load_requires_download", data["voice_input_status"])
             model_cache_dir = data["voice_input_status"]["model_cache_dir"]
             self.assertTrue(model_cache_dir)
             if "STROKEGPT_ASR_CACHE_DIR" not in os.environ:

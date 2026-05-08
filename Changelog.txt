@@ -8,8 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-08 - Unreleased - Keep Hands-Free Mic Button Available
----------------------------------------------------------------
+2026-05-08 - Unreleased - Distinguish Cached Voice Input Models
+----------------------------------------------------------------
+
+Branch: codex/voice-input-cached-model-state
+
+- Added voice-input status fields that distinguish an uncached faster-whisper
+  model from a locally cached model that still needs to be loaded into memory.
+- Updated the Settings > Voice input button, diagnostics, and failure copy so
+  cached models are described as "load" actions instead of repeated download
+  prompts.
+- Auto-load cached models when hands-free voice input is enabled, and let the
+  microphone button load a cached model before arming hands-free listening.
+- Kept the download confirmation only for first-load cases where model files
+  may need to be fetched.
+
+
+2026-05-08 - PR #94 - Keep Hands-Free Mic Button Available
+----------------------------------------------------------
 
 Branch: codex/voice-input-mode-unblock
 

@@ -9,6 +9,8 @@ const HANDS_FREE_RMS_THRESHOLD_MAX = 0.12;
 const SLOW_ASR_WARNING_MS = 2500;
 
 let submitVoiceTranscript = async () => {};
+let voiceInputModelLoadPromise = null;
+let voiceInputAutoLoadKey = '';
 
 function voiceStatusMessage(message, color = 'var(--comment)', {issue = false, clearIssue = false} = {}) {
     if (issue) state.voiceInputLastIssue = message;
@@ -73,16 +75,47 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const timings = status.last_timings || {};
     const dependency = status.dependency_available ? 'available' : 'missing';
     const loaded = status.model_loaded ? 'loaded' : 'not loaded';
+    const cached = status.model_cached ? 'cached' : 'not cached';
     const model = status.model || 'unknown';
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
     const issue = state.voiceInputLastIssue || status.last_error || '-';
     el.voiceInputDiagnostics.textContent = [
-        `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
+        `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Issue: ${issue}`,
     ].join('\n');
+}
+
+function voiceInputModelLoadLabel(status = state.voiceInputStatusSnapshot || {}) {
+    if (status.model_loaded) return 'Voice Input Model Loaded';
+    return status.model_cached ? 'Load Voice Input Model' : 'Download / Load Voice Input Model';
+}
+
+function canLoadCachedVoiceInputModel(status = state.voiceInputStatusSnapshot || {}) {
+    const requiresDownload = Boolean(status.load_requires_download ?? !status.model_cached);
+    return Boolean(status.can_load_model && status.model_cached && !status.model_loaded && !requiresDownload);
+}
+
+function shouldAutoLoadHandsFreeModel(status = state.voiceInputStatusSnapshot || {}) {
+    return Boolean(
+        status.enabled
+        && status.provider !== 'disabled'
+        && status.mode === 'hands_free'
+        && !status.last_error
+        && status.status_code !== 'error'
+        && canLoadCachedVoiceInputModel(status)
+    );
+}
+
+function voiceInputModelStateKey(status = state.voiceInputStatusSnapshot || {}) {
+    return [
+        status.provider || '',
+        status.model || '',
+        status.model_cache_dir || '',
+        status.mode || '',
+    ].join('|');
 }
 
 function microphoneErrorMessage(error) {
@@ -108,7 +141,10 @@ function voicePayloadFailureMessage(payload, fallback) {
         return 'Voice input dependency is missing. Install faster-whisper, then restart the app.';
     }
     if (status.status_code === 'model_not_loaded') {
-        return 'Voice input model is not loaded. Use Download / Load Voice Input Model before recording.';
+        if (status.model_cached) {
+            return 'Voice input model is cached but not loaded. Use Load Voice Input Model before recording.';
+        }
+        return 'Voice input model is not downloaded. Use Download / Load Voice Input Model before recording.';
     }
     if (status.status_code === 'error' && status.last_error) {
         return `Voice input model error: ${status.last_error}`;
@@ -197,17 +233,29 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
 
 function setVoiceButtonState() {
     if (!el.voiceInputMenuBtn) return;
-    const disabled = !state.voiceInputEnabled || !state.voiceInputCanTranscribe || state.voiceInputProvider === 'disabled';
+    const canLoadForHandsFree = state.voiceInputMode === 'hands_free' && canLoadCachedVoiceInputModel();
+    const disabled = (
+        !state.voiceInputEnabled
+        || state.voiceInputProvider === 'disabled'
+        || Boolean(voiceInputModelLoadPromise)
+        || (!state.voiceInputCanTranscribe && !canLoadForHandsFree)
+    );
     el.voiceInputMenuBtn.disabled = disabled;
     el.voiceInputMenuBtn.classList.toggle('is-recording', state.voiceInputRecording);
     el.voiceInputMenuBtn.classList.toggle('is-listening', state.voiceInputHandsFreeArmed && !state.voiceInputRecording);
     el.voiceInputMenuBtn.setAttribute('aria-pressed', state.voiceInputRecording || state.voiceInputHandsFreeArmed ? 'true' : 'false');
-    if (state.voiceInputRecording) {
+    if (voiceInputModelLoadPromise) {
+        el.voiceInputMenuBtn.title = 'Loading voice input model';
+        el.voiceInputMenuBtn.setAttribute('aria-label', 'Loading voice input model');
+    } else if (state.voiceInputRecording) {
         el.voiceInputMenuBtn.title = 'Stop recording';
         el.voiceInputMenuBtn.setAttribute('aria-label', 'Stop recording');
     } else if (state.voiceInputHandsFreeArmed) {
         el.voiceInputMenuBtn.title = 'Stop hands-free listening';
         el.voiceInputMenuBtn.setAttribute('aria-label', 'Stop hands-free listening');
+    } else if (canLoadForHandsFree) {
+        el.voiceInputMenuBtn.title = 'Load cached model and arm hands-free listening';
+        el.voiceInputMenuBtn.setAttribute('aria-label', 'Load cached model and arm hands-free listening');
     } else if (state.voiceInputMode === 'hands_free') {
         el.voiceInputMenuBtn.title = disabled ? 'Voice input unavailable' : 'Arm hands-free listening';
         el.voiceInputMenuBtn.setAttribute('aria-label', 'Arm hands-free listening');
@@ -225,7 +273,7 @@ function selectVoiceInputMode(value) {
     setVoiceButtonState();
 }
 
-export function populateVoiceInputSettings(data = {}) {
+export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true} = {}) {
     const status = data.voice_input_status || data || {};
     state.voiceInputStatusSnapshot = status;
     populateSelect(el.voiceInputProviderSelect, status.provider_options, [
@@ -264,10 +312,13 @@ export function populateVoiceInputSettings(data = {}) {
     if (!status.last_error && status.status_code === 'ready') state.voiceInputLastIssue = '';
     if (el.downloadVoiceInputModelBtn) {
         el.downloadVoiceInputModelBtn.disabled = !status.can_load_model || status.model_loaded;
-        el.downloadVoiceInputModelBtn.textContent = status.model_loaded ? 'Voice Input Model Loaded' : 'Download / Load Voice Input Model';
+        el.downloadVoiceInputModelBtn.textContent = voiceInputModelLoadLabel(status);
     }
     updateVoiceInputDiagnostics(status);
     setVoiceButtonState();
+    if (autoLoadHandsFree && shouldAutoLoadHandsFreeModel(status)) {
+        setTimeout(() => maybeAutoLoadHandsFreeModel(status), 0);
+    }
 }
 
 export async function refreshVoiceInputStatus() {
@@ -283,7 +334,7 @@ export async function refreshVoiceInputStatus() {
     }
 }
 
-async function saveVoiceInputSettings() {
+async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
     const provider = el.voiceInputProviderSelect?.value || 'disabled';
     const data = {
         provider,
@@ -307,38 +358,71 @@ async function saveVoiceInputSettings() {
         return null;
     }
     const payload = await response.json();
-    populateVoiceInputSettings(payload);
+    populateVoiceInputSettings(payload, {autoLoadHandsFree});
     voiceStatusMessage(payload.message || 'Voice input settings saved.', payload.can_transcribe ? 'var(--cyan)' : 'var(--comment)', {clearIssue: true});
     return payload;
 }
 
-async function downloadVoiceInputModel() {
-    const saved = await saveVoiceInputSettings();
-    if (!saved || !saved.can_load_model) return;
-    const ok = window.confirm(`Download/load the voice input model '${saved.model}' now? If it is not cached, this may download model files.`);
-    if (!ok) return;
+async function preloadVoiceInputModel({status = state.voiceInputStatusSnapshot || {}, allowDownload = false, reason = 'manual'} = {}) {
+    if (!status.can_load_model) return null;
+    const requiresDownload = Boolean(status.load_requires_download ?? !status.model_cached);
+    if (requiresDownload && !allowDownload) return null;
+    if (voiceInputModelLoadPromise) return voiceInputModelLoadPromise;
+    const loadingMessage = requiresDownload
+        ? 'Downloading voice input model...'
+        : (reason === 'hands_free_auto'
+            ? 'Loading cached voice input model for hands-free...'
+            : 'Loading cached voice input model...');
+    voiceInputModelLoadPromise = (async () => {
+        try {
+            const response = await fetchWithConnectionState('/preload_voice_input_model', {method: 'POST'});
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice input model load failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
+                if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
+                return null;
+            }
+            populateVoiceInputSettings(payload);
+            voiceStatusMessage(payload.message || 'Voice input model loaded.', 'var(--cyan)', {clearIssue: true});
+            return payload;
+        } catch (error) {
+            voiceStatusMessage(`Voice input model load failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
+            if (el.downloadVoiceInputModelBtn) {
+                el.downloadVoiceInputModelBtn.disabled = false;
+                el.downloadVoiceInputModelBtn.textContent = voiceInputModelLoadLabel(status);
+            }
+            return null;
+        } finally {
+            voiceInputModelLoadPromise = null;
+            setVoiceButtonState();
+        }
+    })();
+    setVoiceButtonState();
     if (el.downloadVoiceInputModelBtn) {
         el.downloadVoiceInputModelBtn.disabled = true;
         el.downloadVoiceInputModelBtn.textContent = 'Loading...';
     }
-    voiceStatusMessage('Loading voice input model...');
-    try {
-        const response = await fetchWithConnectionState('/preload_voice_input_model', {method: 'POST'});
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) {
-            voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice input model load failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
-            if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
-            return;
-        }
-        populateVoiceInputSettings(payload);
-        voiceStatusMessage(payload.message || 'Voice input model loaded.', 'var(--cyan)', {clearIssue: true});
-    } catch (error) {
-        voiceStatusMessage(`Voice input model load failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
-        if (el.downloadVoiceInputModelBtn) {
-            el.downloadVoiceInputModelBtn.disabled = false;
-            el.downloadVoiceInputModelBtn.textContent = 'Download / Load Voice Input Model';
-        }
+    voiceStatusMessage(loadingMessage);
+    return voiceInputModelLoadPromise;
+}
+
+function maybeAutoLoadHandsFreeModel(status = state.voiceInputStatusSnapshot || {}) {
+    if (!shouldAutoLoadHandsFreeModel(status) || voiceInputModelLoadPromise) return;
+    const key = voiceInputModelStateKey(status);
+    if (voiceInputAutoLoadKey === key) return;
+    voiceInputAutoLoadKey = key;
+    preloadVoiceInputModel({status, allowDownload: false, reason: 'hands_free_auto'});
+}
+
+async function downloadVoiceInputModel() {
+    const saved = await saveVoiceInputSettings({autoLoadHandsFree: false});
+    if (!saved || !saved.can_load_model) return;
+    const requiresDownload = Boolean(saved.load_requires_download ?? !saved.model_cached);
+    if (requiresDownload) {
+        const ok = window.confirm(`Download and load the voice input model '${saved.model}' now? This may download model files.`);
+        if (!ok) return;
     }
+    await preloadVoiceInputModel({status: saved, allowDownload: true, reason: 'manual'});
 }
 
 async function ensureMicrophoneStream() {
@@ -512,8 +596,24 @@ function monitorHandsFree() {
     state.voiceInputMonitorFrame = requestAnimationFrame(monitorHandsFree);
 }
 
+async function ensureHandsFreeModelReady() {
+    if (state.voiceInputCanTranscribe) return true;
+    const status = state.voiceInputStatusSnapshot || {};
+    if (canLoadCachedVoiceInputModel(status)) {
+        const payload = await preloadVoiceInputModel({status, allowDownload: false, reason: 'hands_free_toggle'});
+        return Boolean(payload?.can_transcribe || payload?.voice_input_status?.can_transcribe || state.voiceInputCanTranscribe);
+    }
+    voiceStatusMessage(
+        voicePayloadFailureMessage({voice_input_status: status}, 'Voice input is not ready. Download and load the voice input model before recording.'),
+        'var(--yellow)',
+        {issue: true},
+    );
+    return false;
+}
+
 async function startHandsFree() {
     try {
+        if (!await ensureHandsFreeModelReady()) return;
         const stream = await ensureMicrophoneStream();
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) throw new Error('This browser does not support audio level monitoring.');
@@ -568,10 +668,10 @@ function retryVoiceInput() {
     }
 }
 
-function toggleVoiceInput() {
+async function toggleVoiceInput() {
     if (state.voiceInputMode === 'hands_free') {
         if (state.voiceInputHandsFreeArmed) stopHandsFree();
-        else startHandsFree();
+        else await startHandsFree();
         return;
     }
     if (state.voiceInputRecording) stopRecording();

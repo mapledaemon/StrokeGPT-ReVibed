@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 import time
 
 from .settings import (
@@ -16,10 +17,22 @@ from .settings import (
 
 
 _HF_TRUE_VALUES = {"1", "true", "yes", "on"}
+_MODEL_CACHE_MARKER_FILES = {
+    "config.json",
+    "model.bin",
+    "tokenizer.json",
+    "vocabulary.json",
+    "vocabulary.txt",
+}
+_MODEL_CACHE_SCAN_LIMIT = 5000
 
 
 def _env_flag_enabled(name):
     return os.environ[name].lower() in _HF_TRUE_VALUES
+
+
+def _cache_search_text(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
 
 
 class VoiceInputError(RuntimeError):
@@ -127,6 +140,37 @@ class VoiceInputService:
     def effective_model_cache_dir(self):
         return str(os.getenv("STROKEGPT_ASR_CACHE_DIR", self.model_cache_dir) or "").strip()
 
+    def _model_cache_tokens(self):
+        tokens = {_cache_search_text(self.model_name)}
+        model_tail = self.model_name.rsplit("/", 1)[-1]
+        tail_token = _cache_search_text(model_tail)
+        if tail_token:
+            tokens.add(tail_token)
+            if not tail_token.startswith("faster-whisper-"):
+                tokens.add(f"faster-whisper-{tail_token}")
+        return {token for token in tokens if token}
+
+    def is_model_cached(self):
+        if self._model is not None:
+            return True
+        cache_dir = self.effective_model_cache_dir()
+        if not cache_dir or not os.path.isdir(cache_dir):
+            return False
+
+        tokens = self._model_cache_tokens()
+        entries_seen = 0
+        for root, dirs, files in os.walk(cache_dir):
+            entries_seen += len(dirs) + len(files)
+            marker_files = _MODEL_CACHE_MARKER_FILES.intersection(name.lower() for name in files)
+            if marker_files:
+                relative_root = os.path.relpath(root, cache_dir)
+                normalized_root = "" if relative_root == "." else _cache_search_text(relative_root)
+                if not normalized_root or any(token in normalized_root for token in tokens):
+                    return True
+            if entries_seen >= _MODEL_CACHE_SCAN_LIMIT:
+                break
+        return False
+
     def status(self):
         dependency_available = self.dependency_available()
         can_load_model = (
@@ -134,6 +178,7 @@ class VoiceInputService:
             and self.provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER
             and dependency_available
         )
+        model_cached = can_load_model and self.is_model_cached()
         can_transcribe = can_load_model and self._model is not None
         if self.provider == VOICE_INPUT_PROVIDER_DISABLED or not self.enabled:
             status_code = "disabled"
@@ -143,7 +188,10 @@ class VoiceInputService:
             message = "Voice input needs faster-whisper. Install dependencies, then restart the app."
         elif self._model is None:
             status_code = "model_not_loaded"
-            message = f"Voice input model is not loaded. Use Download / Load Voice Input Model before recording. First load may download {self.model_name}."
+            if model_cached:
+                message = "Voice input model is cached but not loaded. Use Load Voice Input Model before recording."
+            else:
+                message = f"Voice input model is not downloaded. Use Download / Load Voice Input Model once to cache and load {self.model_name}."
         else:
             status_code = "ready"
             message = f"Voice input model loaded: {self.model_name}."
@@ -166,7 +214,9 @@ class VoiceInputService:
             "max_recording_ms": self.max_recording_ms,
             "dependency_available": dependency_available,
             "model_loaded": self._model is not None,
+            "model_cached": model_cached,
             "can_load_model": can_load_model,
+            "load_requires_download": can_load_model and not model_cached,
             "can_transcribe": can_transcribe,
             "message": message,
             "last_error": self.last_error,
@@ -245,6 +295,8 @@ class VoiceInputService:
     def transcribe_file(self, audio_path):
         self._require_ready()
         if self._model is None:
+            if self.is_model_cached():
+                raise VoiceInputUnavailable("Load the cached voice input model before recording.")
             raise VoiceInputUnavailable("Download / load the voice input model before recording.")
         timings = {}
         try:
