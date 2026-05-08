@@ -70,6 +70,11 @@ class WebChatRouteTests(WebTestCase):
             self.assertEqual(data["status"], "ok")
             self.assertEqual(data["chat"], "This text should be visible and spoken.")
             self.assertTrue(data["chat_queued"])
+            self.assertIn("timings", data)
+            self.assertIn("request_ms", data["timings"])
+            self.assertIn("llm_ms", data["timings"])
+            self.assertIn("motion_repair_ms", data["timings"])
+            self.assertIn("motion_apply_ms", data["timings"])
 
             updates = self.client.get("/get_updates")
             try:

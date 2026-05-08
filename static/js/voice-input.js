@@ -79,11 +79,13 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const model = status.model || 'unknown';
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
     const issue = state.voiceInputLastIssue || status.last_error || '-';
+    const chatTimings = state.voiceInputLastChatTimings || {};
     el.voiceInputDiagnostics.textContent = [
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+        `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
     ].join('\n');
 }
@@ -156,6 +158,20 @@ function slowAsrWarning(payload) {
     const transcribeMs = Number(payload?.timings?.transcribe_ms ?? payload?.voice_input_status?.last_timings?.transcribe_ms);
     if (!Number.isFinite(transcribeMs) || transcribeMs < SLOW_ASR_WARNING_MS) return '';
     return `ASR took ${formatMs(transcribeMs)}. On CPU-only machines, use tiny.en or a GPU for lower latency.`;
+}
+
+async function submitVoiceTranscriptToChat(transcript) {
+    state.voiceInputLastChatMs = null;
+    state.voiceInputLastChatTimings = {};
+    updateVoiceInputDiagnostics();
+    const startedAt = performance.now();
+    const result = await submitVoiceTranscript(transcript);
+    state.voiceInputLastChatMs = Number.isFinite(result?.elapsed_ms)
+        ? result.elapsed_ms
+        : Math.max(0, Math.round(performance.now() - startedAt));
+    state.voiceInputLastChatTimings = result?.data?.timings || {};
+    updateVoiceInputDiagnostics();
+    return result;
 }
 
 function preferredMimeType() {
@@ -506,7 +522,7 @@ async function transcribeVoiceBlob(blob) {
     const slowWarning = slowAsrWarning(payload);
     if (state.voiceInputSubmitMode === 'auto_submit') {
         hideTranscriptPreview();
-        await submitVoiceTranscript(transcript);
+        await submitVoiceTranscriptToChat(transcript);
         voiceStatusMessage(slowWarning || 'Voice transcript sent.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     } else {
         showTranscriptPreview(transcript);
@@ -656,7 +672,7 @@ function hideTranscriptPreview() {
 async function sendPendingTranscript() {
     const transcript = state.voiceInputPendingTranscript.trim();
     hideTranscriptPreview();
-    if (transcript) await submitVoiceTranscript(transcript);
+    if (transcript) await submitVoiceTranscriptToChat(transcript);
 }
 
 function retryVoiceInput() {

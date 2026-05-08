@@ -1106,6 +1106,7 @@ def _relay_message_to_active_mode(user_input):
 
 @app.route('/send_message', methods=['POST'])
 def handle_user_message():
+    request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
 
@@ -1131,9 +1132,13 @@ def handle_user_message():
     context = get_current_context()
     current_before_llm = motion.current_target()
     motion_repaired = False
+    timings = {}
     try:
+        llm_started = time.perf_counter()
         llm_response = llm.get_chat_response(app_state.chat_history, context)
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
     except Exception as exc:
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
         print(f"[ERROR] LLM request failed: {exc}")
         llm_response = {
             "chat": f"LLM request failed: {exc}",
@@ -1148,12 +1153,14 @@ def handle_user_message():
             "new_mood": None,
         }
     if not _is_llm_transport_error_text(llm_response.get("chat")):
+        repair_started = time.perf_counter()
         llm_response, motion_repaired = _repair_llm_motion_response_if_needed(
             user_input,
             llm_response,
             context,
             current_before_llm,
         )
+        timings["motion_repair_ms"] = int((time.perf_counter() - repair_started) * 1000)
 
     raw_chat_text = llm_response.get("chat")
     chat_text = str(raw_chat_text or "").strip()
@@ -1184,6 +1191,7 @@ def handle_user_message():
             app_state.current_mood = new_mood
     motion_applied = False
     if not is_llm_transport_error and not app_state.auto_mode_active_task:
+        motion_started = time.perf_counter()
         target = _apply_llm_response_move(
             llm_response,
             current_before_llm,
@@ -1191,12 +1199,15 @@ def handle_user_message():
         )
         motion_applied = target is not None
         _remember_motion_pattern_from_target(target)
+        timings["motion_apply_ms"] = int((time.perf_counter() - motion_started) * 1000)
+    timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
     return jsonify({
         "status": "ok",
         "chat": chat_text,
         "chat_queued": True,
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
+        "timings": timings,
     })
 
 def _read_uploaded_pattern_payload(upload):

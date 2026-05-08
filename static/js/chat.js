@@ -144,6 +144,7 @@ function handleSendMessageStatus(data) {
 }
 
 export async function sendUserMessage(message) {
+    const startedAt = performance.now();
     const persona = el.personaInput.value.trim();
     if (message.trim() || persona !== state.myPersonaDescription) {
         if (message.trim()) addChatMessage('YOU', message, {forceScroll: true});
@@ -157,8 +158,15 @@ export async function sendUserMessage(message) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({message, key: state.myHandyKey, persona_desc: state.myPersonaDescription}),
         });
-        if (handleSendMessageStatus(data)) await pollChatUpdates();
+        const handled = handleSendMessageStatus(data);
+        if (handled) await pollChatUpdates();
+        return {
+            data,
+            handled,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+        };
     }
+    return {data: null, handled: false, elapsed_ms: 0, skipped: true};
 }
 
 export async function pollChatUpdates() {

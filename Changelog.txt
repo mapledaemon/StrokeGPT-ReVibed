@@ -8,8 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-08 - Unreleased - Distinguish Cached Voice Input Models
-----------------------------------------------------------------
+2026-05-08 - Unreleased - Add Voice Input Chat Latency Diagnostics
+------------------------------------------------------------------
+
+Branch: codex/voice-input-chat-latency-diagnostics
+
+- Returned request, LLM, motion-repair, and motion-apply timings from the
+  chat send route so voice-control handoffs can expose where delay occurs.
+- Made `sendUserMessage` return its elapsed time and backend payload for
+  voice-input callers without changing existing chat-button behavior.
+- Added voice-input diagnostics for transcript-to-chat handoff, LLM, and
+  motion timing.
+
+
+2026-05-08 - PR #95 - Distinguish Cached Voice Input Models
+-----------------------------------------------------------
 
 Branch: codex/voice-input-cached-model-state
 
