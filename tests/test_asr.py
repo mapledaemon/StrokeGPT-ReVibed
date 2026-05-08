@@ -28,6 +28,10 @@ class VoiceInputServiceTests(unittest.TestCase):
             hands_free_silence_ms=1250,
             min_recording_ms=500,
             max_recording_ms=10000,
+            noise_suppression=False,
+            echo_cancellation=False,
+            auto_gain_control=True,
+            noise_floor_rms=0.021,
         )
         with mock.patch.object(service, "dependency_available", return_value=False):
             status = service.status()
@@ -37,6 +41,10 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(status["hands_free_silence_ms"], 1250)
         self.assertEqual(status["min_recording_ms"], 500)
         self.assertEqual(status["max_recording_ms"], 10000)
+        self.assertFalse(status["noise_suppression"])
+        self.assertFalse(status["echo_cancellation"])
+        self.assertTrue(status["auto_gain_control"])
+        self.assertEqual(status["noise_floor_rms"], 0.021)
 
         with mock.patch.object(service, "dependency_available", return_value=True):
             status = service.status()

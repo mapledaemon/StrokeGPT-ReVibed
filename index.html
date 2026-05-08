@@ -212,6 +212,17 @@
                             <label class="voice-input-number-field" for="voice-input-silence-ms-input"><span>Silence Timeout</span><input type="number" id="voice-input-silence-ms-input" min="250" max="5000" step="50" value="900" data-requires-backend><small>ms</small></label>
                             <label class="voice-input-number-field" for="voice-input-min-recording-ms-input"><span>Minimum Clip</span><input type="number" id="voice-input-min-recording-ms-input" min="150" max="3000" step="50" value="450" data-requires-backend><small>ms</small></label>
                             <label class="voice-input-number-field" for="voice-input-max-recording-ms-input"><span>Maximum Clip</span><input type="number" id="voice-input-max-recording-ms-input" min="1000" max="30000" step="250" value="8000" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-noise-floor-input"><span>Noise Floor</span><input type="number" id="voice-input-noise-floor-input" min="0" max="0.5" step="0.001" value="0" data-requires-backend><small>rms</small></label>
+                        </div>
+                        <div class="voice-input-readout-line">Current trigger threshold: <span id="voice-input-noise-floor-val">auto</span></div>
+                    </fieldset>
+                    <fieldset id="voice-input-microphone-control" class="voice-input-tuning-group" data-requires-backend>
+                        <legend>Microphone Processing</legend>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-noise-suppression-checkbox" checked data-requires-backend> Noise suppression</label>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-echo-cancellation-checkbox" checked data-requires-backend> Echo cancellation</label>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-auto-gain-checkbox" checked data-requires-backend> Automatic gain control</label>
+                        <div class="voice-actions">
+                            <button id="calibrate-voice-input-noise-btn" class="my-button" type="button" data-requires-backend>Calibrate Room Noise</button>
                         </div>
                     </fieldset>
                     <label class="settings-field-label" for="voice-input-model-input">Recognition Model</label>

@@ -9,6 +9,7 @@ from .settings import (
     DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MODEL,
+    DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
     VOICE_INPUT_MODE_PUSH_TO_TALK,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
@@ -93,6 +94,10 @@ class VoiceInputService:
         self.hands_free_silence_ms = DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS
         self.min_recording_ms = DEFAULT_VOICE_INPUT_MIN_RECORDING_MS
         self.max_recording_ms = DEFAULT_VOICE_INPUT_MAX_RECORDING_MS
+        self.noise_suppression = True
+        self.echo_cancellation = True
+        self.auto_gain_control = True
+        self.noise_floor_rms = DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS
         self._model = None
         self._model_key = None
         self.last_error = ""
@@ -112,6 +117,10 @@ class VoiceInputService:
         hands_free_silence_ms=DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
         min_recording_ms=DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
         max_recording_ms=DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
+        noise_suppression=True,
+        echo_cancellation=True,
+        auto_gain_control=True,
+        noise_floor_rms=DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
     ):
         provider = provider or VOICE_INPUT_PROVIDER_DISABLED
         enabled = bool(enabled) and provider != VOICE_INPUT_PROVIDER_DISABLED
@@ -133,6 +142,10 @@ class VoiceInputService:
         self.hands_free_silence_ms = int(hands_free_silence_ms)
         self.min_recording_ms = int(min_recording_ms)
         self.max_recording_ms = int(max_recording_ms)
+        self.noise_suppression = bool(noise_suppression)
+        self.echo_cancellation = bool(echo_cancellation)
+        self.auto_gain_control = bool(auto_gain_control)
+        self.noise_floor_rms = float(noise_floor_rms)
 
     def dependency_available(self):
         return importlib.util.find_spec("faster_whisper") is not None
@@ -212,6 +225,10 @@ class VoiceInputService:
             "hands_free_silence_ms": self.hands_free_silence_ms,
             "min_recording_ms": self.min_recording_ms,
             "max_recording_ms": self.max_recording_ms,
+            "noise_suppression": self.noise_suppression,
+            "echo_cancellation": self.echo_cancellation,
+            "auto_gain_control": self.auto_gain_control,
+            "noise_floor_rms": self.noise_floor_rms,
             "dependency_available": dependency_available,
             "model_loaded": self._model is not None,
             "model_cached": model_cached,

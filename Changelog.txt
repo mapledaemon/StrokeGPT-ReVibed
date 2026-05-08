@@ -8,8 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-08 - Unreleased - Add Voice Input Chat Latency Diagnostics
-------------------------------------------------------------------
+2026-05-08 - PR #97 - Add Voice Input Microphone Calibration
+-------------------------------------------------------------
+
+Branch: codex/voice-input-mic-calibration
+
+- Added persisted browser microphone processing settings for noise
+  suppression, echo cancellation, and automatic gain control.
+- Added a room-noise calibration control that measures local RMS noise,
+  saves the noise floor, and adapts the hands-free trigger threshold around
+  the measured room instead of using only a fixed sensitivity curve.
+- Updated voice-input diagnostics to show microphone processing state, noise
+  floor, and the current hands-free trigger threshold.
+- Updated backend settings, route payloads, ASR status, and frontend source
+  tests for the new microphone reliability contract.
+
+
+2026-05-08 - PR #96 - Add Voice Input Chat Latency Diagnostics
+--------------------------------------------------------------
 
 Branch: codex/voice-input-chat-latency-diagnostics
 

@@ -139,6 +139,12 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "voice-input-provider-select",
             "voice-input-mode-control",
             "voice-input-submit-mode-control",
+            "voice-input-noise-floor-input",
+            "voice-input-microphone-control",
+            "voice-input-noise-suppression-checkbox",
+            "voice-input-echo-cancellation-checkbox",
+            "voice-input-auto-gain-checkbox",
+            "calibrate-voice-input-noise-btn",
             "save-voice-input-btn",
             "download-voice-input-model-btn",
         ]
