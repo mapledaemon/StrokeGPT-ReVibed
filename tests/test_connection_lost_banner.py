@@ -123,6 +123,7 @@ class ConnectionLostBannerSourceTests(unittest.TestCase):
         self.assertIn("if (el.connectionLostBanner)", body)
         self.assertIn("el.connectionLostBanner.hidden = !next", body)
         self.assertIn("syncBackendRequiredControls()", body)
+        self.assertIn("backend-connection-restored", body)
 
     def test_api_call_distinguishes_network_failure_from_http_error(self):
         body = _function_body(self.context_js, "export async function apiCall(")

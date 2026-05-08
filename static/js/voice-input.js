@@ -217,6 +217,14 @@ function setVoiceButtonState() {
     }
 }
 
+function selectVoiceInputMode(value) {
+    if (state.voiceInputMode !== value && (state.voiceInputHandsFreeArmed || state.voiceInputRecording)) {
+        stopActiveVoiceInput('Voice input stopped because settings changed.');
+    }
+    state.voiceInputMode = value;
+    setVoiceButtonState();
+}
+
 export function populateVoiceInputSettings(data = {}) {
     const status = data.voice_input_status || data || {};
     state.voiceInputStatusSnapshot = status;
@@ -576,13 +584,8 @@ export function initVoiceInputControls({sendUserMessage}) {
     el.downloadVoiceInputModelBtn?.addEventListener('click', downloadVoiceInputModel);
     el.voiceInputMenuBtn?.addEventListener('click', toggleVoiceInput);
     el.voiceInputModeInputs?.forEach(input => {
-        input.addEventListener('change', event => {
-            if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
-                stopActiveVoiceInput('Voice input stopped because settings changed.');
-            }
-            state.voiceInputMode = event.target.value;
-            setVoiceButtonState();
-        });
+        input.addEventListener('click', event => selectVoiceInputMode(event.target.value));
+        input.addEventListener('change', event => selectVoiceInputMode(event.target.value));
     });
     el.voiceInputSubmitModeInputs?.forEach(input => {
         input.addEventListener('change', event => {
@@ -606,5 +609,6 @@ export function initVoiceInputControls({sendUserMessage}) {
     el.sendVoiceTranscriptBtn?.addEventListener('click', sendPendingTranscript);
     el.retryVoiceTranscriptBtn?.addEventListener('click', retryVoiceInput);
     el.cancelVoiceTranscriptBtn?.addEventListener('click', hideTranscriptPreview);
+    D.addEventListener('backend-connection-restored', refreshVoiceInputStatus);
     refreshVoiceInputStatus();
 }
