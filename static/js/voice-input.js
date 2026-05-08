@@ -1,9 +1,11 @@
-import { D, el, fetchWithConnectionState, state } from './context.js';
+import { D, clampNumber, el, fetchWithConnectionState, state } from './context.js';
 
-const HANDS_FREE_RMS_THRESHOLD = 0.035;
-const HANDS_FREE_SILENCE_MS = 900;
-const MIN_RECORDING_MS = 450;
-const MAX_RECORDING_MS = 8000;
+const DEFAULT_HANDS_FREE_SENSITIVITY = 75;
+const DEFAULT_HANDS_FREE_SILENCE_MS = 900;
+const DEFAULT_MIN_RECORDING_MS = 450;
+const DEFAULT_MAX_RECORDING_MS = 8000;
+const HANDS_FREE_RMS_THRESHOLD_MIN = 0.01;
+const HANDS_FREE_RMS_THRESHOLD_MAX = 0.12;
 const SLOW_ASR_WARNING_MS = 2500;
 
 let submitVoiceTranscript = async () => {};
@@ -23,6 +25,30 @@ function formatMs(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return '-';
     return `${Math.max(0, Math.round(number))} ms`;
+}
+
+function handsFreeSensitivity() {
+    return Math.round(clampNumber(state.voiceInputHandsFreeSensitivity, 1, 100, DEFAULT_HANDS_FREE_SENSITIVITY));
+}
+
+function handsFreeRmsThreshold() {
+    const ratio = (handsFreeSensitivity() - 1) / 99;
+    return HANDS_FREE_RMS_THRESHOLD_MAX - (ratio * (HANDS_FREE_RMS_THRESHOLD_MAX - HANDS_FREE_RMS_THRESHOLD_MIN));
+}
+
+function handsFreeSilenceMs() {
+    return Math.round(clampNumber(state.voiceInputHandsFreeSilenceMs, 250, 5000, DEFAULT_HANDS_FREE_SILENCE_MS));
+}
+
+function minRecordingMs() {
+    return Math.round(clampNumber(state.voiceInputMinRecordingMs, 150, 3000, DEFAULT_MIN_RECORDING_MS));
+}
+
+function maxRecordingMs() {
+    return Math.max(
+        minRecordingMs(),
+        Math.round(clampNumber(state.voiceInputMaxRecordingMs, 1000, 30000, DEFAULT_MAX_RECORDING_MS)),
+    );
 }
 
 function formatBytes(value) {
@@ -53,6 +79,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     el.voiceInputDiagnostics.textContent = [
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
+        `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Issue: ${issue}`,
     ].join('\n');
@@ -132,6 +159,42 @@ function getCheckedRadioValue(inputs, fallback) {
     return [...inputs].find(input => input.checked)?.value || fallback;
 }
 
+function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
+    state.voiceInputHandsFreeSensitivity = Math.round(clampNumber(
+        fromDom ? el.voiceInputSensitivitySlider?.value : state.voiceInputHandsFreeSensitivity,
+        1,
+        100,
+        DEFAULT_HANDS_FREE_SENSITIVITY,
+    ));
+    state.voiceInputHandsFreeSilenceMs = Math.round(clampNumber(
+        fromDom ? el.voiceInputSilenceMsInput?.value : state.voiceInputHandsFreeSilenceMs,
+        250,
+        5000,
+        DEFAULT_HANDS_FREE_SILENCE_MS,
+    ));
+    state.voiceInputMinRecordingMs = Math.round(clampNumber(
+        fromDom ? el.voiceInputMinRecordingMsInput?.value : state.voiceInputMinRecordingMs,
+        150,
+        3000,
+        DEFAULT_MIN_RECORDING_MS,
+    ));
+    state.voiceInputMaxRecordingMs = Math.max(
+        state.voiceInputMinRecordingMs,
+        Math.round(clampNumber(
+            fromDom ? el.voiceInputMaxRecordingMsInput?.value : state.voiceInputMaxRecordingMs,
+            1000,
+            30000,
+            DEFAULT_MAX_RECORDING_MS,
+        )),
+    );
+    if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
+    if (el.voiceInputSensitivityVal) el.voiceInputSensitivityVal.textContent = `${state.voiceInputHandsFreeSensitivity}%`;
+    if (el.voiceInputSilenceMsInput) el.voiceInputSilenceMsInput.value = String(state.voiceInputHandsFreeSilenceMs);
+    if (el.voiceInputMinRecordingMsInput) el.voiceInputMinRecordingMsInput.value = String(state.voiceInputMinRecordingMs);
+    if (el.voiceInputMaxRecordingMsInput) el.voiceInputMaxRecordingMsInput.value = String(state.voiceInputMaxRecordingMs);
+    updateVoiceInputDiagnostics();
+}
+
 function setVoiceButtonState() {
     if (!el.voiceInputMenuBtn) return;
     const disabled = !state.voiceInputEnabled || !state.voiceInputCanTranscribe || state.voiceInputProvider === 'disabled';
@@ -175,10 +238,15 @@ export function populateVoiceInputSettings(data = {}) {
     state.voiceInputMode = status.mode || data.voice_input_mode || 'push_to_talk';
     state.voiceInputSubmitMode = status.submit_mode || data.voice_input_submit_mode || 'preview';
     state.voiceInputCanTranscribe = Boolean(status.can_transcribe);
+    state.voiceInputHandsFreeSensitivity = status.hands_free_sensitivity ?? data.voice_input_hands_free_sensitivity ?? DEFAULT_HANDS_FREE_SENSITIVITY;
+    state.voiceInputHandsFreeSilenceMs = status.hands_free_silence_ms ?? data.voice_input_hands_free_silence_ms ?? DEFAULT_HANDS_FREE_SILENCE_MS;
+    state.voiceInputMinRecordingMs = status.min_recording_ms ?? data.voice_input_min_recording_ms ?? DEFAULT_MIN_RECORDING_MS;
+    state.voiceInputMaxRecordingMs = status.max_recording_ms ?? data.voice_input_max_recording_ms ?? DEFAULT_MAX_RECORDING_MS;
 
     if (el.voiceInputProviderSelect) el.voiceInputProviderSelect.value = state.voiceInputProvider;
     setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
     setCheckedRadioValue(el.voiceInputSubmitModeInputs, state.voiceInputSubmitMode);
+    updateVoiceInputTuningReadouts({fromDom: false});
     if (el.voiceInputModelInput) el.voiceInputModelInput.value = status.model || data.voice_input_model || 'tiny.en';
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
@@ -216,6 +284,10 @@ async function saveVoiceInputSettings() {
         submit_mode: getCheckedRadioValue(el.voiceInputSubmitModeInputs, 'preview'),
         model: el.voiceInputModelInput?.value || 'tiny.en',
         language: el.voiceInputLanguageInput?.value || 'auto',
+        hands_free_sensitivity: handsFreeSensitivity(),
+        hands_free_silence_ms: handsFreeSilenceMs(),
+        min_recording_ms: minRecordingMs(),
+        max_recording_ms: maxRecordingMs(),
     };
     const response = await fetchWithConnectionState('/set_voice_input', {
         method: 'POST',
@@ -367,7 +439,7 @@ async function startRecording(source = 'manual') {
             state.voiceInputRecording = false;
             clearTimeout(state.voiceInputStopTimer);
             setVoiceButtonState();
-            if (duration >= MIN_RECORDING_MS) {
+            if (duration >= minRecordingMs()) {
                 const blob = new Blob(state.voiceInputChunks, {type: state.voiceInputRecorder.mimeType || 'audio/webm'});
                 await transcribeVoiceBlob(blob);
             } else if (source !== 'hands_free') {
@@ -379,7 +451,7 @@ async function startRecording(source = 'manual') {
         state.voiceInputRecorder.start();
         state.voiceInputRecording = true;
         state.voiceInputSilenceStartedAt = 0;
-        state.voiceInputStopTimer = setTimeout(() => stopRecording(), MAX_RECORDING_MS);
+        state.voiceInputStopTimer = setTimeout(() => stopRecording(), maxRecordingMs());
         voiceStatusMessage(source === 'hands_free' ? 'Speech detected. Recording...' : 'Recording voice input...');
         setVoiceButtonState();
     } catch (error) {
@@ -416,12 +488,13 @@ function monitorHandsFree() {
     if (!state.voiceInputHandsFreeArmed) return;
     const now = performance.now();
     const rms = currentRms();
-    if (!state.voiceInputRecording && rms > HANDS_FREE_RMS_THRESHOLD) {
+    const threshold = handsFreeRmsThreshold();
+    if (!state.voiceInputRecording && rms > threshold) {
         startRecording('hands_free');
     } else if (state.voiceInputRecording) {
-        if (rms <= HANDS_FREE_RMS_THRESHOLD) {
+        if (rms <= threshold) {
             if (!state.voiceInputSilenceStartedAt) state.voiceInputSilenceStartedAt = now;
-            if (recordingDurationMs() >= MIN_RECORDING_MS && now - state.voiceInputSilenceStartedAt >= HANDS_FREE_SILENCE_MS) {
+            if (recordingDurationMs() >= minRecordingMs() && now - state.voiceInputSilenceStartedAt >= handsFreeSilenceMs()) {
                 stopRecording();
             }
         } else {
@@ -524,6 +597,12 @@ export function initVoiceInputControls({sendUserMessage}) {
         state.voiceInputEnabled = event.target.value !== 'disabled';
         setVoiceButtonState();
     });
+    [
+        el.voiceInputSensitivitySlider,
+        el.voiceInputSilenceMsInput,
+        el.voiceInputMinRecordingMsInput,
+        el.voiceInputMaxRecordingMsInput,
+    ].forEach(input => input?.addEventListener('input', () => updateVoiceInputTuningReadouts()));
     el.sendVoiceTranscriptBtn?.addEventListener('click', sendPendingTranscript);
     el.retryVoiceTranscriptBtn?.addEventListener('click', retryVoiceInput);
     el.cancelVoiceTranscriptBtn?.addEventListener('click', hideTranscriptPreview);

@@ -478,6 +478,10 @@ class ModelConfigurationTests(unittest.TestCase):
             "voice_input_submit_mode": "auto-send",
             "voice_input_model": "base.en",
             "voice_input_language": "en",
+            "voice_input_hands_free_sensitivity": 250,
+            "voice_input_hands_free_silence_ms": 75,
+            "voice_input_min_recording_ms": 5000,
+            "voice_input_max_recording_ms": 100,
         })
 
         self.assertEqual(settings.voice_input_provider, "local_faster_whisper")
@@ -486,6 +490,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.voice_input_submit_mode, "auto_submit")
         self.assertFalse(settings.voice_input_preview_required)
         self.assertEqual(settings.to_dict()["voice_input_model"], "base.en")
+        self.assertEqual(settings.voice_input_hands_free_sensitivity, 100)
+        self.assertEqual(settings.voice_input_hands_free_silence_ms, 250)
+        self.assertEqual(settings.voice_input_min_recording_ms, 3000)
+        self.assertEqual(settings.voice_input_max_recording_ms, 3000)
 
 
 if __name__ == "__main__":

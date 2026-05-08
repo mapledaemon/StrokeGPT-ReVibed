@@ -8,8 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-07 - Unreleased - Clarify Voice Input Failure States
--------------------------------------------------------------
+2026-05-08 - Unreleased - Add Hands-Free Voice Input Tuning
+------------------------------------------------------------
+
+Branch: codex/voice-input-handsfree-tuning
+
+- Added persisted hands-free voice input tuning for microphone sensitivity,
+  silence timeout, minimum clip length, and maximum clip length.
+- Exposed the tuning controls as labeled Settings > Voice inputs and included
+  the current values in voice-input diagnostics.
+- Wired the browser hands-free recorder to use the saved tuning values instead
+  of hard-coded constants.
+- Updated settings, route, ASR status, static-asset, and roadmap coverage for
+  the new tuning contract.
+
+
+2026-05-07 - PR #92 - Clarify Voice Input Failure States
+--------------------------------------------------------
 
 Branch: codex/voice-input-failure-states
 

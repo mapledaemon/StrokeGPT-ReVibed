@@ -157,6 +157,10 @@ voice_input.configure(
     language=settings.voice_input_language,
     mode=settings.voice_input_mode,
     submit_mode=settings.voice_input_submit_mode,
+    hands_free_sensitivity=settings.voice_input_hands_free_sensitivity,
+    hands_free_silence_ms=settings.voice_input_hands_free_silence_ms,
+    min_recording_ms=settings.voice_input_min_recording_ms,
+    max_recording_ms=settings.voice_input_max_recording_ms,
 )
 
 # In-Memory State
@@ -458,6 +462,10 @@ def apply_settings_to_services():
         language=settings.voice_input_language,
         mode=settings.voice_input_mode,
         submit_mode=settings.voice_input_submit_mode,
+        hands_free_sensitivity=settings.voice_input_hands_free_sensitivity,
+        hands_free_silence_ms=settings.voice_input_hands_free_silence_ms,
+        min_recording_ms=settings.voice_input_min_recording_ms,
+        max_recording_ms=settings.voice_input_max_recording_ms,
     )
     audio.api_key = ""
     audio.voice_id = ""

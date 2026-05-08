@@ -32,6 +32,10 @@ VOICE_INPUT_MODES = {VOICE_INPUT_MODE_PUSH_TO_TALK, VOICE_INPUT_MODE_HANDS_FREE}
 VOICE_INPUT_SUBMIT_PREVIEW = "preview"
 VOICE_INPUT_SUBMIT_AUTO = "auto_submit"
 VOICE_INPUT_SUBMIT_MODES = {VOICE_INPUT_SUBMIT_PREVIEW, VOICE_INPUT_SUBMIT_AUTO}
+DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY = 75
+DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS = 900
+DEFAULT_VOICE_INPUT_MIN_RECORDING_MS = 450
+DEFAULT_VOICE_INPUT_MAX_RECORDING_MS = 8000
 
 
 def normalize_ollama_model(model):
@@ -74,6 +78,10 @@ def default_settings_dict():
         "voice_input_mode": VOICE_INPUT_MODE_PUSH_TO_TALK,
         "voice_input_submit_mode": VOICE_INPUT_SUBMIT_PREVIEW,
         "voice_input_preview_required": True,
+        "voice_input_hands_free_sensitivity": DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY,
+        "voice_input_hands_free_silence_ms": DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
+        "voice_input_min_recording_ms": DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
+        "voice_input_max_recording_ms": DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
         "patterns": [],
         "milking_patterns": [],
         "motion_pattern_enabled": {},
@@ -254,6 +262,20 @@ class SettingsManager:
                 else VOICE_INPUT_SUBMIT_AUTO
             )
         self.voice_input_preview_required = self.voice_input_submit_mode != VOICE_INPUT_SUBMIT_AUTO
+        self.voice_input_hands_free_sensitivity = self._normalize_voice_input_hands_free_sensitivity(
+            data.get("voice_input_hands_free_sensitivity", defaults["voice_input_hands_free_sensitivity"])
+        )
+        self.voice_input_hands_free_silence_ms = self._normalize_voice_input_silence_ms(
+            data.get("voice_input_hands_free_silence_ms", defaults["voice_input_hands_free_silence_ms"])
+        )
+        self.voice_input_min_recording_ms = self._normalize_voice_input_min_recording_ms(
+            data.get("voice_input_min_recording_ms", defaults["voice_input_min_recording_ms"])
+        )
+        self.voice_input_max_recording_ms = self._normalize_voice_input_max_recording_ms(
+            data.get("voice_input_max_recording_ms", defaults["voice_input_max_recording_ms"])
+        )
+        if self.voice_input_max_recording_ms < self.voice_input_min_recording_ms:
+            self.voice_input_max_recording_ms = self.voice_input_min_recording_ms
 
         depth_low = _clamp_int(data.get("min_depth"), 0, 100, defaults["min_depth"])
         depth_high = _clamp_int(data.get("max_depth"), 0, 100, defaults["max_depth"])
@@ -311,6 +333,10 @@ class SettingsManager:
             "voice_input_mode": self._normalize_voice_input_mode(self.voice_input_mode),
             "voice_input_submit_mode": self._normalize_voice_input_submit_mode(self.voice_input_submit_mode),
             "voice_input_preview_required": bool(self.voice_input_preview_required),
+            "voice_input_hands_free_sensitivity": self._normalize_voice_input_hands_free_sensitivity(self.voice_input_hands_free_sensitivity),
+            "voice_input_hands_free_silence_ms": self._normalize_voice_input_silence_ms(self.voice_input_hands_free_silence_ms),
+            "voice_input_min_recording_ms": self._normalize_voice_input_min_recording_ms(self.voice_input_min_recording_ms),
+            "voice_input_max_recording_ms": self._normalize_voice_input_max_recording_ms(self.voice_input_max_recording_ms),
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
@@ -482,6 +508,18 @@ class SettingsManager:
         if cleaned in VOICE_INPUT_SUBMIT_MODES:
             return cleaned
         return VOICE_INPUT_SUBMIT_PREVIEW
+
+    def _normalize_voice_input_hands_free_sensitivity(self, value):
+        return _clamp_int(value, 1, 100, DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY)
+
+    def _normalize_voice_input_silence_ms(self, value):
+        return _clamp_int(value, 250, 5000, DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS)
+
+    def _normalize_voice_input_min_recording_ms(self, value):
+        return _clamp_int(value, 150, 3000, DEFAULT_VOICE_INPUT_MIN_RECORDING_MS)
+
+    def _normalize_voice_input_max_recording_ms(self, value):
+        return _clamp_int(value, 1000, 30000, DEFAULT_VOICE_INPUT_MAX_RECORDING_MS)
 
     def _normalize_diagnostics_level(self, value):
         cleaned = str(value or "").strip().lower()

@@ -46,6 +46,20 @@ def set_voice_input_route():
         enabled = False
     model = str(data.get("model", web.settings.voice_input_model) or "").strip() or web.settings.voice_input_model
     language = str(data.get("language", web.settings.voice_input_language) or "auto").strip() or "auto"
+    hands_free_sensitivity = web.settings._normalize_voice_input_hands_free_sensitivity(
+        data.get("hands_free_sensitivity", web.settings.voice_input_hands_free_sensitivity)
+    )
+    hands_free_silence_ms = web.settings._normalize_voice_input_silence_ms(
+        data.get("hands_free_silence_ms", web.settings.voice_input_hands_free_silence_ms)
+    )
+    min_recording_ms = web.settings._normalize_voice_input_min_recording_ms(
+        data.get("min_recording_ms", web.settings.voice_input_min_recording_ms)
+    )
+    max_recording_ms = web.settings._normalize_voice_input_max_recording_ms(
+        data.get("max_recording_ms", web.settings.voice_input_max_recording_ms)
+    )
+    if max_recording_ms < min_recording_ms:
+        max_recording_ms = min_recording_ms
 
     web.settings.voice_input_provider = provider
     web.settings.voice_input_enabled = enabled
@@ -54,6 +68,10 @@ def set_voice_input_route():
     web.settings.voice_input_mode = mode
     web.settings.voice_input_submit_mode = submit_mode
     web.settings.voice_input_preview_required = submit_mode != "auto_submit"
+    web.settings.voice_input_hands_free_sensitivity = hands_free_sensitivity
+    web.settings.voice_input_hands_free_silence_ms = hands_free_silence_ms
+    web.settings.voice_input_min_recording_ms = min_recording_ms
+    web.settings.voice_input_max_recording_ms = max_recording_ms
     web.voice_input.configure(
         provider=provider,
         enabled=enabled,
@@ -61,6 +79,10 @@ def set_voice_input_route():
         language=language,
         mode=mode,
         submit_mode=submit_mode,
+        hands_free_sensitivity=hands_free_sensitivity,
+        hands_free_silence_ms=hands_free_silence_ms,
+        min_recording_ms=min_recording_ms,
+        max_recording_ms=max_recording_ms,
     )
     web.settings.save()
     return jsonify(_voice_input_payload(web))
