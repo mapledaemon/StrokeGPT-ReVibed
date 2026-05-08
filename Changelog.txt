@@ -8,8 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-08 - Unreleased - Add Hands-Free Voice Input Tuning
-------------------------------------------------------------
+2026-05-08 - Unreleased - Keep Hands-Free Mic Button Available
+---------------------------------------------------------------
+
+Branch: codex/voice-input-mode-unblock
+
+- Reconciled the voice input mic button when the selected recording mode is
+  clicked again, so users do not have to switch to push-to-talk and back to
+  hands-free just to refresh the button state.
+- Refresh voice-input status after the backend connection is restored so
+  backend-required control locking cannot leave the mic button stale-disabled.
+- Updated frontend source tests for the mode-click and backend-reconnect
+  contracts.
+
+
+2026-05-08 - PR #93 - Add Hands-Free Voice Input Tuning
+-------------------------------------------------------
 
 Branch: codex/voice-input-handsfree-tuning
 

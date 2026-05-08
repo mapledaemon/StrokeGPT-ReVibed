@@ -305,6 +305,7 @@ export function setConnectionLost(isLost) {
     state.connectionLost = next;
     if (el.connectionLostBanner) el.connectionLostBanner.hidden = !next;
     syncBackendRequiredControls();
+    if (!next) D.dispatchEvent(new CustomEvent('backend-connection-restored'));
 }
 
 export async function fetchWithConnectionState(endpoint, options = {}) {
