@@ -18,6 +18,10 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("provider_options", data["voice_input_status"])
             self.assertIn("mode_options", data["voice_input_status"])
             self.assertIn("submit_options", data["voice_input_status"])
+            self.assertIn("hands_free_sensitivity", data["voice_input_status"])
+            self.assertIn("hands_free_silence_ms", data["voice_input_status"])
+            self.assertIn("min_recording_ms", data["voice_input_status"])
+            self.assertIn("max_recording_ms", data["voice_input_status"])
             model_cache_dir = data["voice_input_status"]["model_cache_dir"]
             self.assertTrue(model_cache_dir)
             if "STROKEGPT_ASR_CACHE_DIR" not in os.environ:
@@ -38,6 +42,10 @@ class WebVoiceInputRouteTests(WebTestCase):
                 "submit_mode": "auto_submit",
                 "model": "base.en",
                 "language": "en",
+                "hands_free_sensitivity": 82,
+                "hands_free_silence_ms": 1200,
+                "min_recording_ms": 550,
+                "max_recording_ms": 9000,
             })
 
             self.assertEqual(response.status_code, 200)
@@ -48,10 +56,19 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(settings.voice_input_mode, "hands_free")
             self.assertEqual(settings.voice_input_submit_mode, "auto_submit")
             self.assertFalse(settings.voice_input_preview_required)
+            self.assertEqual(settings.voice_input_hands_free_sensitivity, 82)
+            self.assertEqual(settings.voice_input_hands_free_silence_ms, 1200)
+            self.assertEqual(settings.voice_input_min_recording_ms, 550)
+            self.assertEqual(settings.voice_input_max_recording_ms, 9000)
             self.assertEqual(voice_input.provider, "local_faster_whisper")
             self.assertEqual(voice_input.mode, "hands_free")
             self.assertEqual(voice_input.submit_mode, "auto_submit")
+            self.assertEqual(voice_input.hands_free_sensitivity, 82)
+            self.assertEqual(voice_input.hands_free_silence_ms, 1200)
+            self.assertEqual(voice_input.min_recording_ms, 550)
+            self.assertEqual(voice_input.max_recording_ms, 9000)
             self.assertEqual(data["provider"], "local_faster_whisper")
+            self.assertEqual(data["hands_free_sensitivity"], 82)
         finally:
             settings.apply_dict(original)
             settings.save()

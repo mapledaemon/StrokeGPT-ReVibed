@@ -24,11 +24,19 @@ class VoiceInputServiceTests(unittest.TestCase):
             enabled=True,
             model="tiny.en",
             language="en",
+            hands_free_sensitivity=88,
+            hands_free_silence_ms=1250,
+            min_recording_ms=500,
+            max_recording_ms=10000,
         )
         with mock.patch.object(service, "dependency_available", return_value=False):
             status = service.status()
         self.assertEqual(status["status_code"], "dependency_missing")
         self.assertIn("Install dependencies", status["message"])
+        self.assertEqual(status["hands_free_sensitivity"], 88)
+        self.assertEqual(status["hands_free_silence_ms"], 1250)
+        self.assertEqual(status["min_recording_ms"], 500)
+        self.assertEqual(status["max_recording_ms"], 10000)
 
         with mock.patch.object(service, "dependency_available", return_value=True):
             status = service.status()

@@ -3,6 +3,10 @@ import os
 import time
 
 from .settings import (
+    DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY,
+    DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
+    DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
+    DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MODEL,
     VOICE_INPUT_MODE_PUSH_TO_TALK,
     VOICE_INPUT_PROVIDER_DISABLED,
@@ -72,6 +76,10 @@ class VoiceInputService:
         self.language = "auto"
         self.mode = VOICE_INPUT_MODE_PUSH_TO_TALK
         self.submit_mode = VOICE_INPUT_SUBMIT_PREVIEW
+        self.hands_free_sensitivity = DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY
+        self.hands_free_silence_ms = DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS
+        self.min_recording_ms = DEFAULT_VOICE_INPUT_MIN_RECORDING_MS
+        self.max_recording_ms = DEFAULT_VOICE_INPUT_MAX_RECORDING_MS
         self._model = None
         self._model_key = None
         self.last_error = ""
@@ -87,6 +95,10 @@ class VoiceInputService:
         language,
         mode=VOICE_INPUT_MODE_PUSH_TO_TALK,
         submit_mode=VOICE_INPUT_SUBMIT_PREVIEW,
+        hands_free_sensitivity=DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY,
+        hands_free_silence_ms=DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
+        min_recording_ms=DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
+        max_recording_ms=DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
     ):
         provider = provider or VOICE_INPUT_PROVIDER_DISABLED
         enabled = bool(enabled) and provider != VOICE_INPUT_PROVIDER_DISABLED
@@ -104,6 +116,10 @@ class VoiceInputService:
         self.language = language
         self.mode = mode
         self.submit_mode = submit_mode
+        self.hands_free_sensitivity = int(hands_free_sensitivity)
+        self.hands_free_silence_ms = int(hands_free_silence_ms)
+        self.min_recording_ms = int(min_recording_ms)
+        self.max_recording_ms = int(max_recording_ms)
 
     def dependency_available(self):
         return importlib.util.find_spec("faster_whisper") is not None
@@ -144,6 +160,10 @@ class VoiceInputService:
             "mode": self.mode,
             "submit_mode": self.submit_mode,
             "preview_required": self.submit_mode != "auto_submit",
+            "hands_free_sensitivity": self.hands_free_sensitivity,
+            "hands_free_silence_ms": self.hands_free_silence_ms,
+            "min_recording_ms": self.min_recording_ms,
+            "max_recording_ms": self.max_recording_ms,
             "dependency_available": dependency_available,
             "model_loaded": self._model is not None,
             "can_load_model": can_load_model,

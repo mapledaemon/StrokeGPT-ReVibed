@@ -547,9 +547,9 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
 - Verify push-to-talk and hands-free recognition with real microphones on a
   slow Windows laptop and a faster desktop, including empty/noisy clips,
   short commands, and longer natural-language movement requests.
-- Tune the hands-free voice-activity threshold, silence timeout, minimum
-  recording length, and maximum clip length so normal commands are captured
-  without repeated false starts or clipped transcripts.
+- Use the persisted hands-free tuning controls during real microphone testing
+  to find good defaults for sensitivity, silence timeout, minimum clip length,
+  and maximum clip length on slow laptops and faster desktops.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible

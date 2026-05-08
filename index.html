@@ -201,6 +201,19 @@
                             <label><input type="radio" id="voice-input-submit-auto" name="voice-input-submit-mode" value="auto_submit"><span data-choice-label="voice-input-submit-auto">Auto-send transcript</span></label>
                         </div>
                     </fieldset>
+                    <fieldset id="voice-input-tuning-control" class="voice-input-tuning-group">
+                        <legend>Hands-Free Tuning</legend>
+                        <div class="slider-container voice-input-sensitivity-row">
+                            <label for="voice-input-sensitivity-slider">Sensitivity</label>
+                            <input type="range" min="1" max="100" step="1" value="75" id="voice-input-sensitivity-slider" data-requires-backend>
+                            <span id="voice-input-sensitivity-val">75%</span>
+                        </div>
+                        <div class="voice-input-number-grid">
+                            <label class="voice-input-number-field" for="voice-input-silence-ms-input"><span>Silence Timeout</span><input type="number" id="voice-input-silence-ms-input" min="250" max="5000" step="50" value="900" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-min-recording-ms-input"><span>Minimum Clip</span><input type="number" id="voice-input-min-recording-ms-input" min="150" max="3000" step="50" value="450" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-max-recording-ms-input"><span>Maximum Clip</span><input type="number" id="voice-input-max-recording-ms-input" min="1000" max="30000" step="250" value="8000" data-requires-backend><small>ms</small></label>
+                        </div>
+                    </fieldset>
                     <label class="settings-field-label" for="voice-input-model-input">Recognition Model</label>
                     <input type="text" id="voice-input-model-input" class="input-text" value="tiny.en" placeholder="faster-whisper model" data-requires-backend>
                     <label class="settings-field-label" for="voice-input-language-input">Language</label>

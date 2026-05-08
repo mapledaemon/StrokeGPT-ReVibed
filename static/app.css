@@ -240,8 +240,15 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-subsection { display: flex; flex-direction: column; gap: 12px; border: 1px solid #2d333d; border-radius: 8px; padding: 12px; background: var(--background-darker); }
 .settings-subsection h4 { margin: 0; color: var(--cyan); font-size: 0.95rem; }
 .settings-help { color: var(--comment); font-size: 0.85rem; line-height: 1.35; overflow-wrap: anywhere; }
-.settings-field-label, .voice-input-choice-group legend { color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
+.settings-field-label, .voice-input-choice-group legend, .voice-input-tuning-group legend { color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
 .voice-input-choice-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.voice-input-tuning-group { margin: 0; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: #151922; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.voice-input-tuning-group .slider-container { margin: 0; }
+.voice-input-number-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; min-width: 0; }
+.voice-input-number-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 6px; align-items: center; min-width: 0; color: var(--comment); font-size: 0.78rem; }
+.voice-input-number-field span { grid-column: 1 / -1; color: var(--foreground); font-weight: 600; }
+.voice-input-number-field input { min-width: 0; width: 100%; padding: 7px 8px; border: 1px solid #37404c; border-radius: 6px; background: #101217; color: var(--foreground); }
+.voice-input-number-field small { color: var(--comment); font-size: 0.72rem; }
 .segmented-control { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; min-width: 0; }
 .segmented-control label { min-width: 0; position: relative; display: block; cursor: pointer; }
 .segmented-control input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
