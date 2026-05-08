@@ -4,8 +4,12 @@ const DEFAULT_HANDS_FREE_SENSITIVITY = 75;
 const DEFAULT_HANDS_FREE_SILENCE_MS = 900;
 const DEFAULT_MIN_RECORDING_MS = 450;
 const DEFAULT_MAX_RECORDING_MS = 8000;
-const HANDS_FREE_RMS_THRESHOLD_MIN = 0.01;
-const HANDS_FREE_RMS_THRESHOLD_MAX = 0.12;
+const DEFAULT_NOISE_FLOOR_RMS = 0;
+const HANDS_FREE_RMS_THRESHOLD_MIN = 0.006;
+const HANDS_FREE_RMS_THRESHOLD_MAX = 0.16;
+const HANDS_FREE_NOISE_MULTIPLIER_MIN = 1.6;
+const HANDS_FREE_NOISE_MULTIPLIER_MAX = 5.0;
+const VOICE_INPUT_NOISE_CALIBRATION_MS = 2000;
 const SLOW_ASR_WARNING_MS = 2500;
 
 let submitVoiceTranscript = async () => {};
@@ -33,8 +37,18 @@ function handsFreeSensitivity() {
     return Math.round(clampNumber(state.voiceInputHandsFreeSensitivity, 1, 100, DEFAULT_HANDS_FREE_SENSITIVITY));
 }
 
+function voiceInputNoiseFloorRms() {
+    return Number(clampNumber(state.voiceInputNoiseFloorRms, 0, 0.5, DEFAULT_NOISE_FLOOR_RMS).toFixed(4));
+}
+
 function handsFreeRmsThreshold() {
     const ratio = (handsFreeSensitivity() - 1) / 99;
+    const floor = voiceInputNoiseFloorRms();
+    if (floor > 0) {
+        const multiplier = HANDS_FREE_NOISE_MULTIPLIER_MAX
+            - (ratio * (HANDS_FREE_NOISE_MULTIPLIER_MAX - HANDS_FREE_NOISE_MULTIPLIER_MIN));
+        return clampNumber(floor * multiplier, HANDS_FREE_RMS_THRESHOLD_MIN, HANDS_FREE_RMS_THRESHOLD_MAX, HANDS_FREE_RMS_THRESHOLD_MIN);
+    }
     return HANDS_FREE_RMS_THRESHOLD_MAX - (ratio * (HANDS_FREE_RMS_THRESHOLD_MAX - HANDS_FREE_RMS_THRESHOLD_MIN));
 }
 
@@ -61,6 +75,12 @@ function formatBytes(value) {
     return `${Math.round(number)} B`;
 }
 
+function formatRms(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return 'auto';
+    return number.toFixed(3);
+}
+
 function compactCachePath(path = '') {
     const normalized = String(path || '').trim().replaceAll('\\', '/');
     if (!normalized) return '-';
@@ -80,10 +100,16 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
     const issue = state.voiceInputLastIssue || status.last_error || '-';
     const chatTimings = state.voiceInputLastChatTimings || {};
+    const processing = [
+        state.voiceInputNoiseSuppression ? 'noise suppression' : 'raw noise',
+        state.voiceInputEchoCancellation ? 'echo cancel' : 'raw echo',
+        state.voiceInputAutoGainControl ? 'auto gain' : 'fixed gain',
+    ].join(', ');
     el.voiceInputDiagnostics.textContent = [
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
+        `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
@@ -239,11 +265,33 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
             DEFAULT_MAX_RECORDING_MS,
         )),
     );
+    state.voiceInputNoiseFloorRms = Number(clampNumber(
+        fromDom ? el.voiceInputNoiseFloorInput?.value : state.voiceInputNoiseFloorRms,
+        0,
+        0.5,
+        DEFAULT_NOISE_FLOOR_RMS,
+    ).toFixed(4));
+    if (fromDom) {
+        state.voiceInputNoiseSuppression = Boolean(el.voiceInputNoiseSuppressionCheckbox?.checked);
+        state.voiceInputEchoCancellation = Boolean(el.voiceInputEchoCancellationCheckbox?.checked);
+        state.voiceInputAutoGainControl = Boolean(el.voiceInputAutoGainControlCheckbox?.checked);
+    }
     if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
     if (el.voiceInputSensitivityVal) el.voiceInputSensitivityVal.textContent = `${state.voiceInputHandsFreeSensitivity}%`;
     if (el.voiceInputSilenceMsInput) el.voiceInputSilenceMsInput.value = String(state.voiceInputHandsFreeSilenceMs);
     if (el.voiceInputMinRecordingMsInput) el.voiceInputMinRecordingMsInput.value = String(state.voiceInputMinRecordingMs);
     if (el.voiceInputMaxRecordingMsInput) el.voiceInputMaxRecordingMsInput.value = String(state.voiceInputMaxRecordingMs);
+    if (el.voiceInputNoiseFloorInput) el.voiceInputNoiseFloorInput.value = String(state.voiceInputNoiseFloorRms);
+    if (el.voiceInputNoiseSuppressionCheckbox) el.voiceInputNoiseSuppressionCheckbox.checked = state.voiceInputNoiseSuppression;
+    if (el.voiceInputEchoCancellationCheckbox) el.voiceInputEchoCancellationCheckbox.checked = state.voiceInputEchoCancellation;
+    if (el.voiceInputAutoGainControlCheckbox) el.voiceInputAutoGainControlCheckbox.checked = state.voiceInputAutoGainControl;
+    if (el.voiceInputNoiseFloorVal) {
+        const floor = voiceInputNoiseFloorRms();
+        const threshold = formatRms(handsFreeRmsThreshold());
+        el.voiceInputNoiseFloorVal.textContent = floor > 0
+            ? `${formatRms(floor)} rms, trigger ${threshold} rms`
+            : `auto, trigger ${threshold} rms`;
+    }
     updateVoiceInputDiagnostics();
 }
 
@@ -314,6 +362,10 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputHandsFreeSilenceMs = status.hands_free_silence_ms ?? data.voice_input_hands_free_silence_ms ?? DEFAULT_HANDS_FREE_SILENCE_MS;
     state.voiceInputMinRecordingMs = status.min_recording_ms ?? data.voice_input_min_recording_ms ?? DEFAULT_MIN_RECORDING_MS;
     state.voiceInputMaxRecordingMs = status.max_recording_ms ?? data.voice_input_max_recording_ms ?? DEFAULT_MAX_RECORDING_MS;
+    state.voiceInputNoiseSuppression = Boolean(status.noise_suppression ?? data.voice_input_noise_suppression ?? true);
+    state.voiceInputEchoCancellation = Boolean(status.echo_cancellation ?? data.voice_input_echo_cancellation ?? true);
+    state.voiceInputAutoGainControl = Boolean(status.auto_gain_control ?? data.voice_input_auto_gain_control ?? true);
+    state.voiceInputNoiseFloorRms = status.noise_floor_rms ?? data.voice_input_noise_floor_rms ?? DEFAULT_NOISE_FLOOR_RMS;
 
     if (el.voiceInputProviderSelect) el.voiceInputProviderSelect.value = state.voiceInputProvider;
     setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
@@ -351,6 +403,7 @@ export async function refreshVoiceInputStatus() {
 }
 
 async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
+    updateVoiceInputTuningReadouts();
     const provider = el.voiceInputProviderSelect?.value || 'disabled';
     const data = {
         provider,
@@ -363,6 +416,10 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         hands_free_silence_ms: handsFreeSilenceMs(),
         min_recording_ms: minRecordingMs(),
         max_recording_ms: maxRecordingMs(),
+        noise_suppression: state.voiceInputNoiseSuppression,
+        echo_cancellation: state.voiceInputEchoCancellation,
+        auto_gain_control: state.voiceInputAutoGainControl,
+        noise_floor_rms: voiceInputNoiseFloorRms(),
     };
     const response = await fetchWithConnectionState('/set_voice_input', {
         method: 'POST',
@@ -441,12 +498,20 @@ async function downloadVoiceInputModel() {
     await preloadVoiceInputModel({status: saved, allowDownload: true, reason: 'manual'});
 }
 
+function microphoneAudioConstraints() {
+    return {
+        noiseSuppression: {ideal: Boolean(state.voiceInputNoiseSuppression)},
+        echoCancellation: {ideal: Boolean(state.voiceInputEchoCancellation)},
+        autoGainControl: {ideal: Boolean(state.voiceInputAutoGainControl)},
+    };
+}
+
 async function ensureMicrophoneStream() {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
         throw new Error('This browser does not support microphone recording.');
     }
     if (state.voiceInputStream?.active) return state.voiceInputStream;
-    state.voiceInputStream = await navigator.mediaDevices.getUserMedia({audio: true});
+    state.voiceInputStream = await navigator.mediaDevices.getUserMedia({audio: microphoneAudioConstraints()});
     return state.voiceInputStream;
 }
 
@@ -579,8 +644,7 @@ function stopRecording() {
     }
 }
 
-function currentRms() {
-    const analyser = state.voiceInputAnalyser;
+function analyserRms(analyser) {
     if (!analyser) return 0;
     const data = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(data);
@@ -590,6 +654,80 @@ function currentRms() {
         sum += centered * centered;
     });
     return Math.sqrt(sum / data.length);
+}
+
+function currentRms() {
+    return analyserRms(state.voiceInputAnalyser);
+}
+
+function percentile(values, ratio) {
+    const sorted = values.filter(value => Number.isFinite(value)).sort((a, b) => a - b);
+    if (!sorted.length) return 0;
+    const index = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * ratio)));
+    return sorted[index];
+}
+
+function collectRmsSamples(analyser, durationMs) {
+    return new Promise(resolve => {
+        const samples = [];
+        const startedAt = performance.now();
+        const sample = () => {
+            samples.push(analyserRms(analyser));
+            if (performance.now() - startedAt >= durationMs) {
+                resolve(samples);
+                return;
+            }
+            requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+    });
+}
+
+function calibratedNoiseFloor(samples) {
+    return Number(clampNumber(percentile(samples, 0.75), 0, 0.5, DEFAULT_NOISE_FLOOR_RMS).toFixed(4));
+}
+
+async function calibrateVoiceInputNoise() {
+    if (state.voiceInputRecording) {
+        voiceStatusMessage('Stop the current voice recording before room-noise calibration.', 'var(--yellow)', {issue: true});
+        return;
+    }
+    if (state.voiceInputHandsFreeArmed) {
+        stopHandsFree('Hands-free listening stopped for room-noise calibration.');
+    }
+    let context = null;
+    let source = null;
+    let analyser = null;
+    try {
+        voiceStatusMessage('Calibrating room noise. Stay quiet for 2 seconds...');
+        const stream = await ensureMicrophoneStream();
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error('This browser does not support audio level monitoring.');
+        context = new AudioContextClass();
+        source = context.createMediaStreamSource(stream);
+        analyser = context.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        const samples = await collectRmsSamples(analyser, VOICE_INPUT_NOISE_CALIBRATION_MS);
+        const floor = calibratedNoiseFloor(samples);
+        state.voiceInputNoiseFloorRms = floor;
+        updateVoiceInputTuningReadouts({fromDom: false});
+        const saved = await saveVoiceInputSettings({autoLoadHandsFree: false});
+        if (saved) {
+            voiceStatusMessage(`Room noise calibrated. Hands-free trigger ${formatRms(handsFreeRmsThreshold())} rms.`, 'var(--cyan)', {clearIssue: true});
+        }
+    } catch (error) {
+        voiceStatusMessage(microphoneErrorMessage(error), 'var(--yellow)', {issue: true});
+    } finally {
+        source?.disconnect?.();
+        analyser?.disconnect?.();
+        try {
+            await context?.close?.();
+        } catch (error) {
+            console.debug('Voice input calibration context close failed:', error);
+        }
+        if (!state.voiceInputHandsFreeArmed && !state.voiceInputRecording) stopMicrophoneStream();
+    }
 }
 
 function monitorHandsFree() {
@@ -721,7 +859,14 @@ export function initVoiceInputControls({sendUserMessage}) {
         el.voiceInputSilenceMsInput,
         el.voiceInputMinRecordingMsInput,
         el.voiceInputMaxRecordingMsInput,
+        el.voiceInputNoiseFloorInput,
     ].forEach(input => input?.addEventListener('input', () => updateVoiceInputTuningReadouts()));
+    [
+        el.voiceInputNoiseSuppressionCheckbox,
+        el.voiceInputEchoCancellationCheckbox,
+        el.voiceInputAutoGainControlCheckbox,
+    ].forEach(input => input?.addEventListener('change', () => updateVoiceInputTuningReadouts()));
+    el.calibrateVoiceInputNoiseBtn?.addEventListener('click', calibrateVoiceInputNoise);
     el.sendVoiceTranscriptBtn?.addEventListener('click', sendPendingTranscript);
     el.retryVoiceTranscriptBtn?.addEventListener('click', retryVoiceInput);
     el.cancelVoiceTranscriptBtn?.addEventListener('click', hideTranscriptPreview);

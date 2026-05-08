@@ -161,6 +161,10 @@ voice_input.configure(
     hands_free_silence_ms=settings.voice_input_hands_free_silence_ms,
     min_recording_ms=settings.voice_input_min_recording_ms,
     max_recording_ms=settings.voice_input_max_recording_ms,
+    noise_suppression=settings.voice_input_noise_suppression,
+    echo_cancellation=settings.voice_input_echo_cancellation,
+    auto_gain_control=settings.voice_input_auto_gain_control,
+    noise_floor_rms=settings.voice_input_noise_floor_rms,
 )
 
 # In-Memory State
@@ -466,6 +470,10 @@ def apply_settings_to_services():
         hands_free_silence_ms=settings.voice_input_hands_free_silence_ms,
         min_recording_ms=settings.voice_input_min_recording_ms,
         max_recording_ms=settings.voice_input_max_recording_ms,
+        noise_suppression=settings.voice_input_noise_suppression,
+        echo_cancellation=settings.voice_input_echo_cancellation,
+        auto_gain_control=settings.voice_input_auto_gain_control,
+        noise_floor_rms=settings.voice_input_noise_floor_rms,
     )
     audio.api_key = ""
     audio.voice_id = ""

@@ -550,6 +550,10 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
 - Use the persisted hands-free tuning controls during real microphone testing
   to find good defaults for sensitivity, silence timeout, minimum clip length,
   and maximum clip length on slow laptops and faster desktops.
+- Use the persisted browser microphone processing controls and room-noise
+  calibration during noisy-room testing so hands-free detection can compare
+  speech against the user's actual input floor instead of a hard-coded RMS
+  threshold.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible
@@ -563,8 +567,8 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
   motion dispatch, so delays after transcription are visible during
   hands-free testing.
 - Continue failure-state tuning after real microphone testing: refine
-  browser-specific permission handling, noisy/empty clip copy, model-load
-  recovery guidance, and CPU-latency thresholds.
+  browser-specific permission handling, noisy/empty clip copy, calibrated
+  threshold guidance, model-load recovery guidance, and CPU-latency thresholds.
 - Decide whether the microphone menu should expose sensitivity, clip length,
   language, and submit-mode controls directly or keep those in Settings >
   Voice once real hands-free testing shows which controls users need during

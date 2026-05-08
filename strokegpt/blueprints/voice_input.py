@@ -60,6 +60,24 @@ def set_voice_input_route():
     )
     if max_recording_ms < min_recording_ms:
         max_recording_ms = min_recording_ms
+    noise_suppression = web._request_bool_value(
+        data,
+        "noise_suppression",
+        web.settings.voice_input_noise_suppression,
+    )
+    echo_cancellation = web._request_bool_value(
+        data,
+        "echo_cancellation",
+        web.settings.voice_input_echo_cancellation,
+    )
+    auto_gain_control = web._request_bool_value(
+        data,
+        "auto_gain_control",
+        web.settings.voice_input_auto_gain_control,
+    )
+    noise_floor_rms = web.settings._normalize_voice_input_noise_floor_rms(
+        data.get("noise_floor_rms", web.settings.voice_input_noise_floor_rms)
+    )
 
     web.settings.voice_input_provider = provider
     web.settings.voice_input_enabled = enabled
@@ -72,6 +90,10 @@ def set_voice_input_route():
     web.settings.voice_input_hands_free_silence_ms = hands_free_silence_ms
     web.settings.voice_input_min_recording_ms = min_recording_ms
     web.settings.voice_input_max_recording_ms = max_recording_ms
+    web.settings.voice_input_noise_suppression = noise_suppression
+    web.settings.voice_input_echo_cancellation = echo_cancellation
+    web.settings.voice_input_auto_gain_control = auto_gain_control
+    web.settings.voice_input_noise_floor_rms = noise_floor_rms
     web.voice_input.configure(
         provider=provider,
         enabled=enabled,
@@ -83,6 +105,10 @@ def set_voice_input_route():
         hands_free_silence_ms=hands_free_silence_ms,
         min_recording_ms=min_recording_ms,
         max_recording_ms=max_recording_ms,
+        noise_suppression=noise_suppression,
+        echo_cancellation=echo_cancellation,
+        auto_gain_control=auto_gain_control,
+        noise_floor_rms=noise_floor_rms,
     )
     web.settings.save()
     return jsonify(_voice_input_payload(web))

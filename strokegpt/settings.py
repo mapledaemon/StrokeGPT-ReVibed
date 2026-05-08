@@ -36,6 +36,7 @@ DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY = 75
 DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS = 900
 DEFAULT_VOICE_INPUT_MIN_RECORDING_MS = 450
 DEFAULT_VOICE_INPUT_MAX_RECORDING_MS = 8000
+DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS = 0.0
 
 
 def normalize_ollama_model(model):
@@ -82,6 +83,10 @@ def default_settings_dict():
         "voice_input_hands_free_silence_ms": DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
         "voice_input_min_recording_ms": DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
         "voice_input_max_recording_ms": DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
+        "voice_input_noise_suppression": True,
+        "voice_input_echo_cancellation": True,
+        "voice_input_auto_gain_control": True,
+        "voice_input_noise_floor_rms": DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
         "patterns": [],
         "milking_patterns": [],
         "motion_pattern_enabled": {},
@@ -123,6 +128,21 @@ def _clamp_float(value, low, high, default):
     except (TypeError, ValueError):
         value = default
     return max(low, min(high, value))
+
+
+def _as_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    cleaned = str(value).strip().lower()
+    if cleaned in {"1", "true", "yes", "on"}:
+        return True
+    if cleaned in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def _as_list(value):
@@ -276,6 +296,21 @@ class SettingsManager:
         )
         if self.voice_input_max_recording_ms < self.voice_input_min_recording_ms:
             self.voice_input_max_recording_ms = self.voice_input_min_recording_ms
+        self.voice_input_noise_suppression = _as_bool(
+            data.get("voice_input_noise_suppression", defaults["voice_input_noise_suppression"]),
+            defaults["voice_input_noise_suppression"],
+        )
+        self.voice_input_echo_cancellation = _as_bool(
+            data.get("voice_input_echo_cancellation", defaults["voice_input_echo_cancellation"]),
+            defaults["voice_input_echo_cancellation"],
+        )
+        self.voice_input_auto_gain_control = _as_bool(
+            data.get("voice_input_auto_gain_control", defaults["voice_input_auto_gain_control"]),
+            defaults["voice_input_auto_gain_control"],
+        )
+        self.voice_input_noise_floor_rms = self._normalize_voice_input_noise_floor_rms(
+            data.get("voice_input_noise_floor_rms", defaults["voice_input_noise_floor_rms"])
+        )
 
         depth_low = _clamp_int(data.get("min_depth"), 0, 100, defaults["min_depth"])
         depth_high = _clamp_int(data.get("max_depth"), 0, 100, defaults["max_depth"])
@@ -337,6 +372,10 @@ class SettingsManager:
             "voice_input_hands_free_silence_ms": self._normalize_voice_input_silence_ms(self.voice_input_hands_free_silence_ms),
             "voice_input_min_recording_ms": self._normalize_voice_input_min_recording_ms(self.voice_input_min_recording_ms),
             "voice_input_max_recording_ms": self._normalize_voice_input_max_recording_ms(self.voice_input_max_recording_ms),
+            "voice_input_noise_suppression": bool(self.voice_input_noise_suppression),
+            "voice_input_echo_cancellation": bool(self.voice_input_echo_cancellation),
+            "voice_input_auto_gain_control": bool(self.voice_input_auto_gain_control),
+            "voice_input_noise_floor_rms": self._normalize_voice_input_noise_floor_rms(self.voice_input_noise_floor_rms),
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
@@ -520,6 +559,9 @@ class SettingsManager:
 
     def _normalize_voice_input_max_recording_ms(self, value):
         return _clamp_int(value, 1000, 30000, DEFAULT_VOICE_INPUT_MAX_RECORDING_MS)
+
+    def _normalize_voice_input_noise_floor_rms(self, value):
+        return round(_clamp_float(value, 0.0, 0.5, DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS), 4)
 
     def _normalize_diagnostics_level(self, value):
         cleaned = str(value or "").strip().lower()

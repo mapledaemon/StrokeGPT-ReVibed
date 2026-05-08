@@ -22,6 +22,10 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("hands_free_silence_ms", data["voice_input_status"])
             self.assertIn("min_recording_ms", data["voice_input_status"])
             self.assertIn("max_recording_ms", data["voice_input_status"])
+            self.assertIn("noise_suppression", data["voice_input_status"])
+            self.assertIn("echo_cancellation", data["voice_input_status"])
+            self.assertIn("auto_gain_control", data["voice_input_status"])
+            self.assertIn("noise_floor_rms", data["voice_input_status"])
             self.assertIn("model_cached", data["voice_input_status"])
             self.assertIn("load_requires_download", data["voice_input_status"])
             model_cache_dir = data["voice_input_status"]["model_cache_dir"]
@@ -48,6 +52,10 @@ class WebVoiceInputRouteTests(WebTestCase):
                 "hands_free_silence_ms": 1200,
                 "min_recording_ms": 550,
                 "max_recording_ms": 9000,
+                "noise_suppression": False,
+                "echo_cancellation": False,
+                "auto_gain_control": True,
+                "noise_floor_rms": 0.0234,
             })
 
             self.assertEqual(response.status_code, 200)
@@ -62,6 +70,10 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(settings.voice_input_hands_free_silence_ms, 1200)
             self.assertEqual(settings.voice_input_min_recording_ms, 550)
             self.assertEqual(settings.voice_input_max_recording_ms, 9000)
+            self.assertFalse(settings.voice_input_noise_suppression)
+            self.assertFalse(settings.voice_input_echo_cancellation)
+            self.assertTrue(settings.voice_input_auto_gain_control)
+            self.assertEqual(settings.voice_input_noise_floor_rms, 0.0234)
             self.assertEqual(voice_input.provider, "local_faster_whisper")
             self.assertEqual(voice_input.mode, "hands_free")
             self.assertEqual(voice_input.submit_mode, "auto_submit")
@@ -69,8 +81,14 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(voice_input.hands_free_silence_ms, 1200)
             self.assertEqual(voice_input.min_recording_ms, 550)
             self.assertEqual(voice_input.max_recording_ms, 9000)
+            self.assertFalse(voice_input.noise_suppression)
+            self.assertFalse(voice_input.echo_cancellation)
+            self.assertTrue(voice_input.auto_gain_control)
+            self.assertEqual(voice_input.noise_floor_rms, 0.0234)
             self.assertEqual(data["provider"], "local_faster_whisper")
             self.assertEqual(data["hands_free_sensitivity"], 82)
+            self.assertFalse(data["noise_suppression"])
+            self.assertEqual(data["noise_floor_rms"], 0.0234)
         finally:
             settings.apply_dict(original)
             settings.save()

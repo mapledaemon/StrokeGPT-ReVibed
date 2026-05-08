@@ -66,6 +66,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(saved["motion_feedback_auto_disable"])
         self.assertTrue(saved["allow_llm_edge_in_freestyle"])
         self.assertTrue(saved["allow_llm_edge_in_chat"])
+        self.assertTrue(saved["voice_input_noise_suppression"])
+        self.assertTrue(saved["voice_input_echo_cancellation"])
+        self.assertTrue(saved["voice_input_auto_gain_control"])
+        self.assertEqual(saved["voice_input_noise_floor_rms"], 0.0)
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -90,6 +94,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.motion_feedback_auto_disable)
         self.assertTrue(settings.allow_llm_edge_in_freestyle)
         self.assertTrue(settings.allow_llm_edge_in_chat)
+        self.assertTrue(settings.voice_input_noise_suppression)
+        self.assertTrue(settings.voice_input_echo_cancellation)
+        self.assertTrue(settings.voice_input_auto_gain_control)
+        self.assertEqual(settings.voice_input_noise_floor_rms, 0.0)
 
     def test_llm_edge_permission_settings_are_persisted(self):
         fake_path = FakePath(json.dumps({
@@ -482,6 +490,10 @@ class ModelConfigurationTests(unittest.TestCase):
             "voice_input_hands_free_silence_ms": 75,
             "voice_input_min_recording_ms": 5000,
             "voice_input_max_recording_ms": 100,
+            "voice_input_noise_suppression": "false",
+            "voice_input_echo_cancellation": "off",
+            "voice_input_auto_gain_control": "yes",
+            "voice_input_noise_floor_rms": 0.713,
         })
 
         self.assertEqual(settings.voice_input_provider, "local_faster_whisper")
@@ -494,6 +506,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.voice_input_hands_free_silence_ms, 250)
         self.assertEqual(settings.voice_input_min_recording_ms, 3000)
         self.assertEqual(settings.voice_input_max_recording_ms, 3000)
+        self.assertFalse(settings.voice_input_noise_suppression)
+        self.assertFalse(settings.voice_input_echo_cancellation)
+        self.assertTrue(settings.voice_input_auto_gain_control)
+        self.assertEqual(settings.voice_input_noise_floor_rms, 0.5)
 
 
 if __name__ == "__main__":
