@@ -24,7 +24,9 @@ class FrontendChatStatusTests(unittest.TestCase):
                 self.assertIn(f"{status}:", script)
         self.assertIn("if (actionStatusMessages[data.status])", script)
         self.assertIn("clearTypingIndicator(data.message || actionStatusMessages[data.status]);", script)
-        self.assertIn("if (handleSendMessageStatus(data)) await pollChatUpdates();", script)
+        self.assertIn("const handled = handleSendMessageStatus(data);", script)
+        self.assertIn("if (handled) await pollChatUpdates();", script)
+        self.assertIn("elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt))", script)
 
 
 if __name__ == "__main__":

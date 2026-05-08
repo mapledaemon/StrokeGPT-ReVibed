@@ -430,6 +430,8 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("function updateVoiceInputDiagnostics", script)
         self.assertIn("voiceInputLastRecordingMs", script)
         self.assertIn("voiceInputLastUploadMs", script)
+        self.assertIn("voiceInputLastChatMs", script)
+        self.assertIn("voiceInputLastChatTimings", script)
         self.assertIn("voiceInputLastBlobBytes", script)
         self.assertIn("voiceInputLastIssue", script)
         self.assertIn("voiceInputHandsFreeSensitivity", script)
@@ -447,6 +449,11 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("function microphoneErrorMessage", script)
         self.assertIn("function voicePayloadFailureMessage", script)
         self.assertIn("function slowAsrWarning", script)
+        self.assertIn("async function submitVoiceTranscriptToChat", script)
+        self.assertIn("state.voiceInputLastChatTimings = result?.data?.timings || {}", script)
+        self.assertIn("Voice chat:", script)
+        self.assertIn("LLM:", script)
+        self.assertIn("Motion:", script)
         self.assertIn("status.status_code", script)
         self.assertIn("Issue:", script)
         self.assertIn("Microphone permission is blocked", script)
@@ -473,7 +480,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("ASR took", script)
         self.assertIn("Model load:", script)
         self.assertIn("auto_submit", script)
-        self.assertIn("await submitVoiceTranscript(transcript)", script)
+        self.assertIn("await submitVoiceTranscriptToChat(transcript)", script)
 
     def test_chat_messages_are_rendered_as_text_nodes(self):
         script = self.frontend_scripts()
@@ -504,6 +511,8 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("data.chat_queued === true", script)
         self.assertIn("data.chat_queued === false", script)
         self.assertIn("await pollChatUpdates()", script)
+        self.assertIn("elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt))", script)
+        self.assertIn("return {data: null, handled: false, elapsed_ms: 0, skipped: true}", script)
 
     def test_frontend_js_preserves_scrollback_when_user_is_reading(self):
         script = self.frontend_scripts()

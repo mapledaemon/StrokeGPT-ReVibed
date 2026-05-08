@@ -207,6 +207,8 @@ export const state = {
     voiceInputStatusSnapshot: {},
     voiceInputLastRecordingMs: null,
     voiceInputLastUploadMs: null,
+    voiceInputLastChatMs: null,
+    voiceInputLastChatTimings: {},
     voiceInputLastBlobBytes: null,
     voiceInputLastIssue: '',
     voiceInputRecording: false,
