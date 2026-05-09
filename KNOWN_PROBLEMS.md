@@ -93,15 +93,24 @@ message even though the user-facing transcript is missing the line, so the
 divergence appears to be between the chat-emit path and the TTS-enqueue path
 rather than a model failure.
 
+A backend diagnostic now logs `[WARN] TTS enqueued without chat-emit ...` or
+`[WARN] TTS enqueued with empty chat text ...` from
+`strokegpt.web.add_message_to_queue` whenever the TTS-enqueue path runs without
+a matching chat-emit (either `queue_message=False` or text that strips to
+empty). That gives a backend signal to confirm a reproduction, but does not
+yet explain or fix the user-visible drop.
+
 Follow-up work:
 
 - Verify the chat-emit path runs in lockstep with the TTS-enqueue path for both
-  streamed and non-streamed Ollama responses.
-- Add a diagnostic log when the chat text is empty but a TTS payload was
-  enqueued so the missing-line case is easy to reproduce and triage.
+  streamed and non-streamed Ollama responses. The current diagnostic only
+  catches the `add_message_to_queue` divergence shapes; if the divergence
+  happens later (e.g. `messages_for_ui` drained by `/get_updates` while the
+  frontend is mid-render), the warning will not fire.
 - Confirm the front-end chat panel is not silently dropping messages when a
   prior message is mid-render or while a mode transition is updating the
-  status strip.
+  status strip. Pair the next reproduction attempt with the new backend
+  warning so both sides can be compared.
 
 ## Web UI Stays Functional After Backend Shutdown
 

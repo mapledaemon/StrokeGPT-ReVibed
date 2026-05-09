@@ -992,6 +992,33 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
         if clean_text:
             app_state.chat_history.append({"role": "assistant", "content": clean_text})
     if generate_audio:
+        # Bug-triage diagnostic for KNOWN_PROBLEMS
+        # "Local LLM Chat Text Sometimes Missing While Voice Plays". The
+        # chat-emit path (queue_message + messages_for_ui) and the
+        # TTS-enqueue path (generate_audio) should run in lockstep for any
+        # user-visible reply. If we are spawning a TTS payload without a
+        # matching chat-emit, log it so the missing-line case is easy to
+        # reproduce and triage. Two divergence shapes:
+        #   1. queue_message=False: caller intentionally enqueued TTS
+        #      without queuing a chat bubble. No production caller does this
+        #      today, so a hit suggests a regression or a new caller that
+        #      forgot the chat side.
+        #   2. text strips to empty: a chat bubble would render blank and
+        #      the front-end may visibly drop it; the TTS layer ignores
+        #      empty text downstream so the user hears nothing either, but
+        #      the divergence is still worth surfacing.
+        clean_for_log = re.sub(r'<[^>]+>', '', str(text or "")).strip()
+        if not queue_message:
+            print(
+                f"[WARN] TTS enqueued without chat-emit "
+                f"(queue_message=False, text_len={len(clean_for_log)}, "
+                f"preview={clean_for_log[:60]!r})"
+            )
+        elif not clean_for_log:
+            print(
+                f"[WARN] TTS enqueued with empty chat text; UI bubble "
+                f"will render blank (raw_text={text!r})"
+            )
         threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
