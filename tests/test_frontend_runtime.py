@@ -85,21 +85,34 @@ class FrontendRuntimeTests(unittest.TestCase):
     """
 
     def test_node_behavioral_suite_passes(self):
-        # ``--import`` accepts a module specifier (file path or file:// URL).
-        # ``Path.as_uri()`` produces ``file:///...`` which is the safest
-        # cross-platform format for ESM resolution and works on every Node
-        # version where ``--import`` is supported. Production browser
-        # modules under ``static/js/`` resolve as ES modules because
-        # ``package.json`` at the repo root sets ``"type": "module"``.
-        # ``--test <dir>`` discovers ``*.test.{js,cjs,mjs}`` per Node's
-        # default pattern; ``_harness.mjs`` is excluded by the leading
-        # underscore.
+        # Discover ``*.test.mjs`` files explicitly and pass them as
+        # individual arguments. Older versions of Node accepted a
+        # directory after ``--test`` and discovered files inside, but
+        # Node 24 treats a directory argument as a module-import target
+        # and fails with ``ERR_UNSUPPORTED_DIR_IMPORT``. Passing explicit
+        # files works on every Node version that supports ``--test``
+        # (18.18+), so this is the portable form.
+        #
+        # ``--import`` accepts a module specifier (file path or file://
+        # URL). ``Path.as_uri()`` produces ``file:///...`` which is the
+        # safest cross-platform format for ESM resolution. Production
+        # browser modules under ``static/js/`` resolve as ES modules
+        # because ``package.json`` at the repo root sets
+        # ``"type": "module"``.
+        #
+        # ``_harness.mjs`` is intentionally excluded from the glob (the
+        # leading underscore + the ``.test.mjs`` suffix mean it does not
+        # match), so the harness only runs as a preload, never as a
+        # test.
+        test_files = sorted(JS_TEST_DIR.rglob("*.test.mjs"))
+        if not test_files:
+            self.skipTest("no *.test.mjs files found under tests/js/")
         cmd = [
             "node",
             "--import",
             HARNESS_PATH.as_uri(),
             "--test",
-            str(JS_TEST_DIR),
+            *[str(p) for p in test_files],
         ]
         result = subprocess.run(
             cmd,

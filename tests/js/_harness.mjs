@@ -24,16 +24,27 @@ const NODE_LIST_TYPE = 'NodeList';
 function makeStubElement(tag = 'div') {
     const children = [];
     const listeners = Object.create(null);
+    // Single source of truth for class state. `className` is a getter/setter
+    // that delegates here so the two stay in sync the way the real DOM
+    // keeps them in sync. Without this, `el.className = 'foo'` followed by
+    // `el.classList.add('bar')` ends up dropping 'foo' because the
+    // classList method rewrites the property from its internal Set.
+    const classes = new Set();
+    // Backing field for the textContent getter/setter. Real DOM clears the
+    // element's children when textContent is assigned, replacing them with
+    // a single text node holding the new value. Production code under
+    // test relies on this to "clear" the sequence log via
+    // ``el.motionSequenceIndicator.textContent = 'Idle';`` -- without
+    // mirroring that side effect, leftover entry divs stick around and
+    // ``resetMotionSequenceLog`` looks like a no-op.
+    let textContent = '';
 
     const stub = {
         tagName: tag.toUpperCase(),
         nodeName: tag.toUpperCase(),
         nodeType: 1,
-        className: '',
-        classList: null, // populated below so it can reference `stub`
         style: {},
         dataset: {},
-        textContent: '',
         innerHTML: '',
         title: '',
         value: '',
@@ -43,13 +54,35 @@ function makeStubElement(tag = 'div') {
         files: null,
         parentNode: null,
         children,
+        get className() { return [...classes].join(' '); },
+        set className(value) {
+            classes.clear();
+            for (const c of String(value).split(/\s+/).filter(Boolean)) classes.add(c);
+        },
+        get textContent() { return textContent; },
+        set textContent(value) {
+            textContent = String(value ?? '');
+            for (const c of children) if (c) c.parentNode = null;
+            children.length = 0;
+        },
+        classList: {
+            add(...cls) { for (const c of cls) classes.add(c); },
+            remove(...cls) { for (const c of cls) classes.delete(c); },
+            contains(c) { return classes.has(c); },
+            toggle(c) {
+                if (classes.has(c)) classes.delete(c);
+                else classes.add(c);
+                return classes.has(c);
+            },
+            get _set() { return classes; },
+        },
         get childNodes() { return children; },
         get firstChild() { return children[0] || null; },
         get firstElementChild() { return children[0] || null; },
         get lastChild() { return children[children.length - 1] || null; },
         get lastElementChild() { return children[children.length - 1] || null; },
         appendChild(child) {
-            child.parentNode = stub;
+            if (child && typeof child === 'object') child.parentNode = stub;
             children.push(child);
             return child;
         },
@@ -108,6 +141,7 @@ function makeStubElement(tag = 'div') {
         setAttribute() {},
         removeAttribute() {},
         hasAttribute() { return false; },
+        matches() { return false; },
         focus() {},
         blur() {},
         click() {
@@ -121,25 +155,6 @@ function makeStubElement(tag = 'div') {
         clientHeight: 0,
         clientWidth: 0,
         getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
-    };
-
-    stub.classList = {
-        _set: new Set(),
-        add(...cls) {
-            for (const c of cls) this._set.add(c);
-            stub.className = [...this._set].join(' ');
-        },
-        remove(...cls) {
-            for (const c of cls) this._set.delete(c);
-            stub.className = [...this._set].join(' ');
-        },
-        contains(c) { return this._set.has(c); },
-        toggle(c) {
-            if (this._set.has(c)) this._set.delete(c);
-            else this._set.add(c);
-            stub.className = [...this._set].join(' ');
-            return this._set.has(c);
-        },
     };
 
     return stub;
@@ -190,23 +205,44 @@ globalThis.window = {
     setTimeout, clearTimeout, setInterval, clearInterval,
 };
 
-globalThis.navigator = globalThis.window.navigator;
-globalThis.location = globalThis.window.location;
+// Some Web API globals (navigator, location, fetch, performance) ship with
+// modern Node as read-only getters per the WICG/WebIDL spec. Older Node
+// builds let us assign directly. The defensive helper installs the stub
+// only when the global is missing, and falls back to defineProperty when
+// a plain assignment would throw on a read-only descriptor.
+function installGlobal(name, value) {
+    if (name in globalThis && globalThis[name] !== undefined) return;
+    try {
+        globalThis[name] = value;
+    } catch {
+        try {
+            Object.defineProperty(globalThis, name, {
+                value,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            });
+        } catch { /* unreplaceable on this runtime; production code must tolerate Node's default */ }
+    }
+}
+
+installGlobal('navigator', globalThis.window.navigator);
+installGlobal('location', globalThis.window.location);
 
 // Default fetch throws; tests that exercise apiCall must replace it.
-globalThis.fetch = async () => {
+installGlobal('fetch', async () => {
     throw new Error('fetch is not stubbed; replace globalThis.fetch in your test');
-};
+});
 
 // performance.now exists by default in modern Node; guard for older builds.
-if (!globalThis.performance) globalThis.performance = { now: () => Date.now() };
+installGlobal('performance', { now: () => Date.now() });
 
 // MediaRecorder, FormData, Blob: provide stub-shaped placeholders so
 // imports that REFERENCE these constructors at top-level succeed. Tests
 // that exercise voice input can replace these with real implementations.
-globalThis.MediaRecorder = globalThis.MediaRecorder || class StubMediaRecorder {};
-globalThis.FormData = globalThis.FormData || class StubFormData {};
-globalThis.Blob = globalThis.Blob || class StubBlob {};
+installGlobal('MediaRecorder', class StubMediaRecorder {});
+installGlobal('FormData', class StubFormData {});
+installGlobal('Blob', class StubBlob {});
 
 // Helpers for tests to peek into the store. Importable from test files.
 export function getStubElement(id) {
@@ -219,8 +255,7 @@ export function resetStubElement(id) {
     stub.textContent = '';
     stub.title = '';
     stub.style = {};
-    stub.className = '';
-    stub.classList._set.clear();
+    stub.className = ''; // setter clears the classList _set too
     return stub;
 }
 
