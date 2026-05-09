@@ -120,20 +120,22 @@ A persistent connection-lost banner and backend-required control lock are now
 in place: any connection-aware `fetch()` failure flips a fixed top-of-viewport
 banner visible and disables controls marked `data-requires-backend`; the next
 successful response hides the banner and restores those controls without
-unlocking controls that were already disabled. Routes that return HTTP errors
-from a reachable backend keep the banner hidden so the caller can surface its
-own message. This closes the "no indicator that the backend never received the
-change" half of the problem. The remaining audits below are still open: the UI
-now prevents backend-gone edits, but many write endpoints still do not surface
-their own success/failure state inline when the backend is reachable but the
-request itself fails.
+unlocking controls that were already disabled. The "backend reachable but
+rejected the write" case now also surfaces useful detail: `apiCall` parses the
+JSON response body on HTTP 4xx/5xx and writes the server's `message` field
+into the global statusText instead of the generic "Error: server returned X."
+line, so every save handler gets meaningful failure copy for free. The
+`reportSaveFailure(statusEl, data, fallback)` helper in `static/js/context.js`
+covers the rarer 200-with-`status:'error'` shape (audio enable/disable,
+`/pull_ollama_model`, etc.) and is wired into three settings handlers as the
+template (`setPersonaPrompt`, `setOllamaModel`, `saveDiagnosticsLevels`).
 
-Follow-up work:
+Remaining audit work:
 
-- Audit settings-write endpoints for explicit success/failure indicators in the
-  GUI, especially for toggles that currently rely on optimistic local state.
-  The banner and lock catch network-level failure; per-write success state is
-  still implicit for many toggles.
+- Extend the `reportSaveFailure` pattern to the rest of the 19 save handlers
+  (motion-control.js, motion sub-modules, audio.js, voice-input.js). The helper
+  is in place; each callsite is a small `} else { reportSaveFailure(...) }`
+  follow-up.
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.
