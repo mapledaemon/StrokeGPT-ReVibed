@@ -85,15 +85,19 @@ class FrontendRuntimeTests(unittest.TestCase):
     """
 
     def test_node_behavioral_suite_passes(self):
-        # ``--import`` accepts a relative path or a file:// URL; the
-        # POSIX path form is portable across Linux and Windows Node
-        # builds. ``--test <dir>`` discovers ``*.test.{js,cjs,mjs}`` per
-        # Node's default pattern; ``_harness.mjs`` is excluded by the
-        # leading underscore.
+        # ``--import`` accepts a module specifier (file path or file:// URL).
+        # ``Path.as_uri()`` produces ``file:///...`` which is the safest
+        # cross-platform format for ESM resolution and works on every Node
+        # version where ``--import`` is supported. Production browser
+        # modules under ``static/js/`` resolve as ES modules because
+        # ``package.json`` at the repo root sets ``"type": "module"``.
+        # ``--test <dir>`` discovers ``*.test.{js,cjs,mjs}`` per Node's
+        # default pattern; ``_harness.mjs`` is excluded by the leading
+        # underscore.
         cmd = [
             "node",
             "--import",
-            HARNESS_PATH.as_posix(),
+            HARNESS_PATH.as_uri(),
             "--test",
             str(JS_TEST_DIR),
         ]

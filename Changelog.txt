@@ -53,10 +53,19 @@ Branch: claude-frontend-test-runner
       back near 0 also resets. Five scenarios total, mirroring the
       source-text invariants in `tests/test_motion_status_log_timecodes.py`.
     - `tests/test_frontend_runtime.py`: skip-if-missing Python wrapper
-      that subprocesses `node --import ./tests/js/_harness.mjs --test
+      that subprocesses `node --import file://.../_harness.mjs --test
       ./tests/js`. Skips when Node is not on PATH or when Node is below
-      version 20. Surfaces the Node runner stdout/stderr inline on
-      failure so the diagnostic line is in the unittest output.
+      version 20. The harness path is passed as a `file://` URI via
+      `Path.as_uri()` for cross-platform ESM resolution. Surfaces the
+      Node runner stdout/stderr inline on failure so the diagnostic
+      line is in the unittest output.
+    - `package.json` at the repo root: a 30-byte ESM marker file with
+      `"type": "module"`, no dependencies, no scripts, no node_modules.
+      Required so Node treats `static/js/*.js` as ES modules (matching
+      how the browser loads them via `<script type="module">`); without
+      it, `node --test` cannot import the production browser modules
+      because Node's default for unmarked `.js` files is CommonJS. This
+      is a marker, not a toolchain — `npm install` is never run.
 - `static/js/motion-control.js`: added `export` to
   `updateActiveModeTimer` so the behavioral test can import it. Pure
   additive change; no callers were affected (the function had no
