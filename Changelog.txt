@@ -8,6 +8,54 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - Unreleased - Extract Voice Transcription Helper From Live Recorder
+--------------------------------------------------------------------------------
+
+Branch: claude-voice-input-transcribe-helper-refactor
+
+- Behavior-preserving refactor of `static/js/voice-input.js`. The
+  upload-and-transcribe network logic (FormData construction, the
+  `/transcribe_voice` POST through `fetchWithConnectionState`, HTTP-error
+  copy, settings repopulation on failure, and connection-aware error
+  messaging) moved out of `transcribeVoiceBlob` into a new
+  `requestVoiceTranscription(blob, filename, message)` helper that
+  returns the parsed payload on success or `null` on every failure path
+  (empty blob, non-OK response, network exception).
+- `transcribeVoiceBlob` is now a thin caller of the helper that layers
+  the existing live-recording behavior on top: populate voice-input
+  settings from the payload, surface "no speech detected" copy,
+  evaluate `slowAsrWarning`, and either auto-submit through
+  `submitVoiceTranscriptToChat` or hand off to `showTranscriptPreview`
+  per `state.voiceInputSubmitMode`. Observable behavior of the live
+  recording flow is unchanged.
+- Why the seam: the upload path is reusable, but the auto-submit and
+  preview behavior is caller-specific. Splitting them cleanly removes
+  the only reason a future "transcribe without auto-submitting" caller
+  (e.g. a brief mic loopback or an A/B comparison helper) would need
+  to copy-paste the network logic.
+- Why this branch is not PR #100 (`codex/voice-input-test-clip`): that
+  branch shipped the same helper extraction wrapped in a Settings >
+  Voice file-upload control. The existing live-recording flow already
+  shows the transcript with Send / Retry / Cancel before submitting to
+  chat, so the file-upload UX adds Settings clutter without adding
+  capability the live flow does not already provide. This branch keeps
+  the genuine refactor and drops the file-upload UI, so the seam is
+  available for any future caller that does want to skip auto-submit.
+- Added `tests/test_voice_transcription_helper.py` pinning the contract:
+  the helper signature is `(blob, filename, message)`, the helper owns
+  the `/transcribe_voice` upload and three null-return failure paths,
+  the helper does NOT reference any caller-specific symbols
+  (`submitVoiceTranscriptToChat`, `showTranscriptPreview`,
+  `hideTranscriptPreview`, `voiceInputSubmitMode`, `slowAsrWarning`),
+  `transcribeVoiceBlob` calls the helper and keeps the caller-specific
+  behavior, the helper is declared before the caller, and no test-clip
+  UI IDs are introduced. Verified the new tests fail when the
+  refactor is reverted and pass with it; full
+  `python -m unittest discover -s tests` stays green.
+- No production behavior change for end users. No new UI controls, no
+  ROADMAP changes, no Settings changes.
+
+
 2026-05-08 - PR #99 - Add Voice Input ASR Tuning
 ------------------------------------------------
 
