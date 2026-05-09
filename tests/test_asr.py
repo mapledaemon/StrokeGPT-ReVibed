@@ -32,6 +32,11 @@ class VoiceInputServiceTests(unittest.TestCase):
             echo_cancellation=False,
             auto_gain_control=True,
             noise_floor_rms=0.021,
+            beam_size=3,
+            condition_on_previous_text=True,
+            vad_threshold=0.35,
+            vad_min_silence_ms=650,
+            vad_speech_pad_ms=250,
         )
         with mock.patch.object(service, "dependency_available", return_value=False):
             status = service.status()
@@ -45,6 +50,11 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertFalse(status["echo_cancellation"])
         self.assertTrue(status["auto_gain_control"])
         self.assertEqual(status["noise_floor_rms"], 0.021)
+        self.assertEqual(status["beam_size"], 3)
+        self.assertTrue(status["condition_on_previous_text"])
+        self.assertEqual(status["vad_threshold"], 0.35)
+        self.assertEqual(status["vad_min_silence_ms"], 650)
+        self.assertEqual(status["vad_speech_pad_ms"], 250)
         self.assertIn("model_options", status)
         self.assertIn("base.en", [option["id"] for option in status["model_options"]])
         self.assertIn("small.en", [option["id"] for option in status["model_options"]])
@@ -70,6 +80,50 @@ class VoiceInputServiceTests(unittest.TestCase):
             status = service.status()
         self.assertEqual(status["status_code"], "error")
         self.assertIn("download failed", status["message"])
+
+    def test_transcribe_passes_recognition_tuning_to_faster_whisper(self):
+        calls = {}
+
+        class FakeModel:
+            def transcribe(self, audio_path, **kwargs):
+                calls["audio_path"] = audio_path
+                calls["kwargs"] = kwargs
+                return [types.SimpleNamespace(text=" start freestyle ")], types.SimpleNamespace(
+                    language="en",
+                    language_probability=0.98,
+                    duration=1.2,
+                )
+
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="en",
+            beam_size=4,
+            condition_on_previous_text=False,
+            vad_threshold=0.42,
+            vad_min_silence_ms=700,
+            vad_speech_pad_ms=300,
+        )
+        service._model = FakeModel()
+        service._model_key = ("local_faster_whisper", "tiny.en")
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            result = service.transcribe_file(Path("speech.webm"))
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["transcript"], "start freestyle")
+        self.assertEqual(calls["audio_path"], "speech.webm")
+        self.assertEqual(calls["kwargs"]["language"], "en")
+        self.assertTrue(calls["kwargs"]["vad_filter"])
+        self.assertEqual(calls["kwargs"]["beam_size"], 4)
+        self.assertFalse(calls["kwargs"]["condition_on_previous_text"])
+        self.assertEqual(calls["kwargs"]["vad_parameters"], {
+            "threshold": 0.42,
+            "min_silence_duration_ms": 700,
+            "speech_pad_ms": 300,
+        })
 
     def test_model_load_uses_windows_safe_local_cache(self):
         calls = {}

@@ -5,6 +5,11 @@ const DEFAULT_HANDS_FREE_SILENCE_MS = 900;
 const DEFAULT_MIN_RECORDING_MS = 450;
 const DEFAULT_MAX_RECORDING_MS = 8000;
 const DEFAULT_NOISE_FLOOR_RMS = 0;
+const DEFAULT_VOICE_INPUT_BEAM_SIZE = 5;
+const DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT = false;
+const DEFAULT_VOICE_INPUT_VAD_THRESHOLD = 0.5;
+const DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS = 500;
+const DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS = 400;
 const HANDS_FREE_RMS_THRESHOLD_MIN = 0.006;
 const HANDS_FREE_RMS_THRESHOLD_MAX = 0.16;
 const HANDS_FREE_NOISE_MULTIPLIER_MIN = 1.6;
@@ -46,6 +51,32 @@ function handsFreeSensitivity() {
 
 function voiceInputNoiseFloorRms() {
     return Number(clampNumber(state.voiceInputNoiseFloorRms, 0, 0.5, DEFAULT_NOISE_FLOOR_RMS).toFixed(4));
+}
+
+function voiceInputBeamSize() {
+    return Math.round(clampNumber(state.voiceInputBeamSize, 1, 10, DEFAULT_VOICE_INPUT_BEAM_SIZE));
+}
+
+function voiceInputVadThreshold() {
+    return Number(clampNumber(state.voiceInputVadThreshold, 0.1, 0.9, DEFAULT_VOICE_INPUT_VAD_THRESHOLD).toFixed(2));
+}
+
+function voiceInputVadMinSilenceMs() {
+    return Math.round(clampNumber(
+        state.voiceInputVadMinSilenceMs,
+        100,
+        3000,
+        DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
+    ));
+}
+
+function voiceInputVadSpeechPadMs() {
+    return Math.round(clampNumber(
+        state.voiceInputVadSpeechPadMs,
+        0,
+        1000,
+        DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
+    ));
 }
 
 function handsFreeRmsThreshold() {
@@ -117,6 +148,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
+        `Recognition: beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
@@ -340,10 +372,35 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
         0.5,
         DEFAULT_NOISE_FLOOR_RMS,
     ).toFixed(4));
+    state.voiceInputBeamSize = Math.round(clampNumber(
+        fromDom ? el.voiceInputBeamSizeInput?.value : state.voiceInputBeamSize,
+        1,
+        10,
+        DEFAULT_VOICE_INPUT_BEAM_SIZE,
+    ));
+    state.voiceInputVadThreshold = Number(clampNumber(
+        fromDom ? el.voiceInputVadThresholdInput?.value : state.voiceInputVadThreshold,
+        0.1,
+        0.9,
+        DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
+    ).toFixed(2));
+    state.voiceInputVadMinSilenceMs = Math.round(clampNumber(
+        fromDom ? el.voiceInputVadMinSilenceMsInput?.value : state.voiceInputVadMinSilenceMs,
+        100,
+        3000,
+        DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
+    ));
+    state.voiceInputVadSpeechPadMs = Math.round(clampNumber(
+        fromDom ? el.voiceInputVadSpeechPadMsInput?.value : state.voiceInputVadSpeechPadMs,
+        0,
+        1000,
+        DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
+    ));
     if (fromDom) {
         state.voiceInputNoiseSuppression = Boolean(el.voiceInputNoiseSuppressionCheckbox?.checked);
         state.voiceInputEchoCancellation = Boolean(el.voiceInputEchoCancellationCheckbox?.checked);
         state.voiceInputAutoGainControl = Boolean(el.voiceInputAutoGainControlCheckbox?.checked);
+        state.voiceInputConditionOnPreviousText = Boolean(el.voiceInputConditionPreviousCheckbox?.checked);
     }
     if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
     if (el.voiceInputSensitivityVal) el.voiceInputSensitivityVal.textContent = `${state.voiceInputHandsFreeSensitivity}%`;
@@ -351,9 +408,14 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
     if (el.voiceInputMinRecordingMsInput) el.voiceInputMinRecordingMsInput.value = String(state.voiceInputMinRecordingMs);
     if (el.voiceInputMaxRecordingMsInput) el.voiceInputMaxRecordingMsInput.value = String(state.voiceInputMaxRecordingMs);
     if (el.voiceInputNoiseFloorInput) el.voiceInputNoiseFloorInput.value = String(state.voiceInputNoiseFloorRms);
+    if (el.voiceInputBeamSizeInput) el.voiceInputBeamSizeInput.value = String(state.voiceInputBeamSize);
+    if (el.voiceInputVadThresholdInput) el.voiceInputVadThresholdInput.value = String(state.voiceInputVadThreshold);
+    if (el.voiceInputVadMinSilenceMsInput) el.voiceInputVadMinSilenceMsInput.value = String(state.voiceInputVadMinSilenceMs);
+    if (el.voiceInputVadSpeechPadMsInput) el.voiceInputVadSpeechPadMsInput.value = String(state.voiceInputVadSpeechPadMs);
     if (el.voiceInputNoiseSuppressionCheckbox) el.voiceInputNoiseSuppressionCheckbox.checked = state.voiceInputNoiseSuppression;
     if (el.voiceInputEchoCancellationCheckbox) el.voiceInputEchoCancellationCheckbox.checked = state.voiceInputEchoCancellation;
     if (el.voiceInputAutoGainControlCheckbox) el.voiceInputAutoGainControlCheckbox.checked = state.voiceInputAutoGainControl;
+    if (el.voiceInputConditionPreviousCheckbox) el.voiceInputConditionPreviousCheckbox.checked = state.voiceInputConditionOnPreviousText;
     if (el.voiceInputNoiseFloorVal) {
         const floor = voiceInputNoiseFloorRms();
         const threshold = formatRms(handsFreeRmsThreshold());
@@ -435,6 +497,15 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputEchoCancellation = Boolean(status.echo_cancellation ?? data.voice_input_echo_cancellation ?? true);
     state.voiceInputAutoGainControl = Boolean(status.auto_gain_control ?? data.voice_input_auto_gain_control ?? true);
     state.voiceInputNoiseFloorRms = status.noise_floor_rms ?? data.voice_input_noise_floor_rms ?? DEFAULT_NOISE_FLOOR_RMS;
+    state.voiceInputBeamSize = status.beam_size ?? data.voice_input_beam_size ?? DEFAULT_VOICE_INPUT_BEAM_SIZE;
+    state.voiceInputConditionOnPreviousText = Boolean(
+        status.condition_on_previous_text
+        ?? data.voice_input_condition_on_previous_text
+        ?? DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
+    );
+    state.voiceInputVadThreshold = status.vad_threshold ?? data.voice_input_vad_threshold ?? DEFAULT_VOICE_INPUT_VAD_THRESHOLD;
+    state.voiceInputVadMinSilenceMs = status.vad_min_silence_ms ?? data.voice_input_vad_min_silence_ms ?? DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS;
+    state.voiceInputVadSpeechPadMs = status.vad_speech_pad_ms ?? data.voice_input_vad_speech_pad_ms ?? DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS;
 
     if (el.voiceInputProviderSelect) el.voiceInputProviderSelect.value = state.voiceInputProvider;
     setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
@@ -491,6 +562,11 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         echo_cancellation: state.voiceInputEchoCancellation,
         auto_gain_control: state.voiceInputAutoGainControl,
         noise_floor_rms: voiceInputNoiseFloorRms(),
+        beam_size: voiceInputBeamSize(),
+        condition_on_previous_text: state.voiceInputConditionOnPreviousText,
+        vad_threshold: voiceInputVadThreshold(),
+        vad_min_silence_ms: voiceInputVadMinSilenceMs(),
+        vad_speech_pad_ms: voiceInputVadSpeechPadMs(),
     };
     const response = await fetchWithConnectionState('/set_voice_input', {
         method: 'POST',
@@ -938,11 +1014,16 @@ export function initVoiceInputControls({sendUserMessage}) {
         el.voiceInputMinRecordingMsInput,
         el.voiceInputMaxRecordingMsInput,
         el.voiceInputNoiseFloorInput,
+        el.voiceInputBeamSizeInput,
+        el.voiceInputVadThresholdInput,
+        el.voiceInputVadMinSilenceMsInput,
+        el.voiceInputVadSpeechPadMsInput,
     ].forEach(input => input?.addEventListener('input', () => updateVoiceInputTuningReadouts()));
     [
         el.voiceInputNoiseSuppressionCheckbox,
         el.voiceInputEchoCancellationCheckbox,
         el.voiceInputAutoGainControlCheckbox,
+        el.voiceInputConditionPreviousCheckbox,
     ].forEach(input => input?.addEventListener('change', () => updateVoiceInputTuningReadouts()));
     el.calibrateVoiceInputNoiseBtn?.addEventListener('click', calibrateVoiceInputNoise);
     el.sendVoiceTranscriptBtn?.addEventListener('click', sendPendingTranscript);

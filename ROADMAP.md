@@ -560,6 +560,10 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
   desktops or GPU setups. Keep the custom model field available for converted
   or externally hosted compatible models, and use the local folder picker for
   converted CTranslate2 model directories.
+- Use the persisted recognition tuning controls during noisy-room and
+  latency testing: beam size, previous transcript context, VAD threshold,
+  VAD silence duration, and VAD speech padding should be adjusted against the
+  same real microphone clips before adding another ASR provider.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible

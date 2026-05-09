@@ -70,6 +70,11 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
         self.assertEqual(saved["voice_input_noise_floor_rms"], 0.0)
+        self.assertEqual(saved["voice_input_beam_size"], 5)
+        self.assertFalse(saved["voice_input_condition_on_previous_text"])
+        self.assertEqual(saved["voice_input_vad_threshold"], 0.5)
+        self.assertEqual(saved["voice_input_vad_min_silence_ms"], 500)
+        self.assertEqual(saved["voice_input_vad_speech_pad_ms"], 400)
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))
@@ -98,6 +103,11 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
         self.assertEqual(settings.voice_input_noise_floor_rms, 0.0)
+        self.assertEqual(settings.voice_input_beam_size, 5)
+        self.assertFalse(settings.voice_input_condition_on_previous_text)
+        self.assertEqual(settings.voice_input_vad_threshold, 0.5)
+        self.assertEqual(settings.voice_input_vad_min_silence_ms, 500)
+        self.assertEqual(settings.voice_input_vad_speech_pad_ms, 400)
 
     def test_llm_edge_permission_settings_are_persisted(self):
         fake_path = FakePath(json.dumps({
@@ -494,6 +504,11 @@ class ModelConfigurationTests(unittest.TestCase):
             "voice_input_echo_cancellation": "off",
             "voice_input_auto_gain_control": "yes",
             "voice_input_noise_floor_rms": 0.713,
+            "voice_input_beam_size": 99,
+            "voice_input_condition_on_previous_text": "yes",
+            "voice_input_vad_threshold": 1.2,
+            "voice_input_vad_min_silence_ms": 25,
+            "voice_input_vad_speech_pad_ms": 5000,
         })
 
         self.assertEqual(settings.voice_input_provider, "local_faster_whisper")
@@ -510,6 +525,11 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
         self.assertEqual(settings.voice_input_noise_floor_rms, 0.5)
+        self.assertEqual(settings.voice_input_beam_size, 10)
+        self.assertTrue(settings.voice_input_condition_on_previous_text)
+        self.assertEqual(settings.voice_input_vad_threshold, 0.9)
+        self.assertEqual(settings.voice_input_vad_min_silence_ms, 100)
+        self.assertEqual(settings.voice_input_vad_speech_pad_ms, 1000)
 
 
 if __name__ == "__main__":

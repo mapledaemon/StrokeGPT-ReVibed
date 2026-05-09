@@ -37,6 +37,11 @@ DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS = 900
 DEFAULT_VOICE_INPUT_MIN_RECORDING_MS = 450
 DEFAULT_VOICE_INPUT_MAX_RECORDING_MS = 8000
 DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS = 0.0
+DEFAULT_VOICE_INPUT_BEAM_SIZE = 5
+DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT = False
+DEFAULT_VOICE_INPUT_VAD_THRESHOLD = 0.5
+DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS = 500
+DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS = 400
 
 
 def normalize_ollama_model(model):
@@ -87,6 +92,11 @@ def default_settings_dict():
         "voice_input_echo_cancellation": True,
         "voice_input_auto_gain_control": True,
         "voice_input_noise_floor_rms": DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
+        "voice_input_beam_size": DEFAULT_VOICE_INPUT_BEAM_SIZE,
+        "voice_input_condition_on_previous_text": DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
+        "voice_input_vad_threshold": DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
+        "voice_input_vad_min_silence_ms": DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
+        "voice_input_vad_speech_pad_ms": DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
         "patterns": [],
         "milking_patterns": [],
         "motion_pattern_enabled": {},
@@ -311,6 +321,25 @@ class SettingsManager:
         self.voice_input_noise_floor_rms = self._normalize_voice_input_noise_floor_rms(
             data.get("voice_input_noise_floor_rms", defaults["voice_input_noise_floor_rms"])
         )
+        self.voice_input_beam_size = self._normalize_voice_input_beam_size(
+            data.get("voice_input_beam_size", defaults["voice_input_beam_size"])
+        )
+        self.voice_input_condition_on_previous_text = _as_bool(
+            data.get(
+                "voice_input_condition_on_previous_text",
+                defaults["voice_input_condition_on_previous_text"],
+            ),
+            defaults["voice_input_condition_on_previous_text"],
+        )
+        self.voice_input_vad_threshold = self._normalize_voice_input_vad_threshold(
+            data.get("voice_input_vad_threshold", defaults["voice_input_vad_threshold"])
+        )
+        self.voice_input_vad_min_silence_ms = self._normalize_voice_input_vad_min_silence_ms(
+            data.get("voice_input_vad_min_silence_ms", defaults["voice_input_vad_min_silence_ms"])
+        )
+        self.voice_input_vad_speech_pad_ms = self._normalize_voice_input_vad_speech_pad_ms(
+            data.get("voice_input_vad_speech_pad_ms", defaults["voice_input_vad_speech_pad_ms"])
+        )
 
         depth_low = _clamp_int(data.get("min_depth"), 0, 100, defaults["min_depth"])
         depth_high = _clamp_int(data.get("max_depth"), 0, 100, defaults["max_depth"])
@@ -376,6 +405,11 @@ class SettingsManager:
             "voice_input_echo_cancellation": bool(self.voice_input_echo_cancellation),
             "voice_input_auto_gain_control": bool(self.voice_input_auto_gain_control),
             "voice_input_noise_floor_rms": self._normalize_voice_input_noise_floor_rms(self.voice_input_noise_floor_rms),
+            "voice_input_beam_size": self._normalize_voice_input_beam_size(self.voice_input_beam_size),
+            "voice_input_condition_on_previous_text": bool(self.voice_input_condition_on_previous_text),
+            "voice_input_vad_threshold": self._normalize_voice_input_vad_threshold(self.voice_input_vad_threshold),
+            "voice_input_vad_min_silence_ms": self._normalize_voice_input_vad_min_silence_ms(self.voice_input_vad_min_silence_ms),
+            "voice_input_vad_speech_pad_ms": self._normalize_voice_input_vad_speech_pad_ms(self.voice_input_vad_speech_pad_ms),
             "patterns": self.patterns,
             "milking_patterns": self.milking_patterns,
             "motion_pattern_enabled": self._normalize_bool_map(self.motion_pattern_enabled),
@@ -562,6 +596,18 @@ class SettingsManager:
 
     def _normalize_voice_input_noise_floor_rms(self, value):
         return round(_clamp_float(value, 0.0, 0.5, DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS), 4)
+
+    def _normalize_voice_input_beam_size(self, value):
+        return _clamp_int(value, 1, 10, DEFAULT_VOICE_INPUT_BEAM_SIZE)
+
+    def _normalize_voice_input_vad_threshold(self, value):
+        return round(_clamp_float(value, 0.1, 0.9, DEFAULT_VOICE_INPUT_VAD_THRESHOLD), 2)
+
+    def _normalize_voice_input_vad_min_silence_ms(self, value):
+        return _clamp_int(value, 100, 3000, DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS)
+
+    def _normalize_voice_input_vad_speech_pad_ms(self, value):
+        return _clamp_int(value, 0, 1000, DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS)
 
     def _normalize_diagnostics_level(self, value):
         cleaned = str(value or "").strip().lower()
