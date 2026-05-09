@@ -564,6 +564,9 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
   latency testing: beam size, previous transcript context, VAD threshold,
   VAD silence duration, and VAD speech padding should be adjusted against the
   same real microphone clips before adding another ASR provider.
+- Use repeatable Settings > Voice recognition test clips to compare the same
+  quiet/noisy samples across model presets and ASR tuning changes without
+  routing test transcripts into chat or motion.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible

@@ -645,6 +645,20 @@ async function downloadVoiceInputModel() {
     await preloadVoiceInputModel({status: saved, allowDownload: true, reason: 'manual'});
 }
 
+async function ensureVoiceInputReadyForTestClip(status) {
+    if (status?.can_transcribe || state.voiceInputCanTranscribe) return true;
+    if (canLoadCachedVoiceInputModel(status)) {
+        const loaded = await preloadVoiceInputModel({status, allowDownload: false, reason: 'test_clip'});
+        return Boolean(loaded?.can_transcribe || loaded?.voice_input_status?.can_transcribe || state.voiceInputCanTranscribe);
+    }
+    voiceStatusMessage(
+        voicePayloadFailureMessage({voice_input_status: status}, 'Voice input is not ready. Download and load the voice input model before testing a clip.'),
+        'var(--yellow)',
+        {issue: true},
+    );
+    return false;
+}
+
 function microphoneAudioConstraints() {
     return {
         noiseSuppression: {ideal: Boolean(state.voiceInputNoiseSuppression)},
@@ -697,34 +711,39 @@ function recordingDurationMs() {
     return performance.now() - state.voiceInputRecordingStartedAt;
 }
 
-async function transcribeVoiceBlob(blob) {
+async function requestVoiceTranscription(blob, filename, message) {
     state.voiceInputLastBlobBytes = blob?.size || 0;
     updateVoiceInputDiagnostics();
     if (!blob || blob.size === 0) {
         voiceStatusMessage('Recorded audio was empty. Check microphone permission and input level, then try again.', 'var(--yellow)', {issue: true});
-        return;
+        return null;
     }
-    voiceStatusMessage('Transcribing voice input...');
+    voiceStatusMessage(message || 'Transcribing voice input...');
     const formData = new FormData();
-    formData.append('audio', blob, `voice-${Date.now()}.webm`);
-    let payload = null;
+    formData.append('audio', blob, filename || `voice-${Date.now()}.webm`);
     try {
         const uploadStartedAt = performance.now();
         const response = await fetchWithConnectionState('/transcribe_voice', {method: 'POST', body: formData});
         state.voiceInputLastUploadMs = performance.now() - uploadStartedAt;
-        payload = await response.json().catch(() => null);
+        const payload = await response.json().catch(() => null);
         if (!response.ok) {
             voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice transcription failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
             if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
             else updateVoiceInputDiagnostics();
-            return;
+            return null;
         }
+        return payload;
     } catch (error) {
         state.voiceInputLastUploadMs = null;
         updateVoiceInputDiagnostics();
         voiceStatusMessage(`Voice transcription failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
-        return;
+        return null;
     }
+}
+
+async function transcribeVoiceBlob(blob) {
+    const payload = await requestVoiceTranscription(blob, `voice-${Date.now()}.webm`, 'Transcribing voice input...');
+    if (!payload) return;
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
     if (!transcript) {
@@ -740,6 +759,37 @@ async function transcribeVoiceBlob(blob) {
         showTranscriptPreview(transcript);
         voiceStatusMessage(slowWarning || 'Transcript ready to review.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     }
+}
+
+async function testVoiceInputClip() {
+    const clip = el.voiceInputTestClipInput?.files?.[0];
+    if (!clip) {
+        voiceStatusMessage('Choose an audio clip to test recognition.', 'var(--yellow)', {issue: true});
+        return;
+    }
+    if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
+        stopActiveVoiceInput('Voice input stopped for test clip transcription.');
+    }
+    const saved = await saveVoiceInputSettings({autoLoadHandsFree: false});
+    if (!saved) return;
+    const ready = await ensureVoiceInputReadyForTestClip(saved);
+    if (!ready) return;
+
+    const payload = await requestVoiceTranscription(clip, clip.name || `voice-test-${Date.now()}.webm`, 'Transcribing test clip...');
+    if (!payload) return;
+    if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status, {autoLoadHandsFree: false});
+    const transcript = (payload?.transcript || '').trim();
+    if (!transcript) {
+        voiceStatusMessage(payload?.message || 'No speech detected in the test clip.', 'var(--yellow)', {issue: true});
+        return;
+    }
+    showTranscriptPreview(transcript);
+    const slowWarning = slowAsrWarning(payload);
+    voiceStatusMessage(
+        slowWarning || 'Test clip transcript ready to review.',
+        slowWarning ? 'var(--yellow)' : 'var(--cyan)',
+        slowWarning ? {issue: true} : {clearIssue: true},
+    );
 }
 
 async function startRecording(source = 'manual') {
@@ -1008,6 +1058,7 @@ export function initVoiceInputControls({sendUserMessage}) {
     });
     el.voiceInputModelInput?.addEventListener('input', syncVoiceInputModelSelectFromInput);
     el.browseVoiceInputModelBtn?.addEventListener('click', browseVoiceInputModelPath);
+    el.testVoiceInputClipBtn?.addEventListener('click', testVoiceInputClip);
     [
         el.voiceInputSensitivitySlider,
         el.voiceInputSilenceMsInput,

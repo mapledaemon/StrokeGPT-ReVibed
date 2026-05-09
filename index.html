@@ -250,6 +250,14 @@
                         </div>
                         <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-condition-previous-checkbox" data-requires-backend> Use previous transcript context</label>
                     </fieldset>
+                    <fieldset id="voice-input-test-clip-control" class="voice-input-tuning-group" data-requires-backend>
+                        <legend>Recognition Test Clip</legend>
+                        <div class="browse-line">
+                            <input type="file" id="voice-input-test-clip-input" class="input-text" accept=".webm,.wav,.mp3,.ogg,.m4a,.aac,.flac,audio/webm,audio/wav,audio/mpeg,audio/ogg,audio/mp4,audio/aac,audio/flac" data-requires-backend>
+                            <button id="test-voice-input-clip-btn" class="my-button" type="button" data-requires-backend>Transcribe Test Clip</button>
+                        </div>
+                        <div class="settings-help">Runs the current saved recognition settings on a chosen clip without auto-sending it to chat.</div>
+                    </fieldset>
                     <div id="voice-input-status" class="settings-help">Voice input is disabled.</div>
                     <pre id="voice-input-diagnostics" class="diagnostics-output voice-input-diagnostics" aria-live="polite">No voice input activity recorded.</pre>
                     <div class="voice-actions">

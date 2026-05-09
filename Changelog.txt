@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-08 - PR #100 - Add Voice Input Test Clips
+--------------------------------------------------
+
+Branch: codex/voice-input-test-clip
+
+- Added a Settings > Voice recognition test clip control that uploads a
+  chosen audio file through the existing transcription route without
+  auto-sending it into chat.
+- Reused the current saved voice-input provider, model, microphone, and ASR
+  tuning settings so noisy-room clips can be compared repeatably.
+- Updated frontend wiring, backend-required-control coverage, static asset
+  tests, and the local voice roadmap.
+
+
 2026-05-08 - PR #99 - Add Voice Input ASR Tuning
 ------------------------------------------------
 

@@ -75,6 +75,8 @@ export const el = {
     voiceInputVadThresholdInput: D.getElementById('voice-input-vad-threshold-input'),
     voiceInputVadMinSilenceMsInput: D.getElementById('voice-input-vad-min-silence-ms-input'),
     voiceInputVadSpeechPadMsInput: D.getElementById('voice-input-vad-speech-pad-ms-input'),
+    voiceInputTestClipInput: D.getElementById('voice-input-test-clip-input'),
+    testVoiceInputClipBtn: D.getElementById('test-voice-input-clip-btn'),
     voiceInputStatus: D.getElementById('voice-input-status'),
     voiceInputDiagnostics: D.getElementById('voice-input-diagnostics'),
     saveVoiceInputBtn: D.getElementById('save-voice-input-btn'),
