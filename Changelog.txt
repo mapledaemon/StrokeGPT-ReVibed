@@ -166,8 +166,8 @@ Branch: claude-chat-text-missing-tts-diagnostic
   `python -m unittest discover -s tests` is green.
 
 
-2026-05-09 - Unreleased - Extract Voice Transcription Helper From Live Recorder
---------------------------------------------------------------------------------
+2026-05-09 - PR #101 - Extract Voice Transcription Helper From Live Recorder
+-----------------------------------------------------------------------------
 
 Branch: claude-voice-input-transcribe-helper-refactor
 
