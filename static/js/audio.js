@@ -1,4 +1,4 @@
-import { D, apiCall, el, fetchWithConnectionState, formatElapsed, setSliderValue, state } from './context.js';
+import { D, apiCall, el, fetchWithConnectionState, formatElapsed, reportSaveFailure, setSliderValue, state } from './context.js';
 
 export function updateAudioProviderUi() {
     const provider = el.audioProviderSelect.value;
@@ -181,6 +181,8 @@ async function setupElevenLabsKey() {
         if (el.elevenLabsVoiceSelect.dataset.savedVoiceId) {
             el.elevenLabsVoiceSelect.value = el.elevenLabsVoiceSelect.dataset.savedVoiceId;
         }
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not validate ElevenLabs API key.');
     }
 }
 

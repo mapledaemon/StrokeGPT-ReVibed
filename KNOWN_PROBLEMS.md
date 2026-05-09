@@ -132,10 +132,26 @@ template (`setPersonaPrompt`, `setOllamaModel`, `saveDiagnosticsLevels`).
 
 Remaining audit work:
 
-- Extend the `reportSaveFailure` pattern to the rest of the 19 save handlers
-  (motion-control.js, motion sub-modules, audio.js, voice-input.js). The helper
-  is in place; each callsite is a small `} else { reportSaveFailure(...) }`
-  follow-up.
+- 12 of the 20 audited save handlers are now wired with `reportSaveFailure`
+  (settings.js x3, motion-control.js x4, motion/pattern-list.js x3,
+  motion/feedback-controls.js x1, audio.js x1). The remaining 8 use action-
+  specific success statuses (`boosted`, `edging_started`, `milking_started`,
+  `freestyle_started`, `signaled`, `queued`) where the chat status strip,
+  pause/resume UI, and like/dislike toasts already provide some level of
+  feedback; they each need targeted treatment in a follow-up rather than the
+  same `} else { reportSaveFailure(...) }` shape. Specifically:
+    * motion-control.js:339 (motion training save_generated -- success +
+      data.pattern)
+    * motion-control.js:470, 486 (motion training preview/start)
+    * motion-control.js:829, 840 (like/dislike last move -- `boosted`)
+    * motion-control.js:851, 862, 889 (mode start buttons -- `edging_started`
+      etc.; failure already surfaces through the chat actionStatusMessages
+      table, but the dedicated edge/milk/freestyle button could also surface
+      a short inline failure)
+    * motion-control.js:879 (motion training stop)
+    * motion/pause-controls.js:28, 45 (toggleMotionPause `success`,
+      signalImClose `signaled`)
+    * audio.js:285 (download/load local TTS model -- `queued`)
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.

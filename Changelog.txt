@@ -8,6 +8,71 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - PR #106 - Extend reportSaveFailure To Motion + Audio Handlers
+---------------------------------------------------------------------------
+
+Branch: claude-motion-handlers-save-feedback (stacked on
+claude-settings-write-feedback / PR #105)
+
+- Extends the per-write feedback pattern from PR #105 to nine more save
+  handlers across the motion settings tab and Voice tab:
+    - `static/js/motion-control.js`:
+      * `saveMotionBackend`     -> `el.motionBackendStatus`,
+        fallback "Could not save motion backend."
+      * `saveMotionSpeedLimits` -> `el.statusText`,
+        fallback "Could not save speed limits."
+      * `toggleLongTermMemory`  -> `el.statusText`,
+        fallback "Could not toggle long-term memory."
+      * `saveModeTimings`       -> `el.statusText`,
+        fallback "Could not save mode timings."
+    - `static/js/motion/pattern-list.js`:
+      * `setMotionPatternEnabled`     -> `el.motionPatternStatus`,
+        fallback "Could not change pattern enablement."
+      * `setMotionPatternWeight`      -> `el.motionPatternStatus`,
+        fallback "Could not save pattern weight."
+      * `resetMotionPatternFeedback`  -> `el.motionPatternStatus`,
+        fallback "Could not reset pattern feedback."
+    - `static/js/motion/feedback-controls.js`:
+      * `saveMotionFeedbackOptions`   -> `el.motionPatternStatus`,
+        fallback "Could not save feedback options."
+    - `static/js/audio.js`:
+      * `setupElevenLabsKey`          -> `el.statusText`,
+        fallback "Could not validate ElevenLabs API key."
+- Each handler now pairs its existing `if (data && data.status === 'success')`
+  branch with a small `} else { reportSaveFailure(...) }` failure branch.
+  Each module also gains the `reportSaveFailure` import. Combined with the
+  `apiCall` HTTP-error message-surfacing change from PR #105, the user now
+  sees inline yellow failure copy near the affected control instead of an
+  optimistic UI that silently keeps the failed change.
+- Helper choice: handlers with a dedicated panel status span
+  (motionBackendStatus, motionPatternStatus) target that span so the
+  failure renders next to the control. Handlers without one fall back to
+  the global `el.statusText`. Either way, the user gets a visible signal.
+- Tests:
+    - `tests/test_motion_save_feedback_wiring.py` (new): 13 source-text
+      tests pinning the import, the failure branch shape (`} else {
+      reportSaveFailure(...)`), the target status element, and a
+      handler-specific fallback substring for each of the 9 handlers.
+- Audit progress: 12 of 20 audited save handlers are now wired
+  (settings.js x3 from PR #105, plus the 9 added here). The remaining 8
+  use action-specific success statuses (`boosted`, `edging_started`,
+  `milking_started`, `freestyle_started`, `signaled`, `queued`) where
+  some level of feedback already exists via the chat status strip /
+  pause-resume UI / like-dislike toasts; the precise shape of inline
+  failure feedback for those needs targeted treatment per handler in a
+  follow-up rather than the uniform `reportSaveFailure` form.
+  `KNOWN_PROBLEMS.md` enumerates the remaining 8 callsites by file and
+  line so the next slice has a concrete target list.
+- Local validation: `python -m unittest discover -s tests` green at
+  326 tests / 98 skipped (was 313 / 98 -- +13 source-text wiring tests).
+  The behavioral suite (`tests/js/`) continues to pass under Node 24
+  locally; the 17 JS-side cases run automatically in CI under Node 20.
+  `python -m py_compile app.py strokegpt/*.py tests/*.py` clean.
+- Stacked on `claude-settings-write-feedback` (PR #105). The diff vs
+  master will narrow once #105 merges; if #105 needs review changes,
+  this branch will rebase.
+
+
 2026-05-09 - PR #105 - Surface Server Save-Failure Messages Inline
 -------------------------------------------------------------------
 
