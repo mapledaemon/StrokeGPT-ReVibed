@@ -22,6 +22,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node
+        # Node 20+ provides the stable stdlib `node:test` runner that
+        # tests/test_frontend_runtime.py invokes for behavioral frontend
+        # tests. The wrapper also skips cleanly when `node` is missing,
+        # so omitting this step keeps the suite green; we install Node
+        # here so CI actually exercises tests/js/*.test.mjs.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install lightweight test dependencies
         run: |
           python -m pip install --upgrade pip

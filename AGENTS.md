@@ -200,7 +200,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - README is better than before but still needs release-quality polish.
 - Local Chatterbox still depends heavily on CUDA-enabled PyTorch for good latency; CPU-only Torch is expected to be slow even on fast CPUs.
 - There is no full browser automation test suite.
-- CI covers the lightweight unit tests and Python compile checks, but not the full local Chatterbox stack.
+- CI covers the lightweight Python unit tests, Python compile checks, and the
+  Node-driven behavioral frontend tests under `tests/js/`, but not the full
+  local Chatterbox stack.
 - The original upstream repository did not include a local license file when this fork was prepared.
 
 ## Development Commands
@@ -210,6 +212,12 @@ Run tests:
 ```bash
 python -m unittest discover -s tests
 ```
+
+This runs both the Python unit tests and, when Node 20+ is on `PATH`, the
+behavioral JS suite under `tests/js/` (driven by the
+`tests/test_frontend_runtime.py` wrapper). When Node is not installed, the
+frontend behavioral suite skips cleanly — same skip pattern as the
+Flask-gated tests in `tests/_web_support.py`.
 
 Compile-check Python:
 
@@ -222,6 +230,52 @@ Run the app:
 ```bash
 python app.py
 ```
+
+## Frontend Behavioral Tests
+
+Source-text assertions (e.g.
+`tests/test_frontend_chat_statuses.py`,
+`tests/test_motion_status_log_timecodes.py`,
+`tests/test_connection_lost_banner.py`) read JS files as text and pin
+structural invariants. They cannot drive runtime behavior. When a test
+needs to call a browser ES module and inspect the DOM that the production
+code mutates, write a behavioral test instead.
+
+Behavioral tests live under `tests/js/` as `*.test.mjs` files and run
+through Node's stdlib `node:test` runner. No `package.json`, no
+`node_modules`, no `npm install`. The runner is invoked from
+`tests/test_frontend_runtime.py`, which subprocesses
+`node --import ./tests/js/_harness.mjs --test ./tests/js`.
+
+`tests/js/_harness.mjs` installs a small DOM stub on `globalThis` so
+production modules can evaluate without a browser (`context.js` touches
+`document.getElementById(...)` at top-level). The leading underscore
+keeps it out of `node:test`'s default discovery.
+
+Guidance for picking a test style:
+
+- **Source-text** when you only need to pin the shape of a fix (a string,
+  an export name, a function declaration order, a regex match against the
+  module body). Cheap to write, runs everywhere.
+- **Behavioral** when the bug is a state-machine or DOM-mutation
+  regression that source-text cannot catch (e.g. "after stop, the next
+  log entry must render at the frozen elapsed timecode, not 00:00").
+  Behavioral tests skip cleanly when Node is not available, so they are
+  not a hard dependency for contributors with Python-only environments.
+- Do not bulk-port existing source-text tests to behavioral tests. Port
+  one when a future bug retests the same surface and a runtime assertion
+  would have caught it.
+
+Adding a new behavioral test:
+
+1. Add a `tests/js/<topic>.test.mjs` file that imports from `node:test`
+   and `node:assert/strict`, plus the production module under test.
+2. If your test needs a DOM API the harness does not yet stub, extend
+   `tests/js/_harness.mjs` by one method rather than introducing a
+   heavier dep. The harness is intentionally minimal; jsdom-or-similar
+   is a tier-up reach when the maintenance cost crosses the dep cost.
+3. Run `python -m unittest tests.test_frontend_runtime` locally to
+   confirm. CI runs Node 20 and exercises the suite on every push/PR.
 
 ## Suggested Next Tasks
 

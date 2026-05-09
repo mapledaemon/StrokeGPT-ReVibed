@@ -747,7 +747,7 @@ function activeModeDisplayName(modeName) {
     }[modeName] || modeName || '';
 }
 
-function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.motionPaused) {
+export function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.motionPaused) {
     if (!el.edgingTimer) return;
     const normalizedMode = modeName || '';
     const nextElapsed = normalizedMode ? Math.max(0, Math.round(Number(elapsedSeconds) || 0)) : null;
