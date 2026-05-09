@@ -83,6 +83,31 @@ Follow-up work:
   fixed-size elements so neither resizes the surrounding strip when text
   changes length.
 
+## Voice Input Settings Surface Is Overexposed
+
+Status: Open
+
+Settings > Voice now exposes provider/mode/transcript handling, hands-free
+sensitivity and clip timing, browser microphone processing toggles, calibrated
+noise floor, model preset/custom path, language, beam size, previous-transcript
+context, and VAD threshold/silence/padding controls. Those controls are useful
+for debugging, but the default surface currently makes voice reliability feel
+like a 12-knob user problem before the app has proven good defaults on real
+microphones.
+
+Follow-up work:
+
+- Use real push-to-talk and hands-free microphone testing to decide which
+  controls users actually need during normal operation.
+- Collapse the default Settings > Voice path around provider, recording mode,
+  transcript handling, model preset, language, and one clear calibration or
+  sensitivity path.
+- Move faster-whisper internals such as beam size, condition-previous, and VAD
+  threshold/silence/padding out of the routine path unless testing shows they
+  are necessary for common recovery.
+- Do not add more visible voice-input tuning controls before the current
+  defaults have been validated and simplified.
+
 ## Local LLM Chat Text Sometimes Missing While Voice Plays
 
 Status: Open
@@ -155,3 +180,23 @@ Remaining audit work:
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.
+
+## Single Active Browser Session Assumption
+
+Status: Open / Documentation Gap
+
+The runtime is designed as one local Flask process controlling one Handy with
+one shared `AppState`, one `messages_for_ui` queue, one audio output queue, one
+settings file, and one active mode controller. That matches the local-machine
+product shape, but it is not called out clearly enough for users: multiple
+browser tabs can drain the same update queue, race status messages, and control
+the same device/settings surface.
+
+Follow-up work:
+
+- Document the app as a single trusted local operator / single active browser
+  session controller.
+- Avoid multi-user/session architecture unless the project direction changes;
+  the near-term fix is expectation-setting, not auth or per-session state.
+- If repeated multi-tab confusion is observed, show a small in-app warning
+  rather than pretending the current shared queues are tab-isolated.

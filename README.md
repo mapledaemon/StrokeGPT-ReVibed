@@ -76,6 +76,11 @@ python app.py
 
 Open the URL printed in the terminal (usually <http://127.0.0.1:5000>). If port 5000 is busy, the app picks the next free local port.
 
+StrokeGPT-ReVibed is currently a single-operator local controller: one trusted
+local browser session, one Flask process, one Handy controller, and one shared
+settings file. Multiple tabs share queues and device state, so use one active
+tab while controlling hardware.
+
 ## First Run
 
 1. Paste your Handy connection key in **Open Settings → Device**.
