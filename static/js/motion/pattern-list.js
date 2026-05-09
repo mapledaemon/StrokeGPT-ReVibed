@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, el, markRequiresBackend, state } from '../context.js';
+import { D, apiCall, clampNumber, el, markRequiresBackend, reportSaveFailure, state } from '../context.js';
 
 let renderMotionPatternsCallback = () => {};
 let setMotionTrainingDetailCallback = () => {};
@@ -236,6 +236,8 @@ export async function setMotionPatternEnabled(patternId, enabled) {
     if (data && data.status === 'success') {
         renderMotionPatternsCallback(data.motion_patterns);
         el.statusText.textContent = `${data.pattern.name} pattern ${data.pattern.enabled ? 'enabled' : 'disabled'}.`;
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, 'Could not change pattern enablement.');
     }
 }
 
@@ -249,6 +251,8 @@ export async function setMotionPatternWeight(patternId, weight) {
     if (data && data.status === 'success') {
         renderMotionPatternsCallback(data.motion_patterns);
         el.statusText.textContent = `${data.pattern.name} LLM weight saved: ${data.pattern.weight}.`;
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, 'Could not save pattern weight.');
     }
 }
 
@@ -264,5 +268,7 @@ export async function resetMotionPatternFeedback(patternId) {
             setMotionTrainingDetailCallback(data.pattern);
         }
         el.statusText.textContent = data.message || 'Pattern feedback reset.';
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, 'Could not reset pattern feedback.');
     }
 }

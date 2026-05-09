@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, el, fetchWithConnectionState, markRequiresBackend, setSliderValue, state } from './context.js';
+import { D, apiCall, clampNumber, el, fetchWithConnectionState, markRequiresBackend, reportSaveFailure, setSliderValue, state } from './context.js';
 import {
     formatBackendName,
     formatClockElapsed,
@@ -222,6 +222,8 @@ async function saveMotionBackend() {
     if (data && data.status === 'success') {
         updateMotionBackendUi(data.motion_backend);
         el.statusText.textContent = `Motion backend saved: ${motionBackendDetails(data.motion_backend).label}.`;
+    } else {
+        reportSaveFailure(el.motionBackendStatus, data, 'Could not save motion backend.');
     }
 }
 
@@ -235,6 +237,8 @@ async function saveMotionSpeedLimits() {
     if (res && res.status === 'success') {
         populateMotionSettings({min_speed: res.min_speed, max_speed: res.max_speed});
         el.statusText.textContent = `Speed limits saved: ${state.motionMinSpeed}-${state.motionMaxSpeed}%.`;
+    } else {
+        reportSaveFailure(el.statusText, res, 'Could not save speed limits.');
     }
 }
 
@@ -243,6 +247,8 @@ async function toggleLongTermMemory() {
     if (data && data.status === 'success') {
         updateMemoryToggleUi(data.use_long_term_memory);
         el.statusText.textContent = `Long-term memories ${data.use_long_term_memory ? 'enabled' : 'disabled'}.`;
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not toggle long-term memory.');
     }
 }
 
@@ -273,6 +279,8 @@ async function saveModeTimings() {
     if (data && data.status === 'success') {
         populateMotionSettings({timings: data.timings});
         el.statusText.textContent = 'Mode timings saved.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not save mode timings.');
     }
 }
 

@@ -1,4 +1,4 @@
-import { D, apiCall, el, state } from '../context.js';
+import { D, apiCall, el, reportSaveFailure, state } from '../context.js';
 
 let renderMotionPatternsCallback = () => {};
 
@@ -57,5 +57,7 @@ export async function saveMotionFeedbackOptions() {
         el.statusText.textContent = state.motionFeedbackAutoDisable
             ? 'Repeated thumbs down can disable patterns.'
             : 'Repeated thumbs down will not disable patterns.';
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, 'Could not save feedback options.');
     }
 }

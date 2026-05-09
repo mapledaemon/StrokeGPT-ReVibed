@@ -1,4 +1,4 @@
-import { D, apiCall, el, state } from './context.js';
+import { D, apiCall, el, reportSaveFailure, state } from './context.js';
 import { updateAudioProviderUi } from './audio.js';
 
 export function setSettingsTab(tabName) {
@@ -81,6 +81,8 @@ export async function setPersonaPrompt(prompt, savePrompt = true) {
     if (data && data.status === 'success') {
         state.myPersonaDescription = data.persona;
         populatePersonaPromptOptions(data.persona_prompts, data.persona);
+    } else {
+        reportSaveFailure(el.statusText, data, 'Persona prompt save failed.');
     }
     return data;
 }
@@ -253,6 +255,8 @@ async function saveDiagnosticsLevels() {
         populateDiagnosticsSettings(data);
         updateOllamaStatus(data.ollama_status);
         el.statusText.textContent = 'Diagnostics settings saved.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Diagnostics settings save failed.');
     }
 }
 
@@ -271,6 +275,8 @@ async function setOllamaModel(model) {
     if (data && data.status === 'success') {
         populateModelOptions(data.ollama_models, data.ollama_model);
         updateOllamaStatus(data.ollama_status);
+    } else {
+        reportSaveFailure(el.ollamaModelStatus, data, `Could not set model to ${normalized}.`);
     }
 }
 

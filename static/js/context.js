@@ -356,16 +356,61 @@ export async function apiCall(endpoint, options = {}) {
         return undefined;
     }
     // The backend answered, so the connection is alive even if this specific
-    // request returned an HTTP error. Hide the banner and let the caller
-    // surface its own error message for the non-OK case.
+    // request returned an HTTP error. The route handlers in this app return
+    // useful detail in a JSON body (e.g. ``{"status": "error",
+    // "message": "Persona prompt is required."}``) even on 4xx responses;
+    // surface that message in the global statusText instead of the
+    // generic "Error: server returned 400." line, so the user sees WHY
+    // the save failed without having to open the app terminal. Closes the
+    // KNOWN_PROBLEMS "Web UI Stays Functional After Backend Shutdown" gap
+    // for the backend-reachable-but-rejected case.
     if (!response.ok) {
         console.error(`API call to ${endpoint} returned HTTP ${response.status}`);
-        if (el.statusText) el.statusText.textContent = `Error: server returned ${response.status}.`;
+        let serverMessage = '';
+        try {
+            const errorBody = await response.clone().json();
+            if (errorBody && typeof errorBody.message === 'string' && errorBody.message.trim()) {
+                serverMessage = errorBody.message.trim();
+            }
+        } catch { /* response body was not JSON or was empty */ }
+        if (el.statusText) {
+            el.statusText.textContent = serverMessage || `Error: server returned ${response.status}.`;
+        }
         return undefined;
     }
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('audio/')) return response.blob();
     return response.json();
+}
+
+// Surface a failure message inline on a per-write status element when a
+// settings/save endpoint was REACHABLE but rejected the write (e.g. HTTP
+// 4xx with `{status: 'error', message: ...}` body). Network failures are
+// already covered by the connection-lost banner and the global statusText
+// fallback in `apiCall`, so when ``data`` is undefined this helper stays
+// silent to avoid overwriting a useful "Cannot connect" line with a
+// duplicate. Caller still handles the success branch itself.
+//
+// Use:
+//   const data = await apiCall(...);
+//   if (data && data.status === 'success') {
+//       // ... success branch
+//   } else {
+//       reportSaveFailure(el.someStatus, data, 'Save failed.');
+//   }
+//
+// Pass ``el.statusText`` as ``statusEl`` for endpoints without a
+// dedicated status span. This is the canonical pattern for the
+// KNOWN_PROBLEMS "Web UI Stays Functional After Backend Shutdown"
+// per-write audit follow-up; the connection-lost banner caught the
+// network case, this catches the backend-reachable-but-rejected case.
+export function reportSaveFailure(statusEl, data, fallbackMessage = 'Save failed.') {
+    if (!statusEl) return;
+    if (data === undefined) return; // banner + statusText already surfaced the network failure
+    if (data && data.status === 'success') return;
+    const detail = (data && typeof data.message === 'string' && data.message.trim()) || fallbackMessage;
+    statusEl.textContent = detail;
+    statusEl.style.color = 'var(--yellow)';
 }
 
 export function clampNumber(value, min, max, fallback) {

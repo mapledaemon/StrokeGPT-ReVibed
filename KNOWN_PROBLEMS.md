@@ -120,20 +120,38 @@ A persistent connection-lost banner and backend-required control lock are now
 in place: any connection-aware `fetch()` failure flips a fixed top-of-viewport
 banner visible and disables controls marked `data-requires-backend`; the next
 successful response hides the banner and restores those controls without
-unlocking controls that were already disabled. Routes that return HTTP errors
-from a reachable backend keep the banner hidden so the caller can surface its
-own message. This closes the "no indicator that the backend never received the
-change" half of the problem. The remaining audits below are still open: the UI
-now prevents backend-gone edits, but many write endpoints still do not surface
-their own success/failure state inline when the backend is reachable but the
-request itself fails.
+unlocking controls that were already disabled. The "backend reachable but
+rejected the write" case now also surfaces useful detail: `apiCall` parses the
+JSON response body on HTTP 4xx/5xx and writes the server's `message` field
+into the global statusText instead of the generic "Error: server returned X."
+line, so every save handler gets meaningful failure copy for free. The
+`reportSaveFailure(statusEl, data, fallback)` helper in `static/js/context.js`
+covers the rarer 200-with-`status:'error'` shape (audio enable/disable,
+`/pull_ollama_model`, etc.) and is wired into three settings handlers as the
+template (`setPersonaPrompt`, `setOllamaModel`, `saveDiagnosticsLevels`).
 
-Follow-up work:
+Remaining audit work:
 
-- Audit settings-write endpoints for explicit success/failure indicators in the
-  GUI, especially for toggles that currently rely on optimistic local state.
-  The banner and lock catch network-level failure; per-write success state is
-  still implicit for many toggles.
+- 12 of the 20 audited save handlers are now wired with `reportSaveFailure`
+  (settings.js x3, motion-control.js x4, motion/pattern-list.js x3,
+  motion/feedback-controls.js x1, audio.js x1). The remaining 8 use action-
+  specific success statuses (`boosted`, `edging_started`, `milking_started`,
+  `freestyle_started`, `signaled`, `queued`) where the chat status strip,
+  pause/resume UI, and like/dislike toasts already provide some level of
+  feedback; they each need targeted treatment in a follow-up rather than the
+  same `} else { reportSaveFailure(...) }` shape. Specifically:
+    * motion-control.js:339 (motion training save_generated -- success +
+      data.pattern)
+    * motion-control.js:470, 486 (motion training preview/start)
+    * motion-control.js:829, 840 (like/dislike last move -- `boosted`)
+    * motion-control.js:851, 862, 889 (mode start buttons -- `edging_started`
+      etc.; failure already surfaces through the chat actionStatusMessages
+      table, but the dedicated edge/milk/freestyle button could also surface
+      a short inline failure)
+    * motion-control.js:879 (motion training stop)
+    * motion/pause-controls.js:28, 45 (toggleMotionPause `success`,
+      signalImClose `signaled`)
+    * audio.js:285 (download/load local TTS model -- `queued`)
 - Confirm any feedback-driven change to weights or pattern enablement shows the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.

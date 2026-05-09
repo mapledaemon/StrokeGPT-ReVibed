@@ -8,6 +8,149 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - PR #106 - Extend reportSaveFailure To Motion + Audio Handlers
+---------------------------------------------------------------------------
+
+Branch: claude-motion-handlers-save-feedback (stacked on
+claude-settings-write-feedback / PR #105)
+
+- Extends the per-write feedback pattern from PR #105 to nine more save
+  handlers across the motion settings tab and Voice tab:
+    - `static/js/motion-control.js`:
+      * `saveMotionBackend`     -> `el.motionBackendStatus`,
+        fallback "Could not save motion backend."
+      * `saveMotionSpeedLimits` -> `el.statusText`,
+        fallback "Could not save speed limits."
+      * `toggleLongTermMemory`  -> `el.statusText`,
+        fallback "Could not toggle long-term memory."
+      * `saveModeTimings`       -> `el.statusText`,
+        fallback "Could not save mode timings."
+    - `static/js/motion/pattern-list.js`:
+      * `setMotionPatternEnabled`     -> `el.motionPatternStatus`,
+        fallback "Could not change pattern enablement."
+      * `setMotionPatternWeight`      -> `el.motionPatternStatus`,
+        fallback "Could not save pattern weight."
+      * `resetMotionPatternFeedback`  -> `el.motionPatternStatus`,
+        fallback "Could not reset pattern feedback."
+    - `static/js/motion/feedback-controls.js`:
+      * `saveMotionFeedbackOptions`   -> `el.motionPatternStatus`,
+        fallback "Could not save feedback options."
+    - `static/js/audio.js`:
+      * `setupElevenLabsKey`          -> `el.statusText`,
+        fallback "Could not validate ElevenLabs API key."
+- Each handler now pairs its existing `if (data && data.status === 'success')`
+  branch with a small `} else { reportSaveFailure(...) }` failure branch.
+  Each module also gains the `reportSaveFailure` import. Combined with the
+  `apiCall` HTTP-error message-surfacing change from PR #105, the user now
+  sees inline yellow failure copy near the affected control instead of an
+  optimistic UI that silently keeps the failed change.
+- Helper choice: handlers with a dedicated panel status span
+  (motionBackendStatus, motionPatternStatus) target that span so the
+  failure renders next to the control. Handlers without one fall back to
+  the global `el.statusText`. Either way, the user gets a visible signal.
+- Tests:
+    - `tests/test_motion_save_feedback_wiring.py` (new): 13 source-text
+      tests pinning the import, the failure branch shape (`} else {
+      reportSaveFailure(...)`), the target status element, and a
+      handler-specific fallback substring for each of the 9 handlers.
+- Audit progress: 12 of 20 audited save handlers are now wired
+  (settings.js x3 from PR #105, plus the 9 added here). The remaining 8
+  use action-specific success statuses (`boosted`, `edging_started`,
+  `milking_started`, `freestyle_started`, `signaled`, `queued`) where
+  some level of feedback already exists via the chat status strip /
+  pause-resume UI / like-dislike toasts; the precise shape of inline
+  failure feedback for those needs targeted treatment per handler in a
+  follow-up rather than the uniform `reportSaveFailure` form.
+  `KNOWN_PROBLEMS.md` enumerates the remaining 8 callsites by file and
+  line so the next slice has a concrete target list.
+- Local validation: `python -m unittest discover -s tests` green at
+  326 tests / 98 skipped (was 313 / 98 -- +13 source-text wiring tests).
+  The behavioral suite (`tests/js/`) continues to pass under Node 24
+  locally; the 17 JS-side cases run automatically in CI under Node 20.
+  `python -m py_compile app.py strokegpt/*.py tests/*.py` clean.
+- Stacked on `claude-settings-write-feedback` (PR #105). The diff vs
+  master will narrow once #105 merges; if #105 needs review changes,
+  this branch will rebase.
+
+
+2026-05-09 - PR #105 - Surface Server Save-Failure Messages Inline
+-------------------------------------------------------------------
+
+Branch: claude-settings-write-feedback
+
+- Audit + first slice of the KNOWN_PROBLEMS "Web UI Stays Functional
+  After Backend Shutdown" `Partial` follow-up. The connection-lost
+  banner (PR #82) closed the network-failure half. The audit found
+  19 `data && data.status === 'success'` save handlers across
+  `static/js/`, NONE of which had an `else` branch handling the
+  backend-reachable-but-rejected case: the user could click a settings
+  control, the backend would return HTTP 400 with
+  `{"status": "error", "message": "Persona prompt is required."}`, and
+  the UI would silently keep the optimistic local state with no
+  feedback about why the save did not persist.
+- Two complementary fixes, both in `static/js/context.js`:
+    1. `apiCall` now reads the response body on HTTP 4xx/5xx, parses
+       it as JSON via `response.clone().json()`, and surfaces the
+       server's `message` field into the global statusText instead of
+       the generic `Error: server returned 400.` line. Falls back to
+       the generic line when the body is missing, empty, or non-JSON
+       (e.g. an HTML error page from a misconfigured proxy). All
+       existing save handlers benefit immediately without needing
+       individual changes -- the most useful detail the route handler
+       already returns now reaches the user.
+    2. `reportSaveFailure(statusEl, data, fallbackMessage)` is a new
+       exported helper that handles the rarer 200-with-`status:'error'`
+       shape (audio enable/disable, `/pull_ollama_model`, etc.). It
+       paints the dedicated per-write status element yellow with the
+       server's `message` (or the caller's fallback), skips silently
+       on success or when the call returned `undefined` (apiCall + the
+       banner already covered that), and tolerates a missing
+       `statusEl`.
+- Wired `reportSaveFailure` into three representative handlers in
+  `static/js/settings.js` as the template:
+    - `setPersonaPrompt` -> `el.statusText` with fallback "Persona
+      prompt save failed."
+    - `saveDiagnosticsLevels` -> `el.statusText` with fallback
+      "Diagnostics settings save failed."
+    - `setOllamaModel` -> `el.ollamaModelStatus` (dedicated panel
+      span) with fallback "Could not set model to <name>."
+  The remaining 16 handlers in `motion-control.js`, `motion/*.js`,
+  `audio.js`, and `voice-input.js` keep their existing optimistic
+  shape; each is a `} else { reportSaveFailure(...) }` follow-up that
+  does not need to land before this PR.
+- Tests:
+    - `tests/js/settings_save_feedback.test.mjs` (new): 11 behavioral
+      cases driven through the Backlog #13 frontend test runner. Mocks
+      `globalThis.fetch` with success, HTTP 400 with `message`, HTTP
+      500 without `message`, HTTP 502 with non-JSON body, and 200 with
+      `status:'error'`; calls `apiCall` and `setPersonaPrompt`
+      directly and inspects the stub `el.statusText` /
+      `el.ollamaModelStatus` to confirm the right text + color.
+    - `tests/test_settings_write_feedback.py` (new): 11 source-text
+      cases pinning the helper export, the apiCall HTTP-error parsing,
+      and the three wired handlers. Runs on Python-only environments
+      where the Node behavioral suite skips.
+- Updated `KNOWN_PROBLEMS.md`: the `Web UI` entry now describes the
+  apiCall server-message change and the `reportSaveFailure` helper,
+  reframes the remaining audit work as "extend the pattern to the
+  other 16 save handlers," and keeps the entry `Partial` until those
+  follow-up PRs land.
+- This PR is the first user-visible payoff from Backlog #13. The
+  behavioral test for HTTP 400 with a `message` body would have been
+  effectively impossible to write without the new node:test runner --
+  source-text alone cannot drive `apiCall` through three different
+  fetch mocks and inspect the resulting DOM mutation.
+- Local validation: `python -m unittest discover -s tests` green at
+  313 tests / 98 skipped (was 302 / 98). The +11 tests are the new
+  source-text invariants in `tests/test_settings_write_feedback.py`.
+  The behavioral suite under `tests/js/` is driven by the existing
+  `FrontendRuntimeTests` wrapper (one Python test that skips when
+  Node is missing or executes 17 JS-side cases when Node 20+ is
+  available -- 6 from `motion_timer.test.mjs` plus the 11 new cases
+  in `settings_save_feedback.test.mjs`).
+  `python -m py_compile app.py strokegpt/*.py tests/*.py` clean.
+
+
 2026-05-09 - PR #103 - Add Frontend Behavioral Test Runner (Backlog #13)
 -------------------------------------------------------------------------
 
