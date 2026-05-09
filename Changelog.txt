@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-09 - Unreleased - Add Frontend Behavioral Test Runner (Backlog #13)
-----------------------------------------------------------------------------
+2026-05-09 - PR #103 - Add Frontend Behavioral Test Runner (Backlog #13)
+-------------------------------------------------------------------------
 
 Branch: claude-frontend-test-runner
 
@@ -166,8 +166,8 @@ Branch: claude-chat-text-missing-tts-diagnostic
   `python -m unittest discover -s tests` is green.
 
 
-2026-05-09 - Unreleased - Extract Voice Transcription Helper From Live Recorder
---------------------------------------------------------------------------------
+2026-05-09 - PR #101 - Extract Voice Transcription Helper From Live Recorder
+-----------------------------------------------------------------------------
 
 Branch: claude-voice-input-transcribe-helper-refactor
 
