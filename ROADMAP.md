@@ -554,6 +554,12 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
   calibration during noisy-room testing so hands-free detection can compare
   speech against the user's actual input floor instead of a hard-coded RMS
   threshold.
+- Use the faster-whisper model presets during recognition testing:
+  `tiny.en` for lowest latency, `base.en` as the first balanced laptop target,
+  `small.en` for better noise tolerance, and `distil-large-v3` for faster
+  desktops or GPU setups. Keep the custom model field available for converted
+  or externally hosted compatible models, and use the local folder picker for
+  converted CTranslate2 model directories.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible
@@ -574,8 +580,8 @@ hands-free without bypassing the existing chat, motion, and stop safety paths.
   Voice once real hands-free testing shows which controls users need during
   operation.
 - Evaluate whether whisper.cpp or Parakeet should be added after the
-  faster-whisper baseline is measured. Keep provider-specific setup isolated
-  behind the ASR service contract.
+  faster-whisper preset baseline is measured. Keep provider-specific setup
+  isolated behind the ASR service contract.
 
 Candidate local ASR providers:
 

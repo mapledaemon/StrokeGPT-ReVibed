@@ -1,6 +1,8 @@
 import io
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from tests._web_support import WebTestCase
@@ -18,6 +20,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("provider_options", data["voice_input_status"])
             self.assertIn("mode_options", data["voice_input_status"])
             self.assertIn("submit_options", data["voice_input_status"])
+            self.assertIn("model_options", data["voice_input_status"])
+            self.assertIn("base.en", [option["id"] for option in data["voice_input_status"]["model_options"]])
             self.assertIn("hands_free_sensitivity", data["voice_input_status"])
             self.assertIn("hands_free_silence_ms", data["voice_input_status"])
             self.assertIn("min_recording_ms", data["voice_input_status"])
@@ -93,6 +97,28 @@ class WebVoiceInputRouteTests(WebTestCase):
             settings.apply_dict(original)
             settings.save()
             apply_settings_to_services()
+
+    def test_browse_voice_input_model_path_returns_selected_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch("strokegpt.blueprints.voice_input._browse_directory", return_value=temp_dir):
+                response = self.client.post("/browse_voice_input_model_path")
+            try:
+                self.assertEqual(response.status_code, 200)
+                data = response.get_json()
+                self.assertEqual(data["status"], "success")
+                self.assertEqual(data["model_path"], str(Path(temp_dir)))
+            finally:
+                response.close()
+
+    def test_browse_voice_input_model_path_allows_cancel(self):
+        with mock.patch("strokegpt.blueprints.voice_input._browse_directory", return_value=""):
+            response = self.client.post("/browse_voice_input_model_path")
+        try:
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "cancelled")
+        finally:
+            response.close()
 
     def test_transcribe_voice_returns_transcript_without_chat_side_effects(self):
         from strokegpt.web import app_state, voice_input

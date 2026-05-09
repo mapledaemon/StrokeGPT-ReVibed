@@ -22,6 +22,22 @@ def _voice_input_payload(web, status="success"):
     return payload
 
 
+def _browse_directory(title):
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+        return filedialog.askdirectory(title=title, mustexist=True)
+    finally:
+        root.destroy()
+
+
 @voice_input_blueprint.route('/voice_input_status')
 def voice_input_status_route():
     web = _web()
@@ -112,6 +128,34 @@ def set_voice_input_route():
     )
     web.settings.save()
     return jsonify(_voice_input_payload(web))
+
+
+@voice_input_blueprint.route('/browse_voice_input_model_path', methods=['POST'])
+def browse_voice_input_model_path_route():
+    try:
+        selected = str(_browse_directory("Select faster-whisper model folder") or "").strip()
+    except Exception as exc:
+        return jsonify({
+            "status": "error",
+            "message": f"Model folder picker unavailable: {exc}",
+        }), 500
+    if not selected:
+        return jsonify({
+            "status": "cancelled",
+            "message": "No model folder selected.",
+        })
+
+    model_path = Path(selected).expanduser()
+    if not model_path.exists() or not model_path.is_dir():
+        return jsonify({
+            "status": "error",
+            "message": "Select a local faster-whisper model folder.",
+        }), 400
+    return jsonify({
+        "status": "success",
+        "model_path": str(model_path),
+        "message": "Voice input model folder selected.",
+    })
 
 
 @voice_input_blueprint.route('/preload_voice_input_model', methods=['POST'])

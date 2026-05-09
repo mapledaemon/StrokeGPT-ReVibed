@@ -11,6 +11,13 @@ const HANDS_FREE_NOISE_MULTIPLIER_MIN = 1.6;
 const HANDS_FREE_NOISE_MULTIPLIER_MAX = 5.0;
 const VOICE_INPUT_NOISE_CALIBRATION_MS = 2000;
 const SLOW_ASR_WARNING_MS = 2500;
+const CUSTOM_VOICE_INPUT_MODEL = '__custom__';
+const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
+    {id: 'tiny.en', label: 'Fast - tiny.en'},
+    {id: 'base.en', label: 'Balanced - base.en'},
+    {id: 'small.en', label: 'Accurate - small.en'},
+    {id: 'distil-large-v3', label: 'Desktop/GPU - distil-large-v3'},
+];
 
 let submitVoiceTranscript = async () => {};
 let voiceInputModelLoadPromise = null;
@@ -219,6 +226,68 @@ function populateSelect(selectEl, options = [], fallbackOptions = []) {
     if ([...selectEl.options].some(option => option.value === selected)) selectEl.value = selected;
 }
 
+function populateVoiceInputModelSelect(model, options = []) {
+    if (!el.voiceInputModelSelect) return;
+    const modelOptions = (options.length ? options : FALLBACK_VOICE_INPUT_MODEL_OPTIONS);
+    el.voiceInputModelSelect.innerHTML = '';
+    modelOptions.forEach(option => {
+        const node = D.createElement('option');
+        node.value = option.id;
+        node.textContent = option.label;
+        if (option.description) node.title = option.description;
+        el.voiceInputModelSelect.appendChild(node);
+    });
+    const custom = D.createElement('option');
+    custom.value = CUSTOM_VOICE_INPUT_MODEL;
+    custom.textContent = 'Custom model...';
+    el.voiceInputModelSelect.appendChild(custom);
+    el.voiceInputModelSelect.value = modelOptions.some(option => option.id === model)
+        ? model
+        : CUSTOM_VOICE_INPUT_MODEL;
+}
+
+function syncVoiceInputModelSelectFromInput() {
+    if (!el.voiceInputModelSelect || !el.voiceInputModelInput) return;
+    const model = el.voiceInputModelInput.value.trim();
+    const option = [...el.voiceInputModelSelect.options].find(node => node.value === model);
+    el.voiceInputModelSelect.value = option ? model : CUSTOM_VOICE_INPUT_MODEL;
+}
+
+function selectedVoiceInputModel() {
+    const selected = el.voiceInputModelSelect?.value || CUSTOM_VOICE_INPUT_MODEL;
+    if (selected && selected !== CUSTOM_VOICE_INPUT_MODEL) return selected;
+    return (el.voiceInputModelInput?.value || 'tiny.en').trim() || 'tiny.en';
+}
+
+async function browseVoiceInputModelPath() {
+    if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
+        stopActiveVoiceInput('Voice input stopped because model selection changed.');
+    }
+    try {
+        voiceStatusMessage('Choose a local faster-whisper model folder...');
+        const response = await fetchWithConnectionState('/browse_voice_input_model_path', {method: 'POST'});
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+            voiceStatusMessage(payload?.message || `Model folder selection failed: HTTP ${response.status}`, 'var(--yellow)', {issue: true});
+            return;
+        }
+        if (payload?.status === 'cancelled') {
+            voiceStatusMessage(payload.message || 'No model folder selected.');
+            return;
+        }
+        const modelPath = String(payload?.model_path || '').trim();
+        if (!modelPath) {
+            voiceStatusMessage('Model folder selection did not return a path.', 'var(--yellow)', {issue: true});
+            return;
+        }
+        if (el.voiceInputModelInput) el.voiceInputModelInput.value = modelPath;
+        syncVoiceInputModelSelectFromInput();
+        voiceStatusMessage(payload.message || 'Voice input model folder selected.', 'var(--cyan)', {clearIssue: true});
+    } catch (error) {
+        voiceStatusMessage(`Model folder selection failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
+    }
+}
+
 function populateChoiceLabels(inputs, options = [], fallbackOptions = []) {
     const labelById = new Map((options.length ? options : fallbackOptions).map(option => [option.id, option.label]));
     [...inputs].forEach(input => {
@@ -371,7 +440,9 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
     setCheckedRadioValue(el.voiceInputSubmitModeInputs, state.voiceInputSubmitMode);
     updateVoiceInputTuningReadouts({fromDom: false});
-    if (el.voiceInputModelInput) el.voiceInputModelInput.value = status.model || data.voice_input_model || 'tiny.en';
+    const model = status.model || data.voice_input_model || 'tiny.en';
+    populateVoiceInputModelSelect(model, status.model_options || data.voice_input_model_options || []);
+    if (el.voiceInputModelInput) el.voiceInputModelInput.value = model;
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
         el.voiceInputStatus.textContent = status.message || 'Voice input status unavailable.';
@@ -410,7 +481,7 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         enabled: provider !== 'disabled',
         mode: getCheckedRadioValue(el.voiceInputModeInputs, 'push_to_talk'),
         submit_mode: getCheckedRadioValue(el.voiceInputSubmitModeInputs, 'preview'),
-        model: el.voiceInputModelInput?.value || 'tiny.en',
+        model: selectedVoiceInputModel(),
         language: el.voiceInputLanguageInput?.value || 'auto',
         hands_free_sensitivity: handsFreeSensitivity(),
         hands_free_silence_ms: handsFreeSilenceMs(),
@@ -854,6 +925,13 @@ export function initVoiceInputControls({sendUserMessage}) {
         state.voiceInputEnabled = event.target.value !== 'disabled';
         setVoiceButtonState();
     });
+    el.voiceInputModelSelect?.addEventListener('change', event => {
+        if (event.target.value !== CUSTOM_VOICE_INPUT_MODEL && el.voiceInputModelInput) {
+            el.voiceInputModelInput.value = event.target.value;
+        }
+    });
+    el.voiceInputModelInput?.addEventListener('input', syncVoiceInputModelSelectFromInput);
+    el.browseVoiceInputModelBtn?.addEventListener('click', browseVoiceInputModelPath);
     [
         el.voiceInputSensitivitySlider,
         el.voiceInputSilenceMsInput,

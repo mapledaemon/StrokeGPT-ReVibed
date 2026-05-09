@@ -81,6 +81,32 @@ class VoiceInputService:
             "description": "Send transcripts through the normal chat path after recognition.",
         },
     ]
+    MODEL_OPTIONS = [
+        {
+            "id": "tiny.en",
+            "label": "Fast - tiny.en",
+            "description": "Lowest latency for weak CPUs; least accurate in noise.",
+            "tier": "fast",
+        },
+        {
+            "id": "base.en",
+            "label": "Balanced - base.en",
+            "description": "Better accuracy than tiny.en while still reasonable on laptops.",
+            "tier": "balanced",
+        },
+        {
+            "id": "small.en",
+            "label": "Accurate - small.en",
+            "description": "Stronger recognition for moderate noise; higher CPU and RAM cost.",
+            "tier": "accurate",
+        },
+        {
+            "id": "distil-large-v3",
+            "label": "Desktop/GPU - distil-large-v3",
+            "description": "Higher accuracy target for faster desktops or GPU setups.",
+            "tier": "desktop",
+        },
+    ]
 
     def __init__(self, model_cache_dir=None):
         self.provider = VOICE_INPUT_PROVIDER_DISABLED
@@ -242,6 +268,7 @@ class VoiceInputService:
             "provider_options": list(self.PROVIDER_OPTIONS),
             "mode_options": list(self.MODE_OPTIONS),
             "submit_options": list(self.SUBMIT_OPTIONS),
+            "model_options": list(self.MODEL_OPTIONS),
         }
 
     def _require_ready(self):

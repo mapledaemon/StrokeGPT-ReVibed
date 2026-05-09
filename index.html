@@ -225,8 +225,19 @@
                             <button id="calibrate-voice-input-noise-btn" class="my-button" type="button" data-requires-backend>Calibrate Room Noise</button>
                         </div>
                     </fieldset>
-                    <label class="settings-field-label" for="voice-input-model-input">Recognition Model</label>
-                    <input type="text" id="voice-input-model-input" class="input-text" value="tiny.en" placeholder="faster-whisper model" data-requires-backend>
+                    <label class="settings-field-label" for="voice-input-model-select">Recognition Model Preset</label>
+                    <select id="voice-input-model-select" class="select-box" data-requires-backend>
+                        <option value="tiny.en">Fast - tiny.en</option>
+                        <option value="base.en">Balanced - base.en</option>
+                        <option value="small.en">Accurate - small.en</option>
+                        <option value="distil-large-v3">Desktop/GPU - distil-large-v3</option>
+                        <option value="__custom__">Custom model...</option>
+                    </select>
+                    <label class="settings-field-label" for="voice-input-model-input">Model ID or Folder Path</label>
+                    <div class="browse-line">
+                        <input type="text" id="voice-input-model-input" class="input-text" value="tiny.en" placeholder="tiny.en, Systran/faster-whisper-small.en, or C:\models\faster-whisper-small.en" data-requires-backend>
+                        <button id="browse-voice-input-model-btn" class="my-button" type="button" data-requires-backend>Browse Folder</button>
+                    </div>
                     <label class="settings-field-label" for="voice-input-language-input">Language</label>
                     <input type="text" id="voice-input-language-input" class="input-text" value="auto" placeholder="Language, e.g. auto or en" data-requires-backend>
                     <div id="voice-input-status" class="settings-help">Voice input is disabled.</div>

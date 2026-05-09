@@ -45,6 +45,10 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertFalse(status["echo_cancellation"])
         self.assertTrue(status["auto_gain_control"])
         self.assertEqual(status["noise_floor_rms"], 0.021)
+        self.assertIn("model_options", status)
+        self.assertIn("base.en", [option["id"] for option in status["model_options"]])
+        self.assertIn("small.en", [option["id"] for option in status["model_options"]])
+        self.assertIn("distil-large-v3", [option["id"] for option in status["model_options"]])
 
         with mock.patch.object(service, "dependency_available", return_value=True):
             status = service.status()
