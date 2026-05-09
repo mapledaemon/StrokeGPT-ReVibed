@@ -697,34 +697,47 @@ function recordingDurationMs() {
     return performance.now() - state.voiceInputRecordingStartedAt;
 }
 
-async function transcribeVoiceBlob(blob) {
+// Pure upload+transcribe helper. Returns the parsed payload on success, or
+// null if the audio blob was empty, the request failed, or the backend
+// returned a non-OK status. Surfaces user-facing error messages but does
+// NOT touch the transcript preview, auto-submit logic, or any behavior
+// that depends on what the caller wants to do with the transcript. This
+// seam exists so callers that should NOT auto-submit (e.g. a future test
+// transcription button) can reuse the network path without re-implementing
+// it. Behavior preserved for the existing transcribeVoiceBlob caller.
+async function requestVoiceTranscription(blob, filename, message) {
     state.voiceInputLastBlobBytes = blob?.size || 0;
     updateVoiceInputDiagnostics();
     if (!blob || blob.size === 0) {
         voiceStatusMessage('Recorded audio was empty. Check microphone permission and input level, then try again.', 'var(--yellow)', {issue: true});
-        return;
+        return null;
     }
-    voiceStatusMessage('Transcribing voice input...');
+    voiceStatusMessage(message || 'Transcribing voice input...');
     const formData = new FormData();
-    formData.append('audio', blob, `voice-${Date.now()}.webm`);
-    let payload = null;
+    formData.append('audio', blob, filename || `voice-${Date.now()}.webm`);
     try {
         const uploadStartedAt = performance.now();
         const response = await fetchWithConnectionState('/transcribe_voice', {method: 'POST', body: formData});
         state.voiceInputLastUploadMs = performance.now() - uploadStartedAt;
-        payload = await response.json().catch(() => null);
+        const payload = await response.json().catch(() => null);
         if (!response.ok) {
             voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice transcription failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
             if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
             else updateVoiceInputDiagnostics();
-            return;
+            return null;
         }
+        return payload;
     } catch (error) {
         state.voiceInputLastUploadMs = null;
         updateVoiceInputDiagnostics();
         voiceStatusMessage(`Voice transcription failed before the backend responded: ${error.message}`, 'var(--yellow)', {issue: true});
-        return;
+        return null;
     }
+}
+
+async function transcribeVoiceBlob(blob) {
+    const payload = await requestVoiceTranscription(blob, `voice-${Date.now()}.webm`, 'Transcribing voice input...');
+    if (!payload) return;
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
     if (!transcript) {
