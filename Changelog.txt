@@ -8,6 +8,52 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - PR #102 - Diagnose Chat-Emit / TTS-Enqueue Divergence
+-------------------------------------------------------------------
+
+Branch: claude-chat-text-missing-tts-diagnostic
+
+- Observability-only slice of the KNOWN_PROBLEMS "Local LLM Chat Text
+  Sometimes Missing While Voice Plays" rough edge. The underlying bug
+  (chat panel sometimes silently drops a message while TTS speaks the
+  same text) is not yet fixed; this branch makes the divergence loud
+  enough to triage during a reproduction.
+- `strokegpt.web.add_message_to_queue` now logs a `[WARN]` line when
+  the TTS-enqueue path runs without a matching chat-emit. Two divergence
+  shapes are detected, gated under `if generate_audio:` so chat-only
+  emits (transport-error fallback, `generate_audio=False`) never spam
+  the log:
+    1. `queue_message=False`: caller intentionally enqueued TTS without
+       queuing a chat bubble. No production caller does this today, so
+       a hit suggests a regression or a new caller that forgot the chat
+       side. Logs `[WARN] TTS enqueued without chat-emit (...)`.
+    2. Text strips to empty (using the same `re.sub(r'<[^>]+>', '', ...)`
+       sanitizer that `add_to_history` already uses): a chat bubble
+       would render blank and the front-end may visibly drop it; the
+       TTS layer ignores empty text downstream so the user hears
+       nothing either, but the divergence is still worth surfacing.
+       Logs `[WARN] TTS enqueued with empty chat text (...)`.
+- The diagnostic comment in `web.py` explicitly references the
+  KNOWN_PROBLEMS entry so the next maintainer who hits the warning can
+  find the open bug without grepping for the message body.
+- Added `tests/test_chat_tts_divergence_diagnostic.py` covering both
+  the source-level pins (the warning strings live inside
+  `add_message_to_queue`, gated under `generate_audio`, and the comment
+  references the KNOWN_PROBLEMS entry) and behavioral tests that drive
+  `add_message_to_queue` directly through the existing `WebTestCase`
+  fixture, patch `audio.generate_audio_for_text`, and capture stdout to
+  confirm the warning fires for divergence shapes and stays silent for
+  the normal `text + queue_message + generate_audio` baseline. Verified
+  the source-text tests fail when the diagnostic is reverted and pass
+  with it.
+- Updated `KNOWN_PROBLEMS.md`: the bullet asking for the diagnostic was
+  removed (it now exists), the entry stays `Open`, and a paragraph
+  describes what the diagnostic does and does not catch so the next
+  reproduction attempt knows the limits.
+- No production behavior change beyond the new log lines. Full
+  `python -m unittest discover -s tests` is green.
+
+
 2026-05-09 - Unreleased - Extract Voice Transcription Helper From Live Recorder
 --------------------------------------------------------------------------------
 
