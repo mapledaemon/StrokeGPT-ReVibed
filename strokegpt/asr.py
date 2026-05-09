@@ -4,12 +4,17 @@ import re
 import time
 
 from .settings import (
+    DEFAULT_VOICE_INPUT_BEAM_SIZE,
+    DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
     DEFAULT_VOICE_INPUT_HANDS_FREE_SENSITIVITY,
     DEFAULT_VOICE_INPUT_HANDS_FREE_SILENCE_MS,
     DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MODEL,
     DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
+    DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
+    DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
+    DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
     VOICE_INPUT_MODE_PUSH_TO_TALK,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
@@ -124,6 +129,11 @@ class VoiceInputService:
         self.echo_cancellation = True
         self.auto_gain_control = True
         self.noise_floor_rms = DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS
+        self.beam_size = DEFAULT_VOICE_INPUT_BEAM_SIZE
+        self.condition_on_previous_text = DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT
+        self.vad_threshold = DEFAULT_VOICE_INPUT_VAD_THRESHOLD
+        self.vad_min_silence_ms = DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS
+        self.vad_speech_pad_ms = DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS
         self._model = None
         self._model_key = None
         self.last_error = ""
@@ -147,6 +157,11 @@ class VoiceInputService:
         echo_cancellation=True,
         auto_gain_control=True,
         noise_floor_rms=DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
+        beam_size=DEFAULT_VOICE_INPUT_BEAM_SIZE,
+        condition_on_previous_text=DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
+        vad_threshold=DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
+        vad_min_silence_ms=DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
+        vad_speech_pad_ms=DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
     ):
         provider = provider or VOICE_INPUT_PROVIDER_DISABLED
         enabled = bool(enabled) and provider != VOICE_INPUT_PROVIDER_DISABLED
@@ -172,6 +187,11 @@ class VoiceInputService:
         self.echo_cancellation = bool(echo_cancellation)
         self.auto_gain_control = bool(auto_gain_control)
         self.noise_floor_rms = float(noise_floor_rms)
+        self.beam_size = int(beam_size)
+        self.condition_on_previous_text = bool(condition_on_previous_text)
+        self.vad_threshold = float(vad_threshold)
+        self.vad_min_silence_ms = int(vad_min_silence_ms)
+        self.vad_speech_pad_ms = int(vad_speech_pad_ms)
 
     def dependency_available(self):
         return importlib.util.find_spec("faster_whisper") is not None
@@ -255,6 +275,11 @@ class VoiceInputService:
             "echo_cancellation": self.echo_cancellation,
             "auto_gain_control": self.auto_gain_control,
             "noise_floor_rms": self.noise_floor_rms,
+            "beam_size": self.beam_size,
+            "condition_on_previous_text": self.condition_on_previous_text,
+            "vad_threshold": self.vad_threshold,
+            "vad_min_silence_ms": self.vad_min_silence_ms,
+            "vad_speech_pad_ms": self.vad_speech_pad_ms,
             "dependency_available": dependency_available,
             "model_loaded": self._model is not None,
             "model_cached": model_cached,
@@ -350,6 +375,13 @@ class VoiceInputService:
                 str(audio_path),
                 language=language,
                 vad_filter=True,
+                vad_parameters={
+                    "threshold": self.vad_threshold,
+                    "min_silence_duration_ms": self.vad_min_silence_ms,
+                    "speech_pad_ms": self.vad_speech_pad_ms,
+                },
+                beam_size=self.beam_size,
+                condition_on_previous_text=self.condition_on_previous_text,
             )
             transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
             timings["transcribe_ms"] = int((time.perf_counter() - started) * 1000)

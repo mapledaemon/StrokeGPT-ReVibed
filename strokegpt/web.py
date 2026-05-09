@@ -165,6 +165,11 @@ voice_input.configure(
     echo_cancellation=settings.voice_input_echo_cancellation,
     auto_gain_control=settings.voice_input_auto_gain_control,
     noise_floor_rms=settings.voice_input_noise_floor_rms,
+    beam_size=settings.voice_input_beam_size,
+    condition_on_previous_text=settings.voice_input_condition_on_previous_text,
+    vad_threshold=settings.voice_input_vad_threshold,
+    vad_min_silence_ms=settings.voice_input_vad_min_silence_ms,
+    vad_speech_pad_ms=settings.voice_input_vad_speech_pad_ms,
 )
 
 # In-Memory State
@@ -474,6 +479,11 @@ def apply_settings_to_services():
         echo_cancellation=settings.voice_input_echo_cancellation,
         auto_gain_control=settings.voice_input_auto_gain_control,
         noise_floor_rms=settings.voice_input_noise_floor_rms,
+        beam_size=settings.voice_input_beam_size,
+        condition_on_previous_text=settings.voice_input_condition_on_previous_text,
+        vad_threshold=settings.voice_input_vad_threshold,
+        vad_min_silence_ms=settings.voice_input_vad_min_silence_ms,
+        vad_speech_pad_ms=settings.voice_input_vad_speech_pad_ms,
     )
     audio.api_key = ""
     audio.voice_id = ""

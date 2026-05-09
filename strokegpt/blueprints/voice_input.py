@@ -94,6 +94,23 @@ def set_voice_input_route():
     noise_floor_rms = web.settings._normalize_voice_input_noise_floor_rms(
         data.get("noise_floor_rms", web.settings.voice_input_noise_floor_rms)
     )
+    beam_size = web.settings._normalize_voice_input_beam_size(
+        data.get("beam_size", web.settings.voice_input_beam_size)
+    )
+    condition_on_previous_text = web._request_bool_value(
+        data,
+        "condition_on_previous_text",
+        web.settings.voice_input_condition_on_previous_text,
+    )
+    vad_threshold = web.settings._normalize_voice_input_vad_threshold(
+        data.get("vad_threshold", web.settings.voice_input_vad_threshold)
+    )
+    vad_min_silence_ms = web.settings._normalize_voice_input_vad_min_silence_ms(
+        data.get("vad_min_silence_ms", web.settings.voice_input_vad_min_silence_ms)
+    )
+    vad_speech_pad_ms = web.settings._normalize_voice_input_vad_speech_pad_ms(
+        data.get("vad_speech_pad_ms", web.settings.voice_input_vad_speech_pad_ms)
+    )
 
     web.settings.voice_input_provider = provider
     web.settings.voice_input_enabled = enabled
@@ -110,6 +127,11 @@ def set_voice_input_route():
     web.settings.voice_input_echo_cancellation = echo_cancellation
     web.settings.voice_input_auto_gain_control = auto_gain_control
     web.settings.voice_input_noise_floor_rms = noise_floor_rms
+    web.settings.voice_input_beam_size = beam_size
+    web.settings.voice_input_condition_on_previous_text = condition_on_previous_text
+    web.settings.voice_input_vad_threshold = vad_threshold
+    web.settings.voice_input_vad_min_silence_ms = vad_min_silence_ms
+    web.settings.voice_input_vad_speech_pad_ms = vad_speech_pad_ms
     web.voice_input.configure(
         provider=provider,
         enabled=enabled,
@@ -125,6 +147,11 @@ def set_voice_input_route():
         echo_cancellation=echo_cancellation,
         auto_gain_control=auto_gain_control,
         noise_floor_rms=noise_floor_rms,
+        beam_size=beam_size,
+        condition_on_previous_text=condition_on_previous_text,
+        vad_threshold=vad_threshold,
+        vad_min_silence_ms=vad_min_silence_ms,
+        vad_speech_pad_ms=vad_speech_pad_ms,
     )
     web.settings.save()
     return jsonify(_voice_input_payload(web))

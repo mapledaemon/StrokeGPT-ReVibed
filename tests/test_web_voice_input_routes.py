@@ -30,6 +30,11 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("echo_cancellation", data["voice_input_status"])
             self.assertIn("auto_gain_control", data["voice_input_status"])
             self.assertIn("noise_floor_rms", data["voice_input_status"])
+            self.assertIn("beam_size", data["voice_input_status"])
+            self.assertIn("condition_on_previous_text", data["voice_input_status"])
+            self.assertIn("vad_threshold", data["voice_input_status"])
+            self.assertIn("vad_min_silence_ms", data["voice_input_status"])
+            self.assertIn("vad_speech_pad_ms", data["voice_input_status"])
             self.assertIn("model_cached", data["voice_input_status"])
             self.assertIn("load_requires_download", data["voice_input_status"])
             model_cache_dir = data["voice_input_status"]["model_cache_dir"]
@@ -60,6 +65,11 @@ class WebVoiceInputRouteTests(WebTestCase):
                 "echo_cancellation": False,
                 "auto_gain_control": True,
                 "noise_floor_rms": 0.0234,
+                "beam_size": 4,
+                "condition_on_previous_text": True,
+                "vad_threshold": 0.38,
+                "vad_min_silence_ms": 650,
+                "vad_speech_pad_ms": 300,
             })
 
             self.assertEqual(response.status_code, 200)
@@ -78,6 +88,11 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertFalse(settings.voice_input_echo_cancellation)
             self.assertTrue(settings.voice_input_auto_gain_control)
             self.assertEqual(settings.voice_input_noise_floor_rms, 0.0234)
+            self.assertEqual(settings.voice_input_beam_size, 4)
+            self.assertTrue(settings.voice_input_condition_on_previous_text)
+            self.assertEqual(settings.voice_input_vad_threshold, 0.38)
+            self.assertEqual(settings.voice_input_vad_min_silence_ms, 650)
+            self.assertEqual(settings.voice_input_vad_speech_pad_ms, 300)
             self.assertEqual(voice_input.provider, "local_faster_whisper")
             self.assertEqual(voice_input.mode, "hands_free")
             self.assertEqual(voice_input.submit_mode, "auto_submit")
@@ -89,10 +104,20 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertFalse(voice_input.echo_cancellation)
             self.assertTrue(voice_input.auto_gain_control)
             self.assertEqual(voice_input.noise_floor_rms, 0.0234)
+            self.assertEqual(voice_input.beam_size, 4)
+            self.assertTrue(voice_input.condition_on_previous_text)
+            self.assertEqual(voice_input.vad_threshold, 0.38)
+            self.assertEqual(voice_input.vad_min_silence_ms, 650)
+            self.assertEqual(voice_input.vad_speech_pad_ms, 300)
             self.assertEqual(data["provider"], "local_faster_whisper")
             self.assertEqual(data["hands_free_sensitivity"], 82)
             self.assertFalse(data["noise_suppression"])
             self.assertEqual(data["noise_floor_rms"], 0.0234)
+            self.assertEqual(data["beam_size"], 4)
+            self.assertTrue(data["condition_on_previous_text"])
+            self.assertEqual(data["vad_threshold"], 0.38)
+            self.assertEqual(data["vad_min_silence_ms"], 650)
+            self.assertEqual(data["vad_speech_pad_ms"], 300)
         finally:
             settings.apply_dict(original)
             settings.save()

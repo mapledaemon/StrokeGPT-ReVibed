@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-08 - PR #99 - Add Voice Input ASR Tuning
+------------------------------------------------
+
+Branch: codex/voice-input-asr-tuning
+
+- Added persisted Settings > Voice recognition tuning controls for
+  faster-whisper beam size, previous transcript context, VAD threshold,
+  VAD silence duration, and speech padding.
+- Published the tuning values through voice-input status and settings
+  payloads, then passed them into faster-whisper transcription calls.
+- Updated voice-input diagnostics and backend/frontend tests for the new
+  recognition tuning contract.
+
+
 2026-05-08 - PR #98 - Add Voice Input Model Presets
 ----------------------------------------------------
 
