@@ -1,0 +1,7 @@
+{
+  "name": "strokegpt-revibed",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "comment": "ESM marker only. The repo intentionally has no npm dependencies and no build step. This file exists so Node (when present) treats static/js/*.js as ES modules, matching how the browser loads them via <script type=\"module\">. Without this, the Backlog #13 frontend behavioral test runner (tests/test_frontend_runtime.py) cannot import the production browser modules. See AGENTS.md > Frontend Behavioral Tests."
+}
