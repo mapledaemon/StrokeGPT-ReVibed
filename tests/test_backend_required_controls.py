@@ -145,6 +145,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "voice-input-echo-cancellation-checkbox",
             "voice-input-auto-gain-checkbox",
             "calibrate-voice-input-noise-btn",
+            "voice-input-model-select",
+            "browse-voice-input-model-btn",
             "save-voice-input-btn",
             "download-voice-input-model-btn",
         ]
@@ -172,6 +174,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
         self.assertIn("fetchWithConnectionState('/transcribe_voice'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState('/set_voice_input'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState('/preload_voice_input_model'", self.voice_input_js)
+        self.assertIn("fetchWithConnectionState('/browse_voice_input_model_path'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState(endpoint, options)", self.motion_control_js)
         self.assertIn("fetchWithConnectionState('/import_motion_pattern'", self.motion_control_js)
 
