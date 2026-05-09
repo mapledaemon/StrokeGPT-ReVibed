@@ -182,6 +182,7 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Flask's default static route is disabled; static files are served explicitly from the project `static/` folder.
 - Local Chatterbox WAV output is encoded with the Python `wave` module to avoid `torchaudio.save` / TorchCodec issues.
 - Local Chatterbox defaults to the Turbo engine when available, reports Torch/CUDA status in the Voice tab, and splits long replies into smaller audio chunks. Do not preload/download Chatterbox weights automatically; the Voice tab has an explicit download/load button because first use may download several GB.
+- Settings > Voice should not keep growing as a tuning console. Treat the current voice-input knobs as instrumentation until real microphone testing proves which defaults and recovery controls users need; routine UI should stay smaller than the backend's available ASR/browser-capture parameters.
 - The Model tab reports Ollama availability and has an explicit download button for selected or typed Ollama models. Do not hide large model downloads in startup code.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 - Before pushing a PR, provide a local PowerShell validation script for the
@@ -254,14 +255,17 @@ keeps it out of `node:test`'s default discovery.
 
 Guidance for picking a test style:
 
-- **Source-text** when you only need to pin the shape of a fix (a string,
-  an export name, a function declaration order, a regex match against the
-  module body). Cheap to write, runs everywhere.
+- **Source-text** when you need to pin static structure: an export name,
+  compatibility re-export, route/markup presence, or a module-boundary
+  invariant. Avoid source-text assertions for behavior merely because they are
+  cheap; substring checks for branch shape are brittle once a runtime test can
+  call the production module.
 - **Behavioral** when the bug is a state-machine or DOM-mutation
-  regression that source-text cannot catch (e.g. "after stop, the next
-  log entry must render at the frozen elapsed timecode, not 00:00").
-  Behavioral tests skip cleanly when Node is not available, so they are
-  not a hard dependency for contributors with Python-only environments.
+  regression, async handler outcome, or user-visible status change (e.g.
+  "after stop, the next log entry must render at the frozen elapsed timecode,
+  not 00:00"). Behavioral tests skip cleanly when Node is not available, so
+  they are not a hard dependency for contributors with Python-only
+  environments.
 - Do not bulk-port existing source-text tests to behavioral tests. Port
   one when a future bug retests the same surface and a runtime assertion
   would have caught it.
@@ -294,7 +298,9 @@ Current Up Next targets are:
    legacy bridges frozen. The `strokegpt.web` runtime-state bridge is now
    guarded by `tests/test_web_bridge_guardrails.py` and the `payloads.*`
    binding surface by `tests/test_web_payload_guardrails.py`; extend either
-   allowlist only when intentionally adding new compatibility coverage.
+   allowlist only when intentionally adding new compatibility coverage. Do not
+   defend the `strokegpt.web` AppState bridge indefinitely if no external
+   consumers still need it.
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.

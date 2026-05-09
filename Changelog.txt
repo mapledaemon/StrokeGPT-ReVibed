@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - PR #107 - Plan Critical Review Follow-Ups
+-------------------------------------------------------
+
+- Added planning guidance from a fresh architecture/product review:
+  simplify the Settings > Voice surface, keep ASR internals out of the
+  default user path unless real microphone testing proves they are needed,
+  and stop adding voice-input knobs before defaults are validated.
+- Added known-problems entries for the overexposed voice-input tuning
+  surface and the implicit single-active-browser-session runtime model.
+- Tightened frontend test guidance so source-text tests stay focused on
+  static/export/compatibility contracts while behavior changes use the
+  Node-driven frontend runtime when practical.
+- Updated roadmap guidance around the `strokegpt.web` AppState bridge,
+  backend failure feedback, and local-only runtime assumptions so future
+  work has explicit decision points instead of indefinite compatibility
+  preservation.
+
+
 2026-05-09 - PR #106 - Extend reportSaveFailure To Motion + Audio Handlers
 ---------------------------------------------------------------------------
 

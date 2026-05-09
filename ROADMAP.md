@@ -108,6 +108,11 @@ Adapter audit findings:
   allowlist so new payload work has to extend `strokegpt.payloads` instead
   of growing a new `web.*` wrapper. Extend either allowlist only when
   intentionally adding new compatibility-bridge or service-binding coverage.
+- Do not preserve the `strokegpt.web` `AppState` bridge indefinitely by
+  default. Before expanding bridge coverage, confirm whether any external
+  consumer still imports or writes `strokegpt.web.<AppState-field>`; if not,
+  plan a clean removal path instead of defending the bridge only because guard
+  tests exist.
 - Audit code that translates between app-specific schemas, LLM JSON, pattern
   actions, UI payloads, and Handy API calls. Delete redundant wrappers only
   when they do not enforce validation, migration, user limits, smoothing, or
@@ -327,6 +332,16 @@ a clean tree first.
   into focused modules. Do the voice-generation refactor after the chat/UI
   refactor so TTS cutoffs and text/voice mismatch bugs can be separated from
   chat-pipeline bugs first.
+- Treat frontend source-text tests as static contract coverage, not behavioral
+  proof. When a future bug depends on DOM mutation, state transitions, or
+  handler outcomes, prefer a `tests/js/*.test.mjs` behavioral test and avoid
+  adding new substring pins for branch shape unless the assertion is truly
+  about an export, compatibility boundary, or markup invariant.
+- Keep the local runtime assumption explicit: one trusted local operator, one
+  active browser session, one Handy controller, and one shared settings file.
+  Do not introduce multi-user/session architecture without a deliberate product
+  decision; document the assumption and only add a tab warning if real use
+  shows confusion.
 - Pattern-library lazy-load parking lot: defer lazy-loading the JSON pattern
   library and prepared-action cache until pattern count grows enough to justify
   it; the cache exists, but eager loading is still simpler and cheap at the
@@ -399,7 +414,12 @@ setup console.
   supports a clear warning, limit, and fallback path.
 - Double-check frontend modules against backend save routes so settings
   changes show clear success/failure states and do not fail silently when
-  the tab stays open after the app shuts down.
+  the tab stays open after the app shuts down. Keep the user-facing failure
+  model simple: persistent red banner for network/backend loss, one inline
+  status near the affected control for reachable-but-rejected writes, and
+  handler-specific treatment for action endpoints that already have mode,
+  chat, or toast feedback. Do not mechanically add more yellow status text
+  if it produces duplicate or conflicting messages.
 - Tighten spacing in the right-side/collapsible UI, settings panels, and
   compact control rows so new diagnostics, reconnect, pause/resume, and
   mode buttons fit without adding unnecessary boundaries or dead space.
@@ -503,30 +523,35 @@ licensing, scope, and architecture review before implementation.
 
 Why later: PR #89 landed the provider-neutral service, browser
 `MediaRecorder` capture, faster-whisper transcription route, explicit
-model-load action, transcript preview, and initial hands-free mode. The
-remaining work is reliability and ergonomics: voice control has to feel
-hands-free without bypassing the existing chat, motion, and stop safety paths.
+model-load action, transcript preview, and initial hands-free mode. Follow-up
+PRs added useful diagnostics and tuning, but the Settings > Voice surface now
+exposes too many implementation knobs as normal user choices. The remaining
+work is reliability and ergonomics: validate real defaults, simplify the
+routine UI, and keep voice control flowing through the existing chat, motion,
+and stop safety paths.
 
 - Verify push-to-talk and hands-free recognition with real microphones on a
   slow Windows laptop and a faster desktop, including empty/noisy clips,
   short commands, and longer natural-language movement requests.
-- Use the persisted hands-free tuning controls during real microphone testing
-  to find good defaults for sensitivity, silence timeout, minimum clip length,
-  and maximum clip length on slow laptops and faster desktops.
-- Use the persisted browser microphone processing controls and room-noise
-  calibration during noisy-room testing so hands-free detection can compare
-  speech against the user's actual input floor instead of a hard-coded RMS
-  threshold.
+- Use the current hands-free, browser microphone, room-noise, and ASR tuning
+  controls during real microphone testing as instrumentation first. Promote
+  only the controls that users actually need during normal operation; move the
+  rest behind advanced diagnostics or remove them from the default Settings >
+  Voice path.
+- Simplify the default Voice tab around provider, recording mode, transcript
+  handling, model preset, language, and one clear calibration/sensitivity path.
+  Do not keep beam size, condition-previous, VAD threshold, VAD silence, VAD
+  padding, and raw noise-floor values visible as routine settings unless the
+  real-mic baseline proves they are necessary recovery tools.
 - Use the faster-whisper model presets during recognition testing:
   `tiny.en` for lowest latency, `base.en` as the first balanced laptop target,
   `small.en` for better noise tolerance, and `distil-large-v3` for faster
   desktops or GPU setups. Keep the custom model field available for converted
   or externally hosted compatible models, and use the local folder picker for
   converted CTranslate2 model directories.
-- Use the persisted recognition tuning controls during noisy-room and
-  latency testing: beam size, previous transcript context, VAD threshold,
-  VAD silence duration, and VAD speech padding should be adjusted against the
-  same real microphone clips before adding another ASR provider.
+- Do not add another voice-input tuning knob or ASR provider until the current
+  faster-whisper defaults have been tested against the same real microphone
+  clips and the visible settings surface has been simplified.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible
