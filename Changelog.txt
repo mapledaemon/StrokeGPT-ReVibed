@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #125 - Explicit Start Auto Mode Route
+-----------------------------------------------------
+
+Branch: codex/start-auto-mode-route
+
+- Added `/start_auto_mode` so the Start Auto sidebar control uses the same
+  explicit mode-start route pattern as Edge, Milk, and Freestyle instead of
+  sending the chat text `take over`.
+- Wired the Start Auto button to the direct route, updating the active-mode
+  timer/status chips immediately on success and preserving normal backend
+  rejection feedback on failure.
+- Removed the stale `Message failed: auto_started` roadmap item; chat action
+  statuses already have behavioral coverage and Auto now has a direct UI start
+  path.
+
+
 2026-05-10 - PR #124 - Top Bar Mode Status Chips
 ------------------------------------------------
 

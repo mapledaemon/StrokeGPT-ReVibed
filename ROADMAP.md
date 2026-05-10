@@ -40,9 +40,6 @@ mode controls still have rough edges that block daily use.
   Auto-to-Freestyle no-action case as the current major reliability bug
   cluster. Reproduce the cases where the motion indicator advances but the
   device does not move before tuning planner behavior.
-- Reproduce and classify `Message failed: auto_started` so the UI can show a
-  meaningful mode-start failure instead of leaving the user to infer what
-  happened.
 - Validate the active-mode elapsed timer and detached vertical
   recent-sequence log across Auto, Edge, Milk, Freestyle, and mode
   transitions, and tune the displayed timing/label detail if on-device

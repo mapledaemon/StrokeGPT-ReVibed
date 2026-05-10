@@ -1004,6 +1004,19 @@ async function dislikeLastMove() {
     }
 }
 
+async function startAutoMode() {
+    el.statusText.textContent = 'Starting Auto mode...';
+    const data = await apiCall('/start_auto_mode', {method: 'POST'});
+    if (data && data.status === 'auto_started') {
+        el.statusText.textContent = 'Auto mode started.';
+        if (el.imCloseBtn) el.imCloseBtn.style.display = 'none';
+        updatePauseResumeUi(false);
+        updateActiveModeTimer('auto', 0, false);
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start Auto mode.');
+    }
+}
+
 async function startEdgingMode() {
     el.statusText.textContent = 'Starting edging mode...';
     const data = await apiCall('/start_edging_mode', {method: 'POST'});
@@ -1115,7 +1128,7 @@ export function initMotionControls({sendUserMessage}) {
     el.settingsTabs.forEach(tab => {
         if (tab.dataset.settingsTab === 'motion') tab.addEventListener('click', refreshMotionPatterns);
     });
-    D.getElementById('start-auto-btn').addEventListener('click', () => sendUserMessage('take over'));
+    D.getElementById('start-auto-btn').addEventListener('click', startAutoMode);
     D.getElementById('milking-mode-btn').addEventListener('click', startMilkingMode);
     updateMotionTrainingStatus();
     updateMotionTrainingEditButtons();

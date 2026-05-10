@@ -183,6 +183,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - When Auto, Edge, or Milk mode is active, motion feedback from chat should be
   queued into the active mode planner and wake the mode loop. Do not apply it as
   a one-off command that the next scripted mode step can immediately overwrite.
+- Visible preset-mode buttons should start modes through explicit
+  `/start_*_mode` routes. Do not route sidebar mode starts through chat text
+  just to reuse natural-language intent parsing.
 - Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
 - Browser UI code is split by behavior under `static/js/`. Keep new frontend
@@ -302,9 +305,9 @@ branch, remove any roadmap item that has already landed and is covered in
 Current Up Next targets are:
 
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
-   diagnostics on-device, reproduce regular Freestyle stops, classify
-   `Message failed: auto_started`, fix Auto-to-Freestyle no-action cases, and
-   verify Pause/Resume and hotkey behavior on real hardware.
+   diagnostics on-device, reproduce regular Freestyle stops, fix
+   Auto-to-Freestyle no-action cases, and verify Pause/Resume and hotkey
+   behavior on real hardware.
 2. Adapter Boundary Guardrails And Translation Audit: PRs #48-#75 paid down
    most compatibility shims; preserve real schema/safety adapters and keep
    legacy bridges frozen. The `strokegpt.web` runtime-state bridge is now

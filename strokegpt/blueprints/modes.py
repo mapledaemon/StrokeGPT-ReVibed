@@ -63,6 +63,13 @@ def set_mode_timings_route():
     })
 
 
+@modes_blueprint.route('/start_auto_mode', methods=['POST'])
+def start_auto_route():
+    web = _web()
+    web.start_background_mode(web.auto_mode_logic, "Okay, I'll take over...", mode_name='auto')
+    return jsonify({"status": "auto_started"})
+
+
 @modes_blueprint.route('/start_edging_mode', methods=['POST'])
 def start_edging_route():
     web = _web()
