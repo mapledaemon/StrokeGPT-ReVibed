@@ -1,4 +1,4 @@
-import { D, apiCall, el, state } from './context.js';
+import { D, apiCall, el, setStatusMessage, state } from './context.js';
 import { playQueuedAudio } from './audio.js';
 
 function appendPlainMessageText(parent, text) {
@@ -97,6 +97,17 @@ function clearTypingIndicator(statusMessage = '') {
 function handleSendMessageStatus(data) {
     if (!data) {
         clearTypingIndicator('Message failed before the model could answer. Check the app terminal.');
+        return false;
+    }
+
+    if (data.status === 'model_error') {
+        clearTypingIndicator();
+        setStatusMessage(
+            el.statusText,
+            data.message || 'Model request failed. Check Ollama status and try again.',
+            'error',
+        );
+        if (data.chat) addChatMessage('BOT', data.chat, {forceScroll: true});
         return false;
     }
 

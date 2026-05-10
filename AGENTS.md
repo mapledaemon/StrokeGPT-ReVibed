@@ -192,6 +192,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   browser when the response includes `chat` plus `chat_queued: true`; the next
   `/get_updates` poll skips the matching queued echo so audio readiness can
   still be polled without duplicating the message.
+- Local model transport failures from `/send_message` return
+  `status: model_error` with `chat_queued: false`. Render them as system/error
+  messages in the initiating browser only; do not queue them as assistant
+  dialogue, feed them into chat history, generate TTS, decrement persona-turn
+  counters, or apply motion.
 - Backend-failure feedback uses `setStatusMessage()` plus
   `reportSaveFailure()`: network/backend loss and HTTP errors are global error
   states, while reachable route rejections get one local warning near the

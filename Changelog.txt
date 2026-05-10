@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #128 - Model Error Chat Boundary Cleanup
+--------------------------------------------------------
+
+Branch: codex/model-error-chat-boundary
+
+- Made `/send_message` return explicit `model_error` responses for local LLM
+  transport failures instead of reporting them as normal `ok` assistant
+  replies.
+- Kept model transport failures out of the queued chat update stream, chat
+  history, TTS generation, persona-turn countdown, and motion application so
+  they remain system/error events rather than assistant dialogue.
+- Rendered model transport failures directly in the initiating browser as
+  `MODEL ERROR` chat bubbles with a global error status tone, without polling
+  `/get_updates` for an echo that is no longer queued.
+
+
 2026-05-10 - PR #127 - Backend Failure Status Tone Cleanup
 ----------------------------------------------------------
 

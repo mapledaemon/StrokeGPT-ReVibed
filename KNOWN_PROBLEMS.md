@@ -134,16 +134,22 @@ a matching chat-emit (either `queue_message=False` or text that strips to
 empty). That still gives a backend signal if a future caller sends voice
 without a visible chat emit.
 
+Local model transport failures now return a direct `model_error` response to
+the initiating browser instead of entering the queued assistant-message path.
+The front end renders those as `MODEL ERROR` bubbles with an error status tone,
+and the backend keeps them out of chat history, TTS, persona-turn countdowns,
+and motion application.
+
 Follow-up work:
 
 - Verify the chat-emit path runs in lockstep with the TTS-enqueue path for both
   streamed and non-streamed Ollama responses. The current fix covers the
   non-streamed `/send_message` response path; future streaming work should keep
   the same "render once, play once" contract.
-- Confirm the front-end chat panel is not silently dropping messages when a
-  prior message is mid-render or while a mode transition is updating the status
-  strip. Pair the next reproduction attempt with the backend warning so both
-  sides can be compared.
+- Confirm the front-end chat panel is not silently dropping ordinary assistant
+  messages when a prior message is mid-render or while a mode transition is
+  updating the status strip. Pair the next reproduction attempt with the
+  backend warning so both sides can be compared.
 
 ## Web UI Stays Functional After Backend Shutdown
 
