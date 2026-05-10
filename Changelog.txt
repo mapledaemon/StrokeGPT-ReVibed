@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Chat Latest Jump Affordance
-----------------------------------------
+2026-05-10 - PR #138 - Chat Latest Jump Affordance
+---------------------------------------------------
 
 Branch: codex/chat-latest-focus-affordance
 
