@@ -237,8 +237,9 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 - Continue investigating provider-specific or rapid-mode TTS cutoffs after the
   local Chatterbox WAV encoder's trailing silence cushion has been validated
   during real playback.
-- Keep markdown/code rendering opt-in and predictable; do not regress
-  copy/paste, scrollback, or screen-reader behavior while restyling.
+- Keep markdown/code rendering opt-in and predictable after the first fenced
+  code-block slice; do not regress copy/paste, scrollback, or screen-reader
+  behavior while restyling.
 - Preserve the existing chat-driven motion contract (chat-driven
   Pause/Resume, chat edge-blocking, motion-target language) while moving
   the visible surface into the new layout.

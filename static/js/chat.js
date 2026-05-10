@@ -11,13 +11,13 @@ function appendPlainMessageText(parent, text) {
 
 export function appendMessageText(parent, text) {
     const raw = String(text || '');
-    const prePattern = /<pre>([\s\S]*?)<\/pre>/gi;
+    const prePattern = /<pre>([\s\S]*?)<\/pre>|```[^\r\n`]*(?:\r?\n)([\s\S]*?)```/gi;
     let cursor = 0;
     let match;
     while ((match = prePattern.exec(raw)) !== null) {
         appendPlainMessageText(parent, raw.slice(cursor, match.index));
         const pre = D.createElement('pre');
-        pre.textContent = match[1];
+        pre.textContent = match[1] ?? match[2];
         parent.appendChild(pre);
         cursor = prePattern.lastIndex;
     }
