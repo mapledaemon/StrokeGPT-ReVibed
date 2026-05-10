@@ -631,6 +631,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("no_key_set", script)
         self.assertIn("message_relayed_to_active_mode", script)
         self.assertIn("addChatMessage('BOT', data.chat, {forceScroll: true})", script)
+        self.assertIn("state.pendingQueuedBotEcho = String(data.chat)", script)
         self.assertIn("data.chat_queued !== true", script)
         self.assertIn("data.chat_queued === true", script)
         self.assertIn("data.chat_queued === false", script)
@@ -651,7 +652,9 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("el.jumpToLatestBtn.addEventListener('click'", script)
         self.assertIn("el.chatView.addEventListener('scroll', updateJumpToLatestVisibility, {passive: true})", script)
         self.assertIn("addChatMessage('YOU', message, {forceScroll: true})", script)
-        self.assertIn("data.messages.forEach(msg => addChatMessage('BOT', msg))", script)
+        self.assertIn("let skippedQueuedEcho = false", script)
+        self.assertIn("msg === state.pendingQueuedBotEcho", script)
+        self.assertIn("state.pendingQueuedBotEcho = ''", script)
 
     def test_frontend_js_blocks_chat_when_ollama_is_unavailable(self):
         script = self.frontend_scripts()

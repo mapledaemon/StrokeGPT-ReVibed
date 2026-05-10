@@ -112,7 +112,7 @@ Follow-up work:
 
 ## Local LLM Chat Text Sometimes Missing While Voice Plays
 
-Status: Open
+Status: Partial / Watch
 
 The local LLM occasionally emits a reply that the TTS path speaks normally while
 the chat panel never displays the matching text. The voice model receives the
@@ -120,24 +120,30 @@ message even though the user-facing transcript is missing the line, so the
 divergence appears to be between the chat-emit path and the TTS-enqueue path
 rather than a model failure.
 
+The initiating browser now renders the `chat` text returned by `/send_message`
+immediately when the backend also reports `chat_queued: true`, then skips the
+matching queued echo from the next `/get_updates` response. That removes the
+known queue-drain race where the reply was spoken and returned to the caller,
+but the caller waited for a later update poll that another tab could consume
+first.
+
 A backend diagnostic now logs `[WARN] TTS enqueued without chat-emit ...` or
 `[WARN] TTS enqueued with empty chat text ...` from
 `strokegpt.web.add_message_to_queue` whenever the TTS-enqueue path runs without
 a matching chat-emit (either `queue_message=False` or text that strips to
-empty). That gives a backend signal to confirm a reproduction, but does not
-yet explain or fix the user-visible drop.
+empty). That still gives a backend signal if a future caller sends voice
+without a visible chat emit.
 
 Follow-up work:
 
 - Verify the chat-emit path runs in lockstep with the TTS-enqueue path for both
-  streamed and non-streamed Ollama responses. The current diagnostic only
-  catches the `add_message_to_queue` divergence shapes; if the divergence
-  happens later (e.g. `messages_for_ui` drained by `/get_updates` while the
-  frontend is mid-render), the warning will not fire.
+  streamed and non-streamed Ollama responses. The current fix covers the
+  non-streamed `/send_message` response path; future streaming work should keep
+  the same "render once, play once" contract.
 - Confirm the front-end chat panel is not silently dropping messages when a
-  prior message is mid-render or while a mode transition is updating the
-  status strip. Pair the next reproduction attempt with the new backend
-  warning so both sides can be compared.
+  prior message is mid-render or while a mode transition is updating the status
+  strip. Pair the next reproduction attempt with the backend warning so both
+  sides can be compared.
 
 ## Web UI Stays Functional After Backend Shutdown
 
@@ -174,19 +180,17 @@ Remaining watch work:
 
 ## Single Active Browser Session Assumption
 
-Status: Open / Documentation Gap
+Status: Documented / Watch
 
 The runtime is designed as one local Flask process controlling one Handy with
 one shared `AppState`, one `messages_for_ui` queue, one audio output queue, one
 settings file, and one active mode controller. That matches the local-machine
-product shape, but it is not called out clearly enough for users: multiple
-browser tabs can drain the same update queue, race status messages, and control
-the same device/settings surface.
+product shape. The README now calls the app a single-operator local controller
+and the Troubleshooting section tells users to keep one active browser tab
+while controlling hardware.
 
 Follow-up work:
 
-- Document the app as a single trusted local operator / single active browser
-  session controller.
 - Avoid multi-user/session architecture unless the project direction changes;
   the near-term fix is expectation-setting, not auth or per-session state.
 - If repeated multi-tab confusion is observed, show a small in-app warning

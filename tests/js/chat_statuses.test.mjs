@@ -29,6 +29,17 @@ function jsonResponse(httpStatus, body) {
     return factory();
 }
 
+function collectText(node) {
+    if (!node || typeof node !== 'object') return '';
+    let text = node.textContent || '';
+    for (const child of node.children || []) text += collectText(child);
+    return text;
+}
+
+function occurrenceCount(text, needle) {
+    return String(text).split(needle).length - 1;
+}
+
 describe('chat action statuses', () => {
     let originalFetch;
     let originalQuerySelector;
@@ -57,6 +68,7 @@ describe('chat action statuses', () => {
         state.myPersonaDescription = '';
         state.aiName = 'BOT';
         state.connectionLost = false;
+        state.pendingQueuedBotEcho = '';
     });
 
     afterEach(() => {
@@ -113,6 +125,31 @@ describe('chat action statuses', () => {
             getStubElement('status-text').textContent,
             'Auto accepted but waiting for the next tick.',
         );
+    });
+
+    it('renders queued ok chat from the send response and skips the matching update echo', async () => {
+        const calls = [];
+        globalThis.fetch = async endpoint => {
+            calls.push(endpoint);
+            if (endpoint === '/send_message') return jsonResponse(200, {
+                status: 'ok',
+                chat: 'Visible assistant reply.',
+                chat_queued: true,
+            });
+            if (endpoint === '/get_updates') return jsonResponse(200, {
+                messages: ['Visible assistant reply.', 'Background mode note.'],
+            });
+            return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
+        };
+
+        const result = await sendUserMessage('hello');
+        const chatText = collectText(getStubElement('chat-messages-container'));
+
+        assert.strictEqual(result.handled, true);
+        assert.deepStrictEqual(calls, ['/send_message', '/get_updates']);
+        assert.strictEqual(occurrenceCount(chatText, 'Visible assistant reply.'), 1);
+        assert.strictEqual(occurrenceCount(chatText, 'Background mode note.'), 1);
+        assert.strictEqual(state.pendingQueuedBotEcho, '');
     });
 
     it('does not poll updates for unhandled failure statuses', async () => {

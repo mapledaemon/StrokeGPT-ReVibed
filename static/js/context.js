@@ -263,6 +263,7 @@ export const state = {
     voiceInputPendingTranscript: '',
     systemPromptsLoadedOnce: false,
     chatModelBlockedMessage: '',
+    pendingQueuedBotEcho: '',
     motionPatterns: [],
     motionTraining: {state: 'idle', pattern_id: '', pattern_name: ''},
     motionTrainingSelectedPatternId: '',

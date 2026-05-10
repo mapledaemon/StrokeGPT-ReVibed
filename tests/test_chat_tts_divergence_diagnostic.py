@@ -1,4 +1,4 @@
-"""Pin the chat-emit / TTS-enqueue divergence diagnostic.
+"""Exercise the chat-emit / TTS-enqueue divergence diagnostic.
 
 Spec (KNOWN_PROBLEMS.md "Local LLM Chat Text Sometimes Missing While Voice
 Plays"): when a TTS payload is enqueued without a matching chat-emit (or
@@ -8,57 +8,18 @@ the user-visible divergence is hard to reproduce. The diagnostic in
 divergence shapes so a reproduction attempt can be confirmed from the
 backend log without needing to instrument the frontend.
 
-This branch only adds OBSERVABILITY. The underlying bug (chat panel
-silently dropping a message that TTS speaks) stays open in
-KNOWN_PROBLEMS; the diagnostic just makes hitting it loud enough to triage.
+The first slice added OBSERVABILITY. The frontend now also renders normal
+``/send_message`` replies directly from the response and skips the queued echo
+on the next update poll, while this diagnostic remains for future callers that
+try to enqueue TTS without a visible chat emit.
 """
 
 import io
-import re
 import unittest
 from contextlib import redirect_stdout
-from pathlib import Path
 from unittest import mock
 
 from tests._web_support import WebTestCase
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-WEB_PY = PROJECT_ROOT / "strokegpt" / "web.py"
-
-
-class ChatTtsDivergenceSourceTests(unittest.TestCase):
-    """Source-level pins so the diagnostic cannot be silently removed."""
-
-    def setUp(self):
-        self.source = WEB_PY.read_text(encoding="utf-8")
-
-    def test_diagnostic_warnings_are_present_in_add_message_to_queue(self):
-        # Both warning strings live inside add_message_to_queue.
-        match = re.search(
-            r"def add_message_to_queue\([^)]*\):(?P<body>.*?)\n(?=def |\Z)",
-            self.source,
-            flags=re.DOTALL,
-        )
-        self.assertIsNotNone(match, "add_message_to_queue function definition not found")
-        body = match.group("body")
-        self.assertIn("TTS enqueued without chat-emit", body)
-        self.assertIn("TTS enqueued with empty chat text", body)
-        # Diagnostic must run inside the generate_audio gate so it cannot
-        # spam logs for chat-only ``add_message_to_queue`` calls (e.g. the
-        # transport-error fallback that sets generate_audio=False).
-        gate = body.find("if generate_audio:")
-        self.assertGreater(gate, 0, "generate_audio gate not found")
-        for marker in ("TTS enqueued without chat-emit", "TTS enqueued with empty chat text"):
-            self.assertGreater(body.find(marker), gate, f"{marker!r} must live under the generate_audio gate")
-
-    def test_diagnostic_references_known_problems_entry(self):
-        # The comment must explicitly reference the KNOWN_PROBLEMS entry so
-        # the next maintainer can find it without grepping for the warning.
-        self.assertIn(
-            'Local LLM Chat Text Sometimes Missing While Voice Plays',
-            self.source,
-        )
 
 
 class ChatTtsDivergenceBehavioralTests(WebTestCase):
