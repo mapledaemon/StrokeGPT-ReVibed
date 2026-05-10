@@ -12,7 +12,6 @@ export const el = {
     profileMenuBtn: D.getElementById('profile-menu-btn'),
     profileMenuPopover: D.getElementById('profile-menu-popover'),
     profileMenuPfp: D.getElementById('profile-menu-pfp'),
-    profilePictureMenuBtn: D.getElementById('profile-picture-menu-btn'),
     profileMenuSettingsBtns: D.querySelectorAll('[data-settings-target]'),
     openSettingsBtn: D.getElementById('open-settings-btn'),
     settingsDialog: D.getElementById('settings-dialog'),

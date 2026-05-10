@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #122 - Slim Profile Menu About Planning
+-------------------------------------------------------
+
+Branch: codex/profile-menu-about-plan
+
+- Reduced the profile-picture menu to two top-level entries: Settings and a
+  disabled About placeholder. Settings still opens the existing unified
+  Settings dialog; About is intentionally held for the planned popup.
+- Documented the About-popup follow-up so it reuses the README Support
+  Development copy and the repo-local Bitcoin/Ethereum QR assets instead of
+  inventing a separate donation surface.
+- Updated README setup references from the removed Open Settings button to the
+  current Profile menu > Settings path.
+
+
 2026-05-10 - PR #121 - Compact Sidebar And Profile Menu
 -------------------------------------------------------
 
