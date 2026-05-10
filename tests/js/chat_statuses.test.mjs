@@ -68,6 +68,7 @@ describe('chat action statuses', () => {
         state.myPersonaDescription = '';
         state.aiName = 'BOT';
         state.connectionLost = false;
+        state.chatModelBlockedMessage = '';
         state.pendingQueuedBotEcho = '';
     });
 
@@ -172,6 +173,31 @@ describe('chat action statuses', () => {
         assert.strictEqual(statusText.dataset.statusTone, 'error');
         assert.strictEqual(statusText.style.color, 'var(--red)');
         assert.strictEqual(state.pendingQueuedBotEcho, '');
+    });
+
+    it('does not send or clear text when model availability blocks chat', async () => {
+        const calls = [];
+        globalThis.fetch = async endpoint => {
+            calls.push(endpoint);
+            return jsonResponse(200, { status: 'ok' });
+        };
+        state.chatModelBlockedMessage = 'Model not installed - download local/test in Settings > Model before chatting.';
+        const input = getStubElement('user-chat-input');
+        input.value = 'do not lose this draft';
+
+        const result = await sendUserMessage(input.value);
+
+        assert.strictEqual(result.blocked, true);
+        assert.strictEqual(result.skipped, true);
+        assert.strictEqual(result.reason, state.chatModelBlockedMessage);
+        assert.deepStrictEqual(calls, []);
+        assert.strictEqual(input.value, 'do not lose this draft');
+        assert.strictEqual(
+            getStubElement('status-text').textContent,
+            'Model not installed - download local/test in Settings > Model before chatting.',
+        );
+        assert.strictEqual(getStubElement('status-text').dataset.statusTone, 'warning');
+        assert.strictEqual(getStubElement('status-text').style.color, 'var(--yellow)');
     });
 
     it('does not poll updates for unhandled failure statuses', async () => {

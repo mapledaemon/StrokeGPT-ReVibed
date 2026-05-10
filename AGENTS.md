@@ -192,6 +192,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   browser when the response includes `chat` plus `chat_queued: true`; the next
   `/get_updates` poll skips the matching queued echo so audio readiness can
   still be polled without duplicating the message.
+- `sendUserMessage()` owns the model-readiness send guard. When
+  `state.chatModelBlockedMessage` is set by Ollama status, no caller should
+  bypass it to POST `/send_message`; preserve draft text and surface the block
+  through the shared warning status tone.
 - Local model transport failures from `/send_message` return
   `status: model_error` with `chat_queued: false`. Render them as system/error
   messages in the initiating browser only; do not queue them as assistant

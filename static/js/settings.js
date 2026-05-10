@@ -1,4 +1,4 @@
-import { D, apiCall, el, reportSaveFailure, state } from './context.js';
+import { D, apiCall, el, reportSaveFailure, setStatusMessage, state } from './context.js';
 import { updateAudioProviderUi } from './audio.js';
 
 export function setSettingsTab(tabName) {
@@ -200,9 +200,9 @@ export function updateChatModelAvailability(status = {}) {
         el.sendChatBtn.title = blocked ? message : 'Send message';
     }
     if (blocked) {
-        el.statusText.textContent = message;
+        setStatusMessage(el.statusText, message, 'warning');
     } else if (el.statusText.textContent === previousMessage) {
-        el.statusText.textContent = 'Ready to chat.';
+        setStatusMessage(el.statusText, 'Ready to chat.', 'success');
     }
 }
 

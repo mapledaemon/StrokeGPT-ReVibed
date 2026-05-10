@@ -158,9 +158,26 @@ function handleSendMessageStatus(data) {
     return true;
 }
 
+export function chatSendBlockedMessage() {
+    return state.chatModelBlockedMessage || '';
+}
+
 export async function sendUserMessage(message) {
     const startedAt = performance.now();
     const persona = el.personaInput.value.trim();
+    const blockedMessage = chatSendBlockedMessage();
+    if (blockedMessage) {
+        el.typingIndicator.style.display = 'none';
+        setStatusMessage(el.statusText, blockedMessage, 'warning');
+        return {
+            data: null,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            skipped: true,
+            blocked: true,
+            reason: blockedMessage,
+        };
+    }
     if (message.trim() || persona !== state.myPersonaDescription) {
         if (message.trim()) addChatMessage('YOU', message, {forceScroll: true});
         state.myPersonaDescription = persona;
