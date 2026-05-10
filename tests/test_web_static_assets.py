@@ -301,6 +301,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("height: 100dvh", css)
             self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-min-width), var(--sidebar-width))", css)
             self.assertIn('#top-bar { min-height: var(--top-bar-min-height);', css)
+            self.assertIn("position: relative; z-index: 8100;", css)
             self.assertIn('grid-template-areas: "title status actions"', css)
             self.assertIn(".top-bar-actions { grid-area: actions; justify-self: end;", css)
             self.assertIn('#toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size);', css)
