@@ -22,11 +22,16 @@ const VOICE_INPUT_TRIM_TAIL_PAD_MS = 150;
 const VOICE_INPUT_TRIM_MIN_REMOVED_MS = 120;
 const VOICE_INPUT_PREPROCESS_HIGHPASS_HZ = 100;
 const CUSTOM_VOICE_INPUT_MODEL = '__custom__';
+const NVIDIA_PARAKEET_PROVIDER = 'local_nvidia_parakeet';
+const DEFAULT_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
 const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
     {id: 'tiny.en', label: 'Fast - tiny.en'},
     {id: 'base.en', label: 'Balanced - base.en'},
     {id: 'small.en', label: 'Accurate - small.en'},
     {id: 'distil-large-v3', label: 'Desktop/GPU - distil-large-v3'},
+];
+const FALLBACK_NVIDIA_PARAKEET_MODEL_OPTIONS = [
+    {id: DEFAULT_NVIDIA_PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 0.6B v3'},
 ];
 
 let submitVoiceTranscript = async () => {};
@@ -212,7 +217,7 @@ function microphoneErrorMessage(error) {
 function voicePayloadFailureMessage(payload, fallback) {
     const status = payload?.voice_input_status || {};
     if (status.status_code === 'dependency_missing') {
-        return 'Voice input dependency is missing. Install faster-whisper, then restart the app.';
+        return payload?.message || status.message || 'Voice input dependency is missing. Install the selected provider dependencies, then restart the app.';
     }
     if (status.status_code === 'model_not_loaded') {
         if (status.model_cached) {
@@ -265,9 +270,18 @@ function populateSelect(selectEl, options = [], fallbackOptions = []) {
     if ([...selectEl.options].some(option => option.value === selected)) selectEl.value = selected;
 }
 
-function populateVoiceInputModelSelect(model, options = []) {
+function fallbackVoiceInputModelOptions(provider) {
+    if (provider === NVIDIA_PARAKEET_PROVIDER) return FALLBACK_NVIDIA_PARAKEET_MODEL_OPTIONS;
+    return FALLBACK_VOICE_INPUT_MODEL_OPTIONS;
+}
+
+function defaultVoiceInputModelForProvider(provider) {
+    return fallbackVoiceInputModelOptions(provider)[0]?.id || 'tiny.en';
+}
+
+function populateVoiceInputModelSelect(model, options = [], provider = state.voiceInputProvider) {
     if (!el.voiceInputModelSelect) return;
-    const modelOptions = (options.length ? options : FALLBACK_VOICE_INPUT_MODEL_OPTIONS);
+    const modelOptions = (options.length ? options : fallbackVoiceInputModelOptions(provider));
     el.voiceInputModelSelect.innerHTML = '';
     modelOptions.forEach(option => {
         const node = D.createElement('option');
@@ -295,12 +309,17 @@ function syncVoiceInputModelSelectFromInput() {
 function selectedVoiceInputModel() {
     const selected = el.voiceInputModelSelect?.value || CUSTOM_VOICE_INPUT_MODEL;
     if (selected && selected !== CUSTOM_VOICE_INPUT_MODEL) return selected;
-    return (el.voiceInputModelInput?.value || 'tiny.en').trim() || 'tiny.en';
+    const fallback = defaultVoiceInputModelForProvider(state.voiceInputProvider);
+    return (el.voiceInputModelInput?.value || fallback).trim() || fallback;
 }
 
 async function browseVoiceInputModelPath() {
     if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
         stopActiveVoiceInput('Voice input stopped because model selection changed.');
+    }
+    if (state.voiceInputProvider === NVIDIA_PARAKEET_PROVIDER) {
+        voiceStatusMessage('NVIDIA Parakeet uses a NeMo/Hugging Face model ID; local faster-whisper folders do not apply.', 'var(--comment)');
+        return;
     }
     try {
         voiceStatusMessage('Choose a local faster-whisper model folder...');
@@ -485,6 +504,7 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     populateSelect(el.voiceInputProviderSelect, status.provider_options, [
         {id: 'disabled', label: 'Disabled'},
         {id: 'local_faster_whisper', label: 'Local faster-whisper'},
+        {id: NVIDIA_PARAKEET_PROVIDER, label: 'NVIDIA Parakeet (NeMo)'},
     ]);
     populateChoiceLabels(el.voiceInputModeInputs, status.mode_options, [
         {id: 'push_to_talk', label: 'Push to talk'},
@@ -524,8 +544,8 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     setCheckedRadioValue(el.voiceInputModeInputs, state.voiceInputMode);
     setCheckedRadioValue(el.voiceInputSubmitModeInputs, state.voiceInputSubmitMode);
     updateVoiceInputTuningReadouts({fromDom: false});
-    const model = status.model || data.voice_input_model || 'tiny.en';
-    populateVoiceInputModelSelect(model, status.model_options || data.voice_input_model_options || []);
+    const model = status.model || data.voice_input_model || defaultVoiceInputModelForProvider(state.voiceInputProvider);
+    populateVoiceInputModelSelect(model, status.model_options || data.voice_input_model_options || [], state.voiceInputProvider);
     if (el.voiceInputModelInput) el.voiceInputModelInput.value = model;
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
@@ -1210,6 +1230,9 @@ export function initVoiceInputControls({sendUserMessage}) {
         }
         state.voiceInputProvider = event.target.value;
         state.voiceInputEnabled = event.target.value !== 'disabled';
+        const model = defaultVoiceInputModelForProvider(state.voiceInputProvider);
+        populateVoiceInputModelSelect(model, [], state.voiceInputProvider);
+        if (el.voiceInputModelInput) el.voiceInputModelInput.value = model;
         setVoiceButtonState();
     });
     el.voiceInputModelSelect?.addEventListener('change', event => {

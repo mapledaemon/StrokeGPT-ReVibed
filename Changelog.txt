@@ -8,6 +8,36 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #117 - Add NVIDIA Parakeet ASR Provider
+--------------------------------------------------------
+
+Branch: codex/nvidia-asr-provider
+
+- Added an optional Settings > Voice provider for NVIDIA Parakeet through
+  NeMo while keeping local faster-whisper as the default portable path. The
+  new provider id is `local_nvidia_parakeet`, with alias normalization for
+  `nvidia-parakeet` / `parakeet` style settings values.
+- `strokegpt/asr.py` now dispatches model load and transcription through
+  provider-specific paths: faster-whisper keeps its tuned beam-1,
+  confidence-rerun, VAD, prompt, and rejection behavior; Parakeet loads
+  `nvidia/parakeet-tdt-0.6b-v3` via `nemo.collections.asr` only when the
+  selected provider is explicitly loaded.
+- Parakeet remains optional: the base `requirements.txt` is unchanged, a new
+  `requirements-parakeet.txt` documents the NeMo extra, and the app still
+  requires the existing Download / Load Voice Input Model action before any
+  multi-GB model files are fetched.
+- The Voice tab provider/model metadata now includes NVIDIA Parakeet, updates
+  the model selector when the provider changes, and blocks the faster-whisper
+  folder picker for Parakeet because that provider uses a NeMo/Hugging Face
+  model id instead of a CTranslate2 folder.
+- Updated README, AGENTS, settings, route, static-asset, and ASR tests for the
+  provider contract. Local validation: `python -m unittest discover -s tests`
+  green at 319 tests / 3 skipped; `python -m py_compile app.py
+  strokegpt/*.py tests/*.py` clean via the Windows explicit-file-list
+  equivalent; `scripts/test_and_run.ps1 -NoRun` green with the bundled Python
+  runtime.
+
+
 2026-05-10 - PR #116 - Retire Chat Status Source-Text Test
 --------------------------------------------------------------
 

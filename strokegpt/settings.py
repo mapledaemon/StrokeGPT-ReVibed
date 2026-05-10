@@ -24,8 +24,14 @@ DEFAULT_DIAGNOSTICS_LEVEL = "compact"
 DIAGNOSTICS_LEVELS = {"compact", "status", "debug"}
 VOICE_INPUT_PROVIDER_DISABLED = "disabled"
 VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER = "local_faster_whisper"
-VOICE_INPUT_PROVIDERS = {VOICE_INPUT_PROVIDER_DISABLED, VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER}
+VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET = "local_nvidia_parakeet"
+VOICE_INPUT_PROVIDERS = {
+    VOICE_INPUT_PROVIDER_DISABLED,
+    VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+    VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+}
 DEFAULT_VOICE_INPUT_MODEL = "tiny.en"
+DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 VOICE_INPUT_MODE_PUSH_TO_TALK = "push_to_talk"
 VOICE_INPUT_MODE_HANDS_FREE = "hands_free"
 VOICE_INPUT_MODES = {VOICE_INPUT_MODE_PUSH_TO_TALK, VOICE_INPUT_MODE_HANDS_FREE}
@@ -576,6 +582,8 @@ class SettingsManager:
         cleaned = str(value or "").strip().lower()
         if cleaned in {"local_asr", "browser_microphone", "faster_whisper", "faster-whisper"}:
             return VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER
+        if cleaned in {"nvidia", "parakeet", "nvidia_parakeet", "nvidia-parakeet", "local_parakeet"}:
+            return VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET
         if cleaned in VOICE_INPUT_PROVIDERS:
             return cleaned
         return VOICE_INPUT_PROVIDER_DISABLED

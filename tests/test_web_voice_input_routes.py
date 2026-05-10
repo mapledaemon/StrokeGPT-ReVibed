@@ -18,6 +18,7 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(data["voice_input_provider"], data["voice_input_status"]["provider"])
             self.assertIn("status_code", data["voice_input_status"])
             self.assertIn("provider_options", data["voice_input_status"])
+            self.assertIn("local_nvidia_parakeet", [option["id"] for option in data["voice_input_status"]["provider_options"]])
             self.assertIn("mode_options", data["voice_input_status"])
             self.assertIn("submit_options", data["voice_input_status"])
             self.assertIn("model_options", data["voice_input_status"])
@@ -128,6 +129,33 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(data["vad_threshold"], 0.38)
             self.assertEqual(data["vad_min_silence_ms"], 650)
             self.assertEqual(data["vad_speech_pad_ms"], 300)
+        finally:
+            settings.apply_dict(original)
+            settings.save()
+            apply_settings_to_services()
+
+    def test_set_voice_input_saves_nvidia_parakeet_provider(self):
+        from strokegpt.web import apply_settings_to_services, settings, voice_input
+
+        original = settings.to_dict()
+        try:
+            response = self.client.post("/set_voice_input", json={
+                "provider": "nvidia-parakeet",
+                "enabled": True,
+                "model": "tiny.en",
+                "language": "auto",
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(settings.voice_input_provider, "local_nvidia_parakeet")
+            self.assertTrue(settings.voice_input_enabled)
+            self.assertEqual(settings.voice_input_model, "nvidia/parakeet-tdt-0.6b-v3")
+            self.assertEqual(voice_input.provider, "local_nvidia_parakeet")
+            self.assertEqual(voice_input.model_name, "nvidia/parakeet-tdt-0.6b-v3")
+            self.assertEqual(data["provider"], "local_nvidia_parakeet")
+            self.assertIn("nvidia/parakeet-tdt-0.6b-v3", [option["id"] for option in data["model_options"]])
         finally:
             settings.apply_dict(original)
             settings.save()

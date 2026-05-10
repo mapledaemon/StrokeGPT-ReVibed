@@ -17,6 +17,7 @@ Experimental local app, not a finished release. Expect rough edges in the UI, lo
 - A Handy connection key (the device API requires internet)
 - Optional: ElevenLabs API key for hosted voice
 - Optional: NVIDIA GPU with CUDA-enabled PyTorch for fast local voice
+- Optional: NVIDIA NeMo for the Parakeet voice-input provider
 
 Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Switch or download other models from **Open Settings → Model**.
 
@@ -112,6 +113,15 @@ The normal app setup installs the local voice package stack from `requirements.t
 For low-latency local voice on an NVIDIA GPU, install a CUDA-enabled PyTorch wheel after the normal setup. See [docs/local_voice_setup.md](docs/local_voice_setup.md) for platform-specific commands and verification steps.
 
 In the app, click **Open Settings → Voice → Download / Load Local Voice Model** before testing. First use can download several GB. Use the **Chatterbox Turbo** preset for the lowest latency. The Voice tab reports download/load phase, generation status, missing sample files, and the last error.
+
+Voice input defaults to local faster-whisper because it is the portable CPU/GPU path. For NVIDIA GPU testing, **Open Settings -> Voice -> Provider -> NVIDIA Parakeet (NeMo)** uses `nvidia/parakeet-tdt-0.6b-v3` through NVIDIA NeMo when the optional stack is installed:
+
+```bash
+python -m pip install -r requirements-parakeet.txt
+```
+
+Use the existing **Download / Load Voice Input Model** button after selecting Parakeet. The first load can download multi-GB model files; the app does not fetch them at startup.
+NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Windows, use a compatible CUDA/PyTorch/NeMo environment such as WSL before selecting this provider.
 
 ## Troubleshooting
 
