@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #110 - Shorten Agent Continuation Prompts
+----------------------------------------------------------
+
+- Started implementing the critical-review follow-up about doc-driven
+  development by shortening the `AGENTS.md` continuation prompts. The old
+  prompts encoded file lists, failure cases, and implementation policy in
+  multi-sentence handoff blocks; the new prompts are short orientation notes
+  that require future agents to read the current repo and form their own
+  plan.
+- Added explicit continuation-prompt guidance: prompts should orient future
+  agents, not decide the implementation for them.
+- Local validation: `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` green at
+  330 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-10 - PR #109 - Simplify Default Voice Input Surface
 ------------------------------------------------------------
 
