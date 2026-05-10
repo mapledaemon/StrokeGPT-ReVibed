@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #140 - Top-Bar Voice Output Toggle
+---------------------------------------------------
+
+Branch: codex/top-bar-voice-toggle
+
+- Added a top-bar Voice On/Off control that mirrors the saved audio-enabled
+  state and persists through the existing voice-output settings routes without
+  touching chat, motion, or model settings.
+- Reused the shared audio save path so backend rejections revert the optimistic
+  toggle state, and added frontend runtime coverage for the top-bar control.
+
+
 2026-05-10 - PR #139 - App Shell Focus Rings
 ---------------------------------------------
 

@@ -234,8 +234,6 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   responses, so the chat-emit path stays in lockstep with the TTS-enqueue
   path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
   Voice Plays").
-- Add an explicit top-bar voice on/off toggle that pauses voice generation
-  without changing chat, motion, or model settings.
 - Investigate TTS clips that cut off at the end, especially when local voice
   generation, chunk playback, or rapid mode narration overlaps with chat
   updates.
