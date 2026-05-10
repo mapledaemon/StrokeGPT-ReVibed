@@ -60,6 +60,7 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(status["vad_min_silence_ms"], 650)
         self.assertEqual(status["vad_speech_pad_ms"], 250)
         self.assertIn("model_options", status)
+        self.assertIn("local_nvidia_parakeet", [option["id"] for option in status["provider_options"]])
         self.assertIn("base.en", [option["id"] for option in status["model_options"]])
         self.assertIn("small.en", [option["id"] for option in status["model_options"]])
         self.assertIn("distil-large-v3", [option["id"] for option in status["model_options"]])
@@ -292,6 +293,122 @@ class VoiceInputServiceTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_nvidia_parakeet_status_reports_optional_dependency(self):
+        service = VoiceInputService()
+        service.configure(
+            provider="local_nvidia_parakeet",
+            enabled=True,
+            model="tiny.en",
+            language="auto",
+        )
+
+        with mock.patch.object(service, "dependency_available", return_value=False):
+            status = service.status()
+
+        self.assertEqual(service.model_name, "nvidia/parakeet-tdt-0.6b-v3")
+        self.assertEqual(status["provider"], "local_nvidia_parakeet")
+        self.assertEqual(status["status_code"], "dependency_missing")
+        self.assertIn("NVIDIA NeMo ASR", status["message"])
+        self.assertIn("nvidia/parakeet-tdt-0.6b-v3", [option["id"] for option in status["model_options"]])
+
+    def test_nvidia_parakeet_model_load_uses_optional_nemo(self):
+        calls = {}
+
+        class FakeParakeetModel:
+            def to(self, device):
+                calls["device"] = device
+                return self
+
+            def eval(self):
+                calls["eval"] = True
+                return self
+
+        class FakeASRModel:
+            @staticmethod
+            def from_pretrained(model_name):
+                calls["model_name"] = model_name
+                return FakeParakeetModel()
+
+        fake_nemo = types.ModuleType("nemo")
+        fake_collections = types.ModuleType("nemo.collections")
+        fake_asr = types.ModuleType("nemo.collections.asr")
+        fake_asr.models = types.SimpleNamespace(ASRModel=FakeASRModel)
+        fake_nemo.collections = fake_collections
+        fake_collections.asr = fake_asr
+
+        module_names = ["nemo", "nemo.collections", "nemo.collections.asr"]
+        original_modules = {name: sys.modules.get(name) for name in module_names}
+        env_keys = ["HF_HOME", "HF_HUB_CACHE", "HF_XET_CACHE", "STROKEGPT_PARAKEET_DEVICE"]
+        original_env = {key: os.environ.get(key) for key in env_keys}
+        cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"
+        cache_parent.mkdir(parents=True, exist_ok=True)
+        temp_dir = tempfile.mkdtemp(prefix="parakeet_", dir=cache_parent)
+
+        try:
+            for key in env_keys:
+                os.environ.pop(key, None)
+            sys.modules["nemo"] = fake_nemo
+            sys.modules["nemo.collections"] = fake_collections
+            sys.modules["nemo.collections.asr"] = fake_asr
+            service = VoiceInputService(model_cache_dir=temp_dir)
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+
+            with (
+                mock.patch.object(VoiceInputService, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr._detect_torch_device", return_value="cuda"),
+            ):
+                ok, _ = service.preload_model()
+
+            self.assertTrue(ok)
+            self.assertEqual(calls["model_name"], "nvidia/parakeet-tdt-0.6b-v3")
+            self.assertEqual(calls["device"], "cuda")
+            self.assertTrue(calls["eval"])
+            self.assertEqual(os.environ["HF_HOME"], temp_dir)
+            self.assertEqual(os.environ["HF_HUB_CACHE"], str(Path(temp_dir) / "hub"))
+        finally:
+            for name, module in original_modules.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_nvidia_parakeet_transcribe_normalizes_nemo_output(self):
+        class FakeParakeetModel:
+            def transcribe(self, audio_paths):
+                self.audio_paths = audio_paths
+                return [types.SimpleNamespace(text=" stop now ")]
+
+        model = FakeParakeetModel()
+        service = VoiceInputService()
+        service.configure(
+            provider="local_nvidia_parakeet",
+            enabled=True,
+            model="nvidia/parakeet-tdt-0.6b-v3",
+            language="auto",
+        )
+        service._model = model
+        service._model_key = ("local_nvidia_parakeet", "nvidia/parakeet-tdt-0.6b-v3")
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            result = service.transcribe_file(Path("speech.wav"))
+
+        self.assertEqual(model.audio_paths, ["speech.wav"])
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["transcript"], "stop now")
+        self.assertEqual(result["provider"], "local_nvidia_parakeet")
+        self.assertEqual(result["model"], "nvidia/parakeet-tdt-0.6b-v3")
 
     def test_status_distinguishes_cached_model_files_from_uncached_download(self):
         cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"

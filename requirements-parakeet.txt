@@ -1,0 +1,3 @@
+# Optional local ASR provider for Settings > Voice > NVIDIA Parakeet (NeMo).
+# Install CUDA-enabled PyTorch separately for practical latency on NVIDIA GPUs.
+nemo_toolkit[asr]

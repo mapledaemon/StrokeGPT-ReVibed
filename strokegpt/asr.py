@@ -11,6 +11,7 @@ from .settings import (
     DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MODEL,
+    DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL,
     DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING,
     DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
     DEFAULT_VOICE_INPUT_SILENCE_TRIM,
@@ -20,6 +21,7 @@ from .settings import (
     VOICE_INPUT_MODE_PUSH_TO_TALK,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+    VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
     VOICE_INPUT_SUBMIT_PREVIEW,
 )
 
@@ -28,6 +30,8 @@ _HF_TRUE_VALUES = {"1", "true", "yes", "on"}
 _MODEL_CACHE_MARKER_FILES = {
     "config.json",
     "model.bin",
+    "model.safetensors",
+    "parakeet-tdt-0.6b-v3.nemo",
     "tokenizer.json",
     "vocabulary.json",
     "vocabulary.txt",
@@ -43,10 +47,18 @@ VOICE_INPUT_REJECT_MESSAGE = (
 VOICE_INPUT_INITIAL_PROMPT = (
     "speed depth tip base shaft slow fast harder gentle stop pause resume edge milk"
 )
+VOICE_INPUT_FASTER_WHISPER_MODEL_IDS = {"tiny.en", "base.en", "small.en", "distil-large-v3"}
 
 
 def _env_flag_enabled(name):
     return os.environ[name].lower() in _HF_TRUE_VALUES
+
+
+def _module_available(module_name):
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, AttributeError, ValueError):
+        return False
 
 
 def _count_cuda_devices():
@@ -101,6 +113,25 @@ def _detect_compute_type(env_value, device):
     return "float16" if is_cuda else "int8"
 
 
+def _detect_torch_device(env_value):
+    """Pick the optional NeMo/Parakeet torch device.
+
+    Honors an explicit override for users who need to pin ``cpu`` or a
+    particular CUDA device. The auto path uses CUDA only when PyTorch can see
+    it, otherwise CPU. This helper deliberately avoids adding a UI setting;
+    Parakeet is already behind the provider selector and explicit model-load
+    action.
+    """
+    explicit = (env_value or "").strip().lower()
+    if explicit and explicit != "auto":
+        return explicit
+    try:
+        import torch  # type: ignore[import-not-found]
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 def _cache_search_text(value):
     return re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
 
@@ -139,6 +170,16 @@ def _transcript_from_segments(segments):
     return " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
 
 
+def _transcript_from_nemo_output(output):
+    if output is None:
+        return ""
+    if hasattr(output, "text"):
+        return str(output.text or "").strip()
+    if isinstance(output, dict):
+        return str(output.get("text") or output.get("transcript") or "").strip()
+    return str(output or "").strip()
+
+
 def _needs_confidence_rerun(confidence):
     avg_logprob = confidence.get("avg_logprob")
     no_speech_prob = confidence.get("no_speech_prob")
@@ -175,6 +216,11 @@ class VoiceInputService:
             "id": VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
             "label": "Local faster-whisper",
             "description": "Transcribe browser microphone clips locally.",
+        },
+        {
+            "id": VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+            "label": "NVIDIA Parakeet (NeMo)",
+            "description": "Optional GPU-focused local ASR using NVIDIA Parakeet TDT.",
         },
     ]
     MODE_OPTIONS = [
@@ -225,6 +271,14 @@ class VoiceInputService:
             "label": "Desktop/GPU - distil-large-v3",
             "description": "Higher accuracy target for faster desktops or GPU setups.",
             "tier": "desktop",
+        },
+    ]
+    NVIDIA_PARAKEET_MODEL_OPTIONS = [
+        {
+            "id": DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL,
+            "label": "NVIDIA Parakeet TDT 0.6B v3",
+            "description": "Optional NeMo ASR model for NVIDIA GPU-focused recognition.",
+            "tier": "nvidia",
         },
     ]
 
@@ -285,6 +339,10 @@ class VoiceInputService:
         provider = provider or VOICE_INPUT_PROVIDER_DISABLED
         enabled = bool(enabled) and provider != VOICE_INPUT_PROVIDER_DISABLED
         model = str(model or DEFAULT_VOICE_INPUT_MODEL).strip() or DEFAULT_VOICE_INPUT_MODEL
+        if provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET and model in VOICE_INPUT_FASTER_WHISPER_MODEL_IDS:
+            model = DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL
+        elif provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER and model == DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL:
+            model = DEFAULT_VOICE_INPUT_MODEL
         language = str(language or "auto").strip() or "auto"
         mode = str(mode or VOICE_INPUT_MODE_PUSH_TO_TALK).strip() or VOICE_INPUT_MODE_PUSH_TO_TALK
         submit_mode = str(submit_mode or VOICE_INPUT_SUBMIT_PREVIEW).strip() or VOICE_INPUT_SUBMIT_PREVIEW
@@ -315,7 +373,19 @@ class VoiceInputService:
         self.vad_speech_pad_ms = int(vad_speech_pad_ms)
 
     def dependency_available(self):
-        return importlib.util.find_spec("faster_whisper") is not None
+        if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            return _module_available("nemo.collections.asr")
+        return _module_available("faster_whisper")
+
+    def _provider_dependency_name(self):
+        if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            return "NVIDIA NeMo ASR"
+        return "faster-whisper"
+
+    def _provider_model_options(self):
+        if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            return list(self.NVIDIA_PARAKEET_MODEL_OPTIONS)
+        return list(self.MODEL_OPTIONS)
 
     def effective_model_cache_dir(self):
         return str(os.getenv("STROKEGPT_ASR_CACHE_DIR", self.model_cache_dir) or "").strip()
@@ -355,7 +425,10 @@ class VoiceInputService:
         dependency_available = self.dependency_available()
         can_load_model = (
             self.enabled
-            and self.provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER
+            and self.provider in {
+                VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+                VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+            }
             and dependency_available
         )
         model_cached = can_load_model and self.is_model_cached()
@@ -363,9 +436,15 @@ class VoiceInputService:
         if self.provider == VOICE_INPUT_PROVIDER_DISABLED or not self.enabled:
             status_code = "disabled"
             message = "Voice input is disabled."
+        elif self.provider not in {
+            VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+            VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+        }:
+            status_code = "unsupported_provider"
+            message = f"Unsupported voice input provider: {self.provider}"
         elif not dependency_available:
             status_code = "dependency_missing"
-            message = "Voice input needs faster-whisper. Install dependencies, then restart the app."
+            message = f"Voice input needs {self._provider_dependency_name()}. Install dependencies, then restart the app."
         elif self._model is None:
             status_code = "model_not_loaded"
             if model_cached:
@@ -416,22 +495,30 @@ class VoiceInputService:
             "provider_options": list(self.PROVIDER_OPTIONS),
             "mode_options": list(self.MODE_OPTIONS),
             "submit_options": list(self.SUBMIT_OPTIONS),
-            "model_options": list(self.MODEL_OPTIONS),
+            "model_options": self._provider_model_options(),
         }
 
     def _require_ready(self):
         if not self.enabled or self.provider == VOICE_INPUT_PROVIDER_DISABLED:
             raise VoiceInputUnavailable("Voice input is disabled.")
-        if self.provider != VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER:
+        if self.provider not in {
+            VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+            VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+        }:
             raise VoiceInputUnavailable(f"Unsupported voice input provider: {self.provider}")
         if not self.dependency_available():
-            raise VoiceInputUnavailable("Install faster-whisper before using local voice input.")
+            raise VoiceInputUnavailable(
+                f"Install {self._provider_dependency_name()} before using this voice input provider."
+            )
 
-    def _prepare_model_cache(self):
+    def _prepare_model_cache(self, *, configure_hf_home=False):
         cache_dir = self.effective_model_cache_dir()
         if cache_dir:
             os.makedirs(cache_dir, exist_ok=True)
             os.environ.setdefault("HF_XET_CACHE", os.path.join(cache_dir, "xet"))
+            if configure_hf_home:
+                os.environ.setdefault("HF_HOME", cache_dir)
+                os.environ.setdefault("HF_HUB_CACHE", os.path.join(cache_dir, "hub"))
 
         # Hugging Face's default cache uses symlinks and Xet integration when
         # available. On normal Windows user accounts that can fail or log access
@@ -449,6 +536,11 @@ class VoiceInputService:
         hf_constants.HF_HUB_DISABLE_SYMLINKS_WARNING = _env_flag_enabled("HF_HUB_DISABLE_SYMLINKS_WARNING")
         hf_constants.HF_HUB_DISABLE_XET = _env_flag_enabled("HF_HUB_DISABLE_XET")
         hf_constants.HF_XET_CACHE = os.environ.get("HF_XET_CACHE", hf_constants.HF_XET_CACHE)
+        if configure_hf_home:
+            if hasattr(hf_constants, "HF_HOME"):
+                hf_constants.HF_HOME = os.environ.get("HF_HOME", hf_constants.HF_HOME)
+            if hasattr(hf_constants, "HF_HUB_CACHE"):
+                hf_constants.HF_HUB_CACHE = os.environ.get("HF_HUB_CACHE", hf_constants.HF_HUB_CACHE)
         return cache_dir
 
     def _load_model(self):
@@ -457,6 +549,14 @@ class VoiceInputService:
         if self._model is not None and self._model_key == key:
             return 0
         started = time.perf_counter()
+        if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            self._load_nvidia_parakeet_model()
+        else:
+            self._load_faster_whisper_model()
+        self._model_key = key
+        return int((time.perf_counter() - started) * 1000)
+
+    def _load_faster_whisper_model(self):
         cache_dir = self._prepare_model_cache()
         from faster_whisper import WhisperModel
 
@@ -480,8 +580,23 @@ class VoiceInputService:
             compute_type=compute_type,
             download_root=cache_dir or None,
         )
-        self._model_key = key
-        return int((time.perf_counter() - started) * 1000)
+
+    def _load_nvidia_parakeet_model(self):
+        self._prepare_model_cache(configure_hf_home=True)
+        import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
+
+        device = _detect_torch_device(os.getenv("STROKEGPT_PARAKEET_DEVICE"))
+        print(
+            f"[INFO] NVIDIA NeMo ASR loading model={self.model_name!r} "
+            f"device={device}"
+        )
+        self._model = nemo_asr.models.ASRModel.from_pretrained(
+            model_name=self.model_name,
+        )
+        if hasattr(self._model, "to"):
+            self._model.to(device)
+        if hasattr(self._model, "eval"):
+            self._model.eval()
 
     def _effective_language(self):
         language = str(self.language or "auto").strip() or "auto"
@@ -530,6 +645,11 @@ class VoiceInputService:
             if self.is_model_cached():
                 raise VoiceInputUnavailable("Load the cached voice input model before recording.")
             raise VoiceInputUnavailable("Download / load the voice input model before recording.")
+        if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            return self._transcribe_nvidia_parakeet_file(audio_path)
+        return self._transcribe_faster_whisper_file(audio_path)
+
+    def _transcribe_faster_whisper_file(self, audio_path):
         timings = {}
         try:
             language = self._effective_language()
@@ -591,6 +711,39 @@ class VoiceInputService:
             if message:
                 result["message"] = message
             return result
+        except VoiceInputError:
+            raise
+        except Exception as exc:
+            self.last_error = str(exc)
+            raise VoiceInputError(f"Voice transcription failed: {exc}") from exc
+
+    def _transcribe_nvidia_parakeet_file(self, audio_path):
+        timings = {}
+        try:
+            started = time.perf_counter()
+            outputs = self._model.transcribe([str(audio_path)])
+            output = outputs[0] if outputs else None
+            transcript = _transcript_from_nemo_output(output)
+            timings["transcribe_ms"] = int((time.perf_counter() - started) * 1000)
+            timings["asr_attempts"] = 1
+            self.last_error = ""
+            self.last_transcript = transcript
+            self.last_timings = timings
+            return {
+                "status": "success" if transcript else "no_speech",
+                "transcript": transcript,
+                "language": self._effective_language(),
+                "language_probability": None,
+                "duration": None,
+                "confidence": {},
+                "recognition": {
+                    "provider": VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+                    "attempts": 1,
+                },
+                "timings": timings,
+                "provider": self.provider,
+                "model": self.model_name,
+            }
         except VoiceInputError:
             raise
         except Exception as exc:

@@ -574,22 +574,16 @@ and stop safety paths.
   Voice once real hands-free testing shows which controls users need during
   operation.
 - Keep ASR provider work in this order:
-  1. Measure the tuned faster-whisper baseline before provider changes:
-     confidence rejection, beam-1 fast path with configured-beam rerun,
-     forced English when language is set to `auto`, auto-CUDA/device
-     detection, compute-type selection, browser-side preprocessing, and
-     silence trimming have all landed as the baseline that provider work
-     should be compared against.
-  2. Add an `asr.py` provider abstraction only after the tuned
-     faster-whisper baseline has measured gaps. Keep faster-whisper the
-     default CPU/portable path.
-  3. Treat NVIDIA Parakeet TDT 0.6B v3 as the GPU-focused accuracy/latency
-     candidate behind a provider toggle and optional install path, not as a
-     base dependency.
-  4. Defer whisperX to long-form audio import or funscript-alignment work.
+  1. Measure the tuned faster-whisper baseline and the optional NVIDIA
+     Parakeet provider with the same real microphone clips. Faster-whisper
+     remains the default CPU/portable path; Parakeet is the GPU-focused
+     comparison path behind the provider toggle and optional NeMo install.
+  2. Use those measurements to decide whether routine users need a simpler
+     provider recommendation, not more visible ASR knobs.
+  3. Defer whisperX to long-form audio import or funscript-alignment work.
      Its word alignment, diarization, and batching strengths do not pay for
      short live voice commands.
-  5. Defer whisper.cpp to packaged Windows launcher work, where a small
+  4. Defer whisper.cpp to packaged Windows launcher work, where a small
      external runtime may matter more than Python ML dependency reuse.
 - Keep streaming/chunked upload as a later phase after the tuned baseline and
   provider abstraction decisions land.

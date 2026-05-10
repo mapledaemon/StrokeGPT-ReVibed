@@ -539,6 +539,18 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.voice_input_vad_min_silence_ms, 100)
         self.assertEqual(settings.voice_input_vad_speech_pad_ms, 1000)
 
+    def test_voice_input_provider_accepts_nvidia_parakeet_aliases(self):
+        settings = SettingsManager("settings.json")
+        settings.apply_dict({
+            "voice_input_provider": "nvidia-parakeet",
+            "voice_input_enabled": True,
+            "voice_input_model": "nvidia/parakeet-tdt-0.6b-v3",
+        })
+
+        self.assertEqual(settings.voice_input_provider, "local_nvidia_parakeet")
+        self.assertTrue(settings.voice_input_enabled)
+        self.assertEqual(settings.to_dict()["voice_input_model"], "nvidia/parakeet-tdt-0.6b-v3")
+
 
 if __name__ == "__main__":
     unittest.main()
