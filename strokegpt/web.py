@@ -18,6 +18,7 @@ from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
 from .asr import VoiceInputService
+from .diagnostics import diagnostics_latency_payload as build_diagnostics_latency_payload
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
@@ -44,6 +45,7 @@ VOICE_SAMPLE_DIR = PROJECT_ROOT / "voice_samples"
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
 VOICE_INPUT_UPLOAD_DIR = USER_DATA_DIR / "voice_input"
 VOICE_INPUT_MODEL_DIR = USER_DATA_DIR / "voice_input_hf_cache"
+DIAGNOSTICS_DIR = USER_DATA_DIR / "diagnostics"
 MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
 ALLOWED_VOICE_INPUT_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"}
@@ -493,6 +495,17 @@ def setup_check_payload():
         audio_provider=settings.audio_provider,
         audio_enabled=settings.audio_enabled,
         elevenlabs_key=settings.elevenlabs_api_key,
+    )
+
+def diagnostics_latency_payload():
+    return build_diagnostics_latency_payload(
+        base_url=OLLAMA_BASE_URL,
+        llm_url=LLM_URL,
+        llm=llm,
+        voice_input=voice_input,
+        audio=audio,
+        diagnostics_dir=DIAGNOSTICS_DIR,
+        ollama_status=_ollama_status_payload,
     )
 
 def apply_settings_to_services():

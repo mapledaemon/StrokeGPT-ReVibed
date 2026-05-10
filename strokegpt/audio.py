@@ -275,6 +275,63 @@ class AudioService:
     def local_model_loaded(self):
         return self._local_model is not None and self._local_model_engine == self.local_engine
 
+    def measure_output_latency(self, text_to_speak="Ready."):
+        if self.provider != "local":
+            return {
+                "status": "skipped",
+                "provider": self.provider,
+                "message": "Hosted voice output latency is not measured automatically to avoid API usage.",
+            }
+        if not self.local_model_loaded():
+            return {
+                "status": "skipped",
+                "provider": self.provider,
+                "engine": self.local_engine,
+                "message": "Local voice model is not loaded. Use Download / Load Local Voice Model before testing output latency.",
+            }
+
+        text = self._clean_text(text_to_speak) or "Ready."
+        self._local_generation_status = "generating"
+        self._local_generation_error = ""
+        self._local_generation_started_at = time.perf_counter()
+        started_at = time.perf_counter()
+        try:
+            with self._local_generation_lock:
+                model = self._get_chatterbox_model()
+                generated_audio = self._generate_local_waveform(model, text)
+                audio_bytes = self._encode_wav_bytes(generated_audio, model.sr)
+            elapsed_seconds = time.perf_counter() - started_at
+            self.last_generation_seconds = round(elapsed_seconds, 3)
+            self._local_generation_status = "idle"
+            self._local_generation_started_at = None
+            self.last_error = ""
+            return {
+                "status": "ok",
+                "provider": self.provider,
+                "engine": self.local_engine,
+                "engine_label": self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine),
+                "device": self._local_model_device,
+                "elapsed_ms": int(elapsed_seconds * 1000),
+                "audio_bytes": len(audio_bytes),
+                "message": "Generated a diagnostic local voice sample without queueing playback.",
+            }
+        except Exception as e:
+            error = str(e)
+            self._local_generation_status = "error"
+            self._local_generation_error = error
+            self._local_generation_started_at = None
+            self._local_preload_status = "error"
+            self._local_preload_phase = "error"
+            self._local_preload_error = error
+            self._reset_local_model_after_failure()
+            self.last_error = f"Local Chatterbox problem: {error}"
+            return {
+                "status": "error",
+                "provider": self.provider,
+                "engine": self.local_engine,
+                "message": self.last_error,
+            }
+
     def generate_audio_for_text(self, text_to_speak, force=False):
         if not self.is_on and not force:
             return

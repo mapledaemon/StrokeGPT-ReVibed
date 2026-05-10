@@ -46,6 +46,7 @@ FRONTEND_SCRIPT_PATHS = (
     "/static/js/motion/sequence-log.js",
     "/static/js/motion/training-editor.js",
     "/static/js/setup.js",
+    "/static/js/setup-check.js",
 )
 
 

@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #131 - Settings Diagnostics Tab And Latency Checks
+------------------------------------------------------------------
+
+Branch: codex/diagnostics-settings-tab
+
+- Added a Settings > Diagnostics tab that gathers setup checks, runtime
+  latency tests, and diagnostics verbosity controls so Model, Motion, and
+  Advanced stay focused on their primary settings.
+- Added `/diagnostics_latency` to measure Ollama status latency, selected-model
+  chat latency, already-loaded voice-input ASR latency, and already-loaded
+  local voice-output latency without triggering surprise model downloads or
+  hosted TTS API calls.
+- Rendered setup-check and latency results inline in the settings dialog with
+  grouped status rows, elapsed timings, and metric chips for runtime details.
+- Documented the Diagnostics tab in README/AGENTS and narrowed the roadmap item
+  so already-landed setup/latency diagnostics are no longer listed as future
+  work.
+
+
 2026-05-10 - PR #130 - Setup Check Wizard And Ollama GPU Warning
 -----------------------------------------------------------------
 

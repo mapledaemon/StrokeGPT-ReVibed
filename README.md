@@ -92,7 +92,7 @@ tab while controlling hardware.
 
 1. Paste your Handy connection key in **Profile menu > Settings > Device**.
 2. Pick a model in **Profile menu > Settings > Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
-3. Optional: run **Profile menu > Settings > Advanced > Run Setup Check** to verify Ollama, selected-model GPU use, optional voice dependencies, and CUDA visibility.
+3. Optional: run **Profile menu > Settings > Diagnostics > Run Setup Checks** to verify Ollama, selected-model GPU use, optional voice dependencies, and CUDA visibility.
 4. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
 5. Start chatting. The Handy responds to natural-language motion ("slow tip teasing", "deep slow stroke", "milk me"), named patterns (*flick*, *flutter*, *pulse*, *wave*, *ramp*, *ladder*, *surge*, *sway*, *tease*), and soft-anchor loops between *tip*, *shaft*, and *base*.
 
@@ -107,7 +107,8 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
 - **Device** — Handy key, stroke range, range test.
 - **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.
-- **Advanced** — setup check wizard, diagnostics verbosity, and **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).
+- **Diagnostics** — setup checks, runtime latency tests for Ollama/loaded voice paths, and diagnostics verbosity.
+- **Advanced** — **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).
 
 The motion connector accepts direct numeric moves from the model and named cues like `tip`, `shaft`, `base`, `full`, `flick`, `flutter`, `pulse`, `wave`, `ramp`, `ladder`, `surge`, `sway`, `tease`. It also accepts any enabled fixed pattern id from Motion Pattern Preferences, including Edge and Milk patterns. Soft anchor loops are supported with 2–6 anchors (e.g., `tip → shaft → base`) plus tempo and softness. All cues route through the deterministic motion layer so configured speed limits, smoothing, and stop behavior are preserved.
 
