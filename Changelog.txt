@@ -8,6 +8,30 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #120 - Track Continuous Motion In Handy Visualizer
+------------------------------------------------------------------
+
+Branch: codex/handy-visualizer-live-tracking
+
+- Diagnosed the sidebar Handy visualizer mismatch: it was drawing a single
+  backend-specific point estimate instead of the active program window plus
+  current commanded position. Continuous mode also fell through to the HAMP
+  oscillator estimate, which is inactive while XAVA position control is
+  driving the device.
+- Added program-range metadata to motion observability trace points for
+  continuous sampled control, finite position playback, and HAMP/frame-based
+  playback. The browser now maps the green range band to that active program
+  min/max window when available, falling back to the Handy slide window for
+  HAMP legacy commands.
+- Added continuous-backend position tracking that replays the latest sampled
+  output window between `/get_status` polls and stops replaying stale windows
+  after output stalls. This keeps the purple position line tied to commanded
+  motion without adding Handy API polling.
+- Added frontend and backend behavioral coverage for program-range mapping,
+  continuous visualizer tracking, stale-trace handling, finite position range
+  mapping, and HAMP slide-window phase estimates.
+
+
 2026-05-10 - PR #119 - Pay Down Frontend Feedback Behavior
 ----------------------------------------------------------
 

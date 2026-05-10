@@ -409,6 +409,13 @@ class MotionControllerTests(unittest.TestCase):
         self.assertIsNotNone(target.motion_program)
         self.assertGreater(len(handy.moves), 4)
         self.assertGreater(len({depth for _, depth, _ in handy.moves}), 3)
+        ranges = [
+            point["program_range"]
+            for point in controller.observability_snapshot()["trace"]
+            if "program_range" in point
+        ]
+        self.assertTrue(ranges)
+        self.assertLess(ranges[-1]["min"], ranges[-1]["max"])
 
     def test_controller_expands_direct_anchor_target(self):
         handy = FakeHandy()
@@ -436,6 +443,9 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(all(not move[2] for move in handy.position_moves))
         self.assertGreater(len({depth for _, depth, _, _ in handy.position_moves}), 1)
         self.assertTrue(any(point.get("continuous") for point in snapshot["trace"]))
+        continuous_points = [point for point in snapshot["trace"] if point.get("continuous")]
+        self.assertTrue(all("program_range" in point for point in continuous_points))
+        self.assertLess(continuous_points[-1]["program_range"]["min"], continuous_points[-1]["program_range"]["max"])
 
         controller.stop()
         self.assertTrue(handy.stopped)
@@ -682,6 +692,7 @@ class MotionControllerTests(unittest.TestCase):
             self.assertIn("command_ms", point)
             self.assertIn("frame_count", point)
             self.assertIn("is_pass_through_final", point)
+            self.assertEqual(point["program_range"], {"min": 25, "max": 28})
             self.assertGreaterEqual(point["command_ms"], 0)
         # Every emitted point after the first one should report the gap from the
         # previous command, so the operator can spot starvation between frames.
