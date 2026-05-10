@@ -330,6 +330,29 @@ def _ollama_installed_models():
     models.sort(key=lambda item: item["name"].lower())
     return models
 
+def _ollama_running_models():
+    response = requests.get(f"{OLLAMA_BASE_URL}/api/ps", timeout=0.5)
+    response.raise_for_status()
+    data = response.json()
+    models = []
+    for item in data.get("models", []):
+        name = normalize_ollama_model(item.get("model") or item.get("name") or "")
+        if not name:
+            continue
+        size = int(item.get("size") or 0)
+        size_vram_reported = "size_vram" in item
+        size_vram = int(item.get("size_vram") or 0)
+        models.append({
+            "name": name,
+            "size": size,
+            "size_label": _format_bytes(size),
+            "size_vram": size_vram,
+            "size_vram_label": _format_bytes(size_vram),
+            "size_vram_reported": size_vram_reported,
+        })
+    models.sort(key=lambda item: item["name"].lower())
+    return models
+
 def _ollama_status_payload():
     # Service-bound adapter for ``payloads.ollama_status_payload()``: binds the
     # live ``settings``/``llm`` services and the local pull/installation helpers
@@ -343,6 +366,7 @@ def _ollama_status_payload():
         base_url=OLLAMA_BASE_URL,
         pull_snapshot=_ollama_pull_snapshot,
         installed_models=_ollama_installed_models,
+        running_models=_ollama_running_models,
     )
 
 def _run_ollama_pull(model):
@@ -457,6 +481,18 @@ def settings_payload():
         motion_preferences=_motion_preference_payload(),
         diagnostics_levels=_diagnostics_level_options(),
         voice_input_status=voice_input.status(),
+    )
+
+def setup_check_payload():
+    return payloads.setup_check_payload(
+        configured=bool(settings.handy_key and settings.min_depth < settings.max_depth),
+        handy_key=settings.handy_key,
+        ollama_status=_ollama_status_payload(),
+        voice_input_setup=voice_input.setup_status(),
+        local_tts_status=audio.local_status(),
+        audio_provider=settings.audio_provider,
+        audio_enabled=settings.audio_enabled,
+        elevenlabs_key=settings.elevenlabs_api_key,
     )
 
 def apply_settings_to_services():

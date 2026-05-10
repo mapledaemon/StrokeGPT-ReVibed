@@ -17,6 +17,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/voice-input.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
+            "/static/js/setup-check.js": "text/javascript",
             "/static/js/motion/feedback-controls.js": "text/javascript",
             "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/pattern-list.js": "text/javascript",
@@ -207,6 +208,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('App motion: Continuous position', page)
             self.assertIn('data-settings-tab="advanced"', page)
             self.assertIn('id="settings-tab-advanced"', page)
+            self.assertIn('id="run-setup-check-btn"', page)
+            self.assertIn('id="setup-check-status"', page)
             self.assertIn('id="reset-settings-btn"', page)
             self.assertIn('id="local-tts-engine-select"', page)
             self.assertIn('value="chatterbox_turbo"', page)
@@ -439,6 +442,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-training-save-row", css)
             self.assertIn(".motion-training-feedback-row", css)
             self.assertIn(".setup-slider", css)
+            self.assertIn(".setup-check-row { display: grid;", css)
+            self.assertIn(".setup-check-badge.warning", css)
             self.assertIn(".control-action-stack, .preset-mode-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));", css)
             self.assertIn(".experimental-mode-stack", css)
             self.assertIn(".experimental-mode-section", css)
@@ -956,6 +961,8 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("./js/device-control.js", app_script)
         self.assertIn("./js/motion-control.js", app_script)
         self.assertIn("./js/setup.js", app_script)
+        self.assertIn("./js/setup-check.js", app_script)
+        self.assertIn("initSetupCheckWizard()", app_script)
 
 
 if __name__ == "__main__":

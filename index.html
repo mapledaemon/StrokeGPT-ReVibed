@@ -416,6 +416,11 @@
             </div>
             <div id="settings-tab-advanced" class="settings-panel">
                 <div class="settings-subsection">
+                    <h4>Setup Check</h4>
+                    <button id="run-setup-check-btn" class="my-button" data-requires-backend>Run Setup Check</button>
+                    <div id="setup-check-status" class="settings-help">Checks Ollama, model install state, GPU use, and optional voice dependencies.</div>
+                </div>
+                <div class="settings-subsection">
                     <h4>Settings Data</h4>
                     <button id="reset-settings-btn" class="my-button stop" data-requires-backend>Reset All Settings</button>
                     <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>

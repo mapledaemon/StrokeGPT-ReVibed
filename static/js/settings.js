@@ -143,9 +143,15 @@ function selectedOllamaModelForAction() {
 export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
+    const gpuStatus = status.gpu_status || {};
     const installedCount = (status.installed_model_names || []).length;
     let message = status.message || 'Ollama model status unavailable.';
     if (installedCount) message += ` Installed locally: ${installedCount}.`;
+    if (gpuStatus.warning) {
+        message += ` ${gpuStatus.warning}`;
+    } else if (gpuStatus.message && status.available && status.current_model_installed) {
+        message += ` ${gpuStatus.message}`;
+    }
     if (download.state === 'downloading') {
         message = `Download in progress for ${download.model}: ${download.message || 'working...'}`;
     } else if (download.state === 'error') {
@@ -154,7 +160,7 @@ export function updateOllamaStatus(status) {
         message += ` ${download.message}`;
     }
     el.ollamaModelStatus.textContent = message;
-    el.ollamaModelStatus.style.color = status.available && status.current_model_installed && download.state !== 'downloading'
+    el.ollamaModelStatus.style.color = status.available && status.current_model_installed && !gpuStatus.warning && download.state !== 'downloading'
         ? 'var(--cyan)'
         : 'var(--yellow)';
     state.ollamaDownloadPolling = download.state === 'downloading';
@@ -241,10 +247,18 @@ export function updateOllamaDiagnostics(status = {}) {
     }
 
     const diagnostics = status.llm_diagnostics || {};
+    const gpuStatus = status.gpu_status || {};
     const lines = [
         `Provider: ${status.available ? 'Ollama reachable' : 'Ollama unavailable'}`,
         `Model: ${status.current_model || diagnostics.model || 'unknown'}`,
+        `GPU: ${gpuStatus.message || 'not checked'}`,
     ];
+    if (gpuStatus.current_model_size_vram_label || gpuStatus.current_model_size_label) {
+        const vram = gpuStatus.current_model_size_vram_label || '0 B';
+        const total = gpuStatus.current_model_size_label || 'unknown total';
+        lines.push(`Model memory: ${vram} VRAM / ${total}`);
+    }
+    if (gpuStatus.warning) lines.push(`GPU warning: ${gpuStatus.warning}`);
     if (diagnostics.last_updated_at) {
         const elapsed = diagnostics.last_elapsed_ms ?? 'unknown';
         const code = diagnostics.last_status_code ?? 'n/a';

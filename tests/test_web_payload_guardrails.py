@@ -16,6 +16,7 @@ ALLOWED_PAYLOAD_BINDING_FUNCTIONS = {
     "_ollama_status_payload",
     "get_ollama_models_for_ui",
     "get_persona_prompts_for_ui",
+    "setup_check_payload",
     "settings_payload",
 }
 

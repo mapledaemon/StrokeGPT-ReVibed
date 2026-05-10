@@ -18,6 +18,12 @@ def check_settings_route():
     return jsonify(web.settings_payload())
 
 
+@settings_blueprint.route('/setup_check')
+def setup_check_route():
+    web = _web()
+    return jsonify(web.setup_check_payload())
+
+
 @settings_blueprint.route('/reset_settings', methods=['POST'])
 def reset_settings_route():
     web = _web()

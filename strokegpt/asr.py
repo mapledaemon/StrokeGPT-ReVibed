@@ -498,6 +498,38 @@ class VoiceInputService:
             "model_options": self._provider_model_options(),
         }
 
+    def setup_status(self):
+        torch_runtime = {
+            "torch_available": False,
+            "torch_version": "",
+            "cuda_available": False,
+            "cuda_version": "",
+            "device_count": 0,
+            "device_name": "",
+            "device": _detect_torch_device(os.getenv("STROKEGPT_PARAKEET_DEVICE")),
+        }
+        if _module_available("torch"):
+            try:
+                import torch  # type: ignore[import-not-found]
+
+                torch_runtime["torch_available"] = True
+                torch_runtime["torch_version"] = getattr(torch, "__version__", "")
+                torch_runtime["cuda_available"] = bool(torch.cuda.is_available())
+                torch_runtime["cuda_version"] = getattr(torch.version, "cuda", "") or ""
+                torch_runtime["device_count"] = int(torch.cuda.device_count()) if torch_runtime["cuda_available"] else 0
+                torch_runtime["device_name"] = torch.cuda.get_device_name(0) if torch_runtime["cuda_available"] else ""
+                torch_runtime["device"] = _detect_torch_device(os.getenv("STROKEGPT_PARAKEET_DEVICE"))
+            except Exception as exc:
+                torch_runtime["error"] = str(exc)
+        return {
+            "selected": self.status(),
+            "faster_whisper_available": _module_available("faster_whisper"),
+            "ctranslate2_available": _module_available("ctranslate2"),
+            "ctranslate2_cuda_devices": _count_cuda_devices(),
+            "nemo_available": _module_available("nemo.collections.asr"),
+            "torch": torch_runtime,
+        }
+
     def _require_ready(self):
         if not self.enabled or self.provider == VOICE_INPUT_PROVIDER_DISABLED:
             raise VoiceInputUnavailable("Voice input is disabled.")

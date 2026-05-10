@@ -41,6 +41,104 @@ class WebOllamaRouteTests(WebTestCase):
         self.assertIn("Download Model", data["message"])
         self.assertEqual(data["installed_models"][0]["size_label"], "2.0 KB")
 
+    def test_ollama_status_reports_gpu_vram_for_loaded_current_model(self):
+        from strokegpt.web import llm
+
+        original_model = llm.model
+        llm.model = "local/test-model:latest"
+        try:
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[
+                {
+                    "name": "local/test-model:latest",
+                    "size": 4096,
+                    "size_label": "4.0 KB",
+                    "size_vram": 4096,
+                    "size_vram_label": "4.0 KB",
+                },
+            ]):
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertTrue(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["state"], "gpu")
+            self.assertEqual(data["gpu_status"]["current_model_size_vram_label"], "4.0 KB")
+            self.assertEqual(data["gpu_status"]["setup_warning"], "")
+        finally:
+            llm.model = original_model
+
+    def test_ollama_status_warns_when_loaded_current_model_reports_no_vram(self):
+        from strokegpt.web import llm
+
+        original_model = llm.model
+        llm.model = "local/test-model:latest"
+        try:
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[
+                {
+                    "name": "local/test-model:latest",
+                    "size": 4096,
+                    "size_label": "4.0 KB",
+                    "size_vram": 0,
+                    "size_vram_label": "",
+                },
+            ]):
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertFalse(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["state"], "cpu")
+            self.assertIn("system memory only", data["gpu_status"]["warning"])
+            self.assertEqual(data["gpu_status"]["setup_warning"], data["gpu_status"]["warning"])
+        finally:
+            llm.model = original_model
+
+    def test_ollama_status_keeps_idle_current_model_as_unknown_not_cpu_warning(self):
+        from strokegpt.web import llm
+
+        original_model = llm.model
+        llm.model = "local/test-model:latest"
+        try:
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[]):
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIsNone(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["state"], "not_loaded")
+            self.assertEqual(data["gpu_status"]["warning"], "")
+            self.assertEqual(data["gpu_status"]["setup_warning"], "")
+        finally:
+            llm.model = original_model
+
+    def test_ollama_status_does_not_warn_cpu_when_running_payload_lacks_vram_field(self):
+        from strokegpt.web import llm
+
+        original_model = llm.model
+        llm.model = "local/test-model:latest"
+        try:
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]):
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIsNone(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["state"], "unknown")
+            self.assertEqual(data["gpu_status"]["warning"], "")
+            self.assertIn("did not report VRAM", data["gpu_status"]["message"])
+        finally:
+            llm.model = original_model
+
     def test_ollama_download_endpoint_selects_model_and_starts_pull(self):
         from strokegpt.web import llm, settings
 

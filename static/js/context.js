@@ -162,6 +162,8 @@ export const el = {
     motionTrainingFeedbackDown: D.getElementById('motion-training-feedback-down'),
     setupOverlay: D.getElementById('setup-overlay'),
     setupBox: D.getElementById('setup-box'),
+    runSetupCheckBtn: D.getElementById('run-setup-check-btn'),
+    setupCheckStatus: D.getElementById('setup-check-status'),
     sendChatBtn: D.getElementById('send-chat-btn'),
     statusText: D.getElementById('status-text'),
     resetSettingsBtn: D.getElementById('reset-settings-btn'),

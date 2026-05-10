@@ -23,7 +23,7 @@ import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { initSettingsControls, setPersonaPrompt } from '../../static/js/settings.js';
+import { initSettingsControls, setPersonaPrompt, updateOllamaStatus } from '../../static/js/settings.js';
 import { state, reportSaveFailure, apiCall, setStatusMessage } from '../../static/js/context.js';
 
 
@@ -274,5 +274,35 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
 
         assert.strictEqual(modelStatus.textContent, 'Model name is not available.');
         assert.strictEqual(modelStatus.style.color, 'var(--yellow)');
+    });
+
+    it('updateOllamaStatus surfaces confirmed CPU-only model load as a warning', () => {
+        const modelStatus = resetStubElement('ollama-model-status');
+        const diagnostics = resetStubElement('ollama-diagnostics-output');
+        getStubElement('ollama-diagnostics-level-select').value = 'status';
+
+        updateOllamaStatus({
+            available: true,
+            current_model: 'local/test-model:latest',
+            current_model_installed: true,
+            installed_model_names: ['local/test-model:latest'],
+            download: {},
+            diagnostics_level: 'status',
+            llm_diagnostics: {},
+            message: 'Current model is installed: local/test-model:latest',
+            gpu_status: {
+                state: 'cpu',
+                accelerated: false,
+                message: 'Ollama reports the selected model is CPU-only right now.',
+                warning: 'Ollama reports the selected model is running in system memory only.',
+                current_model_size_label: '4.0 GB',
+                current_model_size_vram_label: '',
+            },
+        });
+
+        assert.match(modelStatus.textContent, /system memory only/);
+        assert.strictEqual(modelStatus.style.color, 'var(--yellow)');
+        assert.match(diagnostics.textContent, /GPU: Ollama reports the selected model is CPU-only/);
+        assert.match(diagnostics.textContent, /GPU warning: Ollama reports the selected model is running in system memory only/);
     });
 });
