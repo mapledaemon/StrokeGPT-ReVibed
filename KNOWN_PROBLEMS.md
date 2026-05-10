@@ -76,8 +76,8 @@ different window sizes.
 
 Follow-up work:
 
-- Review spacing in the main chat footer, settings tabs, model controls, and
-  motion training window at common desktop and mobile widths.
+- Review remaining spacing in the motion training window and dense chat/motion
+  status controls at common desktop and mobile widths.
 - Keep status bars and feedback controls compact without oversized bezels.
 - Prefer small layout fixes and responsive constraints over large visual
   rewrites unless the current structure blocks clean formatting.
