@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #132 - UI Review Cleanup
+-----------------------------------------
+
+Branch: codex/ui-review-cleanups
+
+- Fixed the mobile sidebar drawer so it opens below the top bar instead of
+  hiding its own first controls under the header.
+- Reduced duplicate setup-check failure copy in Settings > Diagnostics and
+  softened optional-feature failures when the core app is still usable.
+- Renamed the returning-user startup persona prompt so it reads as a session
+  choice instead of a first-run setup step.
+- Collapsed local Chatterbox generation sliders behind Advanced Voice Tuning
+  and compacted Motion Training pattern rows for better scanability.
+
+
 2026-05-10 - PR #131 - Settings Diagnostics Tab And Latency Checks
 ------------------------------------------------------------------
 

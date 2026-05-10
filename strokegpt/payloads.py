@@ -228,15 +228,30 @@ def _optional_dependency_status(is_available, provider_selected):
 
 
 def _setup_summary(sections):
-    statuses = [
-        item.get("status")
+    statuses_by_section = {
+        section.get("id"): [
+            item.get("status")
+            for item in section.get("items", [])
+        ]
         for section in sections
-        for item in section.get("items", [])
+    }
+    statuses = [
+        status
+        for section_statuses in statuses_by_section.values()
+        for status in section_statuses
     ]
     if "error" in statuses:
+        blocking_errors = any(
+            "error" in statuses_by_section.get(section_id, [])
+            for section_id in {"core", "ollama"}
+        )
         return {
             "status": "error",
-            "message": "Setup check found required items that need attention.",
+            "message": (
+                "Core app or selected model setup needs attention."
+                if blocking_errors
+                else "Core app is ready; selected optional features need setup."
+            ),
         }
     if "warning" in statuses:
         return {

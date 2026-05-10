@@ -5,6 +5,50 @@ from tests._web_support import WebTestCase
 
 
 class SetupCheckRouteTests(WebTestCase):
+    def test_setup_check_summary_distinguishes_optional_feature_errors(self):
+        from strokegpt.payloads import setup_check_payload
+
+        payload = setup_check_payload(
+            configured=True,
+            handy_key="saved-key",
+            ollama_status={
+                "available": True,
+                "current_model": "local/test-model:latest",
+                "current_model_installed": True,
+                "message": "Current model is installed: local/test-model:latest",
+                "gpu_status": {"state": "not_loaded"},
+            },
+            voice_input_setup={
+                "selected": {
+                    "provider": "local_faster_whisper",
+                    "status_code": "dependency_missing",
+                    "message": "Voice input needs faster-whisper.",
+                },
+                "faster_whisper_available": False,
+                "ctranslate2_available": False,
+                "ctranslate2_cuda_devices": 0,
+                "nemo_available": False,
+                "torch": {"cuda_available": False},
+            },
+            local_tts_status={
+                "engine": "chatterbox_turbo",
+                "engine_label": "Chatterbox Turbo",
+                "message": "Chatterbox Turbo is not installed.",
+                "engines": [{"id": "chatterbox_turbo", "label": "Chatterbox Turbo", "available": False}],
+                "cuda_available": False,
+                "torch": {"device": "cpu", "device_name": ""},
+            },
+            audio_provider="elevenlabs",
+            audio_enabled=False,
+            elevenlabs_key="",
+        )
+
+        self.assertEqual(payload["summary"]["status"], "error")
+        self.assertEqual(
+            payload["summary"]["message"],
+            "Core app is ready; selected optional features need setup.",
+        )
+
     def test_setup_check_reports_ollama_and_voice_gpu_warnings(self):
         from strokegpt.web import audio, settings, voice_input
 

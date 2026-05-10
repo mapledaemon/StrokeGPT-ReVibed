@@ -155,7 +155,13 @@ export async function runSetupCheck() {
         return;
     }
     renderSetupCheckResults(payload);
-    setStatusMessage(el.setupCheckStatus, payload.summary?.message || 'Setup check completed.', statusTone(payload.summary?.status));
+    const summaryStatus = payload.summary?.status;
+    const inlineMessage = summaryStatus === 'error'
+        ? 'Review items marked Needs Fix below.'
+        : summaryStatus === 'warning'
+            ? 'Review warnings below.'
+            : 'Setup check completed.';
+    setStatusMessage(el.setupCheckStatus, inlineMessage, statusTone(summaryStatus));
     if (el.runSetupCheckBtn) el.runSetupCheckBtn.disabled = false;
 }
 

@@ -382,7 +382,10 @@ function renderMotionTrainingPatternList(patterns) {
 
         const main = D.createElement('div');
         main.className = 'motion-pattern-main';
-        main.appendChild(createPatternText(pattern));
+        main.appendChild(createPatternText(pattern, {
+            includeDescription: false,
+            compactMetadata: true,
+        }));
 
         const actions = D.createElement('div');
         actions.className = 'motion-pattern-row-actions';
