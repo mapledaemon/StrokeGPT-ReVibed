@@ -7,7 +7,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { sendUserMessage } from '../../static/js/chat.js';
+import { scrollChatToLatest, sendUserMessage } from '../../static/js/chat.js';
 import { state } from '../../static/js/context.js';
 
 
@@ -211,5 +211,21 @@ describe('chat action statuses', () => {
             'Message failed: auto_started_but_blocked',
         );
         assert.deepStrictEqual(calls, ['/send_message']);
+    });
+
+    it('exposes the latest jump button only while scrollback is away from bottom', () => {
+        const chatView = getStubElement('chat-view');
+        const jumpButton = getStubElement('jump-to-latest-btn');
+        chatView.scrollHeight = 1000;
+        chatView.scrollTop = 100;
+        chatView.clientHeight = 300;
+
+        assert.strictEqual(scrollChatToLatest(), false);
+        assert.strictEqual(jumpButton.hidden, false);
+        assert.strictEqual(jumpButton.getAttribute('aria-hidden'), 'false');
+
+        assert.strictEqual(scrollChatToLatest({ force: true }), true);
+        assert.strictEqual(jumpButton.hidden, true);
+        assert.strictEqual(jumpButton.getAttribute('aria-hidden'), 'true');
     });
 });

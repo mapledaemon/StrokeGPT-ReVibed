@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #138 - Chat Latest Jump Affordance
+---------------------------------------------------
+
+Branch: codex/chat-latest-focus-affordance
+
+- Added an explicit accessible label and chat-log control relationship to the
+  scrollback "Latest" jump button, and mirrored its hidden state through
+  `aria-hidden` so it is exposed only while available.
+- Added a keyboard focus-visible treatment for the floating jump button and a
+  frontend runtime assertion for the scrollback visibility contract.
+
+
 2026-05-10 - PR #137 - Chat Message Surface Tightening
 -------------------------------------------------------
 

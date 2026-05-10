@@ -31,7 +31,9 @@ export function isChatNearBottom() {
 }
 
 function setJumpToLatestVisible(visible) {
-    if (el.jumpToLatestBtn) el.jumpToLatestBtn.hidden = !visible;
+    if (!el.jumpToLatestBtn) return;
+    el.jumpToLatestBtn.hidden = !visible;
+    el.jumpToLatestBtn.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
 
 export function scrollChatToLatest({force = false} = {}) {
