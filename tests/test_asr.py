@@ -82,13 +82,16 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertIn("download failed", status["message"])
 
     def test_transcribe_passes_recognition_tuning_to_faster_whisper(self):
-        calls = {}
+        calls = []
 
         class FakeModel:
             def transcribe(self, audio_path, **kwargs):
-                calls["audio_path"] = audio_path
-                calls["kwargs"] = kwargs
-                return [types.SimpleNamespace(text=" start freestyle ")], types.SimpleNamespace(
+                calls.append({"audio_path": audio_path, "kwargs": kwargs})
+                return [types.SimpleNamespace(
+                    text=" start freestyle ",
+                    avg_logprob=-0.4,
+                    no_speech_prob=0.05,
+                )], types.SimpleNamespace(
                     language="en",
                     language_probability=0.98,
                     duration=1.2,
@@ -114,16 +117,118 @@ class VoiceInputServiceTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["transcript"], "start freestyle")
-        self.assertEqual(calls["audio_path"], "speech.webm")
-        self.assertEqual(calls["kwargs"]["language"], "en")
-        self.assertTrue(calls["kwargs"]["vad_filter"])
-        self.assertEqual(calls["kwargs"]["beam_size"], 4)
-        self.assertFalse(calls["kwargs"]["condition_on_previous_text"])
-        self.assertEqual(calls["kwargs"]["vad_parameters"], {
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["audio_path"], "speech.webm")
+        self.assertEqual(calls[0]["kwargs"]["language"], "en")
+        self.assertTrue(calls[0]["kwargs"]["vad_filter"])
+        self.assertEqual(calls[0]["kwargs"]["beam_size"], 1)
+        self.assertEqual(result["recognition"]["configured_beam_size"], 4)
+        self.assertEqual(result["recognition"]["beam_size"], 1)
+        self.assertIn("tip base shaft", calls[0]["kwargs"]["initial_prompt"])
+        self.assertFalse(calls[0]["kwargs"]["condition_on_previous_text"])
+        self.assertEqual(calls[0]["kwargs"]["vad_parameters"], {
             "threshold": 0.42,
             "min_silence_duration_ms": 700,
             "speech_pad_ms": 300,
         })
+
+    def test_transcribe_forces_english_when_language_is_auto(self):
+        calls = []
+
+        class FakeModel:
+            def transcribe(self, audio_path, **kwargs):
+                calls.append(kwargs)
+                return [types.SimpleNamespace(
+                    text=" stop ",
+                    avg_logprob=-0.2,
+                    no_speech_prob=0.01,
+                )], types.SimpleNamespace(language="en")
+
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="auto",
+        )
+        service._model = FakeModel()
+        service._model_key = ("local_faster_whisper", "tiny.en")
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            result = service.transcribe_file(Path("speech.webm"))
+
+        self.assertEqual(result["transcript"], "stop")
+        self.assertEqual(calls[0]["language"], "en")
+
+    def test_transcribe_reruns_low_confidence_clip_with_configured_beam(self):
+        calls = []
+
+        class FakeModel:
+            def transcribe(self, audio_path, **kwargs):
+                calls.append(kwargs)
+                if len(calls) == 1:
+                    return [types.SimpleNamespace(
+                        text=" start ",
+                        avg_logprob=-0.2,
+                        no_speech_prob=0.72,
+                    )], types.SimpleNamespace(language="en")
+                return [types.SimpleNamespace(
+                    text=" start freestyle ",
+                    avg_logprob=-0.5,
+                    no_speech_prob=0.03,
+                )], types.SimpleNamespace(language="en")
+
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="en",
+            beam_size=5,
+        )
+        service._model = FakeModel()
+        service._model_key = ("local_faster_whisper", "tiny.en")
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            result = service.transcribe_file(Path("speech.webm"))
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["transcript"], "start freestyle")
+        self.assertEqual([call["beam_size"] for call in calls], [1, 5])
+        self.assertEqual(result["timings"]["asr_attempts"], 2)
+        self.assertEqual(result["recognition"]["beam_size"], 5)
+
+    def test_transcribe_rejects_transcript_after_low_confidence_rerun(self):
+        calls = []
+
+        class FakeModel:
+            def transcribe(self, audio_path, **kwargs):
+                calls.append(kwargs)
+                return [types.SimpleNamespace(
+                    text=" random wrong command ",
+                    avg_logprob=-1.7,
+                    no_speech_prob=0.05,
+                )], types.SimpleNamespace(language="en")
+
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="en",
+            beam_size=5,
+        )
+        service._model = FakeModel()
+        service._model_key = ("local_faster_whisper", "tiny.en")
+
+        with mock.patch.object(service, "dependency_available", return_value=True):
+            result = service.transcribe_file(Path("speech.webm"))
+
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(result["transcript"], "")
+        self.assertIn("I didn't catch that", result["message"])
+        self.assertEqual([call["beam_size"] for call in calls], [1, 5])
+        self.assertEqual(service.last_transcript, "")
 
     def test_model_load_uses_windows_safe_local_cache(self):
         calls = {}

@@ -180,6 +180,34 @@ class WebVoiceInputRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_transcribe_voice_preserves_low_confidence_rejection(self):
+        from strokegpt.web import voice_input
+
+        with mock.patch.object(voice_input, "transcribe_file", return_value={
+            "status": "rejected",
+            "transcript": "",
+            "message": "I didn't catch that. Try speaking closer to the microphone.",
+            "language": "en",
+            "timings": {"transcribe_ms": 25, "asr_attempts": 2, "asr_beam_size": 5},
+            "provider": "local_faster_whisper",
+            "model": "tiny.en",
+        }) as transcribe:
+            response = self.client.post(
+                "/transcribe_voice",
+                data={"audio": (io.BytesIO(b"fake audio"), "speech.webm", "audio/webm")},
+                content_type="multipart/form-data",
+            )
+
+        try:
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "rejected")
+            self.assertEqual(data["transcript"], "")
+            self.assertIn("I didn't catch that", data["message"])
+            transcribe.assert_called_once()
+        finally:
+            response.close()
+
     def test_transcribe_voice_rejects_unsupported_files(self):
         response = self.client.post(
             "/transcribe_voice",

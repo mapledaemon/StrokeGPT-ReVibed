@@ -269,8 +269,11 @@ def transcribe_voice_route():
 
     transcript = result.get("transcript", "").strip()
     if not transcript:
-        result["status"] = "no_speech"
-        result["message"] = "No speech detected."
+        if result.get("status") != "rejected":
+            result["status"] = "no_speech"
+            result["message"] = "No speech detected."
+        else:
+            result.setdefault("message", "I didn't catch that.")
     else:
         result["message"] = "Transcript ready."
     result["voice_input_status"] = web.voice_input.status()
