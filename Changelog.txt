@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Chat Fenced Code Rendering
+-----------------------------------------------------
+
+Branch: codex/chat-fenced-code-rendering
+
+- Added explicit chat rendering support for complete Markdown fenced code
+  blocks while keeping ordinary Markdown and HTML-like text literal.
+- Added frontend runtime coverage for fenced code, incomplete fences, and the
+  legacy `<pre>...</pre>` compatibility path so future chat rendering work has
+  a concrete contract.
+
+
 2026-05-10 - PR #142 - Local TTS Tail Padding
 ----------------------------------------------
 
