@@ -163,6 +163,7 @@ body.chat-model-unavailable #chat-messages-container { border-color: rgba(216, 1
 .my-button:disabled:hover { background-color: #2a313b; transform: none; box-shadow: none; }
 .chat-jump-button { position: absolute; left: 50%; bottom: var(--space-3); transform: translateX(-50%); width: auto; min-height: 2rem; padding: 0.375rem 0.875rem; border-radius: 999px; font-size: 0.8rem; z-index: 5; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.36); }
 .chat-jump-button:hover { transform: translateX(-50%) translateY(-1px); }
+.chat-jump-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; transform: translateX(-50%) translateY(-1px); }
 .chat-jump-button[hidden] { display: none; }
 [data-backend-locked="true"] { cursor: not-allowed; opacity: 0.6; }
 .control-action-stack, .preset-mode-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
