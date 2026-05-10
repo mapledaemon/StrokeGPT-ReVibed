@@ -8,7 +8,7 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Voice Input Browser Preprocessing And Trim
+2026-05-10 - PR #115 - Voice Input Browser Preprocessing And Trim
 --------------------------------------------------------------------
 
 Branch: codex/voice-audio-preprocess-trim
