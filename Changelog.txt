@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Setup Check Wizard And Ollama GPU Warning
-------------------------------------------------------
+2026-05-10 - PR #130 - Setup Check Wizard And Ollama GPU Warning
+-----------------------------------------------------------------
 
 Branch: codex/ollama-gpu-setup-warning
 
