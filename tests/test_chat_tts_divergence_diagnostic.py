@@ -34,15 +34,18 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
 
         captured = io.StringIO()
         app_state.messages_for_ui.clear()
+        app_state.chat_audio_warning = ""
         with mock.patch.object(audio, "generate_audio_for_text", return_value=None) as gen:
             with redirect_stdout(captured):
                 add_message_to_queue(**kwargs)
-        return captured.getvalue(), gen
+        warning = app_state.chat_audio_warning
+        app_state.chat_audio_warning = ""
+        return captured.getvalue(), gen, warning
 
     def test_normal_call_does_not_warn(self):
         """A normal user-visible reply (text + queue + tts) is the
         non-divergent baseline. The diagnostic must stay silent."""
-        out, gen = self._run_add_message(
+        out, gen, warning = self._run_add_message(
             text="hello there",
             add_to_history=True,
             queue_message=True,
@@ -50,12 +53,13 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
         )
         self.assertNotIn("[WARN] TTS enqueued without chat-emit", out)
         self.assertNotIn("[WARN] TTS enqueued with empty chat text", out)
+        self.assertEqual(warning, "")
         gen.assert_called_once()
 
     def test_warns_when_queue_message_false_but_tts_on(self):
         """queue_message=False + generate_audio=True is the regression
         shape: TTS speaks while the chat panel never receives the bubble."""
-        out, gen = self._run_add_message(
+        out, gen, warning = self._run_add_message(
             text="hidden audio reply",
             add_to_history=False,
             queue_message=False,
@@ -64,31 +68,34 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
         self.assertIn("[WARN] TTS enqueued without chat-emit", out)
         self.assertIn("text_len=", out)
         self.assertIn("'hidden audio reply'", out)
+        self.assertIn("without a matching chat message", warning)
         gen.assert_called_once()
 
     def test_warns_when_chat_text_is_empty_but_tts_on(self):
         """Whitespace-only or HTML-only text would render as a blank bubble
         and the front-end may drop it. Warn so the case is visible."""
-        out, gen = self._run_add_message(
+        out, gen, warning = self._run_add_message(
             text="   ",
             add_to_history=False,
             queue_message=True,
             generate_audio=True,
         )
         self.assertIn("[WARN] TTS enqueued with empty chat text", out)
+        self.assertIn("empty chat text", warning)
         gen.assert_called_once()
 
     def test_warns_when_only_html_tags_so_visible_text_is_empty(self):
         """The chat-history strip uses ``re.sub(r'<[^>]+>', '', text)``;
         the diagnostic must use the same definition of "empty" so a
         markup-only message is flagged consistently."""
-        out, gen = self._run_add_message(
+        out, gen, warning = self._run_add_message(
             text="<i></i>",
             add_to_history=False,
             queue_message=True,
             generate_audio=True,
         )
         self.assertIn("[WARN] TTS enqueued with empty chat text", out)
+        self.assertIn("empty chat text", warning)
         gen.assert_called_once()
 
     def test_does_not_warn_when_tts_disabled(self):
@@ -97,7 +104,7 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
         whether ``queue_message`` was true or false."""
         for queue_message in (True, False):
             with self.subTest(queue_message=queue_message):
-                out, gen = self._run_add_message(
+                out, gen, warning = self._run_add_message(
                     text="diagnostic body",
                     add_to_history=False,
                     queue_message=queue_message,
@@ -105,6 +112,7 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
                 )
                 self.assertNotIn("[WARN] TTS enqueued without chat-emit", out)
                 self.assertNotIn("[WARN] TTS enqueued with empty chat text", out)
+                self.assertEqual(warning, "")
                 gen.assert_not_called()
 
 

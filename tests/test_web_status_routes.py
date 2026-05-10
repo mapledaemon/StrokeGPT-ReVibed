@@ -1,5 +1,6 @@
 import time
 import unittest
+from unittest import mock
 
 from tests._web_support import WebTestCase
 
@@ -9,6 +10,7 @@ class WebStatusRouteTests(WebTestCase):
         from strokegpt.web import app_state, audio
 
         app_state.messages_for_ui.clear()
+        app_state.chat_audio_warning = ""
         audio.audio_output_queue.clear()
         app_state.messages_for_ui.append("hello")
         audio.audio_output_queue.append({"bytes": b"RIFFtest", "mimetype": "audio/wav"})
@@ -28,6 +30,39 @@ class WebStatusRouteTests(WebTestCase):
             self.assertEqual(audio_response.data, b"RIFFtest")
         finally:
             audio_response.close()
+
+    def test_updates_surface_and_consume_chat_audio_warning(self):
+        from strokegpt.web import add_message_to_queue, app_state, audio
+
+        app_state.messages_for_ui.clear()
+        app_state.chat_audio_warning = ""
+        try:
+            with mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                add_message_to_queue(
+                    "hidden spoken reply",
+                    add_to_history=False,
+                    queue_message=False,
+                    generate_audio=True,
+                )
+
+            response = self.client.get("/get_updates")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertIn("without a matching chat message", payload["chat_audio_warning"])
+
+            response = self.client.get("/get_updates")
+            try:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["chat_audio_warning"], "")
+            finally:
+                response.close()
+        finally:
+            app_state.messages_for_ui.clear()
+            app_state.chat_audio_warning = ""
 
     def test_status_payload_includes_motion_observability(self):
         from strokegpt.motion import MotionTarget

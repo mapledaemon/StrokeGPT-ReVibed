@@ -224,6 +224,9 @@ export async function pollChatUpdates() {
         el.localTtsStatus.textContent = data.audio_error;
         el.localTtsStatus.style.color = 'var(--yellow)';
     }
+    if (data.chat_audio_warning) {
+        setStatusMessage(el.statusText, data.chat_audio_warning, 'warning');
+    }
     if (data.audio_ready) {
         await playQueuedAudio();
     }

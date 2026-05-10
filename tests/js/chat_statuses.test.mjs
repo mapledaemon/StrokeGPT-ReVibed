@@ -7,7 +7,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { scrollChatToLatest, sendUserMessage } from '../../static/js/chat.js';
+import { pollChatUpdates, scrollChatToLatest, sendUserMessage } from '../../static/js/chat.js';
 import { state } from '../../static/js/context.js';
 
 
@@ -227,5 +227,23 @@ describe('chat action statuses', () => {
         assert.strictEqual(scrollChatToLatest({ force: true }), true);
         assert.strictEqual(jumpButton.hidden, true);
         assert.strictEqual(jumpButton.getAttribute('aria-hidden'), 'true');
+    });
+
+    it('surfaces backend chat/TTS divergence warnings from updates', async () => {
+        globalThis.fetch = async endpoint => {
+            assert.strictEqual(endpoint, '/get_updates');
+            return jsonResponse(200, {
+                messages: [],
+                audio_ready: false,
+                chat_audio_warning: 'Voice output was queued without a matching chat message.',
+            });
+        };
+
+        await pollChatUpdates();
+
+        const statusText = getStubElement('status-text');
+        assert.strictEqual(statusText.textContent, 'Voice output was queued without a matching chat message.');
+        assert.strictEqual(statusText.dataset.statusTone, 'warning');
+        assert.strictEqual(statusText.style.color, 'var(--yellow)');
     });
 });
