@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #134 - Settings Dialog Tab Strip Cleanup
+---------------------------------------------------------
+
+Branch: codex/settings-dialog-tab-strip
+
+- Reworked the settings dialog tab row into a compact sticky grid so the eight
+  tabs keep predictable alignment instead of wrapping into uneven rows at
+  narrower widths.
+- Tightened the Model tab action grid and moved the Ollama model status into a
+  reusable settings status line instead of an inline style.
+
+
 2026-05-10 - PR #133 - Mobile Composer Shelf Cleanup
 -----------------------------------------------------
 
