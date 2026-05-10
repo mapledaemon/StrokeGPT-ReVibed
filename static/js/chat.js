@@ -134,6 +134,10 @@ function handleSendMessageStatus(data) {
     }
     if (data.chat_queued === true) {
         clearTypingIndicator();
+        if (data.chat) {
+            addChatMessage('BOT', data.chat, {forceScroll: true});
+            state.pendingQueuedBotEcho = String(data.chat);
+        }
         return true;
     }
     if (data.chat_queued === false) {
@@ -176,7 +180,15 @@ export async function pollChatUpdates() {
         el.typingIndicator.style.display = 'none';
     }
     if (data.messages) {
-        data.messages.forEach(msg => addChatMessage('BOT', msg));
+        let skippedQueuedEcho = false;
+        data.messages.forEach(msg => {
+            if (!skippedQueuedEcho && state.pendingQueuedBotEcho && msg === state.pendingQueuedBotEcho) {
+                skippedQueuedEcho = true;
+                return;
+            }
+            addChatMessage('BOT', msg);
+        });
+        state.pendingQueuedBotEcho = '';
     }
     if (data.audio_error) {
         el.localTtsStatus.textContent = data.audio_error;

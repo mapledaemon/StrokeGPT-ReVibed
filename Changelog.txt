@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #126 - Chat Reply Echo And Session Assumption Cleanup
+---------------------------------------------------------------------
+
+Branch: codex/chat-session-runtime-cleanup
+
+- Rendered `/send_message` chat replies immediately in the initiating browser
+  even when the backend also queues the reply for `/get_updates`, then skipped
+  the matching queued echo on the next poll so audio readiness can still be
+  checked without duplicating the assistant bubble.
+- Added frontend behavioral coverage for the queue-drain race where a reply
+  could be returned to the sender and spoken by TTS, but never rendered if the
+  later update poll missed the queued message.
+- Retired the source-text half of the chat/TTS divergence diagnostic test now
+  that the same contract is covered by direct behavioral calls into
+  `add_message_to_queue()`.
+- Tightened the single-active-browser-session documentation and downgraded the
+  related known problem from documentation gap to watch item.
+
+
 2026-05-10 - PR #125 - Explicit Start Auto Mode Route
 -----------------------------------------------------
 

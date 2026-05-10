@@ -188,6 +188,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   just to reuse natural-language intent parsing.
 - Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
+- Chat replies from `/send_message` are rendered immediately by the initiating
+  browser when the response includes `chat` plus `chat_queued: true`; the next
+  `/get_updates` poll skips the matching queued echo so audio readiness can
+  still be polled without duplicating the message.
 - Browser UI code is split by behavior under `static/js/`. Keep new frontend
   work inside the relevant module instead of growing `static/app.js` again.
 - Local Chatterbox sample browsing uploads/copies the selected file into `voice_samples/`; do not rely on browser-local file paths.
@@ -220,6 +224,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   Node-driven behavioral frontend tests under `tests/js/`, but not the full
   local Chatterbox stack.
 - The original upstream repository did not include a local license file when this fork was prepared.
+- Runtime state is intentionally single-operator: one trusted active browser
+  session, one Flask process, one Handy controller, and one shared settings
+  file. Multiple tabs share update queues and device state; document that
+  assumption instead of adding multi-user/session architecture by accident.
 
 ## Development Commands
 

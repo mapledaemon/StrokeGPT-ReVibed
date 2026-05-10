@@ -137,6 +137,7 @@ NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Wi
 - **Windows blocks the install script** — the `Set-ExecutionPolicy` command above only relaxes the script policy for that PowerShell process; close and reopen if you need it back to default.
 - **Settings appear blocked or show connection errors** — confirm `python app.py` is still running. When the backend is unreachable, the browser shows a connection-lost banner and locks backend-required controls until a request succeeds again.
 - **Disk fills up unexpectedly** — Ollama and Chatterbox model weights are large. Make sure the drive used by Ollama has several GB free.
+- **Chat replies or status messages appear in the wrong tab** - use one active browser tab while controlling hardware. The app is a single-operator local controller; tabs share chat/update queues, settings, mode state, and the same Handy connection.
 - **Lost saved settings** — `my_settings.json` lives in the project root. Keep it private; it can hold API keys and the Handy key.
 
 ## Development
