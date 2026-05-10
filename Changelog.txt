@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Slim Profile Menu About Planning
-----------------------------------------------------------
+2026-05-10 - PR #122 - Slim Profile Menu About Planning
+-------------------------------------------------------
 
 Branch: codex/profile-menu-about-plan
 
