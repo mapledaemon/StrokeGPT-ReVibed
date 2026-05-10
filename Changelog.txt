@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #113 - Retire Motion Save-Feedback Source-Text Test
+--------------------------------------------------------------------
+
+- Continued the source-text test paydown by deleting
+  `tests/test_motion_save_feedback_wiring.py`. The same failure-feedback
+  contract now lives in `tests/js/motion_save_feedback.test.mjs`, which imports
+  the production ES modules and drives the actual motion/audio controls or
+  exported helpers.
+- Covered the existing user-visible failure paths for motion backend save,
+  motion speed limits, long-term memory toggle, mode timing save, motion
+  pattern enable/weight/reset, feedback options, and ElevenLabs key validation
+  without pinning implementation branch shape.
+- Local validation: `python -m unittest tests.test_frontend_runtime` passed
+  with Node available, and `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` was green at
+  301 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-10 - PR #112 - Retire Settings Feedback Source-Text Test
 -----------------------------------------------------------------
 
