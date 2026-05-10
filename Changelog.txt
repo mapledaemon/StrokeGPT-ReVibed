@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #116 - Retire Chat Status Source-Text Test
+--------------------------------------------------------------
+
+Branch: codex/retire-chat-status-source-test
+
+- Continued the source-text test paydown by deleting
+  `tests/test_frontend_chat_statuses.py`. The same chat action-status contract
+  now lives in `tests/js/chat_statuses.test.mjs`, which drives
+  `sendUserMessage()` through the production `apiCall()` path and verifies the
+  visible status text plus the `/get_updates` follow-up poll.
+- Covered every existing handled action status (`stopped`, mode starts/stops,
+  `move_applied`, and `konami_code_activated`), the server-message override,
+  and the unhandled failure branch without pinning the literal object shape in
+  `static/js/chat.js`.
+- Local validation: `python -m unittest discover -s tests` green at
+  314 tests / 3 skipped; `python -m py_compile app.py strokegpt/*.py
+  tests/*.py` clean via the Windows explicit-file-list equivalent;
+  `scripts/test_and_run.ps1 -NoRun` green with the bundled Python runtime.
+
+
 2026-05-10 - PR #115 - Voice Input Browser Preprocessing And Trim
 --------------------------------------------------------------------
 
