@@ -44,20 +44,26 @@ function formatPatternFeedback(pattern) {
     return `feedback +${counts.thumbsUp} / ${counts.neutral} / -${counts.thumbsDown}`;
 }
 
-export function formatPatternMetadata(pattern) {
-    const parts = [
-        pattern.source || 'unknown',
-        `${formatPatternDuration(pattern.duration_ms)} duration`,
-        `${pattern.action_count || 0} actions`,
-        pattern.readonly ? 'read-only' : 'editable file',
-        formatPatternFeedback(pattern),
-    ];
+export function formatPatternMetadata(pattern, {compact = false} = {}) {
+    const parts = compact
+        ? [
+            pattern.source || 'unknown',
+            formatPatternDuration(pattern.duration_ms),
+            `${pattern.action_count || 0} actions`,
+        ]
+        : [
+            pattern.source || 'unknown',
+            `${formatPatternDuration(pattern.duration_ms)} duration`,
+            `${pattern.action_count || 0} actions`,
+            pattern.readonly ? 'read-only' : 'editable file',
+            formatPatternFeedback(pattern),
+        ];
     if (pattern.source === 'fixed') parts.push(`weight ${pattern.weight ?? 50}/100`);
     if (!pattern.enabled) parts.push('disabled');
     return parts.join(' | ');
 }
 
-export function createPatternText(pattern, {includeDescription = true} = {}) {
+export function createPatternText(pattern, {includeDescription = true, compactMetadata = false} = {}) {
     const text = D.createElement('div');
     text.className = 'motion-pattern-text';
 
@@ -67,7 +73,7 @@ export function createPatternText(pattern, {includeDescription = true} = {}) {
 
     const meta = D.createElement('div');
     meta.className = 'motion-pattern-meta';
-    meta.textContent = formatPatternMetadata(pattern);
+    meta.textContent = formatPatternMetadata(pattern, {compact: compactMetadata});
 
     text.append(name, meta);
     if (includeDescription && pattern.description) {

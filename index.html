@@ -295,12 +295,15 @@
                             <button id="browse-local-tts-sample-btn" class="my-button" data-requires-backend>Browse</button>
                         </div>
                         <input type="file" id="local-tts-sample-upload" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg,.aac" style="display: none;" data-requires-backend>
-                        <div class="slider-container"><label for="local-tts-exaggeration">Emotion</label><input type="range" min="0.25" max="2" step="0.05" value="0.65" id="local-tts-exaggeration"><span id="local-tts-exaggeration-val">0.65</span></div>
-                        <div class="slider-container"><label for="local-tts-cfg">Pace / adherence</label><input type="range" min="0" max="1" step="0.05" value="0.35" id="local-tts-cfg"><span id="local-tts-cfg-val">0.35</span></div>
-                        <div class="slider-container"><label for="local-tts-temperature">Variation</label><input type="range" min="0.05" max="5" step="0.05" value="0.85" id="local-tts-temperature"><span id="local-tts-temperature-val">0.85</span></div>
-                        <div class="slider-container"><label for="local-tts-top-p">Top P</label><input type="range" min="0.05" max="1" step="0.05" value="1" id="local-tts-top-p"><span id="local-tts-top-p-val">1</span></div>
-                        <div class="slider-container"><label for="local-tts-min-p">Min P</label><input type="range" min="0" max="1" step="0.01" value="0.05" id="local-tts-min-p"><span id="local-tts-min-p-val">0.05</span></div>
-                        <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
+                        <details class="voice-input-advanced-panel local-tts-advanced-panel">
+                            <summary>Advanced Voice Tuning</summary>
+                            <div class="slider-container"><label for="local-tts-exaggeration">Emotion</label><input type="range" min="0.25" max="2" step="0.05" value="0.65" id="local-tts-exaggeration"><span id="local-tts-exaggeration-val">0.65</span></div>
+                            <div class="slider-container"><label for="local-tts-cfg">Pace / adherence</label><input type="range" min="0" max="1" step="0.05" value="0.35" id="local-tts-cfg"><span id="local-tts-cfg-val">0.35</span></div>
+                            <div class="slider-container"><label for="local-tts-temperature">Variation</label><input type="range" min="0.05" max="5" step="0.05" value="0.85" id="local-tts-temperature"><span id="local-tts-temperature-val">0.85</span></div>
+                            <div class="slider-container"><label for="local-tts-top-p">Top P</label><input type="range" min="0.05" max="1" step="0.05" value="1" id="local-tts-top-p"><span id="local-tts-top-p-val">1</span></div>
+                            <div class="slider-container"><label for="local-tts-min-p">Min P</label><input type="range" min="0" max="1" step="0.01" value="0.05" id="local-tts-min-p"><span id="local-tts-min-p-val">0.05</span></div>
+                            <div class="slider-container"><label for="local-tts-repetition">Repetition guard</label><input type="range" min="1" max="2" step="0.05" value="1.2" id="local-tts-repetition"><span id="local-tts-repetition-val">1.2</span></div>
+                        </details>
                         <div class="voice-actions">
                             <button id="set-local-tts-button" class="my-button" data-requires-backend>Save Local Voice</button>
                             <button id="download-local-tts-model-button" class="my-button" data-requires-backend>Download / Load Local Voice Model</button>

@@ -48,7 +48,11 @@ export function renderSetup(isReturningUser = false, data = {}) {
                 displayStep();
             };
         } else if (step === 2) {
-            el.setupBox.innerHTML = `<h2>Step 2: Persona</h2><p>Choose or edit the AI prompt for this session.</p><select id="setup-persona-select" class="select-box"></select><input type="text" id="setup-persona" class="input-text" placeholder="Describe persona"><div class="voice-actions"><button id="setup-save-persona" class="my-button" data-requires-backend>Save Prompt</button><button id="setup-next" class="my-button" data-requires-backend>Continue</button></div>`;
+            const personaTitle = isReturningUser ? 'Session Persona' : 'Step 2: Persona';
+            const personaCopy = isReturningUser
+                ? 'Review or change the AI prompt before starting this session.'
+                : 'Choose or edit the AI prompt for this session.';
+            el.setupBox.innerHTML = `<h2>${personaTitle}</h2><p>${personaCopy}</p><select id="setup-persona-select" class="select-box"></select><input type="text" id="setup-persona" class="input-text" placeholder="Describe persona"><div class="voice-actions"><button id="setup-save-persona" class="my-button" data-requires-backend>Save Prompt</button><button id="setup-next" class="my-button" data-requires-backend>Continue</button></div>`;
             const setupPersonaSelect = D.getElementById('setup-persona-select');
             const setupPersonaInput = D.getElementById('setup-persona');
             const currentPrompt = data.persona || el.personaInput.value || state.personaPrompts[0] || 'An energetic and passionate girlfriend';
