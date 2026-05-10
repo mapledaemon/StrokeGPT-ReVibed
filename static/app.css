@@ -448,9 +448,12 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-meter-row { grid-template-columns: 36px minmax(40px, 1fr) 34px; gap: 6px; }
     #like-this-move-btn, #dislike-this-move-btn { width: 36px; height: 36px; }
     #motion-feedback-buttons { gap: var(--space-1); }
-    #message-input-line { grid-template-columns: 1fr; align-items: stretch; }
+    #chat-compose-row { grid-template-columns: var(--composer-min-height) minmax(0, 1fr); }
+    #message-input-line { grid-column: 1 / -1; grid-template-columns: 1fr; align-items: stretch; }
     #message-input-line .my-button { width: 100%; }
     #message-input-line .input-text { min-width: 0; }
+    #voice-control-buttons { grid-column: 1; width: var(--composer-min-height); }
+    #status-text { grid-column: 2; min-width: 0; justify-content: flex-start; text-align: left; }
     .chat-message-container { max-width: 100%; }
     .slider-container, .motion-panel .slider-container, .device-panel .slider-container { grid-template-columns: 1fr auto; }
     .slider-container label { grid-column: 1 / -1; }

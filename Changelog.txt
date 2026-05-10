@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #133 - Mobile Composer Shelf Cleanup
+-----------------------------------------------------
+
+Branch: codex/mobile-composer-shelf
+
+- Tightened the phone-sized chat footer so the voice control and live status
+  share one compact row below the stacked message input/send controls instead
+  of leaving the microphone alone on its own row.
+
+
 2026-05-10 - PR #132 - UI Review Cleanup
 -----------------------------------------
 
