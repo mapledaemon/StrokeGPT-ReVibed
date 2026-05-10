@@ -18,7 +18,10 @@
         <div id="top-bar">
             <h1>StrokeGPT</h1>
             <div class="top-bar-info">
-                <div id="edging-timer" style="display: none;" aria-live="polite">00:00</div>
+                <div id="active-mode-status" class="active-mode-status" aria-live="polite" hidden>
+                    <div id="active-mode-label" class="top-bar-chip active-mode-label">Mode</div>
+                    <div id="edging-timer" class="top-bar-chip active-mode-timer">00:00</div>
+                </div>
                 <div id="mood-display">Mood: ...</div>
             </div>
             <div class="top-bar-actions">

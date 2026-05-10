@@ -188,6 +188,8 @@ export const el = {
     imCloseBtn: D.getElementById('im-close-btn'),
     edgingModeBtn: D.getElementById('edging-mode-btn'),
     freestyleModeBtn: D.getElementById('freestyle-mode-btn'),
+    activeModeStatus: D.getElementById('active-mode-status'),
+    activeModeLabel: D.getElementById('active-mode-label'),
     edgingTimer: D.getElementById('edging-timer'),
     easterEggOverlay: D.getElementById('easter-egg-overlay'),
     connectionLostBanner: D.getElementById('connection-lost-banner'),

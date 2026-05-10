@@ -123,6 +123,10 @@ Keep routine settings entry points there instead of adding another full-width
 sidebar button. The About popup reuses the README Support Development text
 plus the repo-local Bitcoin and Ethereum QR assets.
 
+The top bar status area uses separate fixed-size active-mode label and timer
+chips, followed by the mood chip, so long mode names or elapsed clocks do not
+resize each other.
+
 The unified settings popup has tabs:
 
 - Persona
