@@ -30,6 +30,7 @@ class AppState:
     lock: threading.RLock = field(default_factory=threading.RLock)
     chat_history: deque = field(default_factory=lambda: deque(maxlen=20))
     messages_for_ui: deque = field(default_factory=deque)
+    chat_audio_warning: str = ""
     auto_mode_active_task: object | None = None
     current_mood: str = "Curious"
     use_long_term_memory: bool = True

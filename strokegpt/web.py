@@ -1061,17 +1061,29 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
         #      empty text downstream so the user hears nothing either, but
         #      the divergence is still worth surfacing.
         clean_for_log = re.sub(r'<[^>]+>', '', str(text or "")).strip()
+        warning_for_ui = ""
         if not queue_message:
             print(
                 f"[WARN] TTS enqueued without chat-emit "
                 f"(queue_message=False, text_len={len(clean_for_log)}, "
                 f"preview={clean_for_log[:60]!r})"
             )
+            warning_for_ui = (
+                "Voice output was queued without a matching chat message. "
+                "Check the app terminal for the TTS/chat path warning."
+            )
         elif not clean_for_log:
             print(
                 f"[WARN] TTS enqueued with empty chat text; UI bubble "
                 f"will render blank (raw_text={text!r})"
             )
+            warning_for_ui = (
+                "Voice output was requested with empty chat text. "
+                "Check the local model response and app terminal."
+            )
+        if warning_for_ui:
+            with app_state.lock:
+                app_state.chat_audio_warning = warning_for_ui
         threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
@@ -1349,10 +1361,14 @@ def persist_local_voice_settings():
 @app.route('/get_updates')
 def get_ui_updates_route():
     messages = [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
+    with app_state.lock:
+        chat_audio_warning = app_state.chat_audio_warning
+        app_state.chat_audio_warning = ""
     return jsonify({
         "messages": messages,
         "audio_ready": audio.has_audio(),
         "audio_error": audio.consume_last_error(),
+        "chat_audio_warning": chat_audio_warning,
     })
 
 def _request_bool_value(data, key, default):

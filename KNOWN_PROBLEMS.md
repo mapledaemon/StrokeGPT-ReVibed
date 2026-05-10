@@ -131,7 +131,9 @@ A backend diagnostic now logs `[WARN] TTS enqueued without chat-emit ...` or
 `strokegpt.web.add_message_to_queue` whenever the TTS-enqueue path runs without
 a matching chat-emit (either `queue_message=False` or text that strips to
 empty). That still gives a backend signal if a future caller sends voice
-without a visible chat emit.
+without a visible chat emit. The same diagnostic now also reaches the browser
+as a one-shot `/get_updates` warning, so the status strip shows the
+voice/chat-path mismatch instead of leaving the problem terminal-only.
 
 Local model transport failures now return a direct `model_error` response to
 the initiating browser instead of entering the queued assistant-message path.

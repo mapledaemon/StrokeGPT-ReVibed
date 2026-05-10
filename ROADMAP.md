@@ -237,9 +237,6 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 - Investigate TTS clips that cut off at the end, especially when local voice
   generation, chunk playback, or rapid mode narration overlaps with chat
   updates.
-- Make local LLM and voice divergence visible: if text delivery fails while
-  voice playback has a usable message, surface the text/path mismatch instead
-  of failing silently.
 - Keep markdown/code rendering opt-in and predictable; do not regress
   copy/paste, scrollback, or screen-reader behavior while restyling.
 - Preserve the existing chat-driven motion contract (chat-driven

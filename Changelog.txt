@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Chat TTS Divergence Warning
+------------------------------------------------------
+
+Branch: codex/chat-tts-divergence-warning
+
+- Promoted the existing chat/TTS divergence backend diagnostic into a one-shot
+  `/get_updates` warning so the browser status strip surfaces when voice output
+  is queued without a matching visible chat message or with empty chat text.
+- Added backend and frontend behavioral coverage for warning emission,
+  consumption, and status-tone rendering while leaving normal chat/TTS paths
+  unchanged.
+
+
 2026-05-10 - PR #140 - Top-Bar Voice Output Toggle
 ---------------------------------------------------
 
