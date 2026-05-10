@@ -75,6 +75,11 @@ describe('motion/audio save feedback', () => {
         resetStubElement('motion-pattern-status');
         resetStubElement('local-tts-status');
         resetStubElement('llm-edge-permissions-status');
+        resetStubElement('active-mode-status');
+        resetStubElement('active-mode-label');
+        resetStubElement('edging-timer');
+        resetStubElement('im-close-btn');
+        resetStubElement('pause-resume-btn');
         getStubElement('status-text').textContent = 'baseline';
         getStubElement('motion-backend-status').textContent = 'baseline';
         getStubElement('motion-pattern-status').textContent = 'baseline';
@@ -263,6 +268,27 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('status-text');
         assert.strictEqual(status.textContent, 'Edging is blocked until the device connects.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('start auto uses the explicit mode route and updates active mode UI', async () => {
+        const calls = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push([endpoint, options.method || 'GET']);
+            if (endpoint === '/start_auto_mode') return jsonResponse(200, { status: 'auto_started' });
+            return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
+        };
+        getStubElement('im-close-btn').style.display = 'block';
+
+        getStubElement('start-auto-btn').click();
+        await flushAsyncHandlers();
+
+        assert.deepStrictEqual(calls, [['/start_auto_mode', 'POST']]);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Auto mode started.');
+        assert.strictEqual(getStubElement('active-mode-status').hidden, false);
+        assert.strictEqual(getStubElement('active-mode-label').textContent, 'Auto');
+        assert.strictEqual(getStubElement('edging-timer').textContent, '00:00');
+        assert.strictEqual(getStubElement('im-close-btn').style.display, 'none');
+        assert.strictEqual(state.activeModeName, 'auto');
     });
 
     it('saveLlmEdgePermissions surfaces the backend message on the local status span', async () => {

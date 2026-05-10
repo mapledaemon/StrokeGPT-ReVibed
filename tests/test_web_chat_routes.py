@@ -331,6 +331,20 @@ class WebChatRouteTests(WebTestCase):
             mode_name='freestyle',
         )
 
+    def test_start_auto_route_uses_auto_mode(self):
+        import strokegpt.web as web
+
+        with mock.patch.object(web, "start_background_mode") as start_background_mode:
+            response = self.client.post("/start_auto_mode")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "auto_started")
+        start_background_mode.assert_called_once_with(
+            web.auto_mode_logic,
+            "Okay, I'll take over...",
+            mode_name='auto',
+        )
+
     def test_server_motion_request_detector_accepts_slowly(self):
         from strokegpt.web import _looks_like_motion_request
 
