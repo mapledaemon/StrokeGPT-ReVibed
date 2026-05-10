@@ -406,8 +406,9 @@ setup console.
   failure model simple: persistent red banner for network/backend loss, one
   inline status near the affected control for reachable-but-rejected writes,
   and handler-specific treatment for action endpoints that already have mode,
-  chat, or toast feedback. Do not mechanically add more yellow status text if
-  it produces duplicate or conflicting messages.
+  chat, or toast feedback. Extend the shared status-tone helper if the failure
+  model needs new severity states; do not mechanically add handler-specific
+  color writes if they produce duplicate or conflicting messages.
 - Tighten spacing in the right-side/collapsible UI, settings panels, and
   compact control rows so new diagnostics, reconnect, pause/resume, and
   mode buttons fit without adding unnecessary boundaries or dead space.
