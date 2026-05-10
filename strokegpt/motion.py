@@ -14,11 +14,22 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
+def _minimum_jerk(amount: float) -> float:
+    amount = _clamp(amount, 0.0, 1.0)
+    return 10.0 * amount**3 - 15.0 * amount**4 + 6.0 * amount**5
+
+
+def _lerp(start: float, end: float, amount: float) -> float:
+    return start + (end - start) * _clamp(amount, 0.0, 1.0)
+
+
 POSITION_MAX_DEPTH_STEP = 9.0
 POSITION_BLEND_DELAY_FACTOR = 0.16
 POSITION_TURN_DELAY_FACTOR = 0.2
 TURN_BRAKE_SPEED_FACTOR = 0.45
 POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
+CONTINUOUS_SAMPLE_INTERVAL_SECONDS = 0.16
+CONTINUOUS_MORPH_SECONDS = 0.65
 
 
 def _depth_direction(start: "MotionTarget", end: "MotionTarget", threshold: float = 7.0) -> int:
@@ -623,7 +634,7 @@ class MotionController:
         self.handy = handy
         self.sanitizer = sanitizer or MotionSanitizer()
         self.step_delay = step_delay
-        self.backend = "hamp"
+        self.backend = "continuous"
         self._lock = threading.Lock()
         self._generation = 0
         self._observability_lock = threading.Lock()
@@ -637,12 +648,23 @@ class MotionController:
         self._pause_event = threading.Event()
 
     def set_backend(self, backend: str) -> None:
-        normalized = "position" if str(backend or "").lower() == "position" else "hamp"
+        normalized = self._normalize_backend(backend)
         if normalized != self.backend:
+            with self._lock:
+                self._generation += 1
+            self._set_frame_playback_active(False)
             self.backend = normalized
             self._record_current_state(source="settings", label=f"{self.backend} backend")
         else:
             self.backend = normalized
+
+    def _normalize_backend(self, backend: str) -> str:
+        cleaned = str(backend or "").strip().lower().replace("-", "_")
+        if cleaned in {"continuous", "continuous_position", "pattern", "pattern_position", "position_continuous"}:
+            return "continuous"
+        if cleaned in {"position", "position_script", "flexible_position", "flexible"}:
+            return "position"
+        return "hamp"
 
     def current_target(self) -> MotionTarget:
         return MotionTarget(
@@ -655,6 +677,10 @@ class MotionController:
     def apply_target(self, target: MotionTarget, smooth: bool = True, source: str = "target") -> None:
         if target.speed <= 0:
             self.stop()
+            return
+
+        if smooth and self.backend in {"continuous", "position"}:
+            self.apply_position_frames(self._direct_position_frames(target), source=source)
             return
 
         with self._lock:
@@ -685,6 +711,16 @@ class MotionController:
         return target
 
     def apply_generated_target(self, target: MotionTarget, source: str = "generated") -> None:
+        if target.speed <= 0:
+            self.stop()
+            return
+
+        if self.backend == "continuous":
+            if self.apply_continuous_target(target, source=source):
+                return
+            self.apply_position_frames(self._direct_position_frames(target), source=source)
+            return
+
         frames = self._expanded_frames(target)
         if frames:
             if self.backend == "position":
@@ -904,6 +940,133 @@ class MotionController:
         else:
             self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
+
+    def apply_continuous_target(self, target: MotionTarget, source: str = "continuous pattern") -> bool:
+        plan = self._continuous_plan(target)
+        if plan is None:
+            return False
+
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+        self._set_frame_playback_active(True)
+
+        thread = threading.Thread(
+            target=self._run_continuous_plan,
+            args=(plan, target.clamped(), source, generation),
+            daemon=True,
+        )
+        thread.start()
+        return True
+
+    def _continuous_plan(self, target: MotionTarget):
+        if target.motion_program:
+            from .motion_patterns import continuous_anchor_motion_plan
+
+            return continuous_anchor_motion_plan(target.motion_program)
+
+        pattern = self._pattern_from_label(target.label)
+        if not pattern:
+            return None
+        from .motion_patterns import continuous_motion_plan
+
+        return continuous_motion_plan(pattern)
+
+    def _continuous_sample_interval(self) -> float:
+        if self.step_delay <= 0:
+            return 0.08
+        return _clamp(self.step_delay, 0.08, CONTINUOUS_SAMPLE_INTERVAL_SECONDS)
+
+    def _interpolate_target(self, start: MotionTarget, end: MotionTarget, amount: float, label: str) -> MotionTarget:
+        return MotionTarget(
+            _lerp(start.speed, end.speed, amount),
+            _lerp(start.depth, end.depth, amount),
+            _lerp(start.stroke_range, end.stroke_range, amount),
+            label=label,
+        ).clamped()
+
+    def _limit_continuous_step(self, previous: MotionTarget, target: MotionTarget) -> MotionTarget:
+        deltas = (
+            (abs(target.speed - previous.speed), self.sanitizer.limits.max_speed_delta),
+            (abs(target.depth - previous.depth), POSITION_MAX_DEPTH_STEP),
+            (abs(target.stroke_range - previous.stroke_range), self.sanitizer.limits.max_range_delta),
+        )
+        amount = 1.0
+        for delta, limit in deltas:
+            if delta > limit > 0:
+                amount = min(amount, limit / delta)
+        if amount >= 1.0:
+            return target
+        return self._interpolate_target(
+            previous,
+            target,
+            amount,
+            f"{target.label or 'continuous'} step limited",
+        )
+
+    def _run_continuous_plan(self, plan, target: MotionTarget, source: str, generation: int) -> None:
+        from .motion_patterns import sample_continuous_plan
+
+        interval = self._continuous_sample_interval()
+        started_at = time.monotonic()
+        next_tick = started_at
+        start_target = self.current_target()
+        previous_target = start_target
+        previous_command_ended_at = None
+        sample_index = 0
+
+        try:
+            while True:
+                with self._lock:
+                    if generation != self._generation:
+                        return
+                if not self._wait_for_resume(generation):
+                    return
+                self._set_frame_playback_active(True)
+
+                now = time.monotonic()
+                elapsed = max(0.0, now - started_at)
+                sampled = sample_continuous_plan(plan, target, elapsed)
+                if elapsed < CONTINUOUS_MORPH_SECONDS:
+                    amount = _minimum_jerk(elapsed / CONTINUOUS_MORPH_SECONDS)
+                    sampled = self._interpolate_target(
+                        start_target,
+                        sampled,
+                        amount,
+                        f"{sampled.label or plan.name} morph",
+                    )
+                sampled = self._limit_continuous_step(previous_target, sampled)
+                velocity = self._position_velocity(previous_target, sampled, interval)
+
+                send_started_at = time.monotonic()
+                self._apply_position_step(
+                    sampled,
+                    stop_on_target=False,
+                    velocity=velocity,
+                    source=source,
+                )
+                send_ended_at = time.monotonic()
+                extras = {
+                    "continuous": True,
+                    "sample_index": sample_index,
+                    "cycle_ms": round(plan.duration_seconds * 1000.0, 1),
+                    "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
+                }
+                if previous_command_ended_at is not None:
+                    extras["gap_ms"] = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
+                self._augment_last_trace(extras)
+
+                previous_command_ended_at = send_ended_at
+                previous_target = sampled
+                sample_index += 1
+                next_tick += interval
+                if not self._sleep_with_pause(max(0.0, next_tick - time.monotonic()), generation):
+                    return
+        finally:
+            with self._lock:
+                current_generation = generation == self._generation
+            if current_generation:
+                self._set_frame_playback_active(False)
 
     def apply_frames(self, frames: list[Any], *, stop_after: bool = False, source: str = "pattern") -> bool:
         if not frames:

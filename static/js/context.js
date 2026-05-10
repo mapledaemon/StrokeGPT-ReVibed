@@ -199,7 +199,7 @@ export const state = {
     motionMaxDepth: 100,
     motionMinSpeed: 10,
     motionMaxSpeed: 80,
-    motionBackend: 'hamp',
+    motionBackend: 'continuous',
     motionBackends: [],
     motionDiagnosticsLevel: 'compact',
     ollamaDiagnosticsLevel: 'compact',

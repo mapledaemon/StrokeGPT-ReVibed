@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #118 - Add Continuous Pattern Motion Backend
+------------------------------------------------------------
+
+Branch: codex/continuous-pattern-backend
+
+- Added a new `continuous` motion backend and made it the default for new
+  settings. Fixed motion patterns and anchor programs now run as live
+  phase-sampled position-control loops until the next motion command, pause,
+  or stop interrupts them instead of being sent as finite repeating batches.
+- Kept `hamp` selectable as a legacy fallback and preserved the finite
+  `position` backend for previews/compatibility. The Settings > Motion backend
+  picker now labels Continuous position as recommended and HAMP as legacy.
+- Routed Auto/Edge/Milk scripted planners and Freestyle selection through the
+  continuous backend when it is active, so fixed pattern names stay as control
+  bases instead of immediately expanding into many frame steps.
+- Added continuous-motion observability fields to trace entries and regression
+  coverage for continuous sampling, default backend normalization, HAMP legacy
+  preservation, and fixed-pattern planner behavior.
+
+
 2026-05-10 - PR #117 - Add NVIDIA Parakeet ASR Provider
 --------------------------------------------------------
 

@@ -84,15 +84,22 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
 def motion_backends_payload():
     return [
         {
-            "id": "hamp",
-            "label": "HAMP continuous",
-            "description": "Recommended default for smooth ongoing app motion.",
+            "id": "continuous",
+            "label": "Continuous position",
+            "description": "Recommended default: fixed patterns run as live sampled motion until the next command or stop.",
             "experimental": False,
+        },
+        {
+            "id": "hamp",
+            "label": "HAMP legacy",
+            "description": "Legacy bounded-oscillation path. Kept as a fallback, but fixed patterns lose shape fidelity here.",
+            "experimental": False,
+            "deprecated": True,
         },
         {
             "id": "position",
             "label": "Flexible position/script",
-            "description": "Experimental path for pattern fidelity and spatial scripts.",
+            "description": "Finite position/script playback for previews and compatibility.",
             "experimental": True,
         },
     ]

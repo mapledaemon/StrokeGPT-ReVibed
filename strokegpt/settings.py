@@ -18,8 +18,8 @@ DEFAULT_PERSONA_PROMPTS = [
     "An energetic and passionate boyfriend",
     "An energetic and passionate partner",
 ]
-DEFAULT_MOTION_BACKEND = "hamp"
-MOTION_BACKENDS = {"hamp", "position"}
+DEFAULT_MOTION_BACKEND = "continuous"
+MOTION_BACKENDS = {"continuous", "position", "hamp"}
 DEFAULT_DIAGNOSTICS_LEVEL = "compact"
 DIAGNOSTICS_LEVELS = {"compact", "status", "debug"}
 VOICE_INPUT_PROVIDER_DISABLED = "disabled"
@@ -571,10 +571,12 @@ class SettingsManager:
         return normalized
 
     def _normalize_motion_backend(self, value):
-        cleaned = str(value or "").strip().lower()
-        if cleaned in {"hamp", "hamp_continuous", "continuous"}:
+        cleaned = str(value or "").strip().lower().replace("-", "_")
+        if cleaned in {"continuous", "continuous_position", "pattern", "pattern_position", "position_continuous"}:
+            return "continuous"
+        if cleaned in {"hamp", "hamp_continuous", "legacy_hamp"}:
             return "hamp"
-        if cleaned in {"position", "position_script", "position-script", "flexible_position", "flexible"}:
+        if cleaned in {"position", "position_script", "flexible_position", "flexible"}:
             return "position"
         return DEFAULT_MOTION_BACKEND
 

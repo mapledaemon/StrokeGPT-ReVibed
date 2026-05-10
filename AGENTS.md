@@ -158,9 +158,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   feedback into simple LLM-facing weights. Disabled fixed patterns should stay
   visible in settings but hidden from the LLM prompt to avoid confusing smaller
   local models.
-- Motion backend selection is persisted as `motion_backend`. Keep `hamp` as
-  the recommended default for app motion and label `position` flexible
-  position/script playback as experimental until more device testing lands.
+- Motion backend selection is persisted as `motion_backend`. `continuous` is
+  the recommended app-motion default: fixed patterns and anchor programs are
+  phase-sampled as live position control until the next command or stop.
+  Keep `hamp` selectable only as a legacy fallback unless real-device testing
+  shows the continuous backend is worse for a specific recovery path.
 - `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. `shaft` is accepted as the user-facing midpoint label, with `middle`/`mid` kept as aliases. Treat anchors as soft waypoints, not hard stops.
 - Spatial cues should treat `tip`, `shaft`, and `base` as regions of emphasis,
   not single lock points. `shaft` is the in-between region; ordinary zone cues

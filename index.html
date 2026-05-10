@@ -309,11 +309,12 @@
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Backend</h4>
                     <select id="motion-backend-select" class="select-box">
-                        <option value="hamp">HAMP continuous (recommended)</option>
+                        <option value="continuous">Continuous position (recommended)</option>
+                        <option value="hamp">HAMP legacy</option>
                         <option value="position">Flexible position/script (experimental)</option>
                     </select>
                     <button id="save-motion-backend-btn" class="my-button" data-requires-backend>Save Motion Backend</button>
-                    <div id="motion-backend-status" class="settings-help">Current backend: HAMP continuous.</div>
+                    <div id="motion-backend-status" class="settings-help">Current backend: Continuous position.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Diagnostics</h4>
@@ -431,7 +432,7 @@
                         </div>
                         <div class="motion-backend-stack">
                             <span class="motion-backend-badge">Preview: Flexible position</span>
-                            <span id="app-motion-backend-badge" class="motion-backend-badge">App motion: HAMP continuous</span>
+                            <span id="app-motion-backend-badge" class="motion-backend-badge">App motion: Continuous position</span>
                         </div>
                     </div>
                     <div class="motion-training-preview-grid">
