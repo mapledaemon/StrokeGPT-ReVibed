@@ -16,6 +16,11 @@ const HANDS_FREE_NOISE_MULTIPLIER_MIN = 1.6;
 const HANDS_FREE_NOISE_MULTIPLIER_MAX = 5.0;
 const VOICE_INPUT_NOISE_CALIBRATION_MS = 2000;
 const SLOW_ASR_WARNING_MS = 2500;
+const VOICE_INPUT_TRIM_WINDOW_MS = 20;
+const VOICE_INPUT_TRIM_HEAD_PAD_MS = 100;
+const VOICE_INPUT_TRIM_TAIL_PAD_MS = 150;
+const VOICE_INPUT_TRIM_MIN_REMOVED_MS = 120;
+const VOICE_INPUT_PREPROCESS_HIGHPASS_HZ = 100;
 const CUSTOM_VOICE_INPUT_MODEL = '__custom__';
 const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
     {id: 'tiny.en', label: 'Fast - tiny.en'},
@@ -142,6 +147,8 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         state.voiceInputNoiseSuppression ? 'noise suppression' : 'raw noise',
         state.voiceInputEchoCancellation ? 'echo cancel' : 'raw echo',
         state.voiceInputAutoGainControl ? 'auto gain' : 'fixed gain',
+        state.voiceInputAudioPreprocessing ? 'high-pass/compress' : 'raw capture',
+        state.voiceInputSilenceTrim ? 'trim silence' : 'full clip',
     ].join(', ');
     el.voiceInputDiagnostics.textContent = [
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
@@ -400,6 +407,8 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
         state.voiceInputNoiseSuppression = Boolean(el.voiceInputNoiseSuppressionCheckbox?.checked);
         state.voiceInputEchoCancellation = Boolean(el.voiceInputEchoCancellationCheckbox?.checked);
         state.voiceInputAutoGainControl = Boolean(el.voiceInputAutoGainControlCheckbox?.checked);
+        state.voiceInputAudioPreprocessing = Boolean(el.voiceInputAudioPreprocessingCheckbox?.checked);
+        state.voiceInputSilenceTrim = Boolean(el.voiceInputSilenceTrimCheckbox?.checked);
         state.voiceInputConditionOnPreviousText = Boolean(el.voiceInputConditionPreviousCheckbox?.checked);
     }
     if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
@@ -415,6 +424,8 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
     if (el.voiceInputNoiseSuppressionCheckbox) el.voiceInputNoiseSuppressionCheckbox.checked = state.voiceInputNoiseSuppression;
     if (el.voiceInputEchoCancellationCheckbox) el.voiceInputEchoCancellationCheckbox.checked = state.voiceInputEchoCancellation;
     if (el.voiceInputAutoGainControlCheckbox) el.voiceInputAutoGainControlCheckbox.checked = state.voiceInputAutoGainControl;
+    if (el.voiceInputAudioPreprocessingCheckbox) el.voiceInputAudioPreprocessingCheckbox.checked = state.voiceInputAudioPreprocessing;
+    if (el.voiceInputSilenceTrimCheckbox) el.voiceInputSilenceTrimCheckbox.checked = state.voiceInputSilenceTrim;
     if (el.voiceInputConditionPreviousCheckbox) el.voiceInputConditionPreviousCheckbox.checked = state.voiceInputConditionOnPreviousText;
     if (el.voiceInputNoiseFloorVal) {
         const floor = voiceInputNoiseFloorRms();
@@ -497,6 +508,8 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputEchoCancellation = Boolean(status.echo_cancellation ?? data.voice_input_echo_cancellation ?? true);
     state.voiceInputAutoGainControl = Boolean(status.auto_gain_control ?? data.voice_input_auto_gain_control ?? true);
     state.voiceInputNoiseFloorRms = status.noise_floor_rms ?? data.voice_input_noise_floor_rms ?? DEFAULT_NOISE_FLOOR_RMS;
+    state.voiceInputAudioPreprocessing = Boolean(status.audio_preprocessing ?? data.voice_input_audio_preprocessing ?? true);
+    state.voiceInputSilenceTrim = Boolean(status.silence_trim ?? data.voice_input_silence_trim ?? true);
     state.voiceInputBeamSize = status.beam_size ?? data.voice_input_beam_size ?? DEFAULT_VOICE_INPUT_BEAM_SIZE;
     state.voiceInputConditionOnPreviousText = Boolean(
         status.condition_on_previous_text
@@ -562,6 +575,8 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         echo_cancellation: state.voiceInputEchoCancellation,
         auto_gain_control: state.voiceInputAutoGainControl,
         noise_floor_rms: voiceInputNoiseFloorRms(),
+        audio_preprocessing: state.voiceInputAudioPreprocessing,
+        silence_trim: state.voiceInputSilenceTrim,
         beam_size: voiceInputBeamSize(),
         condition_on_previous_text: state.voiceInputConditionOnPreviousText,
         vad_threshold: voiceInputVadThreshold(),
@@ -662,7 +677,67 @@ async function ensureMicrophoneStream() {
     return state.voiceInputStream;
 }
 
+function cleanupVoiceInputRecordingPipeline() {
+    const cleanup = state.voiceInputRecordingCleanup;
+    state.voiceInputRecordingCleanup = null;
+    if (typeof cleanup === 'function') cleanup();
+}
+
+function voiceInputPreprocessingEnabled() {
+    return Boolean(state.voiceInputAudioPreprocessing);
+}
+
+function voiceInputSilenceTrimEnabled() {
+    return Boolean(state.voiceInputSilenceTrim);
+}
+
+async function createVoiceInputRecordingPipeline(stream) {
+    if (!voiceInputPreprocessingEnabled()) return {stream, cleanup: null};
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return {stream, cleanup: null};
+    const context = new AudioContextClass();
+    if (!context.createMediaStreamDestination) {
+        await context.close?.();
+        return {stream, cleanup: null};
+    }
+    try {
+        const source = context.createMediaStreamSource(stream);
+        const highpass = context.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = VOICE_INPUT_PREPROCESS_HIGHPASS_HZ;
+        highpass.Q.value = 0.7;
+
+        const compressor = context.createDynamicsCompressor();
+        compressor.threshold.value = -32;
+        compressor.knee.value = 24;
+        compressor.ratio.value = 6;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.18;
+
+        const destination = context.createMediaStreamDestination();
+        source.connect(highpass);
+        highpass.connect(compressor);
+        compressor.connect(destination);
+        return {
+            stream: destination.stream,
+            cleanup: () => {
+                try { source.disconnect(); } catch { /* already disconnected */ }
+                try { highpass.disconnect(); } catch { /* already disconnected */ }
+                try { compressor.disconnect(); } catch { /* already disconnected */ }
+                context.close?.();
+            },
+        };
+    } catch (error) {
+        try {
+            await context.close?.();
+        } catch { /* ignore close failure on unsupported browsers */ }
+        console.debug('Voice input preprocessing unavailable:', error);
+        return {stream, cleanup: null};
+    }
+}
+
 function stopMicrophoneStream() {
+    cleanupVoiceInputRecordingPipeline();
     if (state.voiceInputStream) {
         state.voiceInputStream.getTracks().forEach(track => track.stop());
         state.voiceInputStream = null;
@@ -695,6 +770,125 @@ function cancelHandsFreeMonitor() {
 
 function recordingDurationMs() {
     return performance.now() - state.voiceInputRecordingStartedAt;
+}
+
+function trimRmsThreshold() {
+    const floor = voiceInputNoiseFloorRms();
+    const adaptive = floor > 0 ? floor * 2.5 : 0.012;
+    return clampNumber(adaptive, 0.008, 0.12, 0.012);
+}
+
+function monoWindowRms(buffer, startFrame, endFrame) {
+    const channelCount = Math.max(1, buffer.numberOfChannels || 1);
+    let sum = 0;
+    let count = 0;
+    for (let channel = 0; channel < channelCount; channel += 1) {
+        const data = buffer.getChannelData(channel);
+        for (let index = startFrame; index < endFrame; index += 1) {
+            const value = data[index] || 0;
+            sum += value * value;
+            count += 1;
+        }
+    }
+    return count ? Math.sqrt(sum / count) : 0;
+}
+
+function speechTrimRange(buffer) {
+    const sampleRate = buffer.sampleRate || 48000;
+    const totalFrames = buffer.length || 0;
+    const windowFrames = Math.max(1, Math.round(sampleRate * VOICE_INPUT_TRIM_WINDOW_MS / 1000));
+    const threshold = trimRmsThreshold();
+    let firstSpeechFrame = null;
+    let lastSpeechFrame = null;
+    for (let start = 0; start < totalFrames; start += windowFrames) {
+        const end = Math.min(totalFrames, start + windowFrames);
+        if (monoWindowRms(buffer, start, end) > threshold) {
+            if (firstSpeechFrame === null) firstSpeechFrame = start;
+            lastSpeechFrame = end;
+        }
+    }
+    if (firstSpeechFrame === null || lastSpeechFrame === null) return null;
+    const headPad = Math.round(sampleRate * VOICE_INPUT_TRIM_HEAD_PAD_MS / 1000);
+    const tailPad = Math.round(sampleRate * VOICE_INPUT_TRIM_TAIL_PAD_MS / 1000);
+    const startFrame = Math.max(0, firstSpeechFrame - headPad);
+    const endFrame = Math.min(totalFrames, lastSpeechFrame + tailPad);
+    const removedMs = Math.round((totalFrames - (endFrame - startFrame)) / sampleRate * 1000);
+    if (removedMs < VOICE_INPUT_TRIM_MIN_REMOVED_MS) return null;
+    if (endFrame <= startFrame) return null;
+    return {startFrame, endFrame};
+}
+
+function writeAscii(view, offset, text) {
+    for (let index = 0; index < text.length; index += 1) {
+        view.setUint8(offset + index, text.charCodeAt(index));
+    }
+}
+
+function encodeAudioBufferRangeToWav(buffer, range) {
+    const sampleRate = buffer.sampleRate || 48000;
+    const channelCount = Math.max(1, buffer.numberOfChannels || 1);
+    const startFrame = range.startFrame;
+    const frameCount = Math.max(0, range.endFrame - range.startFrame);
+    const bytesPerSample = 2;
+    const blockAlign = channelCount * bytesPerSample;
+    const dataBytes = frameCount * blockAlign;
+    const arrayBuffer = new ArrayBuffer(44 + dataBytes);
+    const view = new DataView(arrayBuffer);
+
+    writeAscii(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataBytes, true);
+    writeAscii(view, 8, 'WAVE');
+    writeAscii(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channelCount, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeAscii(view, 36, 'data');
+    view.setUint32(40, dataBytes, true);
+
+    let offset = 44;
+    const channels = Array.from({length: channelCount}, (_, channel) => buffer.getChannelData(channel));
+    for (let frame = 0; frame < frameCount; frame += 1) {
+        const sourceFrame = startFrame + frame;
+        for (let channel = 0; channel < channelCount; channel += 1) {
+            const sample = Math.max(-1, Math.min(1, channels[channel][sourceFrame] || 0));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+            offset += bytesPerSample;
+        }
+    }
+    return arrayBuffer;
+}
+
+async function trimVoiceInputSilence(blob) {
+    if (!voiceInputSilenceTrimEnabled() || !blob || !blob.arrayBuffer) return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    const context = new AudioContextClass();
+    try {
+        const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+        const range = speechTrimRange(buffer);
+        if (!range) return null;
+        const wav = encodeAudioBufferRangeToWav(buffer, range);
+        return new Blob([wav], {type: 'audio/wav'});
+    } catch (error) {
+        console.debug('Voice input silence trim skipped:', error);
+        return null;
+    } finally {
+        try {
+            await context.close?.();
+        } catch { /* ignore close failure on unsupported browsers */ }
+    }
+}
+
+async function prepareVoiceBlobForUpload(blob) {
+    if (!voiceInputSilenceTrimEnabled()) return {blob, filename: `voice-${Date.now()}.webm`};
+    voiceStatusMessage('Preparing voice input...');
+    const trimmed = await trimVoiceInputSilence(blob);
+    if (!trimmed) return {blob, filename: `voice-${Date.now()}.webm`};
+    return {blob: trimmed, filename: `voice-${Date.now()}.wav`};
 }
 
 // Pure upload+transcribe helper. Returns the parsed payload on success, or
@@ -736,7 +930,8 @@ async function requestVoiceTranscription(blob, filename, message) {
 }
 
 async function transcribeVoiceBlob(blob) {
-    const payload = await requestVoiceTranscription(blob, `voice-${Date.now()}.webm`, 'Transcribing voice input...');
+    const prepared = await prepareVoiceBlobForUpload(blob);
+    const payload = await requestVoiceTranscription(prepared.blob, prepared.filename, 'Transcribing voice input...');
     if (!payload) return;
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
@@ -759,9 +954,11 @@ async function startRecording(source = 'manual') {
     if (state.voiceInputRecording) return;
     try {
         const stream = await ensureMicrophoneStream();
+        const recordingPipeline = await createVoiceInputRecordingPipeline(stream);
+        state.voiceInputRecordingCleanup = recordingPipeline.cleanup;
         const mimeType = preferredMimeType();
         state.voiceInputChunks = [];
-        state.voiceInputRecorder = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
+        state.voiceInputRecorder = new MediaRecorder(recordingPipeline.stream, mimeType ? {mimeType} : undefined);
         state.voiceInputRecordingStartedAt = performance.now();
         state.voiceInputRecorder.addEventListener('dataavailable', event => {
             if (event.data && event.data.size > 0) state.voiceInputChunks.push(event.data);
@@ -779,6 +976,7 @@ async function startRecording(source = 'manual') {
                 voiceStatusMessage('Recording was too short. Hold the microphone button long enough to capture a full command.', 'var(--yellow)', {issue: true});
             }
             state.voiceInputChunks = [];
+            cleanupVoiceInputRecordingPipeline();
             if (!state.voiceInputHandsFreeArmed) stopMicrophoneStream();
         });
         state.voiceInputRecorder.start();
@@ -1036,6 +1234,8 @@ export function initVoiceInputControls({sendUserMessage}) {
         el.voiceInputNoiseSuppressionCheckbox,
         el.voiceInputEchoCancellationCheckbox,
         el.voiceInputAutoGainControlCheckbox,
+        el.voiceInputAudioPreprocessingCheckbox,
+        el.voiceInputSilenceTrimCheckbox,
         el.voiceInputConditionPreviousCheckbox,
     ].forEach(input => input?.addEventListener('change', () => updateVoiceInputTuningReadouts()));
     el.calibrateVoiceInputNoiseBtn?.addEventListener('click', calibrateVoiceInputNoise);

@@ -94,6 +94,16 @@ def set_voice_input_route():
     noise_floor_rms = web.settings._normalize_voice_input_noise_floor_rms(
         data.get("noise_floor_rms", web.settings.voice_input_noise_floor_rms)
     )
+    audio_preprocessing = web._request_bool_value(
+        data,
+        "audio_preprocessing",
+        web.settings.voice_input_audio_preprocessing,
+    )
+    silence_trim = web._request_bool_value(
+        data,
+        "silence_trim",
+        web.settings.voice_input_silence_trim,
+    )
     beam_size = web.settings._normalize_voice_input_beam_size(
         data.get("beam_size", web.settings.voice_input_beam_size)
     )
@@ -127,6 +137,8 @@ def set_voice_input_route():
     web.settings.voice_input_echo_cancellation = echo_cancellation
     web.settings.voice_input_auto_gain_control = auto_gain_control
     web.settings.voice_input_noise_floor_rms = noise_floor_rms
+    web.settings.voice_input_audio_preprocessing = audio_preprocessing
+    web.settings.voice_input_silence_trim = silence_trim
     web.settings.voice_input_beam_size = beam_size
     web.settings.voice_input_condition_on_previous_text = condition_on_previous_text
     web.settings.voice_input_vad_threshold = vad_threshold
@@ -147,6 +159,8 @@ def set_voice_input_route():
         echo_cancellation=echo_cancellation,
         auto_gain_control=auto_gain_control,
         noise_floor_rms=noise_floor_rms,
+        audio_preprocessing=audio_preprocessing,
+        silence_trim=silence_trim,
         beam_size=beam_size,
         condition_on_previous_text=condition_on_previous_text,
         vad_threshold=vad_threshold,

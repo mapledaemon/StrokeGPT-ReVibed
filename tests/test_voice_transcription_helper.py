@@ -7,18 +7,16 @@ Behavior contract:
   It must NOT touch transcript-preview state, auto-submit state, or any
   caller-specific behavior; it just returns the parsed payload (or
   ``null`` on failure).
-- ``transcribeVoiceBlob(blob)`` becomes a thin caller of the helper that
-  layers the existing live-recording behavior on top: populate settings,
-  surface no-speech messages, and either auto-submit or show the preview.
+- ``transcribeVoiceBlob(blob)`` prepares the captured clip, then calls the
+  helper and layers the existing live-recording behavior on top: populate
+  settings, surface no-speech messages, and either auto-submit or show the
+  preview.
 - The split makes a future "transcribe without auto-submitting" caller
   trivial without re-implementing the network path. The split itself is
   behavior-preserving for the existing live-recording flow.
 
-Tests are source-text assertions in the established repo style (see
-`tests/test_frontend_chat_statuses.py`,
-`tests/test_motion_status_log_timecodes.py`,
-`tests/test_connection_lost_banner.py`). Real runtime behavior is still
-gated on the Backlog #13 frontend test runner.
+Tests are source-text assertions for this static seam. Runtime DOM behavior
+belongs under ``tests/js/`` when a bug needs to execute the module.
 """
 
 import re
@@ -121,10 +119,12 @@ class VoiceTranscriptionHelperTests(unittest.TestCase):
     def test_transcribe_voice_blob_calls_helper_and_keeps_caller_behavior(self):
         body = _function_body(self.script, "async function transcribeVoiceBlob(")
 
-        # Calls the helper; no longer drives the upload directly.
+        # Prepares the clip, then calls the helper; no longer drives the
+        # upload directly.
+        self.assertIn("prepareVoiceBlobForUpload(blob)", body)
         self.assertRegex(
             body,
-            r"await requestVoiceTranscription\(\s*blob\s*,",
+            r"await requestVoiceTranscription\(\s*prepared\.blob\s*,\s*prepared\.filename\s*,",
             "transcribeVoiceBlob must call the requestVoiceTranscription helper",
         )
         self.assertNotIn(
@@ -158,9 +158,7 @@ class VoiceTranscriptionHelperTests(unittest.TestCase):
         )
 
     def test_helper_is_behavior_preserving_for_live_recording_flow(self):
-        """No new UI controls or roadmap items in this branch — only the
-        seam is added, so the existing single caller keeps the same observable
-        behavior. The test-clip UX from PR #100 stays out of master."""
+        """The test-clip UX from PR #100 stays out of master."""
         # No new IDs sneaking in.
         for new_ui in (
             "voice-input-test-clip-input",

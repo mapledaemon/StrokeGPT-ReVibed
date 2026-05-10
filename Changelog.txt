@@ -8,7 +8,46 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Auto-Detect ASR Device + Compute Type
+2026-05-10 - PR #115 - Voice Input Browser Preprocessing And Trim
+--------------------------------------------------------------------
+
+Branch: codex/voice-audio-preprocess-trim
+
+- Continues ROADMAP #13's low-risk voice latency/accuracy tuning after
+  PR #108 and PR #114 moved the faster-whisper defaults in the right
+  direction. This slice stays in the browser capture path: it does not add
+  a provider, a streaming protocol, or another backend transcription mode.
+- Adds two Advanced Capture toggles under Settings > Voice:
+    - `High-pass + compression` routes the recording stream through a
+      100 Hz high-pass filter plus dynamic-range compression before
+      `MediaRecorder` receives it. This is intended to reduce room rumble
+      and quiet-mic failures, but remains opt-out because browser/audio
+      hardware combinations can already apply their own processing.
+    - `Trim silence before upload` decodes the captured clip in the
+      browser, scans 20 ms RMS windows against the calibrated noise floor,
+      keeps 100 ms of leading pad and 150 ms of trailing pad, and uploads a
+      trimmed WAV only when at least 120 ms of silence would be removed.
+      If decoding, trimming, or browser support fails, the original WebM
+      clip is uploaded unchanged.
+- The toggles are persisted through the existing `/set_voice_input`
+  settings route and returned through the voice-input status payload, so
+  they survive restart and stay visible in diagnostics. Defaults are on for
+  the optimized live-mic path, with explicit Advanced controls for users who
+  hear clipped first phonemes, over-processed capture, or browser-specific
+  recording issues.
+- `voice-input.js` keeps hands-free detection on the existing microphone
+  analyser path while applying preprocessing only to the actual recorded
+  stream. This avoids changing hands-free trigger behavior in the same slice
+  as upload trimming.
+- Settings and route tests now cover the new persisted booleans; static web
+  asset guardrails cover the Advanced controls and client-side processing
+  hooks. Focused validation: `python -m unittest tests.test_configuration
+  tests.test_web_voice_input_routes tests.test_asr
+  tests.test_backend_required_controls tests.test_web_static_assets
+  tests.test_frontend_runtime` green at 82 tests / 1 skipped.
+
+
+2026-05-10 - PR #114 - Auto-Detect ASR Device + Compute Type
 ----------------------------------------------------------------
 
 Branch: claude-voice-asr-auto-device

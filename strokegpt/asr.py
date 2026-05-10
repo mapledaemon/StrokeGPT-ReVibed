@@ -11,7 +11,9 @@ from .settings import (
     DEFAULT_VOICE_INPUT_MAX_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MIN_RECORDING_MS,
     DEFAULT_VOICE_INPUT_MODEL,
+    DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING,
     DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
+    DEFAULT_VOICE_INPUT_SILENCE_TRIM,
     DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS,
     DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS,
     DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
@@ -242,6 +244,8 @@ class VoiceInputService:
         self.echo_cancellation = True
         self.auto_gain_control = True
         self.noise_floor_rms = DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS
+        self.audio_preprocessing = DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING
+        self.silence_trim = DEFAULT_VOICE_INPUT_SILENCE_TRIM
         self.beam_size = DEFAULT_VOICE_INPUT_BEAM_SIZE
         self.condition_on_previous_text = DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT
         self.vad_threshold = DEFAULT_VOICE_INPUT_VAD_THRESHOLD
@@ -270,6 +274,8 @@ class VoiceInputService:
         echo_cancellation=True,
         auto_gain_control=True,
         noise_floor_rms=DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
+        audio_preprocessing=DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING,
+        silence_trim=DEFAULT_VOICE_INPUT_SILENCE_TRIM,
         beam_size=DEFAULT_VOICE_INPUT_BEAM_SIZE,
         condition_on_previous_text=DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
         vad_threshold=DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
@@ -300,6 +306,8 @@ class VoiceInputService:
         self.echo_cancellation = bool(echo_cancellation)
         self.auto_gain_control = bool(auto_gain_control)
         self.noise_floor_rms = float(noise_floor_rms)
+        self.audio_preprocessing = bool(audio_preprocessing)
+        self.silence_trim = bool(silence_trim)
         self.beam_size = int(beam_size)
         self.condition_on_previous_text = bool(condition_on_previous_text)
         self.vad_threshold = float(vad_threshold)
@@ -388,6 +396,8 @@ class VoiceInputService:
             "echo_cancellation": self.echo_cancellation,
             "auto_gain_control": self.auto_gain_control,
             "noise_floor_rms": self.noise_floor_rms,
+            "audio_preprocessing": self.audio_preprocessing,
+            "silence_trim": self.silence_trim,
             "beam_size": self.beam_size,
             "condition_on_previous_text": self.condition_on_previous_text,
             "vad_threshold": self.vad_threshold,
