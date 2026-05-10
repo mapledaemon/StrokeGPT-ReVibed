@@ -118,9 +118,11 @@ The sidebar should stay sparse:
 - Preset Modes
 - Standalone emergency stop
 
-The upper-right profile image opens the settings menu and profile-picture
-upload action. Keep routine settings entry points there instead of adding
-another full-width sidebar button.
+The upper-right profile image opens a compact menu with Settings and About.
+Keep routine settings entry points there instead of adding another full-width
+sidebar button. The About item is a placeholder until the planned popup lands;
+that popup should reuse the README Support Development text plus the repo-local
+Bitcoin and Ethereum QR assets.
 
 The unified settings popup has tabs:
 

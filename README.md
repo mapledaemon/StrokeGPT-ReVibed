@@ -19,7 +19,7 @@ Experimental local app, not a finished release. Expect rough edges in the UI, lo
 - Optional: NVIDIA GPU with CUDA-enabled PyTorch for fast local voice
 - Optional: NVIDIA NeMo for the Parakeet voice-input provider
 
-Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Switch or download other models from **Open Settings → Model**.
+Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Switch or download other models from **Profile menu > Settings > Model**.
 
 ## Install
 
@@ -84,16 +84,16 @@ tab while controlling hardware.
 
 ## First Run
 
-1. Paste your Handy connection key in **Open Settings → Device**.
-2. Pick a model in **Open Settings → Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
-3. Optional: enable voice in **Open Settings → Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
+1. Paste your Handy connection key in **Profile menu > Settings > Device**.
+2. Pick a model in **Profile menu > Settings > Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
+3. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
 4. Start chatting. The Handy responds to natural-language motion ("slow tip teasing", "deep slow stroke", "milk me"), named patterns (*flick*, *flutter*, *pulse*, *wave*, *ramp*, *ladder*, *surge*, *sway*, *tease*), and soft-anchor loops between *tip*, *shaft*, and *base*.
 
 Start conservatively. The Handy can be intense even at low speed values.
 
 ## Configuration
 
-Everything is in **Open Settings**. Tabs:
+Everything is in **Profile menu > Settings**. Tabs:
 
 - **Persona** — change the AI persona prompt and display name.
 - **Model** — pick or download Ollama models, switch the active model, see install state.
@@ -112,9 +112,9 @@ The normal app setup installs the local voice package stack from `requirements.t
 
 For low-latency local voice on an NVIDIA GPU, install a CUDA-enabled PyTorch wheel after the normal setup. See [docs/local_voice_setup.md](docs/local_voice_setup.md) for platform-specific commands and verification steps.
 
-In the app, click **Open Settings → Voice → Download / Load Local Voice Model** before testing. First use can download several GB. Use the **Chatterbox Turbo** preset for the lowest latency. The Voice tab reports download/load phase, generation status, missing sample files, and the last error.
+In the app, click **Profile menu > Settings > Voice > Download / Load Local Voice Model** before testing. First use can download several GB. Use the **Chatterbox Turbo** preset for the lowest latency. The Voice tab reports download/load phase, generation status, missing sample files, and the last error.
 
-Voice input defaults to local faster-whisper because it is the portable CPU/GPU path. For NVIDIA GPU testing, **Open Settings -> Voice -> Provider -> NVIDIA Parakeet (NeMo)** uses `nvidia/parakeet-tdt-0.6b-v3` through NVIDIA NeMo when the optional stack is installed:
+Voice input defaults to local faster-whisper because it is the portable CPU/GPU path. For NVIDIA GPU testing, **Profile menu > Settings > Voice > Provider > NVIDIA Parakeet (NeMo)** uses `nvidia/parakeet-tdt-0.6b-v3` through NVIDIA NeMo when the optional stack is installed:
 
 ```bash
 python -m pip install -r requirements-parakeet.txt

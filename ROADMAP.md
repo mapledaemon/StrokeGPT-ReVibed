@@ -389,9 +389,10 @@ cleanup, and the persona naming audit.
   Trans Woman, Gender fluid, No gender, and custom values. Include
   interested-in options for Cis Male, Cis Female, Trans Man, Trans Woman,
   Gender neutral, and custom values.
-- Add an About window reachable from the profile/settings area, preserving
-  the README donation information and Bitcoin/Ethereum QR codes without
-  crowding the main UI.
+- Replace the current disabled About item in the profile menu with an About
+  popup. The popup should preserve the README Support Development copy and
+  the repo-local Bitcoin/Ethereum QR assets (`static/bitcoin-qr.svg` and
+  `static/ethereum-qr.svg`) without crowding the main UI.
 - Keep identity/preferences inspectable and resettable; do not bury them
   inside natural-language memory.
 

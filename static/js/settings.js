@@ -413,12 +413,6 @@ export function initSettingsControls({addChatMessage}) {
     } else if (el.openSettingsBtn) {
         el.openSettingsBtn.addEventListener('click', () => openSettings('persona'));
     }
-    if (el.profilePictureMenuBtn) {
-        el.profilePictureMenuBtn.addEventListener('click', () => {
-            closeProfileMenu();
-            el.pfpUploadInput.click();
-        });
-    }
     D.addEventListener('click', event => {
         if (!el.profileMenuPopover || el.profileMenuPopover.hidden) return;
         if (!profileMenuContains(event.target)) closeProfileMenu();
