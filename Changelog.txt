@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Local TTS Tail Padding
--------------------------------------------------
+2026-05-10 - PR #142 - Local TTS Tail Padding
+----------------------------------------------
 
 Branch: codex/local-tts-tail-padding
 
