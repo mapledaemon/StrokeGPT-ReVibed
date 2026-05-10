@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Add Continuous Pattern Motion Backend
----------------------------------------------------------------
+2026-05-10 - PR #118 - Add Continuous Pattern Motion Backend
+------------------------------------------------------------
 
 Branch: codex/continuous-pattern-backend
 
