@@ -148,7 +148,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
-        `Recognition: beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
+        `Recognition: fallback beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,

@@ -8,6 +8,33 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-09 - PR #108 - Voice ASR Fast Path And Confidence Gate
+---------------------------------------------------------------
+
+- Tuned the local faster-whisper voice-input path around the existing
+  backend service instead of adding another provider or Settings knob:
+  `language=auto` now resolves to English at transcription time,
+  faster-whisper receives a short motion-command vocabulary prompt, and
+  recognition starts with beam 1 before rerunning low-confidence clips
+  with the user's configured beam size.
+- Added confidence metadata and ASR attempt timings to transcription
+  results. A clip reruns when its first pass reports low average logprob
+  or high no-speech probability, and a still-low-confidence transcript is
+  returned as `status: rejected` with an empty transcript so preview and
+  auto-submit flows do not send probable garbage into chat or motion.
+- Preserved the existing `/transcribe_voice` frontend contract: empty
+  transcripts still produce inline yellow feedback and do not auto-submit,
+  while explicit low-confidence rejections keep their backend message
+  instead of being flattened into generic "No speech detected" copy.
+- Updated the Local Voice Control Hardening roadmap so easy
+  faster-whisper baseline tuning, CUDA/compute-type detection, browser
+  preprocessing, provider abstraction, Parakeet, whisperX, whisper.cpp,
+  and chunked streaming stay in a deliberate order.
+- Local validation: `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` green at
+  330 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-09 - PR #107 - Plan Critical Review Follow-Ups
 -------------------------------------------------------
 

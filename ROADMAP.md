@@ -549,9 +549,11 @@ and stop safety paths.
   desktops or GPU setups. Keep the custom model field available for converted
   or externally hosted compatible models, and use the local folder picker for
   converted CTranslate2 model directories.
-- Do not add another voice-input tuning knob or ASR provider until the current
-  faster-whisper defaults have been tested against the same real microphone
-  clips and the visible settings surface has been simplified.
+- Treat faster-whisper baseline tuning as backend behavior first, not another
+  Settings > Voice expansion. The live mic path should keep using tuned
+  defaults such as English-for-`auto`, a short command vocabulary prompt,
+  beam-1 fast pass with configured-beam fallback, and confidence rejection
+  before any threshold becomes a visible user choice.
 - Keep recognized movement requests routed through the existing
   `/send_message` path and deterministic motion layer. Do not bypass speed
   limits, smoothing, stop handling, chat edge-blocking, or user-visible
@@ -571,25 +573,28 @@ and stop safety paths.
   language, and submit-mode controls directly or keep those in Settings >
   Voice once real hands-free testing shows which controls users need during
   operation.
-- Evaluate whether whisper.cpp or Parakeet should be added after the
-  faster-whisper preset baseline is measured. Keep provider-specific setup
-  isolated behind the ASR service contract.
-
-Candidate local ASR providers:
-
-- **faster-whisper**: optimized Whisper runtime using CTranslate2 with
-  CPU/GPU execution and quantization options. Source:
-  https://github.com/SYSTRAN/faster-whisper
-- **whisper.cpp**: lightweight GGML/GGUF Whisper runtime for CPU-first
-  testing and possible packaged builds. Source:
-  https://github.com/ggerganov/whisper.cpp
-- **OpenAI Whisper, local open-source model**: baseline PyTorch ASR option
-  with multilingual speech recognition, translation, and language
-  identification. Source: https://github.com/openai/whisper
-- **NVIDIA Parakeet TDT 0.6B v3**: promising local ASR for NVIDIA GPU
-  systems with punctuation/capitalization, language detection,
-  timestamps, and CC BY 4.0 licensing. Source:
-  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+- Keep ASR provider work in this order:
+  1. Finish low-risk faster-whisper tuning before provider changes:
+     confidence rejection, beam-1 fast path with configured-beam rerun,
+     forced English when language is set to `auto`, auto-CUDA/device
+     detection, compute-type selection, and browser-side preprocessing or
+     silence trimming where it can be implemented without brittle media
+     surgery.
+  2. Add an `asr.py` provider abstraction only after the tuned
+     faster-whisper baseline has measured gaps. Keep faster-whisper the
+     default CPU/portable path.
+  3. Treat NVIDIA Parakeet TDT 0.6B v3 as the GPU-focused accuracy/latency
+     candidate behind a provider toggle and optional install path, not as a
+     base dependency.
+  4. Defer whisperX to long-form audio import or funscript-alignment work.
+     Its word alignment, diarization, and batching strengths do not pay for
+     short live voice commands.
+  5. Defer whisper.cpp to packaged Windows launcher work, where a small
+     external runtime may matter more than Python ML dependency reuse.
+- Keep streaming/chunked upload as a later phase after the baseline, GPU
+  defaults, browser preprocessing, and provider abstraction decisions land.
+  It has a larger state/concurrency surface than the quick latency wins and
+  should not be mixed into the first tuning slice.
 
 ### 14. Story Mode (L/XL)
 

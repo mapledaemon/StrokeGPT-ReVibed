@@ -31,6 +31,16 @@ _MODEL_CACHE_MARKER_FILES = {
     "vocabulary.txt",
 }
 _MODEL_CACHE_SCAN_LIMIT = 5000
+VOICE_INPUT_FAST_BEAM_SIZE = 1
+VOICE_INPUT_CONFIDENCE_RERUN_AVG_LOGPROB = -1.0
+VOICE_INPUT_CONFIDENCE_RERUN_NO_SPEECH_PROB = 0.6
+VOICE_INPUT_REJECT_AVG_LOGPROB = -1.5
+VOICE_INPUT_REJECT_MESSAGE = (
+    "I didn't catch that. Try speaking closer to the microphone, reducing background noise, or using push-to-talk."
+)
+VOICE_INPUT_INITIAL_PROMPT = (
+    "speed depth tip base shaft slow fast harder gentle stop pause resume edge milk"
+)
 
 
 def _env_flag_enabled(name):
@@ -39,6 +49,57 @@ def _env_flag_enabled(name):
 
 def _cache_search_text(value):
     return re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
+
+
+def _safe_float(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:
+        return None
+    return number
+
+
+def _mean(values):
+    values = [value for value in values if value is not None]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _segment_confidence(segments):
+    avg_logprob = _mean(_safe_float(getattr(segment, "avg_logprob", None)) for segment in segments)
+    no_speech_values = [
+        _safe_float(getattr(segment, "no_speech_prob", None))
+        for segment in segments
+    ]
+    no_speech_values = [value for value in no_speech_values if value is not None]
+    return {
+        "avg_logprob": avg_logprob,
+        "no_speech_prob": max(no_speech_values) if no_speech_values else None,
+    }
+
+
+def _transcript_from_segments(segments):
+    return " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
+
+
+def _needs_confidence_rerun(confidence):
+    avg_logprob = confidence.get("avg_logprob")
+    no_speech_prob = confidence.get("no_speech_prob")
+    return (
+        avg_logprob is not None
+        and avg_logprob < VOICE_INPUT_CONFIDENCE_RERUN_AVG_LOGPROB
+    ) or (
+        no_speech_prob is not None
+        and no_speech_prob > VOICE_INPUT_CONFIDENCE_RERUN_NO_SPEECH_PROB
+    )
+
+
+def _should_reject_transcript(confidence):
+    avg_logprob = confidence.get("avg_logprob")
+    return avg_logprob is not None and avg_logprob < VOICE_INPUT_REJECT_AVG_LOGPROB
 
 
 class VoiceInputError(RuntimeError):
@@ -348,6 +409,34 @@ class VoiceInputService:
         self._model_key = key
         return int((time.perf_counter() - started) * 1000)
 
+    def _effective_language(self):
+        language = str(self.language or "auto").strip() or "auto"
+        if language.lower() == "auto":
+            return "en"
+        return language
+
+    def _transcribe_attempt(self, audio_path, *, language, beam_size):
+        segments, info = self._model.transcribe(
+            str(audio_path),
+            language=language,
+            vad_filter=True,
+            vad_parameters={
+                "threshold": self.vad_threshold,
+                "min_silence_duration_ms": self.vad_min_silence_ms,
+                "speech_pad_ms": self.vad_speech_pad_ms,
+            },
+            beam_size=beam_size,
+            condition_on_previous_text=self.condition_on_previous_text,
+            initial_prompt=VOICE_INPUT_INITIAL_PROMPT,
+        )
+        segments = list(segments)
+        return {
+            "transcript": _transcript_from_segments(segments),
+            "info": info,
+            "confidence": _segment_confidence(segments),
+            "beam_size": beam_size,
+        }
+
     def preload_model(self):
         try:
             load_ms = self._load_model()
@@ -369,35 +458,65 @@ class VoiceInputService:
             raise VoiceInputUnavailable("Download / load the voice input model before recording.")
         timings = {}
         try:
-            language = None if self.language.lower() == "auto" else self.language
+            language = self._effective_language()
+            configured_beam_size = max(VOICE_INPUT_FAST_BEAM_SIZE, int(self.beam_size))
             started = time.perf_counter()
-            segments, info = self._model.transcribe(
-                str(audio_path),
+            attempt = self._transcribe_attempt(
+                audio_path,
                 language=language,
-                vad_filter=True,
-                vad_parameters={
-                    "threshold": self.vad_threshold,
-                    "min_silence_duration_ms": self.vad_min_silence_ms,
-                    "speech_pad_ms": self.vad_speech_pad_ms,
-                },
-                beam_size=self.beam_size,
-                condition_on_previous_text=self.condition_on_previous_text,
+                beam_size=VOICE_INPUT_FAST_BEAM_SIZE,
             )
-            transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
+            attempts = [attempt]
+            if (
+                configured_beam_size > VOICE_INPUT_FAST_BEAM_SIZE
+                and _needs_confidence_rerun(attempt["confidence"])
+            ):
+                attempt = self._transcribe_attempt(
+                    audio_path,
+                    language=language,
+                    beam_size=configured_beam_size,
+                )
+                attempts.append(attempt)
+            transcript = attempt["transcript"]
+            confidence = attempt["confidence"]
+            status = "success"
+            message = None
+            if transcript and _should_reject_transcript(confidence):
+                status = "rejected"
+                transcript = ""
+                message = VOICE_INPUT_REJECT_MESSAGE
             timings["transcribe_ms"] = int((time.perf_counter() - started) * 1000)
+            timings["asr_attempts"] = len(attempts)
+            timings["asr_beam_size"] = attempt["beam_size"]
             self.last_error = ""
             self.last_transcript = transcript
             self.last_timings = timings
-            return {
-                "status": "success",
+            result_language = getattr(attempt["info"], "language", None) or language
+            result = {
+                "status": status,
                 "transcript": transcript,
-                "language": getattr(info, "language", language or "auto"),
-                "language_probability": getattr(info, "language_probability", None),
-                "duration": getattr(info, "duration", None),
+                "language": result_language,
+                "language_probability": getattr(attempt["info"], "language_probability", None),
+                "duration": getattr(attempt["info"], "duration", None),
+                "confidence": confidence,
+                "recognition": {
+                    "beam_size": attempt["beam_size"],
+                    "configured_beam_size": configured_beam_size,
+                    "attempts": [
+                        {
+                            "beam_size": item["beam_size"],
+                            "confidence": item["confidence"],
+                        }
+                        for item in attempts
+                    ],
+                },
                 "timings": timings,
                 "provider": self.provider,
                 "model": self.model_name,
             }
+            if message:
+                result["message"] = message
+            return result
         except VoiceInputError:
             raise
         except Exception as exc:
