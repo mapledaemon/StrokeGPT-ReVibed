@@ -8,6 +8,77 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Auto-Detect ASR Device + Compute Type
+----------------------------------------------------------------
+
+Branch: claude-voice-asr-auto-device
+
+- Continues ROADMAP #13 ASR work order step 1 ("auto-CUDA/device
+  detection, compute-type selection") after PR #108 landed the
+  confidence + beam-1 fast path. Same goal: cut the live mic latency
+  for users who already have the hardware to run faster transcription,
+  without expanding the Settings > Voice surface that is already too
+  knob-heavy.
+- Two new helpers in `strokegpt/asr.py`:
+    - `_count_cuda_devices()`: lazy-imports `ctranslate2` and returns
+      the number of visible CUDA devices, defensively returning `0` on
+      any import or runtime failure (broken CUDA libs, missing wheel).
+    - `_detect_device(env_value)`: honors an explicit
+      `STROKEGPT_ASR_DEVICE` override (case- and whitespace-insensitive,
+      including pinned indices like `cuda:1`) and falls back to
+      `cuda` when CUDA is visible, `cpu` otherwise.
+    - `_detect_compute_type(env_value, device)`: honors
+      `STROKEGPT_ASR_COMPUTE_TYPE` override; auto picks `float16` on
+      CUDA (~2x faster than int8 at similar Whisper accuracy) and
+      `int8` on CPU (smaller memory, AVX2-friendly).
+- `_load_model()` now calls the two helpers instead of reading the env
+  vars directly with `cpu`/`int8` defaults. The chosen device +
+  compute_type prints to stdout once at model load
+  (`[INFO] faster-whisper loading model='small.en' device=cuda
+  compute_type=float16`), so the speedup is visible to the user
+  without needing to enable diagnostics.
+- Behavior change is opt-out, not opt-in: the previous defaults
+  (`cpu`/`int8`) are now the *fallback* when no CUDA is visible. Users
+  who had `STROKEGPT_ASR_DEVICE=cpu` or `=cuda` set explicitly keep
+  exactly their previous behavior. Users who had nothing set get
+  auto-CUDA the next time the model loads, which is the ~10x latency
+  cliff the roadmap called out as the "single biggest ASR latency win
+  for users who happen to have NVIDIA hardware."
+- No new dependency: `ctranslate2` is already a transitive dep of
+  `faster_whisper`. The helper imports it lazily inside the function
+  body, matching the existing `from faster_whisper import WhisperModel`
+  pattern, so this slice does not change CPU-only install footprint.
+- No Settings > Voice change. ROADMAP #13 explicitly says "Treat
+  faster-whisper baseline tuning as backend behavior first, not
+  another Settings > Voice expansion"; this slice obeys that.
+- Tests in `tests/test_asr.py`:
+    - `DeviceDetectionTests` (6): explicit values honored
+      case/whitespace-insensitively, GPU index pin-through, auto
+      branches based on a mocked `_count_cuda_devices`, empty/None
+      treated as auto.
+    - `ComputeTypeDetectionTests` (6): explicit honored, auto +
+      `cuda`/`cuda:N`/`cpu`/unknown device picks the right
+      compute_type, unset/None treated as auto.
+    - `CountCudaDevicesTests` (2): defensive zero on
+      `get_cuda_device_count` failure (the real-world broken-CUDA
+      scenario), and integration check that mock-returned counts pass
+      through. The integration check skips cleanly when ctranslate2
+      is not installed in the test env.
+  No behavioral test of `_load_model()` itself is added because the
+  helper unit tests cover the substantive logic and a `_load_model`
+  test would need to mock both ctranslate2 and `WhisperModel`,
+  duplicating coverage with no net signal.
+- Local validation: `python -m unittest discover -s tests` green at
+  315 tests / 100 skipped (was 313 / 98 -- +14 detection tests, +2
+  skipped reflect the conditional ctranslate2 integration check on
+  this Python-only env). `python -m py_compile app.py strokegpt/*.py
+  tests/*.py` clean.
+- Next ROADMAP #13 step 1 follow-up: browser-side audio
+  preprocessing (high-pass + dynamic-range compression in
+  `voice-input.js`) and silence-trim before upload. Both are
+  front-end-only and benefit users without GPUs as well.
+
+
 2026-05-10 - PR #113 - Retire Motion Save-Feedback Source-Text Test
 --------------------------------------------------------------------
 

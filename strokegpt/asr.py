@@ -47,6 +47,58 @@ def _env_flag_enabled(name):
     return os.environ[name].lower() in _HF_TRUE_VALUES
 
 
+def _count_cuda_devices():
+    """Return the number of CUDA devices visible to CTranslate2, or 0 on any
+    failure. Isolated from :func:`_detect_device` so tests can mock the
+    detection without reaching into the ``ctranslate2`` module itself.
+
+    The lazy import matches the rest of this module: ``ctranslate2`` is a
+    transitive dependency of ``faster_whisper`` and is not guaranteed to be
+    importable on every install (e.g. CPU-only builds, missing wheels). Any
+    import or runtime error here just means "no CUDA visible," which is the
+    safe fallback.
+    """
+    try:
+        import ctranslate2  # type: ignore[import-not-found]
+        return int(ctranslate2.get_cuda_device_count() or 0)
+    except Exception:
+        return 0
+
+
+def _detect_device(env_value):
+    """Pick the faster-whisper device.
+
+    Honors an explicit env override (case- and whitespace-insensitive) so a
+    user with broken CUDA libs can pin ``cpu``, or pin a specific GPU index
+    like ``cuda:1``. When the value is unset, empty, or ``auto``, falls back
+    to runtime detection: ``cuda`` if any CUDA device is visible to
+    CTranslate2, otherwise ``cpu``. The ~10x speedup from GPU is the single
+    biggest ASR latency cliff for users who happen to have NVIDIA hardware,
+    so the auto path defaults toward enabling it.
+    """
+    explicit = (env_value or "").strip().lower()
+    if explicit and explicit != "auto":
+        return explicit
+    return "cuda" if _count_cuda_devices() > 0 else "cpu"
+
+
+def _detect_compute_type(env_value, device):
+    """Pick the CTranslate2 ``compute_type`` for the chosen device.
+
+    Honors an explicit env override. When unset, empty, or ``auto``, picks
+    ``float16`` on CUDA (nearly 2x faster than ``int8`` for similar Whisper
+    accuracy at common model sizes) and ``int8`` on CPU (smaller memory
+    footprint, faster on AVX2-capable laptops). Anything other than
+    ``cuda``/``cuda:N`` defaults to ``int8`` so a future ``metal`` or other
+    device picks a safe baseline.
+    """
+    explicit = (env_value or "").strip().lower()
+    if explicit and explicit != "auto":
+        return explicit
+    is_cuda = device == "cuda" or device.startswith("cuda:")
+    return "float16" if is_cuda else "int8"
+
+
 def _cache_search_text(value):
     return re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
 
@@ -398,8 +450,20 @@ class VoiceInputService:
         cache_dir = self._prepare_model_cache()
         from faster_whisper import WhisperModel
 
-        device = os.getenv("STROKEGPT_ASR_DEVICE", "cpu").strip() or "cpu"
-        compute_type = os.getenv("STROKEGPT_ASR_COMPUTE_TYPE", "int8").strip() or "int8"
+        # Auto-detect by default. Honors explicit STROKEGPT_ASR_DEVICE /
+        # STROKEGPT_ASR_COMPUTE_TYPE overrides for users who need to pin a
+        # specific GPU index, force CPU on a broken CUDA install, or trade
+        # accuracy for memory. The auto path picks GPU+float16 when CUDA is
+        # visible (the ~10x latency cliff that CPU-only voice users hit) and
+        # CPU+int8 otherwise.
+        device = _detect_device(os.getenv("STROKEGPT_ASR_DEVICE"))
+        compute_type = _detect_compute_type(
+            os.getenv("STROKEGPT_ASR_COMPUTE_TYPE"), device
+        )
+        print(
+            f"[INFO] faster-whisper loading model={self.model_name!r} "
+            f"device={device} compute_type={compute_type}"
+        )
         self._model = WhisperModel(
             self.model_name,
             device=device,
