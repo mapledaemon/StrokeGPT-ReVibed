@@ -67,7 +67,7 @@ Follow-up work:
 
 ## Visual Element Formatting
 
-Status: Partial
+Status: Watch
 
 Some UI elements still need visual polish after the motion observability and
 training-window work. Known rough spots include line distance, vertical spacing,
@@ -76,9 +76,8 @@ different window sizes.
 
 Follow-up work:
 
-- Review remaining spacing in dense chat/motion status controls at common
-  desktop and mobile widths.
-- Keep status bars and feedback controls compact without oversized bezels.
+- Watch for user-visible spacing problems after the chat footer, settings
+  tabs, Motion Training window, and motion status strip passes.
 - Prefer small layout fixes and responsive constraints over large visual
   rewrites unless the current structure blocks clean formatting.
 ## Voice Input Settings Surface Is Overexposed
