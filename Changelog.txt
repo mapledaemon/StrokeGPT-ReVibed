@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Pay Down Frontend Feedback Behavior
+-------------------------------------------------------------
+
+Branch: codex/frontend-feedback-behavior-paydown
+
+- Retired the source-text-only connection-lost banner test in favor of
+  behavioral frontend coverage. The Node harness now supports the small DOM
+  surface this contract needs: attributes, backend-required selector queries,
+  `closest()`, document events, and `CustomEvent`.
+- Finished the reachable-backend rejection audit for the remaining motion and
+  audio actions: motion training start/preview/stop/save/feedback,
+  like/dislike, Edge/Milk/Freestyle starts, LLM edge permissions, pause/resume,
+  I'm Close, and local TTS model preload all route backend error messages
+  through `reportSaveFailure()` without overwriting network-loss feedback.
+- Kept static coverage for the connection-lost banner markup/CSS in the web
+  asset test while moving the lock/restore behavior to `tests/js/`, so future
+  frontend refactors can change implementation shape without losing the
+  user-visible contract.
+
+
 2026-05-10 - PR #118 - Add Continuous Pattern Motion Backend
 ------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-import { D, apiCall, el, state } from '../context.js';
+import { D, apiCall, el, reportSaveFailure, state } from '../context.js';
 
 const SHIFT_DOUBLE_TAP_MS = 350;
 
@@ -29,6 +29,8 @@ export async function toggleMotionPause(action = 'toggle') {
         updatePauseResumeUi(data.paused);
         updateActiveModeTimerCallback(data.active_mode, data.active_mode_elapsed_seconds, data.active_mode_paused);
         el.statusText.textContent = data.paused ? 'Motion paused.' : 'Motion resumed.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not change motion pause state.');
     }
 }
 
@@ -48,6 +50,8 @@ export async function signalImClose() {
             : data.mode === 'freestyle'
                 ? 'Freestyle close signal sent.'
             : 'Close signal sent.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not send close signal.');
     }
     if (el.imCloseBtn) {
         el.imCloseBtn.style.transform = 'scale(0.95)';

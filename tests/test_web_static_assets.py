@@ -55,6 +55,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="user-chat-input" class="input-text" placeholder="Type a message or command..." aria-label="Message or command" autocomplete="off"', page)
             self.assertIn('id="send-chat-btn" class="my-button" title="Send message"', page)
             self.assertIn('id="voice-control-buttons" role="group" aria-label="Voice controls"', page)
+            self.assertIn('id="connection-lost-banner" role="alert" aria-live="assertive" hidden', page)
             self.assertIn('id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Start voice input" aria-label="Start voice input" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-requires-backend', page)
             self.assertIn('class="voice-control-mic-icon" aria-hidden="true"', page)
             self.assertIn('class="voice-control-caret" aria-hidden="true"', page)
@@ -275,6 +276,8 @@ class WebStaticAssetTests(WebTestCase):
             css = response.get_data(as_text=True)
 
             self.assertIn("#chat-messages-container { display: flex; flex-direction: column;", css)
+            self.assertIn("#connection-lost-banner { position: fixed;", css)
+            self.assertIn("#connection-lost-banner[hidden] { display: none; }", css)
             self.assertIn("--shell-gutter: clamp(0.875rem, 2.4vw, 1.5rem)", css)
             self.assertIn("--sidebar-width: clamp(18rem, 24vw, 22.5rem)", css)
             self.assertIn("--chat-gutter: clamp(0.5rem, 1.25vw, 0.875rem)", css)

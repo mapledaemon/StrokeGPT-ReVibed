@@ -411,14 +411,14 @@ setup console.
 - Add device-profile controls for Handy 1 versus Handy 2 speed-limit behavior,
   and only expose Handy 2 Pro overclock options if current documentation
   supports a clear warning, limit, and fallback path.
-- Double-check frontend modules against backend save routes so settings
-  changes show clear success/failure states and do not fail silently when
-  the tab stays open after the app shuts down. Keep the user-facing failure
-  model simple: persistent red banner for network/backend loss, one inline
-  status near the affected control for reachable-but-rejected writes, and
-  handler-specific treatment for action endpoints that already have mode,
-  chat, or toast feedback. Do not mechanically add more yellow status text
-  if it produces duplicate or conflicting messages.
+- Keep backend-shutdown browser smoke on the manual checklist so the
+  connection-lost banner, backend-required control lock, and per-control
+  rejection copy stay aligned with the runtime tests. Keep the user-facing
+  failure model simple: persistent red banner for network/backend loss, one
+  inline status near the affected control for reachable-but-rejected writes,
+  and handler-specific treatment for action endpoints that already have mode,
+  chat, or toast feedback. Do not mechanically add more yellow status text if
+  it produces duplicate or conflicting messages.
 - Tighten spacing in the right-side/collapsible UI, settings panels, and
   compact control rows so new diagnostics, reconnect, pause/resume, and
   mode buttons fit without adding unnecessary boundaries or dead space.

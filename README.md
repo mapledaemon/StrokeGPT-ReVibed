@@ -135,7 +135,7 @@ NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Wi
 - **Local voice is slow / "CPU-only Torch" warning** — install CUDA PyTorch (see [docs/local_voice_setup.md](docs/local_voice_setup.md)), use **Chatterbox Turbo**, or switch to ElevenLabs.
 - **Chatterbox install fails on Python 3.12+** — recreate `.venv` with Python 3.11.
 - **Windows blocks the install script** — the `Set-ExecutionPolicy` command above only relaxes the script policy for that PowerShell process; close and reopen if you need it back to default.
-- **Settings appear to save but don't persist** — the browser tab can look responsive while the backend has stopped. Confirm `python app.py` is still running. (Tracked in [KNOWN_PROBLEMS.md](KNOWN_PROBLEMS.md).)
+- **Settings appear blocked or show connection errors** — confirm `python app.py` is still running. When the backend is unreachable, the browser shows a connection-lost banner and locks backend-required controls until a request succeeds again.
 - **Disk fills up unexpectedly** — Ollama and Chatterbox model weights are large. Make sure the drive used by Ollama has several GB free.
 - **Lost saved settings** — `my_settings.json` lives in the project root. Keep it private; it can hold API keys and the Handy key.
 
