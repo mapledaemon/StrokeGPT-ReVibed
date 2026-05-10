@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Profile About Popup
+---------------------------------------------
+
+Branch: codex/profile-about-popup
+
+- Replaced the disabled About placeholder in the profile-picture menu with a
+  real About popup that reuses the README Support Development copy and the
+  repo-local Bitcoin/Ethereum QR code assets.
+- Kept the profile menu to the requested two entries, Settings and About, and
+  wired the About popup to close from the close button, backdrop click, or
+  Escape key.
+- Removed the completed About-popup item from the roadmap and updated the
+  shared agent handoff to describe the live popup instead of a placeholder.
+
+
 2026-05-10 - PR #122 - Slim Profile Menu About Planning
 -------------------------------------------------------
 
