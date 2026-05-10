@@ -263,7 +263,9 @@ class AudioServiceTests(unittest.TestCase):
             self.assertEqual(wav_file.getnchannels(), 1)
             self.assertEqual(wav_file.getsampwidth(), 2)
             self.assertEqual(wav_file.getframerate(), 24000)
-            self.assertEqual(wav_file.getnframes(), 4)
+            self.assertEqual(wav_file.getnframes(), 4 + round(24000 * service.LOCAL_TTS_TAIL_PADDING_MS / 1000))
+            frames = wav_file.readframes(wav_file.getnframes())
+            self.assertEqual(frames[-16:], b"\x00" * 16)
 
     @unittest.skipIf(importlib.util.find_spec("chatterbox") is None, "chatterbox not installed")
     def test_local_status_suppresses_perth_pkg_resources_warning(self):

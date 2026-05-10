@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Local TTS Tail Padding
+-------------------------------------------------
+
+Branch: codex/local-tts-tail-padding
+
+- Added a short silence tail to local Chatterbox WAV output so generated clips
+  have a playback cushion instead of ending exactly on the model waveform's
+  final frame.
+- Updated the local WAV encoder regression test to pin the stdlib WAV shape
+  and the added trailing silence frames.
+
+
 2026-05-10 - PR #141 - Chat TTS Divergence Warning
 ---------------------------------------------------
 
