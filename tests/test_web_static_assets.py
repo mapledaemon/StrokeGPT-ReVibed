@@ -356,6 +356,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("#chat-messages-container { display: flex; flex-direction: column; gap: var(--chat-feed-gap); width: min(var(--chat-max-width), 100%);", css)
             self.assertIn("padding: var(--space-3); border: 1px solid #2d333d; border-radius: 8px; background: linear-gradient", css)
             self.assertIn("body.chat-model-unavailable #chat-messages-container", css)
+            self.assertIn(".my-button:focus-visible, #toggle-sidebar-btn:focus-visible, .profile-menu-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-color: var(--purple); }", css)
             self.assertIn(".chat-jump-button { position: absolute; left: 50%; bottom: var(--space-3);", css)
             self.assertIn(".chat-jump-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; transform: translateX(-50%) translateY(-1px); }", css)
             self.assertIn(".chat-jump-button[hidden] { display: none; }", css)
