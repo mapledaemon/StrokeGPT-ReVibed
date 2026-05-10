@@ -234,9 +234,9 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   responses, so the chat-emit path stays in lockstep with the TTS-enqueue
   path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
   Voice Plays").
-- Investigate TTS clips that cut off at the end, especially when local voice
-  generation, chunk playback, or rapid mode narration overlaps with chat
-  updates.
+- Continue investigating provider-specific or rapid-mode TTS cutoffs after the
+  local Chatterbox WAV encoder's trailing silence cushion has been validated
+  during real playback.
 - Keep markdown/code rendering opt-in and predictable; do not regress
   copy/paste, scrollback, or screen-reader behavior while restyling.
 - Preserve the existing chat-driven motion contract (chat-driven

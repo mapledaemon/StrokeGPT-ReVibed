@@ -19,6 +19,7 @@ class AudioService:
     LOCAL_ENGINE_CHATTERBOX_TURBO = "chatterbox_turbo"
     LOCAL_ENGINE_DEFAULT = LOCAL_ENGINE_CHATTERBOX_TURBO
     LOCAL_TTS_CHUNK_CHARS = 220
+    LOCAL_TTS_TAIL_PADDING_MS = 120
     LOCAL_ENGINE_LABELS = {
         LOCAL_ENGINE_CHATTERBOX_TURBO: "Chatterbox Turbo",
         LOCAL_ENGINE_CHATTERBOX: "Chatterbox Standard",
@@ -546,6 +547,7 @@ class AudioService:
             raise ValueError(f"Expected 1D or 2D audio tensor, got {audio.dim()}D.")
 
         channels = int(audio.shape[0])
+        sample_rate = int(sample_rate)
         pcm = (
             audio.clamp(-1.0, 1.0)
             .mul(32767)
@@ -556,12 +558,15 @@ class AudioService:
             .numpy()
             .tobytes()
         )
+        tail_frames = max(0, round(sample_rate * self.LOCAL_TTS_TAIL_PADDING_MS / 1000))
+        if tail_frames:
+            pcm += b"\x00" * tail_frames * channels * 2
 
         output = io.BytesIO()
         with wave.open(output, "wb") as wav_file:
             wav_file.setnchannels(channels)
             wav_file.setsampwidth(2)
-            wav_file.setframerate(int(sample_rate))
+            wav_file.setframerate(sample_rate)
             wav_file.writeframes(pcm)
         return output.getvalue()
 
