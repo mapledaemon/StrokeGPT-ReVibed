@@ -71,6 +71,8 @@ describe('Handy visualizer tracking', () => {
             'motion-depth-meter-value',
             'motion-sequence-indicator',
             'motion-diagnostics-panel',
+            'active-mode-status',
+            'active-mode-label',
             'edging-timer',
             'mood-display',
             'im-close-btn',

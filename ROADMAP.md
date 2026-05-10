@@ -55,10 +55,6 @@ mode controls still have rough edges that block daily use.
   modes after Freestyle trace data shows whether command starvation is still
   happening at batch boundaries. Chain length was raised for Freestyle in
   PR #41 but probably not enough.
-- Split the active-mode timer indicator and the mode/label indicator into
-  fixed-size elements so neither can resize the other when text length
-  changes.
-
 ### 2. Adapter Boundary Guardrails And Translation Audit (S/M)
 
 Why next: PRs #48-#75 paid down most of the compatibility-shim surface by

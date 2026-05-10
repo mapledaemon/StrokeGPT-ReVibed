@@ -45,6 +45,8 @@ describe('updateActiveModeTimer + sequence log (Backlog #13 proof test)', () => 
         state.motionPaused = false;
         state.motionDiagnosticsLevel = 'compact';
         state.motionBackend = 'hamp';
+        resetStubElement('active-mode-status');
+        resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
         resetStubElement('motion-sequence-indicator');
         resetMotionSequenceLog();
@@ -62,6 +64,23 @@ describe('updateActiveModeTimer + sequence log (Backlog #13 proof test)', () => 
         assert.strictEqual(state.activeModeElapsedSeconds, 42);
     });
 
+    it('renders mode label and timer as separate fixed chips', () => {
+        updateActiveModeTimer('freestyle', 42, false);
+
+        const status = getStubElement('active-mode-status');
+        const label = getStubElement('active-mode-label');
+        const timer = getStubElement('edging-timer');
+
+        assert.strictEqual(status.hidden, false);
+        assert.strictEqual(label.textContent, 'Freestyle');
+        assert.strictEqual(timer.textContent, '00:42');
+        assert.strictEqual(
+            timer.textContent.includes('Freestyle'),
+            false,
+            'the timer chip should not include the mode label',
+        );
+    });
+
     it('freezes elapsed seconds on stop instead of resetting to null/00:00', () => {
         updateActiveModeTimer('auto', 0, false);
         updateActiveModeTimer('auto', 42, false);
@@ -77,8 +96,8 @@ describe('updateActiveModeTimer + sequence log (Backlog #13 proof test)', () => 
         );
 
         // Hidden, but the bug-relevant state is the cached elapsed.
-        const timer = getStubElement('edging-timer');
-        assert.strictEqual(timer.style.display, 'none');
+        const status = getStubElement('active-mode-status');
+        assert.strictEqual(status.hidden, true);
     });
 
     it('keeps post-stop sequence-log entries on the frozen elapsed timecode', () => {

@@ -80,9 +80,13 @@ body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }
 
 #top-bar h1 { grid-area: title; min-width: 0; margin: 0; font-size: 1.5rem; color: var(--cyan); font-weight: 600; letter-spacing: 0; text-shadow: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #top-bar .top-bar-info { grid-area: status; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; justify-self: end; }
-#mood-display, #edging-timer { background-color: var(--background-lighter); padding: 6px 12px; border-radius: 6px; font-size: 0.9em; border: 1px solid #2d333d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-bar-chip, #mood-display { background-color: var(--background-lighter); padding: 6px 12px; border-radius: 6px; font-size: 0.9em; border: 1px solid #2d333d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.active-mode-status { display: grid; grid-template-columns: 5.75rem 5.5rem; gap: var(--space-1); flex: 0 0 auto; min-width: 11.75rem; }
+.active-mode-status[hidden] { display: none; }
+.active-mode-status.paused .top-bar-chip { border-color: rgba(216, 182, 106, 0.72); }
+.active-mode-label { width: 100%; text-align: center; color: var(--cyan); font-weight: 600; }
+.active-mode-timer { width: 100%; text-align: center; color: var(--yellow); font-weight: 600; font-variant-numeric: tabular-nums; }
 #mood-display { min-width: 0; max-width: min(42vw, 20rem); }
-#edging-timer { min-width: 4.75rem; text-align: center; color: var(--yellow); font-weight: 600; font-variant-numeric: tabular-nums; }
 .profile-menu { position: relative; flex: 0 0 auto; }
 .profile-menu-button { width: var(--top-bar-button-size); height: var(--top-bar-button-size); padding: 0; border: 1px solid rgba(127, 183, 163, 0.58); border-radius: 50%; background: var(--background-lighter); cursor: pointer; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28); }
 .profile-menu-button:hover { border-color: var(--cyan); background: #26322f; }

@@ -908,7 +908,15 @@ export function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.m
         // frozen at its last value so any sequence-log entries appended after
         // stop keep their real elapsed timecode instead of rewriting to 00:00.
         // The elapsed counter (and the log) only reset when a new mode starts.
-        el.edgingTimer.style.display = 'none';
+        if (el.activeModeStatus) {
+            el.activeModeStatus.hidden = true;
+            el.activeModeStatus.classList.remove('paused');
+            el.activeModeStatus.title = '';
+        }
+        if (el.activeModeLabel) {
+            el.activeModeLabel.textContent = '';
+            el.activeModeLabel.title = '';
+        }
         el.edgingTimer.textContent = '';
         el.edgingTimer.title = '';
         return;
@@ -916,9 +924,18 @@ export function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.m
     const label = activeModeDisplayName(normalizedMode);
     state.activeModeElapsedSeconds = nextElapsed;
     const elapsed = formatClockElapsed(state.activeModeElapsedSeconds);
-    el.edgingTimer.style.display = 'block';
-    el.edgingTimer.textContent = `${label} ${elapsed}${paused ? ' paused' : ''}`;
-    el.edgingTimer.title = paused ? `${label} paused at ${elapsed}` : `${label} active for ${elapsed}`;
+    if (el.activeModeStatus) {
+        el.activeModeStatus.hidden = false;
+        if (paused) el.activeModeStatus.classList.add('paused');
+        else el.activeModeStatus.classList.remove('paused');
+        el.activeModeStatus.title = paused ? `${label} paused at ${elapsed}` : `${label} active for ${elapsed}`;
+    }
+    if (el.activeModeLabel) {
+        el.activeModeLabel.textContent = label;
+        el.activeModeLabel.title = paused ? `${label} paused` : label;
+    }
+    el.edgingTimer.textContent = elapsed;
+    el.edgingTimer.title = paused ? `Paused at ${elapsed}` : `Active for ${elapsed}`;
 }
 
 export async function pollMotionStatus() {

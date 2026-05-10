@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Top Bar Mode Status Chips
+---------------------------------------------------
+
+Branch: codex/topbar-mode-status-chips
+
+- Split the active mode status into a fixed-width mode label chip and a
+  fixed-width elapsed timer chip so changing mode names, clocks, and pause
+  state no longer resize each other in the top bar.
+- Kept the elapsed timer state behavior unchanged: stopping a mode still hides
+  the visible status while preserving the frozen elapsed time for subsequent
+  motion-sequence log entries.
+- Removed the completed timer/mode-label layout follow-up from the roadmap and
+  known-problems list.
+
+
 2026-05-10 - PR #123 - Profile About Popup
 -------------------------------------------
 

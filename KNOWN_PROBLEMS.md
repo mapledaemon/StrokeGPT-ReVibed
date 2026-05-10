@@ -81,10 +81,6 @@ Follow-up work:
 - Keep status bars and feedback controls compact without oversized bezels.
 - Prefer small layout fixes and responsive constraints over large visual
   rewrites unless the current structure blocks clean formatting.
-- Split the active-mode timer indicator and the mode-label indicator into two
-  fixed-size elements so neither resizes the surrounding strip when text
-  changes length.
-
 ## Voice Input Settings Surface Is Overexposed
 
 Status: Partial
