@@ -326,12 +326,11 @@ async function fetchJsonWithMessage(endpoint, options = {}) {
         const data = await response.json().catch(() => ({}));
         if (!response.ok || data.status === 'error') {
             const message = data.message || `Request failed: ${response.status}`;
-            el.statusText.textContent = message;
+            reportSaveFailure(el.statusText, data, message);
             return data;
         }
         return data;
-    } catch (error) {
-        el.statusText.textContent = `Request failed: ${error.message}`;
+    } catch {
         return undefined;
     }
 }
@@ -444,6 +443,8 @@ async function startMotionTraining(patternId) {
     if (data && data.motion_training) {
         updateMotionTrainingStatus(data.motion_training);
         el.statusText.textContent = data.motion_training.message || 'Motion training started.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start motion training.');
     }
 }
 
@@ -460,6 +461,8 @@ async function playEditedMotionTrainingPreview() {
     if (data && data.motion_training) {
         updateMotionTrainingStatus(data.motion_training);
         el.statusText.textContent = data.motion_training.message || 'Edited preview started.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start edited preview.');
     }
 }
 
@@ -468,6 +471,8 @@ async function stopMotionTraining() {
     if (data && data.motion_training) {
         updateMotionTrainingStatus(data.motion_training);
         el.statusText.textContent = data.motion_training.message || 'Motion training stopped.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not stop motion training.');
     }
 }
 
@@ -487,6 +492,8 @@ async function sendMotionTrainingFeedback(rating) {
         renderMotionPatterns(data.motion_patterns);
         if (data.pattern) setMotionTrainingDetail(data.pattern);
         el.statusText.textContent = data.motion_training.message || 'Pattern feedback saved.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not save pattern feedback.');
     }
 }
 
@@ -504,6 +511,8 @@ async function saveEditedMotionPattern() {
         setMotionTrainingDetail(data.pattern);
         setMotionEditStatus(`Saved ${data.pattern.name}.`, 'var(--cyan)');
         el.statusText.textContent = `Saved motion pattern: ${data.pattern.name}.`;
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not save motion pattern.');
     }
 }
 
@@ -846,7 +855,7 @@ async function likeLastMove() {
         const patternText = data.pattern ? ` Pattern weight updated for ${data.pattern.name}.` : '';
         el.statusText.textContent = `Saved '${data.name}' to my memory!${patternText}`;
     } else {
-        el.statusText.textContent = 'Status: No active move to like.';
+        reportSaveFailure(el.statusText, data, 'Status: No active move to like.');
     }
 }
 
@@ -856,7 +865,7 @@ async function dislikeLastMove() {
         if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
         el.statusText.textContent = data.message || 'Saved thumbs down feedback.';
     } else {
-        el.statusText.textContent = data?.message || 'No fixed motion pattern is active to rate.';
+        reportSaveFailure(el.statusText, data, 'No fixed motion pattern is active to rate.');
     }
 }
 
@@ -868,6 +877,8 @@ async function startEdgingMode() {
         el.imCloseBtn.style.display = 'block';
         updatePauseResumeUi(false);
         updateActiveModeTimer('edging', 0, false);
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start edging mode.');
     }
 }
 
@@ -879,6 +890,8 @@ async function startMilkingMode() {
         el.imCloseBtn.style.display = 'block';
         updatePauseResumeUi(false);
         updateActiveModeTimer('milking', 0, false);
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start milking mode.');
     }
 }
 
@@ -895,6 +908,8 @@ async function saveLlmEdgePermissions() {
         populateMotionSettings(data);
         if (el.llmEdgePermissionsStatus) el.llmEdgePermissionsStatus.textContent = 'LLM edge permissions saved.';
         el.statusText.textContent = 'LLM edge permissions saved.';
+    } else {
+        reportSaveFailure(el.llmEdgePermissionsStatus || el.statusText, data, 'Could not save LLM edge permissions.');
     }
 }
 
@@ -906,6 +921,8 @@ async function startFreestyleMode() {
         el.imCloseBtn.style.display = 'block';
         updatePauseResumeUi(false);
         updateActiveModeTimer('freestyle', 0, false);
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start Freestyle.');
     }
 }
 

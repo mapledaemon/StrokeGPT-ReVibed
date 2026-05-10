@@ -141,45 +141,34 @@ Follow-up work:
 
 ## Web UI Stays Functional After Backend Shutdown
 
-Status: Partial
+Status: Watch / Needs Browser Smoke
 
-A persistent connection-lost banner and backend-required control lock are now
-in place: any connection-aware `fetch()` failure flips a fixed top-of-viewport
+A persistent connection-lost banner and backend-required control lock are in
+place: any connection-aware `fetch()` failure flips a fixed top-of-viewport
 banner visible and disables controls marked `data-requires-backend`; the next
 successful response hides the banner and restores those controls without
 unlocking controls that were already disabled. The "backend reachable but
-rejected the write" case now also surfaces useful detail: `apiCall` parses the
-JSON response body on HTTP 4xx/5xx and writes the server's `message` field
-into the global statusText instead of the generic "Error: server returned X."
-line, so every save handler gets meaningful failure copy for free. The
-`reportSaveFailure(statusEl, data, fallback)` helper in `static/js/context.js`
-covers the rarer 200-with-`status:'error'` shape (audio enable/disable,
-`/pull_ollama_model`, etc.) and is wired into three settings handlers as the
-template (`setPersonaPrompt`, `setOllamaModel`, `saveDiagnosticsLevels`).
+rejected the write" case surfaces the backend's `message` through either the
+global status text or the affected control's local status span.
 
-Remaining audit work:
+The code audit for known write/action controls is complete. Settings saves,
+motion pattern feedback, motion training start/preview/stop/save/feedback,
+like/dislike, Edge/Milk/Freestyle starts, LLM edge permissions, pause/resume,
+I'm Close, and local TTS model preload all use the shared reachable-backend
+failure helper where their success shape is not met. Source-text coverage for
+the connection-lost behavior was retired in favor of Node runtime tests; static
+markup/CSS coverage remains in the web asset test.
 
-- 12 of the 20 audited save handlers are now wired with `reportSaveFailure`
-  (settings.js x3, motion-control.js x4, motion/pattern-list.js x3,
-  motion/feedback-controls.js x1, audio.js x1). The remaining 8 use action-
-  specific success statuses (`boosted`, `edging_started`, `milking_started`,
-  `freestyle_started`, `signaled`, `queued`) where the chat status strip,
-  pause/resume UI, and like/dislike toasts already provide some level of
-  feedback; they each need targeted treatment in a follow-up rather than the
-  same `} else { reportSaveFailure(...) }` shape. Specifically:
-    * motion-control.js:339 (motion training save_generated -- success +
-      data.pattern)
-    * motion-control.js:470, 486 (motion training preview/start)
-    * motion-control.js:829, 840 (like/dislike last move -- `boosted`)
-    * motion-control.js:851, 862, 889 (mode start buttons -- `edging_started`
-      etc.; failure already surfaces through the chat actionStatusMessages
-      table, but the dedicated edge/milk/freestyle button could also surface
-      a short inline failure)
-    * motion-control.js:879 (motion training stop)
-    * motion/pause-controls.js:28, 45 (toggleMotionPause `success`,
-      signalImClose `signaled`)
-    * audio.js:285 (download/load local TTS model -- `queued`)
-- Confirm any feedback-driven change to weights or pattern enablement shows the
+Remaining watch work:
+
+- Smoke-test the real browser flow by starting the app, opening Settings,
+  stopping the backend process, and confirming the banner/control lock and
+  per-control failure copy still match the runtime tests.
+- Do not expand yellow warning/status styling ad hoc. If real use shows that
+  save failures, slow ASR warnings, unavailable models, and other warnings are
+  visually ambiguous, handle that as one status-severity pass rather than
+  another handler-by-handler patch.
+- Confirm feedback-driven changes to weights or pattern enablement show the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.
 

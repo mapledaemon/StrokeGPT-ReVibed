@@ -45,6 +45,7 @@ describe('motion/audio save feedback', () => {
         originalRequestAnimationFrame = globalThis.window.requestAnimationFrame;
 
         globalThis.window.requestAnimationFrame = () => 0;
+        globalThis.window.confirm = () => true;
         globalThis.fetch = async () => jsonResponse(200, {
             status: 'success',
             patterns: [{
@@ -73,11 +74,18 @@ describe('motion/audio save feedback', () => {
         resetStubElement('motion-backend-status');
         resetStubElement('motion-pattern-status');
         resetStubElement('local-tts-status');
+        resetStubElement('llm-edge-permissions-status');
         getStubElement('status-text').textContent = 'baseline';
         getStubElement('motion-backend-status').textContent = 'baseline';
         getStubElement('motion-pattern-status').textContent = 'baseline';
         getStubElement('local-tts-status').textContent = 'baseline';
+        getStubElement('llm-edge-permissions-status').textContent = 'baseline';
         state.connectionLost = false;
+        state.activeModeName = '';
+        state.motionTraining = {state: 'idle', pattern_id: 'seed', pattern_name: 'Seed', preview: false};
+        state.motionTrainingOriginalPattern = null;
+        state.motionTrainingEditedPattern = null;
+        state.motionTrainingDirty = false;
     });
 
     afterEach(() => {
@@ -89,6 +97,15 @@ describe('motion/audio save feedback', () => {
             status: 'error',
             message,
         });
+    }
+
+    function installFetchQueue(responses) {
+        const queue = [...responses];
+        globalThis.fetch = async () => {
+            const response = queue.shift();
+            if (!response) throw new Error('fetch queue exhausted');
+            return response;
+        };
     }
 
     async function flushAsyncHandlers() {
@@ -188,6 +205,112 @@ describe('motion/audio save feedback', () => {
 
         const status = getStubElement('motion-pattern-status');
         assert.strictEqual(status.textContent, 'Feedback options failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('stopMotionTraining surfaces the backend message on global status', async () => {
+        installBackendError('Training stop failed.');
+
+        getStubElement('stop-motion-training-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Training stop failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveEditedMotionPattern surfaces the backend message on global status', async () => {
+        installBackendError('Generated pattern was rejected.');
+        state.motionTrainingOriginalPattern = {
+            id: 'seed',
+            name: 'Seed',
+            duration_ms: 1000,
+            actions: [{at: 0, pos: 20}, {at: 1000, pos: 80}],
+        };
+        state.motionTrainingEditedPattern = {
+            id: 'seed',
+            name: 'Seed',
+            duration_ms: 1000,
+            actions: [{at: 0, pos: 30}, {at: 1000, pos: 70}],
+        };
+        state.motionTrainingDirty = true;
+
+        getStubElement('save-motion-training-pattern-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Generated pattern was rejected.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('likeLastMove surfaces the backend message on global status', async () => {
+        installBackendError('Nothing active to like.');
+
+        getStubElement('like-this-move-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Nothing active to like.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('mode start failures replace optimistic starting text', async () => {
+        installBackendError('Edging is blocked until the device connects.');
+
+        getStubElement('edging-mode-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Edging is blocked until the device connects.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveLlmEdgePermissions surfaces the backend message on the local status span', async () => {
+        installBackendError('LLM edge permission write failed.');
+
+        getStubElement('save-llm-edge-permissions-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('llm-edge-permissions-status');
+        assert.strictEqual(status.textContent, 'LLM edge permission write failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+        assert.strictEqual(getStubElement('status-text').textContent, 'baseline');
+    });
+
+    it('toggleMotionPause surfaces the backend message on global status', async () => {
+        installBackendError('Pause request failed.');
+
+        getStubElement('pause-resume-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Pause request failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('signalImClose surfaces the backend message on global status', async () => {
+        installBackendError('Close signal failed.');
+        state.activeModeName = 'edging';
+
+        getStubElement('im-close-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Close signal failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('downloadLocalTtsModel surfaces the preload backend message on local status', async () => {
+        installFetchQueue([
+            jsonResponse(200, {status: 'ok', local_tts_status: {message: 'Local voice settings saved.'}}),
+            jsonResponse(200, {status: 'error', message: 'Model preload failed.', local_tts_status: {message: 'Idle.'}}),
+        ]);
+
+        getStubElement('download-local-tts-model-button').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('local-tts-status');
+        assert.strictEqual(status.textContent, 'Model preload failed.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
     });
 

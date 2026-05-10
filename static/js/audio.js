@@ -51,6 +51,8 @@ async function saveAudioProvider() {
         body: JSON.stringify({provider: el.audioProviderSelect.value, enabled: el.enableAudioCheckbox.checked}),
     });
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+    if (data && data.status === 'error') reportSaveFailure(el.statusText, data, 'Could not save audio provider.');
+    else if (!data || !data.local_tts_status) reportSaveFailure(el.statusText, data, 'Could not save audio provider.');
 }
 
 export function updateLocalTtsStatus(status) {
@@ -102,14 +104,15 @@ export async function saveLocalTtsSettings() {
         }),
     });
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
+    if (data && data.status === 'error') reportSaveFailure(el.localTtsStatus, data, 'Could not save local voice settings.');
+    else if (!data || !data.local_tts_status) reportSaveFailure(el.localTtsStatus, data, 'Could not save local voice settings.');
     return data;
 }
 
 async function downloadLocalTtsModel() {
     const saved = await saveLocalTtsSettings();
     if (!saved || saved.status === 'error') {
-        el.localTtsStatus.textContent = saved && saved.message ? saved.message : 'Could not save local voice settings before model download.';
-        el.localTtsStatus.style.color = 'var(--yellow)';
+        reportSaveFailure(el.localTtsStatus, saved, 'Could not save local voice settings before model download.');
         return;
     }
     const ok = window.confirm('Download/load the local Chatterbox voice model now? If it is not cached, this may download several GB.');
@@ -120,6 +123,13 @@ async function downloadLocalTtsModel() {
     el.downloadLocalTtsModelBtn.disabled = true;
     el.downloadLocalTtsModelBtn.textContent = 'Starting...';
     const data = await apiCall('/preload_local_tts_model', {method: 'POST'});
+    if (data && data.status === 'error') {
+        state.localTtsStatusPolling = false;
+        reportSaveFailure(el.localTtsStatus, data, 'Local voice model download/load request failed. Check the app console for details.');
+        el.downloadLocalTtsModelBtn.disabled = false;
+        el.downloadLocalTtsModelBtn.textContent = 'Download / Load Local Voice Model';
+        return;
+    }
     if (data && data.local_tts_status) {
         updateLocalTtsStatus(data.local_tts_status);
         if (data.status === 'started') {
@@ -129,8 +139,7 @@ async function downloadLocalTtsModel() {
         return;
     }
     state.localTtsStatusPolling = false;
-    el.localTtsStatus.textContent = 'Local voice model download/load request failed. Check the app console for details.';
-    el.localTtsStatus.style.color = 'var(--yellow)';
+    reportSaveFailure(el.localTtsStatus, data, 'Local voice model download/load request failed. Check the app console for details.');
     el.downloadLocalTtsModelBtn.disabled = false;
     el.downloadLocalTtsModelBtn.textContent = 'Download / Load Local Voice Model';
 }

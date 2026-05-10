@@ -24,6 +24,7 @@ const NODE_LIST_TYPE = 'NodeList';
 function makeStubElement(tag = 'div') {
     const children = [];
     const listeners = Object.create(null);
+    const attributes = Object.create(null);
     // Single source of truth for class state. `className` is a getter/setter
     // that delegates here so the two stay in sync the way the real DOM
     // keeps them in sync. Without this, `el.className = 'foo'` followed by
@@ -131,17 +132,33 @@ function makeStubElement(tag = 'div') {
         dispatchEvent(name, event = {}) {
             for (const fn of (listeners[name] || [])) fn(event);
         },
-        querySelectorAll() {
-            const list = [];
+        querySelectorAll(selector = '[data-requires-backend]') {
+            const list = collectMatchingDescendants(stub, selector);
             list.constructor = { name: NODE_LIST_TYPE };
             return list;
         },
-        querySelector() { return null; },
-        getAttribute() { return null; },
-        setAttribute() {},
-        removeAttribute() {},
-        hasAttribute() { return false; },
-        matches() { return false; },
+        querySelector(selector) { return stub.querySelectorAll(selector)[0] || null; },
+        getAttribute(name) { return attributes[name] ?? null; },
+        setAttribute(name, value = '') {
+            attributes[name] = String(value);
+            if (name === 'data-requires-backend') stub.dataset.requiresBackend = 'true';
+        },
+        removeAttribute(name) {
+            delete attributes[name];
+            if (name === 'data-requires-backend') delete stub.dataset.requiresBackend;
+        },
+        hasAttribute(name) { return Object.hasOwn(attributes, name); },
+        matches(selector) {
+            return selector === '[data-requires-backend]' && stub.dataset.requiresBackend === 'true';
+        },
+        closest(selector) {
+            let node = stub;
+            while (node) {
+                if (node.matches?.(selector)) return node;
+                node = node.parentNode;
+            }
+            return null;
+        },
         focus() {},
         blur() {},
         click() {
@@ -155,6 +172,9 @@ function makeStubElement(tag = 'div') {
         clientHeight: 0,
         clientWidth: 0,
         getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+        _clearAttributes() {
+            for (const key of Object.keys(attributes)) delete attributes[key];
+        },
     };
 
     return stub;
@@ -167,14 +187,31 @@ function getOrCreateElement(id, tag = 'div') {
     return elementStore.get(id);
 }
 
+function collectMatchingDescendants(root, selector = '[data-requires-backend]') {
+    const result = [];
+    const visit = node => {
+        if (!node || typeof node !== 'object') return;
+        if (node !== root && node.matches?.(selector)) result.push(node);
+        for (const child of node.children || []) visit(child);
+    };
+    visit(root);
+    return result;
+}
+
+function matchingStoredElements(selector = '[data-requires-backend]') {
+    return [...elementStore.values()].filter(element => element.matches?.(selector));
+}
+
+const documentListeners = Object.create(null);
+
 globalThis.document = {
     getElementById(id) { return getOrCreateElement(id); },
-    querySelectorAll() {
-        const list = [];
+    querySelectorAll(selector = '[data-requires-backend]') {
+        const list = matchingStoredElements(selector);
         list.constructor = { name: NODE_LIST_TYPE };
         return list;
     },
-    querySelector() { return null; },
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
     createElement(tag) { return makeStubElement(tag); },
     createTextNode(text) { return { nodeType: 3, textContent: String(text), data: String(text) }; },
     createDocumentFragment() {
@@ -182,8 +219,17 @@ globalThis.document = {
         frag.nodeType = 11;
         return frag;
     },
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(name, fn) {
+        (documentListeners[name] ||= []).push(fn);
+    },
+    removeEventListener(name, fn) {
+        if (!documentListeners[name]) return;
+        documentListeners[name] = documentListeners[name].filter(f => f !== fn);
+    },
+    dispatchEvent(event) {
+        const type = typeof event === 'string' ? event : event?.type;
+        for (const fn of (documentListeners[type] || [])) fn(event);
+    },
     documentElement: makeStubElement('html'),
     body: makeStubElement('body'),
     head: makeStubElement('head'),
@@ -228,6 +274,12 @@ function installGlobal(name, value) {
 
 installGlobal('navigator', globalThis.window.navigator);
 installGlobal('location', globalThis.window.location);
+installGlobal('CustomEvent', class StubCustomEvent {
+    constructor(type, options = {}) {
+        this.type = type;
+        this.detail = options.detail;
+    }
+});
 
 // Default fetch throws; tests that exercise apiCall must replace it.
 installGlobal('fetch', async () => {
@@ -254,8 +306,14 @@ export function resetStubElement(id) {
     stub.replaceChildren();
     stub.textContent = '';
     stub.title = '';
+    stub.value = '';
+    stub.checked = false;
     stub.style = {};
     stub.className = ''; // setter clears the classList _set too
+    stub.dataset = {};
+    stub.disabled = false;
+    stub.hidden = false;
+    stub._clearAttributes?.();
     return stub;
 }
 
