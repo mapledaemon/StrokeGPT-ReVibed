@@ -313,26 +313,28 @@ Current Up Next targets are:
 
 ## Continuation Prompts
 
-Use one of these prompts to continue work with a coding agent:
+Continuation prompts should orient a future agent, not decide the
+implementation for them. Keep them short enough that the next agent still has
+to read the current code, verify the branch state, and form its own plan.
 
 ```text
-Continue stabilizing StrokeGPT-ReVibed. First read AGENTS.md, README.md, Changelog.txt, ROADMAP.md, KNOWN_PROBLEMS.md, and the strokegpt package. Do not assume prior chat context. Identify the highest-risk current roadmap item and make one focused improvement with tests.
+Continue StrokeGPT-ReVibed from the current master. Read AGENTS.md, Changelog.txt, ROADMAP.md, and KNOWN_PROBLEMS.md, then make one focused, tested improvement.
 ```
 
 ```text
-Continue the Freestyle Diagnostics And Mode Control Reliability stage in StrokeGPT-ReVibed. First read AGENTS.md, Changelog.txt, ROADMAP.md, KNOWN_PROBLEMS.md, static/js/motion-control.js, strokegpt/background_modes.py, and strokegpt/motion.py. Reproduce regular Freestyle stops, `Message failed: auto_started`, and Auto-to-Freestyle no-action cases. Preserve HAMP as the default backend, keep stop behavior and speed limits non-negotiable, and add focused tests before preparing a PR.
+Continue Freestyle and mode-control reliability. Reproduce one current failure, fix the smallest confirmed cause, and preserve stop/speed safety.
 ```
 
 ```text
-Continue the Adapter Boundary Guardrails And Translation Audit stage in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, Changelog.txt, strokegpt/web.py, strokegpt/payloads.py, strokegpt/app_state.py, strokegpt/blueprints/, tests/test_web_bridge_guardrails.py, and tests/test_web_payload_guardrails.py. The web payload wrappers now serve as the canonical service-binding adapter and the bridge/payload guardrails enforce the legacy compatibility boundaries automatically; further moves should extend `strokegpt.payloads` rather than introducing new `web.*` wrappers, and routine tests should use `web.app_state` instead of the `strokegpt.web` runtime-state bridge. The remaining work in this stage is the schema/translation audit (LLM JSON ↔ pattern actions ↔ UI payloads ↔ Handy API): document real safety adapters, delete only wrappers that enforce no validation/migration/limit/smoothing/persistence, and update Changelog.txt before preparing a PR.
+Continue the adapter-boundary audit. Confirm one bridge or wrapper is still useful or actively harmful, then document or change only that surface.
 ```
 
 ```text
-Continue the Chat Interface Refactor planning in StrokeGPT-ReVibed. First read AGENTS.md, ROADMAP.md, KNOWN_PROBLEMS.md, index.html, static/app.css, static/app.js, static/js/chat.js, and static/js/motion-control.js. Preserve message safety, TTS/chat synchronization, stop handling, and motion controls while improving the chat shell incrementally.
+Continue the chat/UI refactor. Make one behavior-preserving usability improvement and verify chat, TTS, and motion contracts still hold.
 ```
 
 ```text
-Audit the motion-control path in StrokeGPT-ReVibed. Confirm all hardware movement goes through MotionController or HandyController safety methods. Add tests for any uncovered unsafe paths.
+Audit one motion-control path from UI or LLM input to HandyController. Patch any proven safety bypass.
 ```
 
 ## Agent Rules For This Repo
