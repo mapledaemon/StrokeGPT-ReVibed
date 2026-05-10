@@ -360,7 +360,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-training-box .modal-header { flex-shrink: 0; }
 .motion-training-workspace { display: grid; grid-template-columns: minmax(260px, 0.62fr) minmax(760px, 1.9fr); gap: 12px; min-height: 0; overflow: hidden; flex: 1; }
 .motion-training-list-pane, .motion-training-detail-pane { min-width: 0; min-height: 0; padding: 12px; border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); }
-.motion-training-list-pane { display: flex; flex-direction: column; gap: 10px; }
+.motion-training-list-pane { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 .motion-training-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
 .motion-training-status { min-height: 38px; display: flex; align-items: center; padding: 8px 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.85rem; overflow-wrap: anywhere; }
 .motion-training-toolbar .my-button { width: auto; min-width: 132px; min-height: 38px; padding: 8px 10px; font-size: 0.9rem; }
@@ -372,15 +372,15 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-training-pattern-row .motion-pattern-play, .motion-training-pattern-row .motion-pattern-export, .motion-training-pattern-row .motion-pattern-feedback-reset { width: 100%; min-width: 0; }
 .motion-training-pattern-row:hover, .motion-training-pattern-row.selected { border-color: rgba(127, 183, 163, 0.8); background: #263039; }
 .motion-training-pattern-row.selected { box-shadow: 0 0 0 1px rgba(127, 183, 163, 0.28); }
-.motion-training-detail-pane { display: flex; flex-direction: column; gap: 10px; }
+.motion-training-detail-pane { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; scrollbar-width: thin; }
 .motion-training-detail-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .motion-training-detail-header h4 { margin: 0; color: var(--foreground); font-size: 1rem; overflow-wrap: anywhere; }
 .motion-backend-stack { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 260px; }
 .motion-backend-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; white-space: nowrap; }
-.motion-training-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-height: 0; flex: 1 1 auto; }
+.motion-training-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-height: 0; flex: 0 0 auto; }
 .motion-training-preview-panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 .motion-training-preview-label { color: var(--comment); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
-.motion-training-preview-wrap { height: clamp(320px, 52vh, 560px); min-height: 0; border: 1px solid #2d333d; border-radius: 6px; overflow: hidden; background: #101217; }
+.motion-training-preview-wrap { height: clamp(260px, 38vh, 520px); min-height: 0; border: 1px solid #2d333d; border-radius: 6px; overflow: hidden; background: #101217; }
 #motion-training-original-preview-canvas, #motion-training-preview-canvas { width: 100%; height: 100%; display: block; }
 .motion-training-transform-panel { display: flex; flex-direction: column; gap: 10px; }
 .motion-training-control-section { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: rgba(20, 23, 30, 0.72); }
@@ -431,6 +431,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     #visualizer-box { min-height: 3.625rem; }
     .motion-sequence-log { min-height: 4rem; height: 4rem; }
     #chat-compose-row { grid-template-columns: 1fr; }
+    .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
+    .motion-training-pattern-list { max-height: min(18rem, 34vh); }
+    .motion-training-detail-pane { overflow: visible; }
+    .motion-training-preview-wrap { height: clamp(240px, 36vh, 360px); }
 }
 
 @media (max-width: 760px) {

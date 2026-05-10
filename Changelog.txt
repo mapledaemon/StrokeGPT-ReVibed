@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Motion Training Layout Tightening
+----------------------------------------------
+
+Branch: codex/motion-training-layout-tighten
+
+- Tightened the Motion Training dialog so medium-width screens stack the
+  training list and editor before the old two-column minimums crowd the
+  window.
+- Let the desktop editor pane scroll its lower controls instead of clipping
+  them below the preview, and reduced preview height pressure while preserving
+  the two-canvas editor layout on wider screens.
+
+
 2026-05-10 - PR #134 - Settings Dialog Tab Strip Cleanup
 ---------------------------------------------------------
 
