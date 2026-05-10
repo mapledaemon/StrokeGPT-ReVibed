@@ -208,19 +208,6 @@
                             <input type="range" min="1" max="100" step="1" value="75" id="voice-input-sensitivity-slider" data-requires-backend>
                             <span id="voice-input-sensitivity-val">75%</span>
                         </div>
-                        <div class="voice-input-number-grid">
-                            <label class="voice-input-number-field" for="voice-input-silence-ms-input"><span>Silence Timeout</span><input type="number" id="voice-input-silence-ms-input" min="250" max="5000" step="50" value="900" data-requires-backend><small>ms</small></label>
-                            <label class="voice-input-number-field" for="voice-input-min-recording-ms-input"><span>Minimum Clip</span><input type="number" id="voice-input-min-recording-ms-input" min="150" max="3000" step="50" value="450" data-requires-backend><small>ms</small></label>
-                            <label class="voice-input-number-field" for="voice-input-max-recording-ms-input"><span>Maximum Clip</span><input type="number" id="voice-input-max-recording-ms-input" min="1000" max="30000" step="250" value="8000" data-requires-backend><small>ms</small></label>
-                            <label class="voice-input-number-field" for="voice-input-noise-floor-input"><span>Noise Floor</span><input type="number" id="voice-input-noise-floor-input" min="0" max="0.5" step="0.001" value="0" data-requires-backend><small>rms</small></label>
-                        </div>
-                        <div class="voice-input-readout-line">Current trigger threshold: <span id="voice-input-noise-floor-val">auto</span></div>
-                    </fieldset>
-                    <fieldset id="voice-input-microphone-control" class="voice-input-tuning-group" data-requires-backend>
-                        <legend>Microphone Processing</legend>
-                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-noise-suppression-checkbox" checked data-requires-backend> Noise suppression</label>
-                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-echo-cancellation-checkbox" checked data-requires-backend> Echo cancellation</label>
-                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-auto-gain-checkbox" checked data-requires-backend> Automatic gain control</label>
                         <div class="voice-actions">
                             <button id="calibrate-voice-input-noise-btn" class="my-button" type="button" data-requires-backend>Calibrate Room Noise</button>
                         </div>
@@ -240,16 +227,35 @@
                     </div>
                     <label class="settings-field-label" for="voice-input-language-input">Language</label>
                     <input type="text" id="voice-input-language-input" class="input-text" value="auto" placeholder="Language, e.g. auto or en" data-requires-backend>
-                    <fieldset id="voice-input-recognition-tuning-control" class="voice-input-tuning-group" data-requires-backend>
-                        <legend>Recognition Tuning</legend>
+                    <details id="voice-input-advanced-capture-panel" class="voice-input-advanced-panel">
+                        <summary>Advanced Capture</summary>
                         <div class="voice-input-number-grid">
-                            <label class="voice-input-number-field" for="voice-input-beam-size-input"><span>Fallback Beam</span><input type="number" id="voice-input-beam-size-input" min="1" max="10" step="1" value="5" data-requires-backend><small>1-10</small></label>
-                            <label class="voice-input-number-field" for="voice-input-vad-threshold-input"><span>Speech Threshold</span><input type="number" id="voice-input-vad-threshold-input" min="0.1" max="0.9" step="0.05" value="0.5" data-requires-backend><small>vad</small></label>
-                            <label class="voice-input-number-field" for="voice-input-vad-min-silence-ms-input"><span>VAD Silence</span><input type="number" id="voice-input-vad-min-silence-ms-input" min="100" max="3000" step="50" value="500" data-requires-backend><small>ms</small></label>
-                            <label class="voice-input-number-field" for="voice-input-vad-speech-pad-ms-input"><span>Speech Padding</span><input type="number" id="voice-input-vad-speech-pad-ms-input" min="0" max="1000" step="50" value="400" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-silence-ms-input"><span>Silence Timeout</span><input type="number" id="voice-input-silence-ms-input" min="250" max="5000" step="50" value="900" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-min-recording-ms-input"><span>Minimum Clip</span><input type="number" id="voice-input-min-recording-ms-input" min="150" max="3000" step="50" value="450" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-max-recording-ms-input"><span>Maximum Clip</span><input type="number" id="voice-input-max-recording-ms-input" min="1000" max="30000" step="250" value="8000" data-requires-backend><small>ms</small></label>
+                            <label class="voice-input-number-field" for="voice-input-noise-floor-input"><span>Noise Floor</span><input type="number" id="voice-input-noise-floor-input" min="0" max="0.5" step="0.001" value="0" data-requires-backend><small>rms</small></label>
                         </div>
-                        <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-condition-previous-checkbox" data-requires-backend> Use previous transcript context</label>
-                    </fieldset>
+                        <div class="voice-input-readout-line">Current trigger threshold: <span id="voice-input-noise-floor-val">auto</span></div>
+                        <fieldset id="voice-input-microphone-control" class="voice-input-tuning-group" data-requires-backend>
+                            <legend>Microphone Processing</legend>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-noise-suppression-checkbox" checked data-requires-backend> Noise suppression</label>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-echo-cancellation-checkbox" checked data-requires-backend> Echo cancellation</label>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-auto-gain-checkbox" checked data-requires-backend> Automatic gain control</label>
+                        </fieldset>
+                    </details>
+                    <details id="voice-input-advanced-recognition-panel" class="voice-input-advanced-panel">
+                        <summary>Advanced Recognition</summary>
+                        <fieldset id="voice-input-recognition-tuning-control" class="voice-input-tuning-group" data-requires-backend>
+                            <legend>Recognition Tuning</legend>
+                            <div class="voice-input-number-grid">
+                                <label class="voice-input-number-field" for="voice-input-beam-size-input"><span>Fallback Beam</span><input type="number" id="voice-input-beam-size-input" min="1" max="10" step="1" value="5" data-requires-backend><small>1-10</small></label>
+                                <label class="voice-input-number-field" for="voice-input-vad-threshold-input"><span>Speech Threshold</span><input type="number" id="voice-input-vad-threshold-input" min="0.1" max="0.9" step="0.05" value="0.5" data-requires-backend><small>vad</small></label>
+                                <label class="voice-input-number-field" for="voice-input-vad-min-silence-ms-input"><span>VAD Silence</span><input type="number" id="voice-input-vad-min-silence-ms-input" min="100" max="3000" step="50" value="500" data-requires-backend><small>ms</small></label>
+                                <label class="voice-input-number-field" for="voice-input-vad-speech-pad-ms-input"><span>Speech Padding</span><input type="number" id="voice-input-vad-speech-pad-ms-input" min="0" max="1000" step="50" value="400" data-requires-backend><small>ms</small></label>
+                            </div>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-condition-previous-checkbox" data-requires-backend> Use previous transcript context</label>
+                        </fieldset>
+                    </details>
                     <div id="voice-input-status" class="settings-help">Voice input is disabled.</div>
                     <pre id="voice-input-diagnostics" class="diagnostics-output voice-input-diagnostics" aria-live="polite">No voice input activity recorded.</pre>
                     <div class="voice-actions">

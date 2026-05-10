@@ -85,7 +85,7 @@ Follow-up work:
 
 ## Voice Input Settings Surface Is Overexposed
 
-Status: Open
+Status: Partial
 
 Settings > Voice now exposes provider/mode/transcript handling, hands-free
 sensitivity and clip timing, browser microphone processing toggles, calibrated
@@ -95,16 +95,20 @@ for debugging, but the default surface currently makes voice reliability feel
 like a 12-knob user problem before the app has proven good defaults on real
 microphones.
 
+The default Voice tab now keeps the normal path to provider, recording mode,
+transcript handling, hands-free sensitivity/calibration, model preset/path, and
+language, with raw capture and recognition controls collapsed under advanced
+panels. The remaining problem is deciding, from real microphone use, whether
+those advanced controls should stay reachable, move to diagnostics, or disappear
+from routine settings entirely.
+
 Follow-up work:
 
 - Use real push-to-talk and hands-free microphone testing to decide which
   controls users actually need during normal operation.
-- Collapse the default Settings > Voice path around provider, recording mode,
-  transcript handling, model preset, language, and one clear calibration or
-  sensitivity path.
 - Move faster-whisper internals such as beam size, condition-previous, and VAD
-  threshold/silence/padding out of the routine path unless testing shows they
-  are necessary for common recovery.
+  threshold/silence/padding farther out of the routine path unless testing
+  shows they are necessary for common recovery.
 - Do not add more visible voice-input tuning controls before the current
   defaults have been validated and simplified.
 

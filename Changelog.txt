@@ -8,6 +8,30 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #109 - Simplify Default Voice Input Surface
+------------------------------------------------------------
+
+- Started implementing the critical-review follow-up for the overexposed
+  Settings > Voice surface without deleting existing tuning state. The
+  normal Voice Input path now stays focused on provider, recording mode,
+  transcript handling, hands-free sensitivity/calibration, model preset/path,
+  and language.
+- Moved raw capture parameters (silence timeout, min/max clip length,
+  noise floor, and microphone-processing toggles) into a collapsed
+  Advanced Capture panel, and moved faster-whisper internals (fallback
+  beam, VAD threshold/silence/padding, and previous-context decoding) into
+  a collapsed Advanced Recognition panel.
+- Kept all existing element IDs and save payload fields intact so saved
+  settings, backend-required locking, diagnostics, and the current
+  `/set_voice_input` route continue to use the same contract.
+- Updated roadmap and known-problems text so the remaining work is real
+  microphone validation and deciding whether the advanced controls should
+  stay reachable, move to diagnostics, or be removed from routine settings.
+- Local validation: `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` green at
+  330 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-09 - PR #108 - Voice ASR Fast Path And Confidence Gate
 ---------------------------------------------------------------
 
