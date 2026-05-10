@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Top Bar Mode Status Chips
----------------------------------------------------
+2026-05-10 - PR #124 - Top Bar Mode Status Chips
+------------------------------------------------
 
 Branch: codex/topbar-mode-status-chips
 
