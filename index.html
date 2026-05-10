@@ -28,7 +28,7 @@
                     </button>
                     <div id="profile-menu-popover" class="profile-menu-popover" role="menu" hidden>
                         <button id="open-settings-btn" class="profile-menu-item" type="button" role="menuitem" data-settings-target="persona">Settings</button>
-                        <button id="profile-about-menu-btn" class="profile-menu-item" type="button" role="menuitem" aria-disabled="true" disabled title="About popup planned">About</button>
+                        <button id="profile-about-menu-btn" class="profile-menu-item" type="button" role="menuitem">About</button>
                     </div>
                 </div>
                 <button id="toggle-sidebar-btn" title="Toggle settings panel" aria-label="Toggle settings panel">&laquo;</button>
@@ -416,6 +416,54 @@
                     <h4>Settings Data</h4>
                     <button id="reset-settings-btn" class="my-button stop" data-requires-backend>Reset All Settings</button>
                     <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="about-dialog" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="about-dialog-title">
+        <div class="modal-box about-box">
+            <div class="modal-header">
+                <h3 id="about-dialog-title">About StrokeGPT-ReVibed</h3>
+                <button id="close-about-btn" class="modal-close" aria-label="Close about">&times;</button>
+            </div>
+            <div class="about-content">
+                <p>
+                    StrokeGPT-ReVibed is a local-first Flask app for controlling The Handy
+                    through natural language, deterministic motion routing, optional voice
+                    input, and optional voice output.
+                </p>
+                <p>
+                    Derived from StrokeGPT, but this fork has diverged substantially and is
+                    not affiliated with the original maintainers.
+                </p>
+                <div class="about-support">
+                    <h4>Support Development</h4>
+                    <p>
+                        This project is free and open source, developed and maintained in
+                        my spare time. If you find pleasure in this program, please
+                        consider donating, no matter how small.
+                    </p>
+                    <p>
+                        Donations cover token costs, which currently limit development
+                        speed in the ongoing compute shortage, and help with hardware
+                        replacements. To request support for a different stroker or toy,
+                        open an issue and donate enough to cover the device. Any toys that
+                        work on men (including insertables) are fine, nothing larger than a
+                        VacuGlide.
+                    </p>
+                    <p>These wallets are only for this project, so I will know what it is for.</p>
+                    <div class="about-wallet-grid">
+                        <div class="about-wallet">
+                            <strong>Ethereum</strong>
+                            <img src="/static/ethereum-qr.svg" alt="Ethereum donation QR code" width="132" height="132">
+                            <code>0x1319841646b196F81283<br>a1bf08d8a0256Cdd414B</code>
+                        </div>
+                        <div class="about-wallet">
+                            <strong>Bitcoin</strong>
+                            <img src="/static/bitcoin-qr.svg" alt="Bitcoin donation QR code" width="132" height="132">
+                            <code>bc1pwqvmmzhdnmgp3px7l0<br>ltsrrjk7hzlppnhhk6fm3e2l24<br>xdvgpd7srm5zg6</code>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

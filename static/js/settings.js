@@ -41,6 +41,17 @@ function closeProfileMenu() {
     setProfileMenuOpen(false);
 }
 
+function closeAboutDialog() {
+    if (el.aboutDialog) el.aboutDialog.classList.remove('open');
+}
+
+function openAboutDialog() {
+    closeProfileMenu();
+    if (el.settingsDialog) el.settingsDialog.classList.remove('open');
+    if (el.aboutDialog) el.aboutDialog.classList.add('open');
+    el.closeAboutBtn?.focus?.();
+}
+
 function profileMenuContains(target) {
     let node = target;
     while (node) {
@@ -413,12 +424,18 @@ export function initSettingsControls({addChatMessage}) {
     } else if (el.openSettingsBtn) {
         el.openSettingsBtn.addEventListener('click', () => openSettings('persona'));
     }
+    if (el.profileAboutMenuBtn) {
+        el.profileAboutMenuBtn.addEventListener('click', openAboutDialog);
+    }
     D.addEventListener('click', event => {
         if (!el.profileMenuPopover || el.profileMenuPopover.hidden) return;
         if (!profileMenuContains(event.target)) closeProfileMenu();
     });
     D.addEventListener('keydown', event => {
-        if (event.key === 'Escape') closeProfileMenu();
+        if (event.key === 'Escape') {
+            closeProfileMenu();
+            closeAboutDialog();
+        }
     });
     el.toggleSidebarBtn.addEventListener('click', () => {
         const isCollapsed = D.body.classList.toggle('sidebar-collapsed');
@@ -429,6 +446,14 @@ export function initSettingsControls({addChatMessage}) {
     el.settingsDialog.addEventListener('click', event => {
         if (event.target === el.settingsDialog) el.settingsDialog.classList.remove('open');
     });
+    if (el.closeAboutBtn) {
+        el.closeAboutBtn.addEventListener('click', closeAboutDialog);
+    }
+    if (el.aboutDialog) {
+        el.aboutDialog.addEventListener('click', event => {
+            if (event.target === el.aboutDialog) closeAboutDialog();
+        });
+    }
     el.settingsTabs.forEach(tab => {
         tab.addEventListener('click', () => setSettingsTab(tab.dataset.settingsTab));
     });

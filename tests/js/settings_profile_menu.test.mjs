@@ -18,9 +18,11 @@ describe('settings profile menu', () => {
         const menuButton = getStubElement('profile-menu-btn');
         const popover = getStubElement('profile-menu-popover');
         const settingsDialog = getStubElement('settings-dialog');
+        const aboutDialog = getStubElement('about-dialog');
         menuButton.setAttribute('aria-expanded', 'false');
         popover.hidden = true;
         settingsDialog.className = '';
+        aboutDialog.className = '';
     });
 
     it('toggles the profile menu from the top-bar image button', () => {
@@ -48,5 +50,30 @@ describe('settings profile menu', () => {
         assert.strictEqual(menuButton.getAttribute('aria-expanded'), 'false');
         assert.strictEqual(popover.hidden, true);
         assert.strictEqual(settingsDialog.classList.contains('open'), true);
+    });
+
+    it('opens the About popup from the profile menu', () => {
+        const menuButton = getStubElement('profile-menu-btn');
+        const popover = getStubElement('profile-menu-popover');
+        const aboutButton = getStubElement('profile-about-menu-btn');
+        const aboutDialog = getStubElement('about-dialog');
+        menuButton.setAttribute('aria-expanded', 'true');
+        popover.hidden = false;
+
+        aboutButton.click();
+
+        assert.strictEqual(menuButton.getAttribute('aria-expanded'), 'false');
+        assert.strictEqual(popover.hidden, true);
+        assert.strictEqual(aboutDialog.classList.contains('open'), true);
+    });
+
+    it('closes the About popup from its close button', () => {
+        const aboutDialog = getStubElement('about-dialog');
+        const closeAboutButton = getStubElement('close-about-btn');
+        aboutDialog.classList.add('open');
+
+        closeAboutButton.click();
+
+        assert.strictEqual(aboutDialog.classList.contains('open'), false);
     });
 });
