@@ -183,7 +183,7 @@ export async function sendUserMessage(message) {
         state.myPersonaDescription = persona;
         el.userChatInput.value = '';
         D.querySelector('#typing-indicator .speaker-name').textContent = state.aiName;
-        el.typingIndicator.style.display = 'flex';
+        el.typingIndicator.style.display = 'grid';
         scrollChatToLatest({force: true});
         const data = await apiCall('/send_message', {
             method: 'POST',

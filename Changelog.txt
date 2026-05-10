@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #137 - Chat Message Surface Tightening
+-------------------------------------------------------
+
+Branch: codex/chat-message-surface-tighten
+
+- Reworked chat message rows onto a three-column grid with tokenized avatar
+  gutters so user, assistant, typing, and model-error rows keep stable
+  alignment while preserving the existing message-rendering behavior.
+- Kept the typing indicator on the same grid layout as normal messages and
+  extended the static asset guard to pin the chat row contract.
+
+
 2026-05-10 - PR #136 - Motion Status Compact Controls
 ------------------------------------------------------
 
