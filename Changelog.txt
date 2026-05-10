@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #130 - Setup Check Wizard And Ollama GPU Warning
+-----------------------------------------------------------------
+
+Branch: codex/ollama-gpu-setup-warning
+
+- Added a Settings > Advanced setup-check wizard that groups core app, Ollama,
+  voice-input, and voice-output readiness without loading or downloading
+  models.
+- Added Ollama running-model GPU detection through `/api/ps`, including
+  selected-model VRAM reporting and a CPU-only warning when the loaded model
+  reports no VRAM use.
+- Included optional dependency and CUDA visibility checks for faster-whisper,
+  NVIDIA Parakeet/NeMo, and local Chatterbox voice output.
+- Surfaced the Ollama warning in setup and Settings > Model while keeping idle
+  models as an unknown/not-loaded state so startup does not falsely accuse
+  Ollama of CPU-only inference before a model has run.
+- Documented the setup-check wizard, Ollama GPU acceleration checks, and the
+  Vulkan runner path for AMD/Radeon or Intel-class systems that stay CPU-bound.
+
+
 2026-05-10 - PR #129 - Chat Model Readiness Send Guard
 ------------------------------------------------------
 

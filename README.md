@@ -59,6 +59,12 @@ python -m pip install -r requirements.txt
 
 This creates `.venv` and installs `requirements.txt`. Model downloads start from inside the app so the UI can show progress.
 
+### Ollama GPU acceleration
+
+The app checks Ollama's running-model status and warns during setup when the selected model is loaded but reports no VRAM use. The check is only definitive after Ollama has loaded the selected model at least once; send one chat message or run `ollama ps` after loading a model if the status is still unknown.
+
+Ollama GPU setup depends on the hardware path. NVIDIA and Apple systems use their usual Ollama GPU backends when supported. AMD/Radeon support may use ROCm for listed cards, while additional Windows/Linux GPU support is available through Ollama's experimental Vulkan runner. If this app reports CPU-only Ollama use on AMD/Radeon or Intel-class hardware that should have GPU acceleration, update the vendor GPU driver, set `OLLAMA_VULKAN=1` for the Ollama server, restart Ollama, and see the official [Ollama hardware support](https://docs.ollama.com/gpu) notes. `GGML_VK_VISIBLE_DEVICES` can select or disable Vulkan GPUs when multiple devices are present.
+
 ### 3. Start the app
 
 **Windows:**
@@ -86,8 +92,9 @@ tab while controlling hardware.
 
 1. Paste your Handy connection key in **Profile menu > Settings > Device**.
 2. Pick a model in **Profile menu > Settings > Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
-3. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
-4. Start chatting. The Handy responds to natural-language motion ("slow tip teasing", "deep slow stroke", "milk me"), named patterns (*flick*, *flutter*, *pulse*, *wave*, *ramp*, *ladder*, *surge*, *sway*, *tease*), and soft-anchor loops between *tip*, *shaft*, and *base*.
+3. Optional: run **Profile menu > Settings > Advanced > Run Setup Check** to verify Ollama, selected-model GPU use, optional voice dependencies, and CUDA visibility.
+4. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
+5. Start chatting. The Handy responds to natural-language motion ("slow tip teasing", "deep slow stroke", "milk me"), named patterns (*flick*, *flutter*, *pulse*, *wave*, *ramp*, *ladder*, *surge*, *sway*, *tease*), and soft-anchor loops between *tip*, *shaft*, and *base*.
 
 Start conservatively. The Handy can be intense even at low speed values.
 
@@ -100,7 +107,7 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
 - **Device** — Handy key, stroke range, range test.
 - **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.
-- **Advanced** — diagnostics verbosity and **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).
+- **Advanced** — setup check wizard, diagnostics verbosity, and **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).
 
 The motion connector accepts direct numeric moves from the model and named cues like `tip`, `shaft`, `base`, `full`, `flick`, `flutter`, `pulse`, `wave`, `ramp`, `ladder`, `surge`, `sway`, `tease`. It also accepts any enabled fixed pattern id from Motion Pattern Preferences, including Edge and Milk patterns. Soft anchor loops are supported with 2–6 anchors (e.g., `tip → shaft → base`) plus tempo and softness. All cues route through the deterministic motion layer so configured speed limits, smoothing, and stop behavior are preserved.
 

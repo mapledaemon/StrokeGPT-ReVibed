@@ -18,7 +18,18 @@ export function renderSetup(isReturningUser = false, data = {}) {
     let step = isReturningUser ? 2 : 1;
     let setupMinSpeed = data.min_speed ?? 10;
 
+    function applySetupOllamaGpuWarning() {
+        const warning = data.ollama_status?.gpu_status?.setup_warning || '';
+        if (!warning) return;
+        const node = D.createElement('div');
+        node.className = 'setup-warning';
+        node.setAttribute('role', 'alert');
+        node.textContent = warning;
+        el.setupBox.prepend(node);
+    }
+
     function displayStep() {
+        el.setupBox.classList.remove('setup-check-box');
         if (step === 1) {
             el.setupBox.innerHTML = `<h2>Step 1: Handy Key</h2><p>Please enter your connection key from handyfeeling.com</p><input type="password" id="setup-key" class="input-text" placeholder="Handy Key" data-requires-backend><br><button id="setup-next" class="my-button" data-requires-backend>Next</button>`;
             D.getElementById('setup-next').onclick = async () => {
@@ -133,6 +144,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
                 }
             };
         }
+        applySetupOllamaGpuWarning();
     }
 
     displayStep();
@@ -191,7 +203,7 @@ export async function startupCheck() {
             if (event.key === 'Enter') {
                 D.removeEventListener('keydown', startHandler);
                 D.getElementById('splash-screen').classList.add('hidden');
-                setTimeout(() => renderSetup(false), 1000);
+                setTimeout(() => renderSetup(false, data || {}), 1000);
             }
         };
         D.addEventListener('keydown', startHandler);

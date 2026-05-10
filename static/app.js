@@ -5,6 +5,7 @@ import { initDeviceControls } from './js/device-control.js';
 import { initMotionControls, pollMotionStatus, resizeCanvas } from './js/motion-control.js';
 import { refreshOllamaStatus, initSettingsControls } from './js/settings.js';
 import { startupCheck } from './js/setup.js';
+import { initSetupCheckWizard } from './js/setup-check.js';
 import { initVoiceInputControls } from './js/voice-input.js';
 
 function startPollingLoops() {
@@ -22,6 +23,7 @@ function initApp() {
     updateAudioProviderUi();
     initChatControls();
     initSettingsControls({addChatMessage});
+    initSetupCheckWizard();
     initAudioControls();
     initVoiceInputControls({sendUserMessage});
     initDeviceControls();
