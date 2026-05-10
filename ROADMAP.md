@@ -534,8 +534,9 @@ and stop safety paths.
   slow Windows laptop and a faster desktop, including empty/noisy clips,
   short commands, and longer natural-language movement requests.
 - Use the current advanced capture and recognition controls during real
-  microphone testing as instrumentation first. Promote only the controls that
-  users actually need during normal operation; move the rest to diagnostics or
+  microphone testing as instrumentation first, including browser audio
+  preprocessing and silence trimming. Promote only the controls that users
+  actually need during normal operation; move the rest to diagnostics or
   remove them from Settings > Voice after the baseline is measured.
 - Keep the default Voice tab centered on provider, recording mode, transcript
   handling, model preset/path, language, and one clear calibration/sensitivity
@@ -573,12 +574,12 @@ and stop safety paths.
   Voice once real hands-free testing shows which controls users need during
   operation.
 - Keep ASR provider work in this order:
-  1. Finish low-risk faster-whisper tuning before provider changes:
+  1. Measure the tuned faster-whisper baseline before provider changes:
      confidence rejection, beam-1 fast path with configured-beam rerun,
      forced English when language is set to `auto`, auto-CUDA/device
-     detection, compute-type selection, and browser-side preprocessing or
-     silence trimming where it can be implemented without brittle media
-     surgery.
+     detection, compute-type selection, browser-side preprocessing, and
+     silence trimming have all landed as the baseline that provider work
+     should be compared against.
   2. Add an `asr.py` provider abstraction only after the tuned
      faster-whisper baseline has measured gaps. Keep faster-whisper the
      default CPU/portable path.
@@ -590,8 +591,8 @@ and stop safety paths.
      short live voice commands.
   5. Defer whisper.cpp to packaged Windows launcher work, where a small
      external runtime may matter more than Python ML dependency reuse.
-- Keep streaming/chunked upload as a later phase after the baseline, GPU
-  defaults, browser preprocessing, and provider abstraction decisions land.
+- Keep streaming/chunked upload as a later phase after the tuned baseline and
+  provider abstraction decisions land.
   It has a larger state/concurrency surface than the quick latency wins and
   should not be mixed into the first tuning slice.
 

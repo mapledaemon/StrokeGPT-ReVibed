@@ -30,6 +30,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("echo_cancellation", data["voice_input_status"])
             self.assertIn("auto_gain_control", data["voice_input_status"])
             self.assertIn("noise_floor_rms", data["voice_input_status"])
+            self.assertIn("audio_preprocessing", data["voice_input_status"])
+            self.assertIn("silence_trim", data["voice_input_status"])
             self.assertIn("beam_size", data["voice_input_status"])
             self.assertIn("condition_on_previous_text", data["voice_input_status"])
             self.assertIn("vad_threshold", data["voice_input_status"])
@@ -65,6 +67,8 @@ class WebVoiceInputRouteTests(WebTestCase):
                 "echo_cancellation": False,
                 "auto_gain_control": True,
                 "noise_floor_rms": 0.0234,
+                "audio_preprocessing": False,
+                "silence_trim": False,
                 "beam_size": 4,
                 "condition_on_previous_text": True,
                 "vad_threshold": 0.38,
@@ -88,6 +92,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertFalse(settings.voice_input_echo_cancellation)
             self.assertTrue(settings.voice_input_auto_gain_control)
             self.assertEqual(settings.voice_input_noise_floor_rms, 0.0234)
+            self.assertFalse(settings.voice_input_audio_preprocessing)
+            self.assertFalse(settings.voice_input_silence_trim)
             self.assertEqual(settings.voice_input_beam_size, 4)
             self.assertTrue(settings.voice_input_condition_on_previous_text)
             self.assertEqual(settings.voice_input_vad_threshold, 0.38)
@@ -104,6 +110,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertFalse(voice_input.echo_cancellation)
             self.assertTrue(voice_input.auto_gain_control)
             self.assertEqual(voice_input.noise_floor_rms, 0.0234)
+            self.assertFalse(voice_input.audio_preprocessing)
+            self.assertFalse(voice_input.silence_trim)
             self.assertEqual(voice_input.beam_size, 4)
             self.assertTrue(voice_input.condition_on_previous_text)
             self.assertEqual(voice_input.vad_threshold, 0.38)
@@ -113,6 +121,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(data["hands_free_sensitivity"], 82)
             self.assertFalse(data["noise_suppression"])
             self.assertEqual(data["noise_floor_rms"], 0.0234)
+            self.assertFalse(data["audio_preprocessing"])
+            self.assertFalse(data["silence_trim"])
             self.assertEqual(data["beam_size"], 4)
             self.assertTrue(data["condition_on_previous_text"])
             self.assertEqual(data["vad_threshold"], 0.38)

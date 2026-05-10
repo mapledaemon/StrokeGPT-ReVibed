@@ -70,6 +70,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
         self.assertEqual(saved["voice_input_noise_floor_rms"], 0.0)
+        self.assertTrue(saved["voice_input_audio_preprocessing"])
+        self.assertTrue(saved["voice_input_silence_trim"])
         self.assertEqual(saved["voice_input_beam_size"], 5)
         self.assertFalse(saved["voice_input_condition_on_previous_text"])
         self.assertEqual(saved["voice_input_vad_threshold"], 0.5)
@@ -103,6 +105,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
         self.assertEqual(settings.voice_input_noise_floor_rms, 0.0)
+        self.assertTrue(settings.voice_input_audio_preprocessing)
+        self.assertTrue(settings.voice_input_silence_trim)
         self.assertEqual(settings.voice_input_beam_size, 5)
         self.assertFalse(settings.voice_input_condition_on_previous_text)
         self.assertEqual(settings.voice_input_vad_threshold, 0.5)
@@ -504,6 +508,8 @@ class ModelConfigurationTests(unittest.TestCase):
             "voice_input_echo_cancellation": "off",
             "voice_input_auto_gain_control": "yes",
             "voice_input_noise_floor_rms": 0.713,
+            "voice_input_audio_preprocessing": "off",
+            "voice_input_silence_trim": "false",
             "voice_input_beam_size": 99,
             "voice_input_condition_on_previous_text": "yes",
             "voice_input_vad_threshold": 1.2,
@@ -525,6 +531,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
         self.assertEqual(settings.voice_input_noise_floor_rms, 0.5)
+        self.assertFalse(settings.voice_input_audio_preprocessing)
+        self.assertFalse(settings.voice_input_silence_trim)
         self.assertEqual(settings.voice_input_beam_size, 10)
         self.assertTrue(settings.voice_input_condition_on_previous_text)
         self.assertEqual(settings.voice_input_vad_threshold, 0.9)

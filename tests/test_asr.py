@@ -32,6 +32,8 @@ class VoiceInputServiceTests(unittest.TestCase):
             echo_cancellation=False,
             auto_gain_control=True,
             noise_floor_rms=0.021,
+            audio_preprocessing=False,
+            silence_trim=False,
             beam_size=3,
             condition_on_previous_text=True,
             vad_threshold=0.35,
@@ -50,6 +52,8 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertFalse(status["echo_cancellation"])
         self.assertTrue(status["auto_gain_control"])
         self.assertEqual(status["noise_floor_rms"], 0.021)
+        self.assertFalse(status["audio_preprocessing"])
+        self.assertFalse(status["silence_trim"])
         self.assertEqual(status["beam_size"], 3)
         self.assertTrue(status["condition_on_previous_text"])
         self.assertEqual(status["vad_threshold"], 0.35)
