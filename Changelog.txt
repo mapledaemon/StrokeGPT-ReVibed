@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #112 - Retire Settings Feedback Source-Text Test
+-----------------------------------------------------------------
+
+- Continued the source-text test paydown by deleting
+  `tests/test_settings_write_feedback.py`. The contract now lives in
+  `tests/js/settings_save_feedback.test.mjs`, which imports the production ES
+  modules, drives `apiCall()` / `reportSaveFailure()` behavior directly, and
+  clicks the real settings buttons for diagnostics and Ollama model save
+  failures.
+- Kept the replacement focused on existing user-visible feedback: reachable
+  backend rejections still surface the server message on the relevant status
+  element, while HTTP/network failures remain owned by `apiCall()` and the
+  connection-lost path.
+- Local validation: `python -m unittest tests.test_frontend_runtime` passed
+  with Node available, and `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` was green at
+  314 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-10 - PR #111 - Retire Motion Timecode Source-Text Test
 ---------------------------------------------------------------
 
