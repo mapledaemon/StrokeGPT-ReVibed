@@ -4,15 +4,13 @@
 // "Add a small initial proof: a behavioral test for `updateActiveModeTimer`
 // that drives stop -> idle -> new-mode transitions through the function and
 // asserts the sequence-log DOM holds frozen timecodes after stop and resets
-// to `00:00` only on the mode-start transition. Mirror the spec the recent
-// text-only test pins (tests/test_motion_status_log_timecodes.py)."
+// to `00:00` only on the mode-start transition.
 //
 // This test imports the real production ES modules, drives the actual
 // updateActiveModeTimer + updateMotionSequenceIndicator code paths, and
-// inspects the DOM that the production code mutates. It is the runtime
-// counterpart to the source-text invariants in
-// tests/test_motion_status_log_timecodes.py; both contracts cover the same
-// fix from PR #81.
+// inspects the DOM that the production code mutates. It replaces the older
+// source-text assertions for this bug; the behavior matters more than the
+// exact branch shape inside motion-control.js.
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
