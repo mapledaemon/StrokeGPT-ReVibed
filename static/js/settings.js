@@ -31,7 +31,27 @@ export async function refreshSystemPrompts() {
     if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = `Loaded at ${new Date().toLocaleTimeString()}.`;
 }
 
+function setProfileMenuOpen(isOpen) {
+    if (!el.profileMenuBtn || !el.profileMenuPopover) return;
+    el.profileMenuBtn.setAttribute('aria-expanded', String(isOpen));
+    el.profileMenuPopover.hidden = !isOpen;
+}
+
+function closeProfileMenu() {
+    setProfileMenuOpen(false);
+}
+
+function profileMenuContains(target) {
+    let node = target;
+    while (node) {
+        if (node === el.profileMenu) return true;
+        node = node.parentNode;
+    }
+    return false;
+}
+
 export function openSettings(tabName = 'voice') {
+    closeProfileMenu();
     setSettingsTab(tabName);
     updateAudioProviderUi();
     el.settingsDialog.classList.add('open');
@@ -327,6 +347,7 @@ function updateProfilePicture(file) {
         const base64String = reader.result;
         el.pfpPreview.src = base64String;
         el.typingIndicatorPfp.src = base64String;
+        if (el.profileMenuPfp) el.profileMenuPfp.src = base64String;
         apiCall('/set_profile_picture', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -378,12 +399,38 @@ export function initSettingsControls({addChatMessage}) {
         if (data) el.statusText.textContent = 'Persona prompt saved.';
     });
     el.setAiNameBtn.addEventListener('click', () => setAiName(addChatMessage));
+    if (el.profileMenuBtn) {
+        el.profileMenuBtn.addEventListener('click', event => {
+            event.stopPropagation?.();
+            const isOpen = el.profileMenuBtn.getAttribute('aria-expanded') === 'true';
+            setProfileMenuOpen(!isOpen);
+        });
+    }
+    if (el.profileMenuSettingsBtns.length) {
+        el.profileMenuSettingsBtns.forEach(button => {
+            button.addEventListener('click', () => openSettings(button.dataset.settingsTarget || 'persona'));
+        });
+    } else if (el.openSettingsBtn) {
+        el.openSettingsBtn.addEventListener('click', () => openSettings('persona'));
+    }
+    if (el.profilePictureMenuBtn) {
+        el.profilePictureMenuBtn.addEventListener('click', () => {
+            closeProfileMenu();
+            el.pfpUploadInput.click();
+        });
+    }
+    D.addEventListener('click', event => {
+        if (!el.profileMenuPopover || el.profileMenuPopover.hidden) return;
+        if (!profileMenuContains(event.target)) closeProfileMenu();
+    });
+    D.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeProfileMenu();
+    });
     el.toggleSidebarBtn.addEventListener('click', () => {
         const isCollapsed = D.body.classList.toggle('sidebar-collapsed');
         localStorage.setItem('sidebar_collapsed', isCollapsed);
         setTimeout(() => window.dispatchEvent(new Event('resize')), 350);
     });
-    el.openSettingsBtn.addEventListener('click', () => openSettings('persona'));
     el.closeSettingsBtn.addEventListener('click', () => el.settingsDialog.classList.remove('open'));
     el.settingsDialog.addEventListener('click', event => {
         if (event.target === el.settingsDialog) el.settingsDialog.classList.remove('open');

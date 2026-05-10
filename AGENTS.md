@@ -114,10 +114,13 @@ behavior, and route motion changes through the shared controller path.
 
 The sidebar should stay sparse:
 
-- Open Settings
 - Control Actions
 - Preset Modes
 - Standalone emergency stop
+
+The upper-right profile image opens the settings menu and profile-picture
+upload action. Keep routine settings entry points there instead of adding
+another full-width sidebar button.
 
 The unified settings popup has tabs:
 

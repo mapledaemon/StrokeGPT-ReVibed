@@ -21,7 +21,23 @@
                 <div id="edging-timer" style="display: none;" aria-live="polite">00:00</div>
                 <div id="mood-display">Mood: ...</div>
             </div>
-            <button id="toggle-sidebar-btn" title="Toggle settings panel" aria-label="Toggle settings panel">&laquo;</button>
+            <div class="top-bar-actions">
+                <div id="profile-menu" class="profile-menu">
+                    <button id="profile-menu-btn" class="profile-menu-button" type="button" title="Open profile menu" aria-label="Open profile menu" aria-haspopup="menu" aria-expanded="false">
+                        <img id="profile-menu-pfp" src="/static/default-pfp.png" alt="">
+                    </button>
+                    <div id="profile-menu-popover" class="profile-menu-popover" role="menu" hidden>
+                        <button id="open-settings-btn" class="profile-menu-item" type="button" role="menuitem" data-settings-target="persona">Persona</button>
+                        <button class="profile-menu-item" type="button" role="menuitem" data-settings-target="model">Model</button>
+                        <button class="profile-menu-item" type="button" role="menuitem" data-settings-target="voice">Voice</button>
+                        <button class="profile-menu-item" type="button" role="menuitem" data-settings-target="device">Device</button>
+                        <button class="profile-menu-item" type="button" role="menuitem" data-settings-target="motion">Motion</button>
+                        <button class="profile-menu-item" type="button" role="menuitem" data-settings-target="advanced">Advanced</button>
+                        <button id="profile-picture-menu-btn" class="profile-menu-item" type="button" role="menuitem" data-requires-backend>Change Picture</button>
+                    </div>
+                </div>
+                <button id="toggle-sidebar-btn" title="Toggle settings panel" aria-label="Toggle settings panel">&laquo;</button>
+            </div>
         </div>
         <div id="chat-view" aria-label="Chat conversation">
             <div id="chat-messages-container" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages">
@@ -84,7 +100,6 @@
         </div>
     </div>
     <div id="sidebar">
-        <div class="settings-summary-line"><button id="open-settings-btn" class="my-button">Open Settings</button></div>
         <div class="setting-section">
             <h3>Control Actions</h3>
             <div class="control-action-stack">
@@ -139,8 +154,8 @@
                 <button class="settings-tab" data-settings-tab="advanced">Advanced</button>
             </div>
             <div id="settings-tab-persona" class="settings-panel">
-                <label for="pfp-upload" style="cursor: pointer; display: block;">
-                    <img id="ai-pfp-preview" src="/static/default-pfp.png" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 10px auto; display: block; border: 2px solid var(--comment);">
+                <label class="profile-picture-field" for="pfp-upload">
+                    <img id="ai-pfp-preview" class="profile-picture-preview" src="/static/default-pfp.png" alt="AI profile picture">
                 </label>
                 <input type="file" id="pfp-upload" accept="image/*" style="display: none;" data-requires-backend>
                 <input type="text" id="ai-name-input" class="input-text" placeholder="AI's Name...">

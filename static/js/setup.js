@@ -153,6 +153,7 @@ export async function startupCheck() {
         if (data.pfp) {
             el.pfpPreview.src = data.pfp;
             el.typingIndicatorPfp.src = data.pfp;
+            if (el.profileMenuPfp) el.profileMenuPfp.src = data.pfp;
         }
         populateModelOptions(data.ollama_models, data.ollama_model);
         populateDiagnosticsSettings(data);

@@ -192,7 +192,7 @@ The first slice should keep behavior stable while making the visible app
 scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 
 - Continue the behavior-preserving responsive foundation started in PR #84:
-  shared spacing, control-height, sidebar-width, chat-width, and
+  shared spacing, control-height, chat-width, and
   motion-strip tokens; dynamic viewport height; centered chat/input/status
   surfaces; and a medium-width breakpoint that stacks the motion strip
   before it crowds the chat input.
@@ -228,9 +228,9 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   Voice input provider selector can land before the backend, but they must
   stay inert, clearly blocked, and visually separated from the existing Voice
   Output settings until push-to-talk/transcription routes exist.
-- Refine the app-shell top bar so title, timer/mood chips, and the sidebar
-  toggle have stable grid areas and predictable wrapping before adding more
-  chat controls or a voice toggle.
+- Continue app-shell top-bar work as new controls are added: title,
+  timer/mood chips, profile menu, sidebar toggle, and future voice controls
+  should keep stable grid areas and predictable wrapping.
 - Refactor the visible app shell in small stages: top bar, chat scrollback,
   bottom composer, motion/status strip, and right-side controls should each
   have clear layout responsibilities before deeper visual restyling.
@@ -373,9 +373,8 @@ Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics, motion vocabulary
 cleanup, and the persona naming audit.
 
-- Add a user profile picture and custom user display name.
-- Use the user profile control as the settings entry point in the
-  upper-right area.
+- Add a custom user display name and keep it separate from the current
+  persona/profile-picture controls.
 - Add Personality Presets to Settings and include the GLaDOS-style prompt as
   a selectable preset. Keep persona presets separate from motion style and
   user identity preferences.

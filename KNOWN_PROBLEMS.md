@@ -67,7 +67,7 @@ Follow-up work:
 
 ## Visual Element Formatting
 
-Status: Open
+Status: Partial
 
 Some UI elements still need visual polish after the motion observability and
 training-window work. Known rough spots include line distance, vertical spacing,
@@ -76,14 +76,11 @@ different window sizes.
 
 Follow-up work:
 
-- Review spacing in the main chat footer, sidebar control stack, settings tabs,
-  model controls, and motion training window at common desktop and mobile
-  widths.
+- Review spacing in the main chat footer, settings tabs, model controls, and
+  motion training window at common desktop and mobile widths.
 - Keep status bars and feedback controls compact without oversized bezels.
 - Prefer small layout fixes and responsive constraints over large visual
   rewrites unless the current structure blocks clean formatting.
-- Tighten right-side collapsible menu spacing so additional buttons can fit
-  without forcing a full layout rewrite.
 - Split the active-mode timer indicator and the mode-label indicator into two
   fixed-size elements so neither resizes the surrounding strip when text
   changes length.
