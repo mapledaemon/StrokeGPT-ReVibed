@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #111 - Retire Motion Timecode Source-Text Test
+---------------------------------------------------------------
+
+- Started implementing the critical-review follow-up about source-text test
+  accumulation by deleting `tests/test_motion_status_log_timecodes.py`. The
+  same regression is already covered by `tests/js/motion_timer.test.mjs`,
+  which imports the production ES modules, drives the actual
+  `updateActiveModeTimer()` / sequence-log code paths, and asserts the
+  DOM-visible frozen and reset timecodes.
+- Updated the JS runtime test comments so the remaining contract is explicit:
+  the behavior matters more than the internal branch shape in
+  `static/js/motion-control.js`.
+- Local validation: `python -m unittest tests.test_frontend_runtime` passed
+  with Node available, and `powershell.exe -ExecutionPolicy Bypass -File
+  .\scripts\test_and_run.ps1 -NoRun -PythonPath <python>` was green at
+  325 tests / 2 skipped, including Python compile checks.
+
+
 2026-05-10 - PR #110 - Shorten Agent Continuation Prompts
 ----------------------------------------------------------
 
