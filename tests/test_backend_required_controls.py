@@ -80,6 +80,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "milking-mode-btn",
             "freestyle-mode-btn",
             "emergency-stop-all-btn",
+            "top-bar-voice-toggle-btn",
             "audio-provider-select",
             "enable-audio-checkbox",
             "set-elevenlabs-key-button",

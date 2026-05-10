@@ -1,5 +1,19 @@
 import { D, apiCall, el, fetchWithConnectionState, formatElapsed, reportSaveFailure, setSliderValue, state } from './context.js';
 
+let lastKnownAudioEnabled = false;
+
+export function updateVoiceOutputToggleUi(enabled = el.enableAudioCheckbox.checked) {
+    lastKnownAudioEnabled = Boolean(enabled);
+    el.enableAudioCheckbox.checked = lastKnownAudioEnabled;
+    if (!el.topBarVoiceToggleBtn) return;
+    el.topBarVoiceToggleBtn.textContent = lastKnownAudioEnabled ? 'Voice On' : 'Voice Off';
+    el.topBarVoiceToggleBtn.title = lastKnownAudioEnabled ? 'Turn voice output off' : 'Turn voice output on';
+    el.topBarVoiceToggleBtn.setAttribute('aria-label', lastKnownAudioEnabled ? 'Voice output on' : 'Voice output off');
+    el.topBarVoiceToggleBtn.setAttribute('aria-pressed', lastKnownAudioEnabled ? 'true' : 'false');
+    if (lastKnownAudioEnabled) el.topBarVoiceToggleBtn.classList.add('is-on');
+    else el.topBarVoiceToggleBtn.classList.remove('is-on');
+}
+
 export function updateAudioProviderUi() {
     const provider = el.audioProviderSelect.value;
     el.elevenLabsPanel.style.display = provider === 'elevenlabs' ? 'flex' : 'none';
@@ -53,6 +67,8 @@ async function saveAudioProvider() {
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
     if (data && data.status === 'error') reportSaveFailure(el.statusText, data, 'Could not save audio provider.');
     else if (!data || !data.local_tts_status) reportSaveFailure(el.statusText, data, 'Could not save audio provider.');
+    else updateVoiceOutputToggleUi(el.enableAudioCheckbox.checked);
+    return data;
 }
 
 export function updateLocalTtsStatus(status) {
@@ -86,7 +102,7 @@ export async function refreshLocalTtsStatus() {
     return data;
 }
 
-export async function saveLocalTtsSettings() {
+export async function saveLocalTtsSettings({failureTarget = el.localTtsStatus} = {}) {
     const data = await apiCall('/set_local_tts_voice', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -104,8 +120,38 @@ export async function saveLocalTtsSettings() {
         }),
     });
     if (data && data.local_tts_status) updateLocalTtsStatus(data.local_tts_status);
-    if (data && data.status === 'error') reportSaveFailure(el.localTtsStatus, data, 'Could not save local voice settings.');
-    else if (!data || !data.local_tts_status) reportSaveFailure(el.localTtsStatus, data, 'Could not save local voice settings.');
+    if (data && data.status === 'error') reportSaveFailure(failureTarget, data, 'Could not save local voice settings.');
+    else if (!data || !data.local_tts_status) reportSaveFailure(failureTarget, data, 'Could not save local voice settings.');
+    return data;
+}
+
+async function saveElevenLabsEnabled() {
+    const data = await apiCall('/set_elevenlabs_voice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({voice_id: el.elevenLabsVoiceSelect.value, enabled: el.enableAudioCheckbox.checked}),
+    });
+    if (data && data.status === 'error') reportSaveFailure(el.statusText, data, 'Could not save voice output setting.');
+    else if (!data) reportSaveFailure(el.statusText, data, 'Could not save voice output setting.');
+    return data;
+}
+
+async function saveAudioEnabled(enabled, {failureTarget = el.statusText} = {}) {
+    const previousEnabled = lastKnownAudioEnabled;
+    el.enableAudioCheckbox.checked = Boolean(enabled);
+    updateVoiceOutputToggleUi(enabled);
+
+    const data = el.audioProviderSelect.value === 'local'
+        ? await saveLocalTtsSettings({failureTarget})
+        : await saveElevenLabsEnabled();
+
+    if (!data || data.status === 'error') {
+        el.enableAudioCheckbox.checked = previousEnabled;
+        updateVoiceOutputToggleUi(previousEnabled);
+        return data;
+    }
+
+    updateVoiceOutputToggleUi(enabled);
     return data;
 }
 
@@ -230,6 +276,7 @@ export async function playQueuedAudio() {
 export function populateAudioSettings(data = {}) {
     el.audioProviderSelect.value = data.audio_provider || 'elevenlabs';
     el.enableAudioCheckbox.checked = Boolean(data.audio_enabled);
+    updateVoiceOutputToggleUi(data.audio_enabled);
     populateLocalStyleOptions(data.local_tts_style_presets || (data.local_tts_status && data.local_tts_status.style_presets));
     populateLocalEngineOptions(
         data.local_tts_engines || (data.local_tts_status && data.local_tts_status.engines),
@@ -260,14 +307,10 @@ export function initAudioControls() {
         await saveAudioProvider();
     });
     el.enableAudioCheckbox.addEventListener('change', async () => {
-        if (el.audioProviderSelect.value === 'local') await saveLocalTtsSettings();
-        else {
-            await apiCall('/set_elevenlabs_voice', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({voice_id: el.elevenLabsVoiceSelect.value, enabled: el.enableAudioCheckbox.checked}),
-            });
-        }
+        await saveAudioEnabled(el.enableAudioCheckbox.checked, {failureTarget: el.localTtsStatus});
+    });
+    el.topBarVoiceToggleBtn.addEventListener('click', async () => {
+        await saveAudioEnabled(!lastKnownAudioEnabled, {failureTarget: el.statusText});
     });
     el.elevenLabsVoiceSelect.addEventListener('change', event => apiCall('/set_elevenlabs_voice', {
         method: 'POST',

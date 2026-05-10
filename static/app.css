@@ -77,6 +77,8 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 
 #top-bar { min-height: var(--top-bar-min-height); padding: 0.625rem var(--shell-gutter); background-color: var(--background); border-bottom: 1px solid var(--background-lighter); display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, auto) auto; grid-template-areas: "title status actions"; align-items: center; gap: var(--space-3); flex-shrink: 0; position: relative; z-index: 8100; }
 .top-bar-actions { grid-area: actions; justify-self: end; display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.top-bar-actions .top-bar-voice-toggle { width: auto; min-width: 5.75rem; min-height: var(--top-bar-button-size); padding: 0.45rem 0.7rem; flex: 0 0 auto; border-color: #2d333d; font-size: 0.85rem; white-space: nowrap; box-shadow: none; }
+.top-bar-actions .top-bar-voice-toggle.is-on { border-color: rgba(127, 183, 163, 0.7); background: #26322f; color: var(--cyan); }
 #toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size); background: var(--background-lighter); border: 1px solid #2d333d; color: var(--foreground); width: var(--top-bar-button-size); height: var(--top-bar-button-size); border-radius: 50%; cursor: pointer; transition: transform 0.3s ease-in-out, background-color 0.2s ease; font-size: 1.2em; display: flex; align-items: center; justify-content: center; }
 #toggle-sidebar-btn:hover { background-color: var(--comment); }
 body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }

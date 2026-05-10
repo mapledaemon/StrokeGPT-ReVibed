@@ -33,6 +33,7 @@ export const el = {
     ollamaModelStatus: D.getElementById('ollama-model-status'),
     downloadOllamaModelBtn: D.getElementById('download-ollama-model-btn'),
     refreshOllamaStatusBtn: D.getElementById('refresh-ollama-status-btn'),
+    topBarVoiceToggleBtn: D.getElementById('top-bar-voice-toggle-btn'),
     audioProviderSelect: D.getElementById('audio-provider-select'),
     enableAudioCheckbox: D.getElementById('enable-audio-checkbox'),
     elevenLabsPanel: D.getElementById('elevenlabs-settings-panel'),
