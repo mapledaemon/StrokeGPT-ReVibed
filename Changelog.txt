@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-Unreleased - Motion Training Layout Tightening
-----------------------------------------------
+2026-05-10 - PR #135 - Motion Training Layout Tightening
+---------------------------------------------------------
 
 Branch: codex/motion-training-layout-tighten
 
