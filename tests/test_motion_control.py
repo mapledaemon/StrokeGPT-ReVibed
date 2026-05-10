@@ -358,9 +358,18 @@ class MotionSanitizerTests(unittest.TestCase):
 
 
 class MotionControllerTests(unittest.TestCase):
+    def wait_until(self, predicate, timeout=1.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.01)
+        return bool(predicate())
+
     def test_controller_routes_motion_through_smooth_path(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
+        controller.set_backend("hamp")
         controller.apply_target(MotionTarget(70, 60, 80))
         self.assertGreater(len(handy.moves), 1)
         self.assertEqual(handy.moves[-1], (70, 60, 80))
@@ -372,7 +381,7 @@ class MotionControllerTests(unittest.TestCase):
         controller.apply_target(MotionTarget(70, 60, 80, label="wide stroke"), source="unit test")
 
         snapshot = controller.observability_snapshot()
-        self.assertEqual(snapshot["backend"], "hamp")
+        self.assertEqual(snapshot["backend"], "continuous")
         self.assertEqual(snapshot["source"], "unit test")
         self.assertEqual(snapshot["label"], "wide stroke")
         self.assertGreater(len(snapshot["trace"]), 1)
@@ -384,6 +393,7 @@ class MotionControllerTests(unittest.TestCase):
     def test_controller_expands_llm_anchor_program(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
+        controller.set_backend("hamp")
         target = controller.apply_llm_move(
             {
                 "motion": "anchor_loop",
@@ -403,12 +413,44 @@ class MotionControllerTests(unittest.TestCase):
     def test_controller_expands_direct_anchor_target(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
+        controller.set_backend("hamp")
         intent = IntentMatcher().parse("soft bounce between tip middle and base", controller.current_target())
 
         controller.apply_generated_target(intent.target)
 
         self.assertGreater(len(handy.moves), 4)
         self.assertGreater(len({depth for _, depth, _ in handy.moves}), 3)
+
+    def test_continuous_backend_runs_fixed_pattern_until_interrupted(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        intent = IntentMatcher().parse("milk me", controller.current_target())
+
+        controller.apply_generated_target(intent.target, source="unit test")
+
+        self.assertTrue(self.wait_until(lambda: len(handy.position_moves) >= 3), handy.position_moves)
+        snapshot = controller.observability_snapshot()
+        self.assertEqual(snapshot["backend"], "continuous")
+        self.assertTrue(snapshot["playback_active"])
+        self.assertEqual(handy.moves, [])
+        self.assertTrue(all(not move[2] for move in handy.position_moves))
+        self.assertGreater(len({depth for _, depth, _, _ in handy.position_moves}), 1)
+        self.assertTrue(any(point.get("continuous") for point in snapshot["trace"]))
+
+        controller.stop()
+        self.assertTrue(handy.stopped)
+        self.assertFalse(controller.observability_snapshot()["playback_active"])
+
+    def test_continuous_backend_routes_plain_chat_targets_through_position_smoothing(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+
+        controller.apply_generated_target(MotionTarget(70, 90, 80, "plain chat"), source="llm")
+
+        self.assertEqual(handy.moves, [])
+        self.assertGreater(len(handy.position_moves), 3)
+        self.assertEqual(handy.position_moves[-1][1], 90)
+        self.assertEqual(handy.position_moves[-1][2], True)
 
     def test_position_backend_routes_generated_frames_to_position_moves(self):
         handy = FakeHandy()

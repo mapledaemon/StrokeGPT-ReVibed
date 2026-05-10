@@ -9,6 +9,8 @@ from strokegpt.motion_patterns import (
     expand_anchor_program,
     expand_motion_pattern,
     expand_pattern,
+    continuous_motion_plan,
+    sample_continuous_plan,
     inject_intermediate_actions,
     limit_action_delta,
     minimum_jerk,
@@ -76,6 +78,37 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertTrue(any(label.startswith("Milking ") for label in labels))
         self.assertFalse(any(label == "current" for label in labels))
         self.assertFalse(any(label.startswith("pressure build") for label in labels))
+
+    def test_continuous_planner_keeps_fixed_pattern_as_single_control_basis(self):
+        planner = MotionScriptPlanner("milking", rng=random.Random(2), continuous_patterns=True)
+        current = MotionTarget(20, 30, 40)
+
+        steps = planner._pattern_cluster(current, "milking-full-drive", "Passionate", 66, 52, 88)
+
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].target.label, PATTERNS["milking-full-drive"].name)
+        self.assertGreater(steps[0].delay_factor, 0)
+
+    def test_continuous_feedback_bridge_does_not_restart_pattern_basis(self):
+        planner = MotionScriptPlanner("auto", rng=random.Random(4), continuous_patterns=True)
+        current = MotionTarget(25, 25, 25)
+        feedback = MotionTarget(60, 70, 35, "milk")
+
+        steps = planner._pattern_feedback_steps(current, feedback, "milk")
+
+        self.assertEqual(steps[0].target.label, "feedback bridge")
+        self.assertEqual(steps[1].target.label, "milk")
+
+    def test_continuous_motion_plan_samples_pattern_as_cycle(self):
+        plan = continuous_motion_plan("stroke")
+        target = MotionTarget(50, 50, 80, "stroke")
+
+        first = sample_continuous_plan(plan, target, 0.0)
+        later = sample_continuous_plan(plan, target, plan.duration_seconds * 0.35)
+
+        self.assertIn("continuous", first.label)
+        self.assertNotEqual(round(first.depth), round(later.depth))
+        self.assertGreaterEqual(first.stroke_range, 5)
 
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:

@@ -91,9 +91,10 @@ ARCS_BY_MODE = {
 
 
 class MotionScriptPlanner:
-    def __init__(self, mode, rng=None):
+    def __init__(self, mode, rng=None, continuous_patterns=False):
         self.mode = mode
         self.rng = rng or random.Random()
+        self.continuous_patterns = bool(continuous_patterns)
         self.steps = deque()
         self.last_arc_index = None
         self.recent_labels = deque(maxlen=10)
@@ -136,6 +137,8 @@ class MotionScriptPlanner:
             stroke_range + self.rng.uniform(-7, 7),
             label=label,
         ).clamped()
+        if self.continuous_patterns and pattern:
+            return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.85, 1.15))]
         frames = expand_pattern(pattern_id, current, target, rng=self.rng)
         if not frames:
             return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.75, 1.15))]
@@ -195,6 +198,16 @@ class MotionScriptPlanner:
             label=f"{target.label} bridge",
         ).clamped()
         steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
+        if self.continuous_patterns:
+            bridge = MotionTarget(
+                bridge.speed,
+                bridge.depth,
+                bridge.stroke_range,
+                label="feedback bridge",
+            ).clamped()
+            steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
+            steps.append(ScriptStep(target, mood="Confident", delay_factor=0.9))
+            return steps
         mood_by_pattern = {
             "flick": "Playful",
             "flutter": "Playful",
@@ -222,6 +235,16 @@ class MotionScriptPlanner:
             label=f"{target.label} bridge",
         ).clamped()
         steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
+        if self.continuous_patterns:
+            bridge = MotionTarget(
+                bridge.speed,
+                bridge.depth,
+                bridge.stroke_range,
+                label="feedback bridge",
+            ).clamped()
+            steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
+            steps.append(ScriptStep(target, mood="Intimate", delay_factor=0.9))
+            return steps
         frames = expand_anchor_program(current, target, target.motion_program, rng=self.rng)
         steps.extend(
             ScriptStep(frame.target, mood="Intimate", delay_factor=frame.delay_factor)

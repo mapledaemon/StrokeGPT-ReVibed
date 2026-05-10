@@ -211,11 +211,12 @@ class WebSettingsRouteTests(WebTestCase):
                 payload = response.get_json()
                 self.assertEqual(payload["motion_backend"], "position")
                 self.assertTrue(any(item["experimental"] for item in payload["motion_backends"] if item["id"] == "position"))
+                self.assertTrue(any(item.get("deprecated") for item in payload["motion_backends"] if item["id"] == "hamp"))
 
                 response = self.client.post("/set_motion_backend", json={"motion_backend": "bad"})
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.get_json()["motion_backend"], "hamp")
-                self.assertEqual(motion.backend, "hamp")
+                self.assertEqual(response.get_json()["motion_backend"], "continuous")
+                self.assertEqual(motion.backend, "continuous")
         finally:
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)

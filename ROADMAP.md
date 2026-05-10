@@ -73,8 +73,9 @@ Adapter audit findings:
 
 - Preserve the real safety boundaries:
   `MotionSanitizer.from_llm_move()` parses LLM JSON into `MotionTarget`,
-  `MotionController.apply_generated_target()` chooses HAMP versus
-  position-frame playback while preserving smoothing/stop behavior, and
+  `MotionController.apply_generated_target()` chooses continuous sampled
+  control, finite position playback, or legacy HAMP while preserving
+  smoothing/stop behavior, and
   `HandyController.move()` / `move_to_depth()` translate relative app targets
   into calibrated device commands with user speed/depth limits.
 - Preserve the pattern/compiler boundaries:
@@ -134,7 +135,7 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 - Confirm Milk Me and natural-language milk requests actually use most or
   all of the safe calibrated range unless the user explicitly asks for
   short/tight motion. PR #38 added milk vocabulary; the on-device check
-  that this still holds across HAMP and the experimental backend is open.
+  that this still holds across Continuous position and HAMP legacy is open.
 - Add a Freestyle/freeform toggle (checkbox or dropdown in settings) that
   switches between deterministic speed/range semantics and a more
   freeform/freestyle interpretation, so users can choose how tightly the
@@ -148,9 +149,8 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
 - Add user-facing Freestyle planner controls and diagnostics for fuzzy
   inputs such as visible weights, feedback, recent chat, and current motion
   context.
-- Keep Freestyle off HAMP/current scripted Auto arcs; it should continue
-  using the experimental pattern/script playback path until a later motion
-  backend replaces the current default.
+- Keep Freestyle on the shared continuous motion path by default instead of
+  falling back to HAMP/current scripted Auto arcs.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
 - Allow the LLM to request visible modes such as Freestyle, Edge Me, and
@@ -299,20 +299,19 @@ editor extraction), and the chat shell refactor in Up Next #5 cover the
 obvious splits. This entry is for the deeper, design-level audits that need
 a clean tree first.
 
-- Before changing the default motion backend, audit the flexible
-  position/script path against chat control, Freestyle, motion training,
-  Edge/Milk mode scripts, stop behavior, and real-device smoothness.
-- Start any move toward the newer flexible motion schema behind a visible
-  backend/settings selector. Keep the current HAMP continuous path available
-  until flexible playback is smoother, recoverable, and verified on device.
-- When the new schema becomes the only motion backend, preserve the
-  current shared backend guard rails: pass-through final targets for
-  continuous planners, user-speed-relative XAVA velocity caps, depth-jump
-  splitting, and turn-apex smoothing for all position/script callers.
-- Prototype inertia-aware direction changes and stops for the flexible
-  schema, so interpolated output does not expose obvious step boundaries or
-  abrupt reversals. This should not change HAMP behavior until the flexible
-  path is validated.
+- Validate the new Continuous position default against chat control,
+  Freestyle, motion training, Edge/Milk mode scripts, stop behavior, and
+  real-device smoothness.
+- Keep HAMP visible as a legacy fallback until real-device testing proves the
+  continuous backend is at least as recoverable for basic strokes and stop
+  behavior.
+- Preserve the current shared backend guard rails: user-speed-relative XAVA
+  velocity caps, depth-jump splitting, turn-apex smoothing for finite
+  position/script callers, and uninterrupted stop/pause generation changes for
+  continuous sampled planners.
+- Prototype inertia-aware direction changes and stops for the continuous
+  schema, so sampled output does not expose obvious step boundaries or abrupt
+  reversals.
 - Review current Handy API and firmware behavior, including Handy 2 and
   Handy 2 Pro-specific constraints, before raising speed limits or adding
   overclock-style settings.
@@ -470,9 +469,9 @@ adding another setup surface.
   and a reset path back to conservative defaults.
 - Migrate existing settings conservatively so current users keep
   equivalent motion until they intentionally recalibrate.
-- Keep HAMP continuous and experimental position/script playback honoring
-  the same calibration mapping without bypassing smoothing, stop behavior,
-  or user speed limits.
+- Keep Continuous position, finite position/script playback, and HAMP legacy
+  honoring the same calibration mapping without bypassing smoothing, stop
+  behavior, or user speed limits.
 
 ### 12. Reference Research Backlog (S/M)
 
@@ -637,16 +636,11 @@ runtime shows a clear app-level benefit.
   appear immediately in the GUI so the user can see what changed and
   adjust it; nothing should silently disable a pattern or shift a weight
   without a visible control to undo it.
-- HAMP continuous motion should remain the recommended default until
-  flexible position/script playback has more real-device validation for
+- Continuous position is now the recommended default, but HAMP must remain a
+  user-visible legacy fallback until physical-device testing confirms
   smoothness, pattern fidelity, latency, and recovery behavior.
-- The current flexible backend now receives shared smoothing for
-  pattern/script playback and plain chat targets, but it should not
-  become the default until those paths are validated on the physical
-  device without boundary stutter, unexpected stops, or speed-limit
-  escapes.
-- Any motion-backend switch must be user-visible and reversible until the new
-  flexible schema can match or beat HAMP reliability on physical hardware.
+- Any motion-backend switch must stay user-visible and reversible until the
+  continuous schema clearly beats HAMP reliability on physical hardware.
 - Settings saves, feedback actions, reconnect attempts, and mode starts should
   report success or failure in the UI. A browser tab that remains open after
   the app shuts down must not appear to keep saving settings silently.

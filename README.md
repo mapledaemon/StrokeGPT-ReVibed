@@ -99,7 +99,7 @@ Everything is in **Open Settings**. Tabs:
 - **Model** — pick or download Ollama models, switch the active model, see install state.
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
 - **Device** — Handy key, stroke range, range test.
-- **Motion** — speed limits, motion backend (HAMP continuous is the default; flexible position/script is experimental), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.
+- **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.
 - **Advanced** — diagnostics verbosity and **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).
 
 The motion connector accepts direct numeric moves from the model and named cues like `tip`, `shaft`, `base`, `full`, `flick`, `flutter`, `pulse`, `wave`, `ramp`, `ladder`, `surge`, `sway`, `tease`. It also accepts any enabled fixed pattern id from Motion Pattern Preferences, including Edge and Milk patterns. Soft anchor loops are supported with 2–6 anchors (e.g., `tip → shaft → base`) plus tempo and softness. All cues route through the deterministic motion layer so configured speed limits, smoothing, and stop behavior are preserved.

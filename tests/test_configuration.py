@@ -60,7 +60,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
         self.assertEqual(saved["motion_pattern_weights"], {})
-        self.assertEqual(saved["motion_backend"], "hamp")
+        self.assertEqual(saved["motion_backend"], "continuous")
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
         self.assertEqual(saved["ollama_diagnostics_level"], "compact")
         self.assertFalse(saved["motion_feedback_auto_disable"])
@@ -95,7 +95,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_feedback, {})
         self.assertEqual(settings.motion_pattern_feedback_history, [])
         self.assertEqual(settings.motion_pattern_weights, {})
-        self.assertEqual(settings.motion_backend, "hamp")
+        self.assertEqual(settings.motion_backend, "continuous")
         self.assertEqual(settings.motion_diagnostics_level, "compact")
         self.assertEqual(settings.ollama_diagnostics_level, "compact")
         self.assertFalse(settings.motion_feedback_auto_disable)
@@ -217,9 +217,17 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
         self.assertEqual(settings.motion_backend, "position")
 
-        settings.file_path = FakePath(json.dumps({"motion_backend": "unknown"}))
+        settings.file_path = FakePath(json.dumps({"motion_backend": "pattern-position"}))
+        settings.load()
+        self.assertEqual(settings.motion_backend, "continuous")
+
+        settings.file_path = FakePath(json.dumps({"motion_backend": "hamp"}))
         settings.load()
         self.assertEqual(settings.motion_backend, "hamp")
+
+        settings.file_path = FakePath(json.dumps({"motion_backend": "unknown"}))
+        settings.load()
+        self.assertEqual(settings.motion_backend, "continuous")
 
     def test_diagnostics_levels_are_normalized(self):
         fake_path = FakePath(json.dumps({

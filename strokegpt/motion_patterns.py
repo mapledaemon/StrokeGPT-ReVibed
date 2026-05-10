@@ -64,6 +64,16 @@ class FrameStyle:
     range_jitter: float = 0.0
 
 
+@dataclass(frozen=True)
+class ContinuousMotionPlan:
+    """Phase-domain motion basis for live controller sampling."""
+
+    name: str
+    actions: tuple[PatternAction, ...]
+    style: FrameStyle
+    duration_seconds: float
+
+
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
     if not actions:
         return 0
@@ -465,6 +475,135 @@ def _actions_to_frames(
         )
     frames = _blend_from_current(current, frames, style.name)
     return _blend_direction_changes(frames, style.name)
+
+
+def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
+    tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
+    return _clamp((_duration_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
+
+
+def _sample_action_position(
+    actions: tuple[PatternAction, ...],
+    phase: float,
+    *,
+    interpolation: str = "cosine",
+) -> float:
+    if not actions:
+        return 50.0
+    if len(actions) == 1:
+        return actions[0].pos
+
+    phase = phase % 1.0
+    start_at = actions[0].at
+    duration_ms = _duration_ms(actions)
+    sample_at = start_at + phase * duration_ms
+    previous = actions[0]
+    for following in actions[1:]:
+        if sample_at <= following.at:
+            span = max(1, following.at - previous.at)
+            amount = (sample_at - previous.at) / span
+            return _clamp(_interpolate(previous.pos, following.pos, amount, interpolation))
+        previous = following
+    return actions[-1].pos
+
+
+def _motion_target_for_sample(
+    normalized_pos: float,
+    target: MotionTarget,
+    style: FrameStyle,
+    *,
+    label: str,
+) -> MotionTarget:
+    target = target.clamped()
+    half_range = target.stroke_range / 2.0
+    shallow = _clamp(target.depth - half_range)
+    deep = _clamp(target.depth + half_range)
+    if deep - shallow < 5:
+        shallow = _clamp(target.depth - 2.5)
+        deep = _clamp(target.depth + 2.5)
+
+    normalized_pos = _clamp(normalized_pos) / 100.0
+    depth = shallow + (deep - shallow) * normalized_pos
+    range_wave = 0.75 + abs(normalized_pos - 0.5) * 0.5
+    local_range = max(5.0, min(target.stroke_range, target.stroke_range * style.window_scale * range_wave))
+    return MotionTarget(
+        speed=target.speed * style.speed_scale,
+        depth=depth,
+        stroke_range=local_range,
+        label=label,
+    ).clamped()
+
+
+def continuous_motion_plan(pattern_name: str) -> Optional[ContinuousMotionPlan]:
+    pattern = PATTERNS.get((pattern_name or "").lower())
+    if not pattern:
+        return None
+    return continuous_motion_plan_from_pattern(pattern)
+
+
+def continuous_motion_plan_from_pattern(pattern: MotionPattern) -> Optional[ContinuousMotionPlan]:
+    actions = prepare_pattern_actions(pattern)
+    if not actions:
+        return None
+    style = FrameStyle(
+        name=pattern.name,
+        window_scale=pattern.window_scale,
+        speed_scale=pattern.speed_scale,
+        tempo_scale=pattern.tempo_scale,
+        depth_jitter=pattern.depth_jitter,
+        range_jitter=pattern.range_jitter,
+    )
+    return ContinuousMotionPlan(
+        name=pattern.name,
+        actions=actions,
+        style=style,
+        duration_seconds=_continuous_duration_seconds(actions, style),
+    )
+
+
+def continuous_anchor_motion_plan(
+    program: Any,
+    rng: Optional[random.Random] = None,
+) -> Optional[ContinuousMotionPlan]:
+    anchor_program = coerce_anchor_program(program, require_request=False)
+    if anchor_program is None:
+        return None
+    actions = prepare_anchor_actions(anchor_program, rng=rng)
+    if not actions:
+        return None
+    style = FrameStyle(
+        name="anchor_loop",
+        window_scale=0.22 + (1.0 - anchor_program.softness) * 0.18,
+        speed_scale=0.85 + anchor_program.tempo * 0.18,
+        depth_jitter=anchor_program.variation * 4.0,
+        range_jitter=anchor_program.variation * 2.5,
+    )
+    return ContinuousMotionPlan(
+        name="anchor_loop",
+        actions=actions,
+        style=style,
+        duration_seconds=_continuous_duration_seconds(actions, style),
+    )
+
+
+def sample_continuous_plan(
+    plan: ContinuousMotionPlan,
+    target: MotionTarget,
+    elapsed_seconds: float,
+) -> MotionTarget:
+    duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
+    phase = (max(0.0, float(elapsed_seconds or 0.0)) / duration_seconds) % 1.0
+    pos = _sample_action_position(plan.actions, phase, interpolation="cosine")
+    base_label = str(target.label or plan.name or "pattern").strip()
+    style_label = str(plan.name or "").strip()
+    if style_label and _clean_label(style_label) not in _clean_label(base_label):
+        base_label = f"{base_label} {style_label}".strip()
+    return _motion_target_for_sample(
+        pos,
+        target,
+        plan.style,
+        label=f"{base_label} continuous",
+    )
 
 
 def _blend_from_current(

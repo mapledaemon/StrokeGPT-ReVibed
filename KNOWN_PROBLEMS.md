@@ -10,8 +10,8 @@ Status: Open
 The sidebar Handy cylinder is currently a commanded-motion estimate, not a
 confirmed live device-position readout. It can still show poor alignment or
 slight latency compared with the physical Handy, especially when switching
-between HAMP and the experimental position/script backend or when network/API
-timing differs from local command timing.
+between Continuous position, finite position/script playback, and HAMP legacy
+motion or when network/API timing differs from local command timing.
 
 Follow-up work:
 
@@ -22,26 +22,23 @@ Follow-up work:
 - Tune the local estimate against calibrated stroke range, physical position,
   and status polling cadence without adding excessive Handy API traffic.
 
-## Flexible Position Backend Default Readiness
+## Continuous Position Backend Real-Device Readiness
 
 Status: Open / Needs Verification
 
-The experimental flexible position/script backend now routes pattern playback,
-Freestyle playback, motion training previews, and plain chat-generated targets
-through shared smoothing and velocity guard rails. It still needs real Handy
-testing before it replaces HAMP as the default, because recent manual testing
-showed boundary stutter/stopping in Freestyle and direction-change smoothing
-that was not obvious enough on-device. PR #42 added a current-position bridge
-and per-frame timing traces that may have fixed the regular Freestyle stop, but
-that needs longer on-device confirmation before the problem is closed or the
-flexible backend is promoted.
+Continuous position is now the default app-motion backend. Fixed patterns and
+anchor programs run as live sampled control bases instead of finite repeating
+scripts, while HAMP remains selectable as a legacy fallback. This still needs
+real Handy testing because recent manual testing showed boundary
+stutter/stopping in Freestyle and direction-change smoothing that was not
+obvious enough on-device.
 
 Transition notes to preserve when the motion schema is fully replaced:
 
 - Keep one shared playback sanitizer for trained patterns, imported scripts,
   Freestyle, Edge/Milk scripts, and plain chat-generated targets.
-- Keep final-target pass-through available for continuous planners so one
-  selected segment can slide into the next without a stop-on-target boundary.
+- Keep continuous planners interruptible by the same generation/stop/pause
+  boundary as every other motion path.
 - Keep XAVA/position velocity capped against the current user max-speed setting,
   not only against pattern-local speed.
 - Keep depth jump splitting and turn-apex smoothing in the backend layer so
@@ -49,8 +46,9 @@ Transition notes to preserve when the motion schema is fully replaced:
 
 Follow-up work:
 
-- Compare HAMP and flexible position playback on the physical Handy using the
-  same speed limits, depth/range settings, and pattern set.
+- Compare HAMP legacy, finite position playback, and Continuous position on
+  the physical Handy using the same speed limits, depth/range settings, and
+  pattern set.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Instrument the normal Freestyle command loop and Handy command responses to
@@ -58,7 +56,7 @@ Follow-up work:
   device-side position-mode behavior.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
-- Keep HAMP as the default until these checks pass.
+- Keep HAMP selectable until these checks pass.
 
 ## Visual Element Formatting
 

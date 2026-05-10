@@ -199,6 +199,17 @@ def _set_active_mode(callbacks: ModeCallbacks, mode_name):
         pass
 
 
+def _uses_continuous_motion(motion_controller) -> bool:
+    return getattr(motion_controller, "backend", "") == "continuous"
+
+
+def _apply_mode_motion(motion_controller, target, source):
+    if _uses_continuous_motion(motion_controller):
+        motion_controller.apply_generated_target(target, source=source)
+    else:
+        motion_controller.apply_target(target, source=source)
+
+
 def _run_scripted_mode(
     stop_event: threading.Event,
     services: ModeServices,
@@ -218,7 +229,7 @@ def _run_scripted_mode(
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
     remember_pattern = callbacks.get("remember_pattern", lambda target: None)
-    planner = MotionScriptPlanner(mode)
+    planner = MotionScriptPlanner(mode, continuous_patterns=_uses_continuous_motion(motion_controller))
     step_count = 0
     mode_intensity = initial_intensity
 
@@ -272,7 +283,7 @@ def _run_scripted_mode(
             send_message(step.message)
         update_mood(step.mood)
         target = mode_decision_helpers._target_with_intensity(step.target, mode_intensity)
-        motion_controller.apply_target(target, source=f"{mode} mode")
+        _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
         remember_pattern(target)
         step_count += 1
         _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event, pause_event)
@@ -394,12 +405,14 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
         elif close_style_target and time.monotonic() >= close_style_until:
             close_style_target = None
 
+        continuous_freestyle = _uses_continuous_motion(motion_controller)
         choices = freestyle_helpers._freestyle_choice_chain(
             tuple(freestyle_candidates()),
             motion_controller.current_target(),
             feedback_target,
             tuple(recent_ids),
             rng,
+            length=1 if continuous_freestyle else freestyle_helpers.FREESTYLE_CHAIN_LENGTH,
         )
         if not choices:
             send_message("Freestyle needs at least one enabled motion pattern.")
@@ -413,13 +426,15 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
 
         if freestyle_helpers._apply_freestyle_choices(motion_controller, choices, rng):
             update_mood(choices[-1].mood)
-            for played_choice in choices:
+            played_choices = choices[:1] if continuous_freestyle else choices
+            for played_choice in played_choices:
                 remember_pattern_id(played_choice.pattern_id)
                 recent_ids.append(played_choice.pattern_id)
             recent_ids[:] = recent_ids[-8:]
 
-        step_count += len(choices)
-        _sleep_with_stop(stop_event, 0, message_event, pause_event)
+        step_count += 1 if continuous_freestyle else len(choices)
+        sleep_seconds = random.uniform(min_time, max_time) if continuous_freestyle else 0
+        _sleep_with_stop(stop_event, sleep_seconds, message_event, pause_event)
 
 
 def milking_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
@@ -443,7 +458,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
     pause_event = callbacks.get("pause_event")
-    planner = MotionScriptPlanner("edging")
+    planner = MotionScriptPlanner("edging", continuous_patterns=_uses_continuous_motion(motion_controller))
     edge_count = 0
     step_count = 0
     max_steps = random.randint(56, 78)
@@ -575,7 +590,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
             send_message(step.message)
         update_mood(step.mood)
         target = mode_decision_helpers._target_with_intensity(step.target, mode_intensity)
-        motion_controller.apply_target(target, source="edging mode")
+        _apply_mode_motion(motion_controller, target, source="edging mode")
         remember_pattern(target)
         step_count += 1
         _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event, pause_event)

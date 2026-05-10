@@ -53,6 +53,7 @@ function recentMotionLabels(payload = {}, limit = 4) {
 }
 
 export function formatBackendName(backend) {
+    if (backend === 'continuous') return 'Continuous';
     return backend === 'position' ? 'Position' : 'HAMP';
 }
 

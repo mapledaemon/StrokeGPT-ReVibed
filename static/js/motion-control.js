@@ -126,18 +126,18 @@ function normalizeMotionSpeedLimits() {
 
 function motionBackendDetails(backendId) {
     return state.motionBackends.find(backend => backend.id === backendId) || {
-        id: 'hamp',
-        label: 'HAMP continuous',
-        description: 'Recommended default for smooth ongoing app motion.',
+        id: 'continuous',
+        label: 'Continuous position',
+        description: 'Recommended default: fixed patterns run as live sampled motion until the next command or stop.',
         experimental: false,
     };
 }
 
 function updateMotionBackendUi(backendId) {
-    state.motionBackend = backendId === 'position' ? 'position' : 'hamp';
+    state.motionBackend = ['continuous', 'position', 'hamp'].includes(backendId) ? backendId : 'continuous';
     if (el.motionBackendSelect) el.motionBackendSelect.value = state.motionBackend;
     const details = motionBackendDetails(state.motionBackend);
-    const suffix = details.experimental ? ' (experimental)' : '';
+    const suffix = details.experimental ? ' (experimental)' : details.deprecated ? ' (legacy)' : '';
     if (el.motionBackendStatus) {
         el.motionBackendStatus.textContent = `Current backend: ${details.label}${suffix}. ${details.description || ''}`.trim();
     }
@@ -146,18 +146,25 @@ function updateMotionBackendUi(backendId) {
     }
 }
 
-function renderMotionBackendOptions(options = [], currentBackend = 'hamp') {
+function renderMotionBackendOptions(options = [], currentBackend = 'continuous') {
     state.motionBackends = options.length ? options : [
         {
-            id: 'hamp',
-            label: 'HAMP continuous',
-            description: 'Recommended default for smooth ongoing app motion.',
+            id: 'continuous',
+            label: 'Continuous position',
+            description: 'Recommended default: fixed patterns run as live sampled motion until the next command or stop.',
             experimental: false,
+        },
+        {
+            id: 'hamp',
+            label: 'HAMP legacy',
+            description: 'Legacy bounded-oscillation path. Kept as a fallback, but fixed patterns lose shape fidelity here.',
+            experimental: false,
+            deprecated: true,
         },
         {
             id: 'position',
             label: 'Flexible position/script',
-            description: 'Experimental path for pattern fidelity and spatial scripts.',
+            description: 'Finite position/script playback for previews and compatibility.',
             experimental: true,
         },
     ];
@@ -166,7 +173,7 @@ function renderMotionBackendOptions(options = [], currentBackend = 'hamp') {
         state.motionBackends.forEach(backend => {
             const option = D.createElement('option');
             option.value = backend.id;
-            option.textContent = `${backend.label}${backend.experimental ? ' (experimental)' : backend.id === 'hamp' ? ' (recommended)' : ''}`;
+            option.textContent = `${backend.label}${backend.experimental ? ' (experimental)' : backend.deprecated ? ' (legacy)' : backend.id === 'continuous' ? ' (recommended)' : ''}`;
             el.motionBackendSelect.appendChild(option);
         });
     }
@@ -213,7 +220,7 @@ export function populateMotionSettings(data = {}) {
 }
 
 async function saveMotionBackend() {
-    const motionBackend = el.motionBackendSelect?.value || 'hamp';
+    const motionBackend = el.motionBackendSelect?.value || 'continuous';
     const data = await apiCall('/set_motion_backend', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
