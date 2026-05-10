@@ -24,6 +24,12 @@ def setup_check_route():
     return jsonify(web.setup_check_payload())
 
 
+@settings_blueprint.route('/diagnostics_latency', methods=['POST'])
+def diagnostics_latency_route():
+    web = _web()
+    return jsonify(web.diagnostics_latency_payload())
+
+
 @settings_blueprint.route('/reset_settings', methods=['POST'])
 def reset_settings_route():
     web = _web()

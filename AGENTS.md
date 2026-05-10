@@ -138,6 +138,9 @@ The unified settings popup has tabs:
   can receive: chat, motion repair, name-this-move, profile
   consolidation. Lazy-loaded on first open; refresh button re-renders
   against the current context.)
+- Diagnostics (setup checks, Ollama/voice latency probes, and diagnostics
+  verbosity. Latency probes must not trigger surprise model downloads or paid
+  hosted TTS calls; they measure only already-loaded local voice paths.)
 - Advanced
 
 Do not move detailed settings back into the sidebar unless there is a strong usability reason.

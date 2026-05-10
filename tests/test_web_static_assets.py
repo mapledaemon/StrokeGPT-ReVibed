@@ -84,6 +84,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="edging-timer" class="top-bar-chip active-mode-timer">00:00</div>', page)
             self.assertIn('id="ollama-diagnostics-level-select"', page)
             self.assertIn('id="motion-diagnostics-level-select"', page)
+            self.assertIn('data-settings-tab="diagnostics"', page)
+            self.assertIn('id="settings-tab-diagnostics"', page)
             self.assertIn('id="motion-feedback-auto-disable-checkbox"', page)
             self.assertIn('id="toggle-memory-btn"', page)
             self.assertIn("Memories: ON", page)
@@ -124,13 +126,17 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="system-prompt-name-this-move"', page)
             self.assertIn('id="system-prompt-name-this-move-sample"', page)
             self.assertIn('id="system-prompt-profile-consolidation"', page)
-            # The Prompts tab sits between Motion and Advanced so the
+            self.assertIn('data-settings-tab="diagnostics"', page)
+            self.assertIn('id="settings-tab-diagnostics"', page)
+            # The Prompts tab sits before Diagnostics and Advanced so the
             # tab order matches the architecture note in AGENTS.md.
             motion_tab = page.find('data-settings-tab="motion"')
             prompts_tab = page.find('data-settings-tab="prompts"')
+            diagnostics_tab = page.find('data-settings-tab="diagnostics"')
             advanced_tab = page.find('data-settings-tab="advanced"')
             self.assertGreater(prompts_tab, motion_tab)
-            self.assertGreater(advanced_tab, prompts_tab)
+            self.assertGreater(diagnostics_tab, prompts_tab)
+            self.assertGreater(advanced_tab, diagnostics_tab)
         finally:
             response.close()
 
@@ -206,10 +212,16 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('Preview: Flexible position', page)
             self.assertIn('id="app-motion-backend-badge"', page)
             self.assertIn('App motion: Continuous position', page)
-            self.assertIn('data-settings-tab="advanced"', page)
-            self.assertIn('id="settings-tab-advanced"', page)
+            self.assertIn('data-settings-tab="diagnostics"', page)
+            self.assertIn('id="settings-tab-diagnostics"', page)
             self.assertIn('id="run-setup-check-btn"', page)
             self.assertIn('id="setup-check-status"', page)
+            self.assertIn('id="setup-check-results"', page)
+            self.assertIn('id="run-latency-tests-btn"', page)
+            self.assertIn('id="latency-test-status"', page)
+            self.assertIn('id="latency-test-results"', page)
+            self.assertIn('data-settings-tab="advanced"', page)
+            self.assertIn('id="settings-tab-advanced"', page)
             self.assertIn('id="reset-settings-btn"', page)
             self.assertIn('id="local-tts-engine-select"', page)
             self.assertIn('value="chatterbox_turbo"', page)
@@ -410,6 +422,10 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".voice-input-settings .select-box:disabled", css)
             self.assertIn(".settings-checkbox-line", css)
             self.assertIn(".diagnostics-output", css)
+            self.assertIn(".diagnostics-action-row", css)
+            self.assertIn(".diagnostics-level-grid", css)
+            self.assertIn(".latency-test-row", css)
+            self.assertIn(".latency-metric-list", css)
             self.assertIn(".model-actions", css)
             self.assertIn(".motion-pattern-row", css)
             self.assertIn(".motion-pattern-list", css)
@@ -783,6 +799,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("data.active_mode", script)
         self.assertIn("weight ${pattern.weight", script)
         self.assertIn("/set_diagnostics_levels", script)
+        self.assertIn("/diagnostics_latency", script)
         self.assertIn("function updateOllamaDiagnostics", script)
 
     def test_motion_sequence_log_module_is_extracted(self):
@@ -962,7 +979,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("./js/motion-control.js", app_script)
         self.assertIn("./js/setup.js", app_script)
         self.assertIn("./js/setup-check.js", app_script)
-        self.assertIn("initSetupCheckWizard()", app_script)
+        self.assertIn("initDiagnosticsControls()", app_script)
 
 
 if __name__ == "__main__":

@@ -241,6 +241,24 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .setup-check-badge.error { color: var(--red-hover); }
 .setup-check-row-label { color: var(--foreground); font-weight: 700; font-size: 0.9rem; }
 .setup-check-row-detail { margin-top: 3px; color: var(--comment); font-size: 0.82rem; line-height: 1.35; overflow-wrap: anywhere; }
+.diagnostics-action-row { display: grid; grid-template-columns: minmax(150px, max-content) minmax(0, 1fr); gap: 10px; align-items: center; }
+.diagnostics-action-row .my-button { width: auto; min-width: 0; }
+.diagnostics-results:empty { display: none; }
+.diagnostics-level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
+.diagnostics-level-grid .settings-field-label { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.diagnostics-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.diagnostics-actions .my-button { width: auto; min-width: 0; }
+.latency-test-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.latency-test-row { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-darker); }
+.latency-test-row.ok { border-color: rgba(127, 183, 163, 0.42); }
+.latency-test-row.warning, .latency-test-row.skipped { border-color: rgba(216, 182, 106, 0.48); }
+.latency-test-row.error { border-color: rgba(193, 18, 31, 0.62); }
+.latency-test-body { min-width: 0; }
+.latency-test-label { color: var(--foreground); font-weight: 700; font-size: 0.9rem; }
+.latency-test-detail { margin-top: 3px; color: var(--comment); font-size: 0.82rem; line-height: 1.35; overflow-wrap: anywhere; }
+.latency-test-elapsed { color: var(--cyan); font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
+.latency-metric-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.latency-metric { padding: 2px 6px; border: 1px solid #2d333d; border-radius: 999px; color: var(--comment); font-size: 0.72rem; }
 .slider-container { display: grid; grid-template-columns: minmax(130px, 0.9fr) minmax(0, 2fr) minmax(54px, auto); align-items: center; gap: 12px; margin: 0; text-align: left; }
 .slider-container label { color: var(--foreground); font-size: 0.9em; }
 .slider-container input[type="range"] { width: 100%; min-width: 0; }
@@ -256,6 +274,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .modal-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.72); z-index: 9000; padding: 16px; }
 .modal-overlay.open { display: flex; }
 .modal-box { width: min(640px, 100%); max-height: 90vh; overflow-y: auto; background: var(--background); border: 1px solid #2d333d; border-radius: 8px; box-shadow: 0 16px 40px var(--shadow); padding: 18px; }
+.settings-box { width: min(860px, 100%); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--background-lighter); padding-bottom: 12px; margin-bottom: 14px; }
 .modal-header h3 { margin: 0; color: var(--cyan); font-size: 1.1rem; }
 .modal-close { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #37404c; background: var(--background-lighter); color: var(--foreground); cursor: pointer; font-size: 1.2rem; }
@@ -429,7 +448,9 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .chat-message-container { max-width: 100%; }
     .slider-container, .motion-panel .slider-container, .device-panel .slider-container { grid-template-columns: 1fr auto; }
     .slider-container label { grid-column: 1 / -1; }
-    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions { grid-template-columns: 1fr; }
+    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }
+    .latency-test-row { grid-template-columns: 1fr; }
+    .latency-test-elapsed { white-space: normal; }
     .browse-line { grid-template-columns: 1fr; }
     .browse-line .my-button { width: 100%; }
     .motion-pattern-row { grid-template-columns: 1fr; }

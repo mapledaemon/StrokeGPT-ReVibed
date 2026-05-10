@@ -381,13 +381,15 @@ cleanup, and the persona naming audit.
 
 ### 10. Runtime And Setup Diagnostics (M)
 
-Why later: broader setup checks should build on the completed diagnostics
-verbosity slice (PR #43) without turning the compact status UI into a
-setup console.
+Why later: the Settings > Diagnostics tab now covers setup checks and basic
+latency probes, but the remaining runtime diagnostics should still avoid
+turning the compact status UI into a setup console.
 
-- Add a diagnostics tab for Ollama status, selected model install state,
-  local voice model state, Torch/CUDA status, Handy key presence, active
-  port, and current motion backend.
+- Extend the diagnostics tab only where the information changes user action:
+  selected-model install/GPU state, local voice model state, Torch/CUDA status,
+  Handy key presence, active port, current motion backend, and measured
+  Ollama/voice latency should stay grouped there instead of spreading into
+  Model, Voice, or the sidebar.
 - Add a visible Handy connection indicator and reconnect button below the
   sidebar visualizer, using the same connection state as diagnostics
   rather than a separate hidden device path.
@@ -544,11 +546,9 @@ and stop safety paths.
 - Keep the physical stop button and explicit stop command independent from
   recording, upload, transcription, LLM response, TTS generation, and motion
   dispatch latency.
-- Build on the voice-input chat-latency diagnostics slice by extending the
-  current transcript-to-chat, LLM, and motion-apply timings into full
-  end-to-end latency diagnostics for voice generation, audio playback, and
-  motion dispatch, so delays after transcription are visible during
-  hands-free testing.
+- Continue from the Settings > Diagnostics latency tests by adding audio
+  playback and motion-dispatch timings only after real hands-free testing
+  shows that those downstream delays are still hard to explain.
 - Continue failure-state tuning after real microphone testing: refine
   browser-specific permission handling, noisy/empty clip copy, calibrated
   threshold guidance, model-load recovery guidance, and CPU-latency thresholds.

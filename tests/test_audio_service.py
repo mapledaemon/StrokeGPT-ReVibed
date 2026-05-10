@@ -204,6 +204,27 @@ class AudioServiceTests(unittest.TestCase):
         self.assertIn("cuda exploded", service._local_generation_error)
         self.assertIn("Local Chatterbox problem", service.last_error)
 
+    def test_local_output_latency_uses_loaded_model_without_queueing_audio(self):
+        class DummyModel:
+            sr = 24000
+
+        service = AudioService()
+        service.provider = "local"
+        service._local_model = DummyModel()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._generate_local_waveform = lambda *_args, **_kwargs: object()
+        service._encode_wav_bytes = lambda *_args, **_kwargs: b"wav-bytes"
+
+        result = service.measure_output_latency("ready")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["provider"], "local")
+        self.assertEqual(result["device"], "cuda")
+        self.assertEqual(result["audio_bytes"], len(b"wav-bytes"))
+        self.assertEqual(service._local_generation_status, "idle")
+        self.assertFalse(service.audio_output_queue)
+
     def test_local_preload_failure_resets_cached_model_state(self):
         service = AudioService()
         service._local_model = object()
