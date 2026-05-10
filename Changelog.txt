@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #139 - App Shell Focus Rings
+---------------------------------------------
+
+Branch: codex/app-shell-focus-rings
+
+- Added a shared keyboard focus-visible treatment for ordinary app buttons,
+  the sidebar toggle, and the profile image button so primary shell and chat
+  controls do not rely on hover styling when reached by keyboard.
+- Extended the static CSS guard to pin the shared focus ring while preserving
+  the custom floating "Latest" jump-button focus treatment.
+
+
 2026-05-10 - PR #138 - Chat Latest Jump Affordance
 ---------------------------------------------------
 
