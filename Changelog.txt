@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #121 - Compact Sidebar And Profile Menu
+-------------------------------------------------------
+
+Branch: codex/sidebar-profile-menu
+
+- Moved the settings entry point out of the already crowded right sidebar and
+  into an upper-right profile-image menu. The menu opens Persona, Model,
+  Voice, Device, Motion, and Advanced settings directly, and includes a
+  Change Picture action that reuses the existing profile-picture upload path.
+- Rescaled the right sidebar with narrower width tokens, tighter padding,
+  compact section headers, two-column action/mode grids, smaller sidebar
+  controls, and a reduced Handy cylinder so the motion/control surface fits
+  better without changing command semantics.
+- Synchronized the top-bar profile image with saved and newly uploaded profile
+  pictures, and moved the Persona-tab profile image styling from inline markup
+  into stylesheet classes.
+- Kept the top-bar action layer above the mobile sidebar drawer so the profile
+  menu and sidebar toggle remain reachable on narrow screens.
+
+
 2026-05-10 - PR #120 - Track Continuous Motion In Handy Visualizer
 ------------------------------------------------------------------
 
