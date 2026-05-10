@@ -783,6 +783,21 @@ class MotionController:
         self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
 
+    def _depth_range_for_targets(self, targets: Iterable[Any]) -> Optional[dict[str, int]]:
+        depths: list[float] = []
+        for raw in targets:
+            target = raw
+            if not isinstance(target, MotionTarget):
+                target = getattr(raw, "target", None)
+            if isinstance(target, MotionTarget):
+                depths.append(target.clamped().depth)
+        if not depths:
+            return None
+        return {
+            "min": int(round(_clamp(min(depths)))),
+            "max": int(round(_clamp(max(depths)))),
+        }
+
     def _position_velocity_cap(self, target: MotionTarget) -> int | None:
         if hasattr(self.handy, "max_velocity_for_relative_speed"):
             try:
@@ -1014,6 +1029,14 @@ class MotionController:
         previous_target = start_target
         previous_command_ended_at = None
         sample_index = 0
+        program_range = self._depth_range_for_targets(
+            sample_continuous_plan(
+                plan,
+                target,
+                max(0.1, float(plan.duration_seconds or 0.1)) * index / 24.0,
+            )
+            for index in range(25)
+        )
 
         try:
             while True:
@@ -1052,6 +1075,8 @@ class MotionController:
                     "cycle_ms": round(plan.duration_seconds * 1000.0, 1),
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
+                if program_range is not None:
+                    extras["program_range"] = program_range
                 if previous_command_ended_at is not None:
                     extras["gap_ms"] = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
                 self._augment_last_trace(extras)
@@ -1071,6 +1096,7 @@ class MotionController:
     def apply_frames(self, frames: list[Any], *, stop_after: bool = False, source: str = "pattern") -> bool:
         if not frames:
             return False
+        program_range = self._depth_range_for_targets(frames)
 
         with self._lock:
             self._generation += 1
@@ -1092,6 +1118,8 @@ class MotionController:
                     if not self._wait_for_resume(generation):
                         return False
                     self._apply_step(step, source=source)
+                    if program_range is not None:
+                        self._augment_last_trace({"program_range": program_range})
                     if not self._sleep_with_pause(self.step_delay, generation):
                         return False
 
@@ -1123,6 +1151,7 @@ class MotionController:
         playback_frames = self._position_playback_frames(frames)
         if not playback_frames:
             return False
+        program_range = self._depth_range_for_targets(playback_frames)
 
         with self._lock:
             self._generation += 1
@@ -1170,6 +1199,7 @@ class MotionController:
                         previous_command_ended_at=previous_command_ended_at,
                         batch_gap_ms=batch_gap_ms,
                         is_pass_through_final=is_pass_through_final,
+                        program_range=program_range,
                     )
                 )
                 previous_command_ended_at = send_ended_at
@@ -1267,6 +1297,7 @@ class MotionController:
         previous_command_ended_at: Optional[float],
         batch_gap_ms: Optional[float],
         is_pass_through_final: bool,
+        program_range: Optional[dict[str, int]] = None,
     ) -> dict[str, Any]:
         extras: dict[str, Any] = {
             "frame_index": index,
@@ -1274,6 +1305,8 @@ class MotionController:
             "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
             "is_pass_through_final": bool(is_pass_through_final),
         }
+        if program_range is not None:
+            extras["program_range"] = program_range
         if previous_command_ended_at is not None:
             extras["gap_ms"] = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
         if index == 0 and batch_gap_ms is not None:

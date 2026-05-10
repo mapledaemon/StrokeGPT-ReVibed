@@ -5,22 +5,29 @@ the current branch. Move fixed items into `Changelog.txt` when they are resolved
 
 ## Handy Visualizer Alignment And Latency
 
-Status: Open
+Status: Partial / Needs Real-Device Verification
 
-The sidebar Handy cylinder is currently a commanded-motion estimate, not a
-confirmed live device-position readout. It can still show poor alignment or
-slight latency compared with the physical Handy, especially when switching
-between Continuous position, finite position/script playback, and HAMP legacy
-motion or when network/API timing differs from local command timing.
+The sidebar Handy cylinder is a commanded-motion estimate, not a confirmed
+live device-position readout. The green range band now maps to the active
+program's observed min/max depth window when the backend emits one, and the
+purple position line estimates the current commanded position from the active
+backend: continuous sampled output replay for Continuous position, trace
+interpolation for finite position playback, and phase estimation inside the
+active slide window for HAMP legacy. It can still show latency or misalignment
+compared with the physical Handy when browser polling, network timing, Handy
+firmware behavior, or local velocity assumptions diverge from the device.
 
 Follow-up work:
 
 - Compare commanded position against live Handy position if the device/API path
   exposes a practical polling endpoint.
-- Keep the green cylinder background static; only the purple position line
-  should move.
-- Tune the local estimate against calibrated stroke range, physical position,
-  and status polling cadence without adding excessive Handy API traffic.
+- Verify the continuous trace replay against the physical device at slow and
+  fast speeds, then tune the local estimate against calibrated stroke range,
+  physical position, and status polling cadence without adding excessive Handy
+  API traffic.
+- Re-check finite position/script playback and HAMP legacy on hardware; their
+  visual range now follows program/slide min/max, but the position line is
+  still an estimate rather than a live device readout.
 
 ## Continuous Position Backend Real-Device Readiness
 
