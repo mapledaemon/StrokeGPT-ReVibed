@@ -1,0 +1,205 @@
+// Behavioral coverage for the motion/audio save-feedback wiring that used to
+// be pinned by tests/test_motion_save_feedback_wiring.py. These tests keep the
+// contract user-visible: a reachable backend rejection writes the server's
+// message to the same status element the real control uses.
+
+import { describe, it, before, beforeEach, after, afterEach } from 'node:test';
+import assert from 'node:assert';
+
+import { getStubElement, resetStubElement } from './_harness.mjs';
+import { initAudioControls } from '../../static/js/audio.js';
+import { initMotionControls } from '../../static/js/motion-control.js';
+import {
+    resetMotionPatternFeedback,
+    setMotionPatternEnabled,
+    setMotionPatternWeight,
+} from '../../static/js/motion/pattern-list.js';
+import { saveMotionFeedbackOptions } from '../../static/js/motion/feedback-controls.js';
+import { state } from '../../static/js/context.js';
+
+
+function jsonResponse(httpStatus, body) {
+    const factory = () => ({
+        ok: httpStatus >= 200 && httpStatus < 300,
+        status: httpStatus,
+        headers: {
+            get(name) {
+                return name && name.toLowerCase() === 'content-type'
+                    ? 'application/json'
+                    : null;
+            },
+        },
+        async json() { return body; },
+        async blob() { return null; },
+        clone() { return factory(); },
+    });
+    return factory();
+}
+
+describe('motion/audio save feedback', () => {
+    let originalFetch;
+    let originalRequestAnimationFrame;
+
+    before(async () => {
+        originalFetch = globalThis.fetch;
+        originalRequestAnimationFrame = globalThis.window.requestAnimationFrame;
+
+        globalThis.window.requestAnimationFrame = () => 0;
+        globalThis.fetch = async () => jsonResponse(200, {
+            status: 'success',
+            patterns: [{
+                id: 'seed',
+                name: 'Seed',
+                source: 'fixed',
+                enabled: true,
+                duration_ms: 1000,
+                action_count: 2,
+                actions: [{ at: 0, pos: 30 }, { at: 1000, pos: 70 }],
+            }],
+            feedback_history: [],
+        });
+        initMotionControls({ sendUserMessage: () => {} });
+        initAudioControls();
+        await flushAsyncHandlers();
+    });
+
+    after(() => {
+        globalThis.fetch = originalFetch;
+        globalThis.window.requestAnimationFrame = originalRequestAnimationFrame;
+    });
+
+    beforeEach(() => {
+        resetStubElement('status-text');
+        resetStubElement('motion-backend-status');
+        resetStubElement('motion-pattern-status');
+        resetStubElement('local-tts-status');
+        getStubElement('status-text').textContent = 'baseline';
+        getStubElement('motion-backend-status').textContent = 'baseline';
+        getStubElement('motion-pattern-status').textContent = 'baseline';
+        getStubElement('local-tts-status').textContent = 'baseline';
+        state.connectionLost = false;
+    });
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    function installBackendError(message) {
+        globalThis.fetch = async () => jsonResponse(200, {
+            status: 'error',
+            message,
+        });
+    }
+
+    async function flushAsyncHandlers() {
+        await Promise.resolve();
+        await Promise.resolve();
+        await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    it('saveMotionBackend surfaces the backend message on the backend status span', async () => {
+        installBackendError('Motion backend rejected.');
+
+        getStubElement('motion-backend-select').value = 'position';
+        getStubElement('save-motion-backend-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('motion-backend-status');
+        assert.strictEqual(status.textContent, 'Motion backend rejected.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveMotionSpeedLimits surfaces the backend message on global status', async () => {
+        installBackendError('Speed limit range is invalid.');
+
+        getStubElement('motion-speed-min-slider').value = '20';
+        getStubElement('motion-speed-max-slider').value = '80';
+        getStubElement('save-motion-speed-limits').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Speed limit range is invalid.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('toggleLongTermMemory surfaces the backend message on global status', async () => {
+        installBackendError('Memory toggle failed.');
+
+        getStubElement('toggle-memory-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Memory toggle failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveModeTimings surfaces the backend message on global status', async () => {
+        installBackendError('Mode timing range is invalid.');
+
+        getStubElement('auto-min-time').value = '4';
+        getStubElement('auto-max-time').value = '7';
+        getStubElement('edging-min-time').value = '5';
+        getStubElement('edging-max-time').value = '8';
+        getStubElement('milking-min-time').value = '2.5';
+        getStubElement('milking-max-time').value = '4.5';
+        getStubElement('save-timings-btn').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'Mode timing range is invalid.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('setMotionPatternEnabled surfaces the backend message on pattern status', async () => {
+        installBackendError('Pattern enablement failed.');
+
+        await setMotionPatternEnabled('pulse', false);
+
+        const status = getStubElement('motion-pattern-status');
+        assert.strictEqual(status.textContent, 'Pattern enablement failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('setMotionPatternWeight surfaces the backend message on pattern status', async () => {
+        installBackendError('Pattern weight failed.');
+
+        await setMotionPatternWeight('pulse', 72);
+
+        const status = getStubElement('motion-pattern-status');
+        assert.strictEqual(status.textContent, 'Pattern weight failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('resetMotionPatternFeedback surfaces the backend message on pattern status', async () => {
+        installBackendError('Pattern feedback reset failed.');
+
+        await resetMotionPatternFeedback('pulse');
+
+        const status = getStubElement('motion-pattern-status');
+        assert.strictEqual(status.textContent, 'Pattern feedback reset failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveMotionFeedbackOptions surfaces the backend message on pattern status', async () => {
+        installBackendError('Feedback options failed.');
+
+        getStubElement('motion-feedback-auto-disable-checkbox').checked = true;
+        await saveMotionFeedbackOptions();
+
+        const status = getStubElement('motion-pattern-status');
+        assert.strictEqual(status.textContent, 'Feedback options failed.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('setupElevenLabsKey surfaces the backend message on global status', async () => {
+        installBackendError('ElevenLabs key is invalid.');
+
+        getStubElement('elevenlabs-key-input').value = 'sk-test';
+        getStubElement('set-elevenlabs-key-button').click();
+        await flushAsyncHandlers();
+
+        const status = getStubElement('status-text');
+        assert.strictEqual(status.textContent, 'ElevenLabs key is invalid.');
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+});
