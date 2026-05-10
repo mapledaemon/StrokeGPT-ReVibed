@@ -1218,28 +1218,39 @@ def handle_user_message():
         chat_text = "The local model returned movement data but no chat text. Check Ollama model status and try again."
     is_llm_transport_error = _is_llm_transport_error_text(chat_text)
 
+    if is_llm_transport_error:
+        timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
+        return jsonify({
+            "status": "model_error",
+            "message": "Model request failed. Check Ollama status and try again.",
+            "chat": chat_text,
+            "chat_queued": False,
+            "motion_applied": False,
+            "motion_repaired": False,
+            "timings": timings,
+        })
+
     should_revert_persona = False
-    if not is_llm_transport_error:
-        with app_state.lock:
-            if app_state.special_persona_mode is not None:
-                app_state.special_persona_interactions_left -= 1
-                should_revert_persona = app_state.special_persona_interactions_left <= 0
-                if should_revert_persona:
-                    app_state.special_persona_mode = None
+    with app_state.lock:
+        if app_state.special_persona_mode is not None:
+            app_state.special_persona_interactions_left -= 1
+            should_revert_persona = app_state.special_persona_interactions_left <= 0
+            if should_revert_persona:
+                app_state.special_persona_mode = None
     if should_revert_persona:
         add_message_to_queue("(Personality core reverted to standard operation.)", add_to_history=False)
 
     add_message_to_queue(
         chat_text,
-        add_to_history=bool(str(raw_chat_text or "").strip()) and not is_llm_transport_error,
+        add_to_history=bool(str(raw_chat_text or "").strip()),
         queue_message=True,
-        generate_audio=not is_llm_transport_error,
+        generate_audio=True,
     )
-    if not is_llm_transport_error and (new_mood := llm_response.get("new_mood")):
+    if new_mood := llm_response.get("new_mood"):
         with app_state.lock:
             app_state.current_mood = new_mood
     motion_applied = False
-    if not is_llm_transport_error and not app_state.auto_mode_active_task:
+    if not app_state.auto_mode_active_task:
         motion_started = time.perf_counter()
         target = _apply_llm_response_move(
             llm_response,

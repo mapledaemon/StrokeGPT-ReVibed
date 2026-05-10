@@ -152,6 +152,28 @@ describe('chat action statuses', () => {
         assert.strictEqual(state.pendingQueuedBotEcho, '');
     });
 
+    it('renders model transport errors as direct system errors without polling updates', async () => {
+        const calls = installChatResponses({
+            status: 'model_error',
+            message: 'Model request failed. Check Ollama status and try again.',
+            chat: 'LLM Connection Error: read timed out',
+            chat_queued: false,
+        });
+
+        const result = await sendUserMessage('hello');
+        const chatText = collectText(getStubElement('chat-messages-container'));
+        const statusText = getStubElement('status-text');
+
+        assert.strictEqual(result.handled, false);
+        assert.deepStrictEqual(calls, ['/send_message']);
+        assert.strictEqual(occurrenceCount(chatText, 'MODEL ERROR'), 1);
+        assert.strictEqual(occurrenceCount(chatText, 'LLM Connection Error: read timed out'), 1);
+        assert.strictEqual(statusText.textContent, 'Model request failed. Check Ollama status and try again.');
+        assert.strictEqual(statusText.dataset.statusTone, 'error');
+        assert.strictEqual(statusText.style.color, 'var(--red)');
+        assert.strictEqual(state.pendingQueuedBotEcho, '');
+    });
+
     it('does not poll updates for unhandled failure statuses', async () => {
         const calls = installChatResponses({ status: 'auto_started_but_blocked' });
 

@@ -114,9 +114,10 @@ class WebChatRouteTests(WebTestCase):
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
-            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["status"], "model_error")
+            self.assertEqual(data["message"], "Model request failed. Check Ollama status and try again.")
             self.assertEqual(data["chat"], error_text)
-            self.assertTrue(data["chat_queued"])
+            self.assertFalse(data["chat_queued"])
             self.assertFalse(data["motion_repaired"])
             self.assertFalse(data["motion_applied"])
 
@@ -125,7 +126,7 @@ class WebChatRouteTests(WebTestCase):
                 queued = updates.get_json()["messages"]
             finally:
                 updates.close()
-            self.assertEqual(queued, [error_text])
+            self.assertEqual(queued, [])
             self.assertEqual(list(app_state.chat_history), [{"role": "user", "content": "switch to another rhythm"}])
             repair_motion_response.assert_not_called()
             generate_audio.assert_not_called()

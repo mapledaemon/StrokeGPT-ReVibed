@@ -213,9 +213,6 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 - Keep chat readiness tied to local model availability: when Ollama is
   offline, downloading, or missing the selected model, the chat composer
   should look blocked and explain the problem instead of appearing ready.
-- Treat model transport failures differently from assistant dialogue:
-  timeout/connection errors should render as system/error states and should
-  not be fed back into normal chat history, TTS, or persona flow.
 - Reserve visible UI slots for future voice input during the chat refactor:
   a disabled multi-purpose microphone menu button and a disabled Settings >
   Voice input provider selector can land before the backend, but they must
