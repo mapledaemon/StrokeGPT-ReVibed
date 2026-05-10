@@ -330,5 +330,110 @@ class VoiceInputServiceTests(unittest.TestCase):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+class DeviceDetectionTests(unittest.TestCase):
+    """Pin the auto-detection contract for ``_detect_device`` /
+    ``_detect_compute_type``. Closes ROADMAP #13 ASR step 1 line for
+    "auto-CUDA/device detection, compute-type selection."
+    """
+
+    def test_explicit_value_honored_case_and_whitespace_insensitive(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_device("CPU"), "cpu")
+        self.assertEqual(asr._detect_device("  cpu  "), "cpu")
+        self.assertEqual(asr._detect_device("cuda"), "cuda")
+
+    def test_explicit_pin_to_specific_gpu_index_passes_through(self):
+        # `cuda:1` is a valid CTranslate2 device spec for users with
+        # multi-GPU setups. Honor it without trying to interpret.
+        from strokegpt import asr
+        self.assertEqual(asr._detect_device("cuda:1"), "cuda:1")
+
+    def test_auto_with_no_cuda_returns_cpu(self):
+        from strokegpt import asr
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=0):
+            self.assertEqual(asr._detect_device("auto"), "cpu")
+
+    def test_auto_with_cuda_returns_cuda(self):
+        from strokegpt import asr
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=1):
+            self.assertEqual(asr._detect_device("auto"), "cuda")
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=4):
+            self.assertEqual(asr._detect_device("auto"), "cuda")
+
+    def test_empty_string_treated_as_auto(self):
+        from strokegpt import asr
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=0):
+            self.assertEqual(asr._detect_device(""), "cpu")
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=1):
+            self.assertEqual(asr._detect_device(""), "cuda")
+
+    def test_none_treated_as_auto(self):
+        from strokegpt import asr
+        with mock.patch.object(asr, "_count_cuda_devices", return_value=0):
+            self.assertEqual(asr._detect_device(None), "cpu")
+
+
+class ComputeTypeDetectionTests(unittest.TestCase):
+    def test_explicit_honored_case_and_whitespace_insensitive(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type("INT8_FLOAT16", "cuda"), "int8_float16")
+        self.assertEqual(asr._detect_compute_type("  int8  ", "cuda"), "int8")
+
+    def test_auto_cuda_picks_float16(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type("auto", "cuda"), "float16")
+
+    def test_auto_cuda_with_index_picks_float16(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type("auto", "cuda:0"), "float16")
+        self.assertEqual(asr._detect_compute_type("auto", "cuda:1"), "float16")
+
+    def test_auto_cpu_picks_int8(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type("auto", "cpu"), "int8")
+
+    def test_auto_unknown_device_picks_int8_defensive(self):
+        # If a future device string ("metal", "rocm", etc.) reaches here,
+        # default to int8 rather than guessing a CUDA-specific compute_type.
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type("auto", "metal"), "int8")
+        self.assertEqual(asr._detect_compute_type("auto", ""), "int8")
+
+    def test_unset_treated_as_auto(self):
+        from strokegpt import asr
+        self.assertEqual(asr._detect_compute_type(None, "cpu"), "int8")
+        self.assertEqual(asr._detect_compute_type("", "cuda"), "float16")
+
+
+class CountCudaDevicesTests(unittest.TestCase):
+    def test_returns_zero_when_ctranslate2_get_count_raises(self):
+        # ctranslate2 ships as a faster-whisper transitive dep on systems
+        # with the voice stack installed. Even when present, broken CUDA
+        # libs can make ``get_cuda_device_count`` throw at runtime; the
+        # helper must absorb that and return 0 so auto-detection falls
+        # back to CPU instead of crashing the model load.
+        from strokegpt import asr
+        try:
+            import ctranslate2
+        except ImportError:
+            # ctranslate2 not installed in this env; helper returns 0
+            # via the same except-Exception path. Verify it.
+            self.assertEqual(asr._count_cuda_devices(), 0)
+            return
+        with mock.patch.object(
+            ctranslate2, "get_cuda_device_count", side_effect=RuntimeError("CUDA libs missing"),
+        ):
+            self.assertEqual(asr._count_cuda_devices(), 0)
+
+    def test_returns_count_when_ctranslate2_reports_devices(self):
+        from strokegpt import asr
+        try:
+            import ctranslate2
+        except ImportError:
+            self.skipTest("ctranslate2 not installed; integration check skipped")
+        with mock.patch.object(ctranslate2, "get_cuda_device_count", return_value=2):
+            self.assertEqual(asr._count_cuda_devices(), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
