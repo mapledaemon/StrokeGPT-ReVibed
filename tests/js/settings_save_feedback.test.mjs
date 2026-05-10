@@ -8,20 +8,23 @@
 //    a JSON body with a useful ``message`` field even on 400. ``apiCall``
 //    must surface that message in the global statusText instead of the
 //    generic "Error: server returned 400." -- otherwise the user sees a
-//    save fail with no detail about WHY.
+//    save fail with no detail about WHY. HTTP failures use the global
+//    error tone because the backend was reachable but the request failed
+//    at the transport/status layer.
 //
 // 2. ``reportSaveFailure`` for the 200-with-error case: some routes
 //    (audio enable/disable, ``/pull_ollama_model``) return HTTP 200 with
 //    ``{"status": "error" | "started", "message": "..."}``. The success
 //    branch in the caller does not fire; the save handler must surface
-//    the server message inline on a per-write status element.
+//    the server message inline on a per-write status element with a
+//    warning tone.
 
 import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
 import { initSettingsControls, setPersonaPrompt } from '../../static/js/settings.js';
-import { state, reportSaveFailure, apiCall } from '../../static/js/context.js';
+import { state, reportSaveFailure, apiCall, setStatusMessage } from '../../static/js/context.js';
 
 
 // Build a fetch-shaped mock that supports the small surface apiCall uses
@@ -82,6 +85,18 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
 
     // ---- reportSaveFailure unit tests ----
 
+    it('setStatusMessage applies explicit tones without inventing copy', () => {
+        const target = getStubElement('status-text');
+        setStatusMessage(target, 'Server is offline.', 'error');
+        assert.strictEqual(target.textContent, 'Server is offline.');
+        assert.strictEqual(target.dataset.statusTone, 'error');
+        assert.strictEqual(target.style.color, 'var(--red)');
+
+        setStatusMessage(target, 'Saved.', 'success');
+        assert.strictEqual(target.dataset.statusTone, 'success');
+        assert.strictEqual(target.style.color, 'var(--cyan)');
+    });
+
     it('reportSaveFailure stays silent on success', () => {
         const target = getStubElement('status-text');
         target.textContent = 'baseline';
@@ -114,6 +129,7 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
             'fallback should not be used when server provided one',
         );
         assert.strictEqual(target.textContent, 'persona name is too long');
+        assert.strictEqual(target.dataset.statusTone, 'warning');
         assert.strictEqual(target.style.color, 'var(--yellow)');
     });
 
@@ -148,6 +164,8 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
             'Persona prompt is required.',
             'apiCall must surface the server message instead of "Error: server returned 400."',
         );
+        assert.strictEqual(statusText.dataset.statusTone, 'error');
+        assert.strictEqual(statusText.style.color, 'var(--red)');
     });
 
     it('apiCall falls back to the generic line when the body has no message', async () => {
@@ -157,6 +175,8 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         const statusText = getStubElement('status-text');
 
         assert.strictEqual(statusText.textContent, 'Error: server returned 500.');
+        assert.strictEqual(statusText.dataset.statusTone, 'error');
+        assert.strictEqual(statusText.style.color, 'var(--red)');
     });
 
     it('apiCall falls back to the generic line when the body is not JSON', async () => {
@@ -173,6 +193,8 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         const statusText = getStubElement('status-text');
 
         assert.strictEqual(statusText.textContent, 'Error: server returned 502.');
+        assert.strictEqual(statusText.dataset.statusTone, 'error');
+        assert.strictEqual(statusText.style.color, 'var(--red)');
     });
 
     // ---- end-to-end via setPersonaPrompt ----

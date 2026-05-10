@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #127 - Backend Failure Status Tone Cleanup
+----------------------------------------------------------
+
+Branch: codex/backend-feedback-simplify
+
+- Added a shared frontend status-tone helper so backend/network loss and HTTP
+  errors now use an explicit global error tone instead of inheriting whatever
+  color the status line had before.
+- Reported connection restoration with a success tone and cleared stale global
+  backend-error tone on later successful backend responses, so later
+  success/status copy does not stay painted as an error.
+- Kept reachable route rejections on `reportSaveFailure()` as one local warning
+  near the affected control, with `reportSaveFailure()` still silent when
+  `apiCall()` already reported a network or HTTP failure.
+- Updated the backend-failure known-problems and roadmap guidance so future
+  handlers extend the shared status-tone path instead of adding more ad hoc
+  yellow status writes.
+
+
 2026-05-10 - PR #126 - Chat Reply Echo And Session Assumption Cleanup
 ---------------------------------------------------------------------
 

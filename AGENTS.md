@@ -192,6 +192,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   browser when the response includes `chat` plus `chat_queued: true`; the next
   `/get_updates` poll skips the matching queued echo so audio readiness can
   still be polled without duplicating the message.
+- Backend-failure feedback uses `setStatusMessage()` plus
+  `reportSaveFailure()`: network/backend loss and HTTP errors are global error
+  states, while reachable route rejections get one local warning near the
+  affected control. Avoid adding ad hoc `var(--yellow)` writes for new backend
+  failures.
 - Browser UI code is split by behavior under `static/js/`. Keep new frontend
   work inside the relevant module instead of growing `static/app.js` again.
 - Local Chatterbox sample browsing uploads/copies the selected file into `voice_samples/`; do not rely on browser-local file paths.

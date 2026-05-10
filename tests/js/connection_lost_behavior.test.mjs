@@ -97,6 +97,8 @@ describe('connection-lost behavior', () => {
         assert.equal(state.connectionLost, true);
         assert.equal(getStubElement('connection-lost-banner').hidden, false);
         assert.equal(getStubElement('status-text').textContent, 'Error: Cannot connect to server.');
+        assert.equal(getStubElement('status-text').dataset.statusTone, 'error');
+        assert.equal(getStubElement('status-text').style.color, 'var(--red)');
 
         globalThis.fetch = async () => jsonResponse(400, {
             status: 'error',
@@ -108,6 +110,25 @@ describe('connection-lost behavior', () => {
         assert.equal(state.connectionLost, false);
         assert.equal(getStubElement('connection-lost-banner').hidden, true);
         assert.equal(getStubElement('status-text').textContent, 'Persona prompt is required.');
+        assert.equal(getStubElement('status-text').dataset.statusTone, 'error');
+        assert.equal(getStubElement('status-text').style.color, 'var(--red)');
+    });
+
+    it('a later successful response clears the global backend error tone', async () => {
+        globalThis.fetch = async () => {
+            throw new Error('backend is gone');
+        };
+        await apiCall('/check_settings');
+
+        globalThis.fetch = async () => jsonResponse(200, { status: 'success' });
+        const result = await apiCall('/check_settings');
+
+        assert.deepEqual(result, { status: 'success' });
+        assert.equal(state.connectionLost, false);
+        assert.equal(getStubElement('connection-lost-banner').hidden, true);
+        assert.equal(getStubElement('status-text').textContent, 'Connection restored.');
+        assert.equal(getStubElement('status-text').dataset.statusTone, 'success');
+        assert.equal(getStubElement('status-text').style.color, 'var(--cyan)');
     });
 
     it('applyBackendRequiredControlState can lock dynamic controls immediately', () => {

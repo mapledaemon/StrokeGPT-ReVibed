@@ -278,6 +278,21 @@ export const state = {
 };
 
 export const BACKEND_REQUIRED_SELECTOR = '[data-requires-backend]';
+const STATUS_TONE_COLORS = {
+    neutral: '',
+    info: 'var(--comment)',
+    success: 'var(--cyan)',
+    warning: 'var(--yellow)',
+    error: 'var(--red)',
+};
+
+export function setStatusMessage(statusEl, message, tone = 'neutral') {
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    const normalizedTone = Object.prototype.hasOwnProperty.call(STATUS_TONE_COLORS, tone) ? tone : 'neutral';
+    statusEl.dataset.statusTone = normalizedTone;
+    statusEl.style.color = STATUS_TONE_COLORS[normalizedTone];
+}
 
 export function applyBackendRequiredControlState(control) {
     if (!control || !('disabled' in control)) return control;
@@ -316,7 +331,11 @@ function blockBackendRequiredInteraction(event) {
     if (!control) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (el.statusText) el.statusText.textContent = 'Connection lost. Reconnect before changing settings or sending commands.';
+    setStatusMessage(
+        el.statusText,
+        'Connection lost. Reconnect before changing settings or sending commands.',
+        'error',
+    );
 }
 
 export function initBackendRequiredControlGuard() {
@@ -350,13 +369,19 @@ export function setConnectionLost(isLost) {
 
 export async function fetchWithConnectionState(endpoint, options = {}) {
     try {
+        const wasConnectionLost = state.connectionLost;
         const response = await fetch(endpoint, options);
         setConnectionLost(false);
+        if (wasConnectionLost) {
+            setStatusMessage(el.statusText, 'Connection restored.', 'success');
+        } else if (el.statusText?.dataset.statusTone === 'error') {
+            setStatusMessage(el.statusText, el.statusText.textContent, 'neutral');
+        }
         return response;
     } catch (error) {
         console.error(`API call to ${endpoint} failed:`, error);
         setConnectionLost(true);
-        if (el.statusText) el.statusText.textContent = 'Error: Cannot connect to server.';
+        setStatusMessage(el.statusText, 'Error: Cannot connect to server.', 'error');
         throw error;
     }
 }
@@ -389,9 +414,7 @@ export async function apiCall(endpoint, options = {}) {
                 serverMessage = errorBody.message.trim();
             }
         } catch { /* response body was not JSON or was empty */ }
-        if (el.statusText) {
-            el.statusText.textContent = serverMessage || `Error: server returned ${response.status}.`;
-        }
+        setStatusMessage(el.statusText, serverMessage || `Error: server returned ${response.status}.`, 'error');
         return undefined;
     }
     const contentType = response.headers.get('content-type');
@@ -399,13 +422,10 @@ export async function apiCall(endpoint, options = {}) {
     return response.json();
 }
 
-// Surface a failure message inline on a per-write status element when a
-// settings/save endpoint was REACHABLE but rejected the write (e.g. HTTP
-// 4xx with `{status: 'error', message: ...}` body). Network failures are
-// already covered by the connection-lost banner and the global statusText
-// fallback in `apiCall`, so when ``data`` is undefined this helper stays
-// silent to avoid overwriting a useful "Cannot connect" line with a
-// duplicate. Caller still handles the success branch itself.
+// Backend-failure feedback has three levels:
+// - Network loss: persistent banner + global error tone from apiCall().
+// - HTTP error: global error tone from apiCall().
+// - Reachable route rejection: one local warning from reportSaveFailure().
 //
 // Use:
 //   const data = await apiCall(...);
@@ -415,18 +435,15 @@ export async function apiCall(endpoint, options = {}) {
 //       reportSaveFailure(el.someStatus, data, 'Save failed.');
 //   }
 //
-// Pass ``el.statusText`` as ``statusEl`` for endpoints without a
-// dedicated status span. This is the canonical pattern for the
-// KNOWN_PROBLEMS "Web UI Stays Functional After Backend Shutdown"
-// per-write audit follow-up; the connection-lost banner caught the
-// network case, this catches the backend-reachable-but-rejected case.
+// Pass ``el.statusText`` as ``statusEl`` for endpoints without a dedicated
+// status span. When ``data`` is undefined, apiCall() already reported the
+// network/HTTP failure and this helper deliberately stays silent.
 export function reportSaveFailure(statusEl, data, fallbackMessage = 'Save failed.') {
     if (!statusEl) return;
     if (data === undefined) return; // banner + statusText already surfaced the network failure
     if (data && data.status === 'success') return;
     const detail = (data && typeof data.message === 'string' && data.message.trim()) || fallbackMessage;
-    statusEl.textContent = detail;
-    statusEl.style.color = 'var(--yellow)';
+    setStatusMessage(statusEl, detail, 'warning');
 }
 
 export function clampNumber(value, min, max, fallback) {

@@ -157,6 +157,13 @@ unlocking controls that were already disabled. The "backend reachable but
 rejected the write" case surfaces the backend's `message` through either the
 global status text or the affected control's local status span.
 
+The frontend now uses one explicit status helper for backend-failure tones:
+network/backend loss and HTTP errors use the global status line with an error
+tone, while reachable route rejections use one local warning near the affected
+control. `reportSaveFailure()` stays silent when `apiCall()` has already
+reported a network or HTTP failure, so handlers do not overwrite the useful
+global line with a second generic warning.
+
 The code audit for known write/action controls is complete. Settings saves,
 motion pattern feedback, motion training start/preview/stop/save/feedback,
 like/dislike, Edge/Milk/Freestyle starts, LLM edge permissions, pause/resume,
@@ -170,10 +177,10 @@ Remaining watch work:
 - Smoke-test the real browser flow by starting the app, opening Settings,
   stopping the backend process, and confirming the banner/control lock and
   per-control failure copy still match the runtime tests.
-- Do not expand yellow warning/status styling ad hoc. If real use shows that
-  save failures, slow ASR warnings, unavailable models, and other warnings are
-  visually ambiguous, handle that as one status-severity pass rather than
-  another handler-by-handler patch.
+- Do not expand warning/status styling ad hoc. If real use shows that save
+  failures, slow ASR warnings, unavailable models, and other warnings are still
+  visually ambiguous, extend the shared status-tone helper rather than adding
+  handler-by-handler color writes.
 - Confirm feedback-driven changes to weights or pattern enablement show the
   resulting numeric value in the GUI immediately so the user can see the
   change took effect rather than guessing from device behavior.
