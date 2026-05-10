@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #129 - Chat Model Readiness Send Guard
+------------------------------------------------------
+
+Branch: codex/chat-readiness-send-guard
+
+- Added a shared `sendUserMessage()` guard for model-availability blocks so
+  button clicks, Enter sends, voice transcript sends, and future callers all
+  stop before `/send_message` when Ollama is offline, downloading, or missing
+  the selected model.
+- Preserved the user's draft chat text when the send is blocked, surfaced the
+  existing model-readiness message through the shared warning status tone, and
+  returned a structured `blocked` result for voice diagnostics.
+- Kept voice transcript previews visible when a blocked chat send rejects the
+  transcript handoff, so users do not lose recognized text just because the
+  local model is not ready.
+
+
 2026-05-10 - PR #128 - Model Error Chat Boundary Cleanup
 --------------------------------------------------------
 

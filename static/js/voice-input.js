@@ -1188,7 +1188,10 @@ function hideTranscriptPreview() {
 async function sendPendingTranscript() {
     const transcript = state.voiceInputPendingTranscript.trim();
     hideTranscriptPreview();
-    if (transcript) await submitVoiceTranscriptToChat(transcript);
+    if (transcript) {
+        const result = await submitVoiceTranscriptToChat(transcript);
+        if (result?.blocked) showTranscriptPreview(transcript);
+    }
 }
 
 function retryVoiceInput() {

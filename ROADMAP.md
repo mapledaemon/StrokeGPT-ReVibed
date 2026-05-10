@@ -210,9 +210,6 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   should not yank the user away from older content, the local "Latest" jump
   affordance should stay visible and keyboard reachable, and later streaming
   work should reuse the same near-bottom stickiness contract.
-- Keep chat readiness tied to local model availability: when Ollama is
-  offline, downloading, or missing the selected model, the chat composer
-  should look blocked and explain the problem instead of appearing ready.
 - Reserve visible UI slots for future voice input during the chat refactor:
   a disabled multi-purpose microphone menu button and a disabled Settings >
   Voice input provider selector can land before the backend, but they must
