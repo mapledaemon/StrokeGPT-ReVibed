@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #136 - Motion Status Compact Controls
+------------------------------------------------------
+
+Branch: codex/motion-status-compact-controls
+
+- Tightened the always-visible motion status strip by shrinking the meter
+  columns, meter tracks, and thumbs feedback buttons while keeping their hit
+  targets consistent across desktop and phone layouts.
+- Moved the feedback button sizing onto a dedicated token and narrowed the
+  Visual Element Formatting known-problem entry to watch for future
+  user-visible spacing issues rather than listing the already-polished areas.
+
+
 2026-05-10 - PR #135 - Motion Training Layout Tightening
 ---------------------------------------------------------
 
