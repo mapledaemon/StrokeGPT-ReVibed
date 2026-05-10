@@ -221,6 +221,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="voice-input-max-recording-ms-input"', page)
             self.assertIn('id="voice-input-noise-floor-input"', page)
             self.assertIn('id="voice-input-noise-floor-val"', page)
+            self.assertIn('<details id="voice-input-advanced-capture-panel" class="voice-input-advanced-panel">', page)
+            self.assertIn("<summary>Advanced Capture</summary>", page)
             self.assertIn('id="voice-input-microphone-control" class="voice-input-tuning-group" data-requires-backend', page)
             self.assertIn("<legend>Microphone Processing</legend>", page)
             self.assertIn('id="voice-input-noise-suppression-checkbox" checked data-requires-backend', page)
@@ -237,6 +239,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="browse-voice-input-model-btn" class="my-button" type="button" data-requires-backend', page)
             self.assertIn('<label class="settings-field-label" for="voice-input-language-input">Language</label>', page)
             self.assertIn('id="voice-input-language-input"', page)
+            self.assertIn('<details id="voice-input-advanced-recognition-panel" class="voice-input-advanced-panel">', page)
+            self.assertIn("<summary>Advanced Recognition</summary>", page)
             self.assertIn('id="voice-input-recognition-tuning-control" class="voice-input-tuning-group" data-requires-backend', page)
             self.assertIn("<legend>Recognition Tuning</legend>", page)
             self.assertIn('id="voice-input-beam-size-input"', page)
@@ -251,6 +255,12 @@ class WebStaticAssetTests(WebTestCase):
                 page.index('class="settings-subsection voice-input-settings"'),
                 page.index('class="settings-subsection voice-output-settings"'),
             )
+            self.assertLess(
+                page.index('id="calibrate-voice-input-noise-btn"'),
+                page.index('id="voice-input-advanced-capture-panel"'),
+            )
+            self.assertNotIn('id="voice-input-advanced-capture-panel" class="voice-input-advanced-panel" open', page)
+            self.assertNotIn('id="voice-input-advanced-recognition-panel" class="voice-input-advanced-panel" open', page)
             self.assertIn('class="model-actions"', page)
             self.assertIn('class="model-actions model-actions-wide"', page)
         finally:
@@ -354,6 +364,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".settings-field-label, .voice-input-choice-group legend", css)
             self.assertIn(".voice-input-choice-group { margin: 0; padding: 0; border: 0;", css)
             self.assertIn(".voice-input-tuning-group { margin: 0; padding: 10px; border: 1px solid #2d333d;", css)
+            self.assertIn(".voice-input-advanced-panel { border: 1px solid #2d333d;", css)
+            self.assertIn(".voice-input-advanced-panel summary { min-height: var(--control-min-height);", css)
             self.assertIn(".voice-input-number-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));", css)
             self.assertIn(".segmented-control { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));", css)
             self.assertIn(".segmented-control input:checked + span", css)

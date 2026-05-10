@@ -244,6 +244,12 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .voice-input-choice-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .voice-input-tuning-group { margin: 0; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: #151922; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .voice-input-tuning-group .slider-container { margin: 0; }
+.voice-input-advanced-panel { border: 1px solid #2d333d; border-radius: 6px; background: #151922; min-width: 0; }
+.voice-input-advanced-panel summary { min-height: var(--control-min-height); padding: 8px 10px; color: var(--foreground); cursor: pointer; display: flex; align-items: center; font-weight: 600; }
+.voice-input-advanced-panel summary:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.voice-input-advanced-panel[open] { padding-bottom: 10px; }
+.voice-input-advanced-panel[open] > :not(summary) { margin: 0 10px 8px; }
+.voice-input-advanced-panel[open] > :last-child { margin-bottom: 0; }
 .voice-input-number-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; min-width: 0; }
 .voice-input-number-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 6px; align-items: center; min-width: 0; color: var(--comment); font-size: 0.78rem; }
 .voice-input-number-field span { grid-column: 1 / -1; color: var(--foreground); font-weight: 600; }

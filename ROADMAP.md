@@ -533,16 +533,15 @@ and stop safety paths.
 - Verify push-to-talk and hands-free recognition with real microphones on a
   slow Windows laptop and a faster desktop, including empty/noisy clips,
   short commands, and longer natural-language movement requests.
-- Use the current hands-free, browser microphone, room-noise, and ASR tuning
-  controls during real microphone testing as instrumentation first. Promote
-  only the controls that users actually need during normal operation; move the
-  rest behind advanced diagnostics or remove them from the default Settings >
-  Voice path.
-- Simplify the default Voice tab around provider, recording mode, transcript
-  handling, model preset, language, and one clear calibration/sensitivity path.
-  Do not keep beam size, condition-previous, VAD threshold, VAD silence, VAD
-  padding, and raw noise-floor values visible as routine settings unless the
-  real-mic baseline proves they are necessary recovery tools.
+- Use the current advanced capture and recognition controls during real
+  microphone testing as instrumentation first. Promote only the controls that
+  users actually need during normal operation; move the rest to diagnostics or
+  remove them from Settings > Voice after the baseline is measured.
+- Keep the default Voice tab centered on provider, recording mode, transcript
+  handling, model preset/path, language, and one clear calibration/sensitivity
+  path. Do not move beam size, condition-previous, VAD threshold, VAD silence,
+  VAD padding, and raw noise-floor values back into the routine path unless
+  the real-mic baseline proves they are necessary recovery tools.
 - Use the faster-whisper model presets during recognition testing:
   `tiny.en` for lowest latency, `base.en` as the first balanced laptop target,
   `small.en` for better noise tolerance, and `distil-large-v3` for faster
