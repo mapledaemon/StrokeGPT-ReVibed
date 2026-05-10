@@ -16,11 +16,11 @@
 //    branch in the caller does not fire; the save handler must surface
 //    the server message inline on a per-write status element.
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { setPersonaPrompt } from '../../static/js/settings.js';
+import { initSettingsControls, setPersonaPrompt } from '../../static/js/settings.js';
 import { state, reportSaveFailure, apiCall } from '../../static/js/context.js';
 
 
@@ -48,6 +48,10 @@ function jsonResponse(httpStatus, body) {
 describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
     let originalFetch;
 
+    before(() => {
+        initSettingsControls({ addChatMessage: () => {} });
+    });
+
     beforeEach(() => {
         // Reset state and the status element each test sees.
         resetStubElement('status-text');
@@ -59,11 +63,21 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         originalFetch = globalThis.fetch;
     });
 
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
     function installFetchResult(response) {
         globalThis.fetch = async () => {
             if (response instanceof Error) throw response;
             return response;
         };
+    }
+
+    async function flushAsyncClickHandlers() {
+        await Promise.resolve();
+        await Promise.resolve();
+        await new Promise(resolve => setTimeout(resolve, 0));
     }
 
     // ---- reportSaveFailure unit tests ----
@@ -207,5 +221,36 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         const result = await setPersonaPrompt('   ', false);
         assert.strictEqual(result, null, 'empty input short-circuits before the fetch');
         assert.strictEqual(fetchCalled, false, 'fetch was not called');
+    });
+
+    it('saveDiagnosticsLevels: backend 200-status:error surfaces the failure message', async () => {
+        installFetchResult(jsonResponse(200, {
+            status: 'error',
+            message: 'Diagnostics level is invalid.',
+        }));
+
+        getStubElement('motion-diagnostics-level-select').value = 'debug';
+        getStubElement('ollama-diagnostics-level-select').value = 'status';
+        getStubElement('save-motion-diagnostics-level-btn').click();
+        await flushAsyncClickHandlers();
+
+        const statusText = getStubElement('status-text');
+        assert.strictEqual(statusText.textContent, 'Diagnostics level is invalid.');
+        assert.strictEqual(statusText.style.color, 'var(--yellow)');
+    });
+
+    it('setOllamaModel: backend 200-status:error surfaces the model-specific failure message', async () => {
+        installFetchResult(jsonResponse(200, {
+            status: 'error',
+            message: 'Model name is not available.',
+        }));
+
+        const modelStatus = resetStubElement('ollama-model-status');
+        getStubElement('ollama-model-input').value = 'local/test-model:latest';
+        getStubElement('save-ollama-model-btn').click();
+        await flushAsyncClickHandlers();
+
+        assert.strictEqual(modelStatus.textContent, 'Model name is not available.');
+        assert.strictEqual(modelStatus.style.color, 'var(--yellow)');
     });
 });
