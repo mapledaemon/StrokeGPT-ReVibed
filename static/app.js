@@ -10,12 +10,25 @@ import { initVoiceInputControls } from './js/voice-input.js';
 import { initSingleActiveTabWarning } from './js/browser-session.js';
 
 function startPollingLoops() {
-    setInterval(pollChatUpdates, 1500);
-    setInterval(pollMotionStatus, 500);
-    setInterval(async () => {
+    startGuardedPoll(pollChatUpdates, 1500);
+    startGuardedPoll(pollMotionStatus, 500);
+    startGuardedPoll(async () => {
         if (state.ollamaDownloadPolling) await refreshOllamaStatus();
         if (state.localTtsStatusPolling) await refreshLocalTtsStatus();
     }, 2500);
+}
+
+function startGuardedPoll(callback, intervalMs) {
+    let inFlight = false;
+    setInterval(async () => {
+        if (inFlight) return;
+        inFlight = true;
+        try {
+            await callback();
+        } finally {
+            inFlight = false;
+        }
+    }, intervalMs);
 }
 
 function initApp() {

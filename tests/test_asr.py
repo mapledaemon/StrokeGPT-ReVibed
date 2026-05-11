@@ -450,6 +450,31 @@ class VoiceInputServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_cached_model_status_reuses_positive_scan_result(self):
+        cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"
+        cache_parent.mkdir(parents=True, exist_ok=True)
+        temp_dir = tempfile.mkdtemp(prefix="cached_model_reuse_", dir=cache_parent)
+        try:
+            service = VoiceInputService(model_cache_dir=temp_dir)
+            service.configure(
+                provider="local_faster_whisper",
+                enabled=True,
+                model="tiny.en",
+                language="en",
+            )
+            cached_model_dir = Path(temp_dir) / "faster-whisper-tiny-en" / "snapshots" / "abc123"
+
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr.os.walk", return_value=[(str(cached_model_dir), [], ["model.bin"])]) as walk_cache,
+            ):
+                self.assertTrue(service.status()["model_cached"])
+                self.assertTrue(service.status()["model_cached"])
+
+            self.assertEqual(walk_cache.call_count, 1)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 class DeviceDetectionTests(unittest.TestCase):
     """Pin the auto-detection contract for ``_detect_device`` /

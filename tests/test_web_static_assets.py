@@ -728,6 +728,16 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("source = 'chat'", script)
         self.assertIn("source,", script)
 
+    def test_app_polling_intervals_skip_overlapping_requests(self):
+        script = self.frontend_scripts()
+
+        self.assertIn("function startGuardedPoll(callback, intervalMs)", script)
+        self.assertIn("let inFlight = false", script)
+        self.assertIn("if (inFlight) return", script)
+        self.assertIn("startGuardedPoll(pollChatUpdates, 1500)", script)
+        self.assertIn("startGuardedPoll(pollMotionStatus, 500)", script)
+        self.assertIn("startGuardedPoll(async () =>", script)
+
     def test_frontend_js_preserves_scrollback_when_user_is_reading(self):
         script = self.frontend_scripts()
 
