@@ -346,11 +346,13 @@
                     <button id="save-timings-btn" class="my-button" data-requires-backend>Save Timings</button>
                 </div>
                 <div class="settings-subsection motion-panel">
-                    <h4>LLM Edge Permissions</h4>
+                    <h4>LLM Mode Permissions</h4>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-freestyle-checkbox" checked> Allow LLM to edge in freestyle</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
-                    <button id="save-llm-edge-permissions-btn" class="my-button" data-requires-backend>Save LLM Edge Permissions</button>
-                    <div id="llm-edge-permissions-status" class="settings-help">LLM edge permissions not saved yet.</div>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-mode-actions-chat-checkbox" data-requires-backend> Allow typed chat to request mode actions</label>
+                    <div class="settings-help">Mode actions let the model request Freestyle, Edge, Milk, Legacy Auto, Stop, or I'm Close through guarded controls.</div>
+                    <button id="save-llm-edge-permissions-btn" class="my-button" data-requires-backend>Save LLM Permissions</button>
+                    <div id="llm-edge-permissions-status" class="settings-help">LLM permissions not saved yet.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Patterns</h4>

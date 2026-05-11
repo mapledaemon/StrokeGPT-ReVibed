@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - Unreleased - Typed Chat Mode Action Toggle
+--------------------------------------------------------
+
+Branch: codex/chat-mode-actions-toggle
+
+- Added an off-by-default Motion setting that lets ordinary typed chat expose
+  the same guarded LLM `mode_action` schema already used by hands-free voice.
+- Kept the backend gate source-aware:
+    - Hands-free mode actions still require saved Hands-free Voice mode plus
+      the Voice > Advanced Flow toggle.
+    - Typed chat mode actions require the new Motion > LLM Mode Permissions
+      toggle and a `chat` request source.
+    - Reviewed/manual voice transcript sends keep the existing transcript-only
+      behavior for now.
+- Generalized the LLM prompt wording from hands-free-only mode actions to
+  source-labeled mode actions, while still routing every selected action
+  through the existing visible-mode start/stop/close-signal helpers.
+
+
 2026-05-11 - PR #150 - Hands-Free Mode Actions
 -----------------------------------------------
 

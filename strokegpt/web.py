@@ -742,7 +742,10 @@ def _target_from_llm_response_move(response, current):
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):
         return response, False
-    if context.get("handsfree_mode_actions_enabled") and _normalize_llm_mode_action(response.get("mode_action")):
+    if (
+        (context.get("mode_actions_enabled") or context.get("handsfree_mode_actions_enabled"))
+        and _normalize_llm_mode_action(response.get("mode_action"))
+    ):
         return response, False
     target = _target_from_llm_response_move(response, current)
     needs_repair = (
@@ -1266,6 +1269,14 @@ def _request_allows_handsfree_mode_actions(data):
         and _normalize_request_source(data.get("source")) == "voice_hands_free"
     )
 
+def _request_mode_action_context(data):
+    source = _normalize_request_source(data.get("source"))
+    if _request_allows_handsfree_mode_actions(data):
+        return True, "hands-free voice input"
+    if bool(settings.allow_llm_mode_actions_in_chat) and source == "chat":
+        return True, "typed chat"
+    return False, ""
+
 LLM_MODE_ACTION_ALIASES = {
     "continue": "continue_mode",
     "continue_mode": "continue_mode",
@@ -1531,7 +1542,8 @@ def handle_user_message():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
-    mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
+    mode_actions_allowed, mode_action_source = _request_mode_action_context(data)
+    handsfree_mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
     if (p := data.get('persona_desc')) and p != settings.persona_desc:
         settings.set_persona_prompt(p); settings.save()
@@ -1554,7 +1566,9 @@ def handle_user_message():
         return _relay_message_to_active_mode(user_input)
 
     context = get_current_context()
-    context["handsfree_mode_actions_enabled"] = mode_actions_allowed
+    context["mode_actions_enabled"] = mode_actions_allowed
+    context["mode_action_request_source"] = mode_action_source
+    context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
     current_before_llm = motion.current_target()
     timings = {}
     try:
@@ -1586,7 +1600,8 @@ def handle_user_message_stream():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
-    mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
+    mode_actions_allowed, mode_action_source = _request_mode_action_context(data)
+    handsfree_mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
     def generate():
         if (p := data.get('persona_desc')) and p != settings.persona_desc:
@@ -1618,7 +1633,9 @@ def handle_user_message_stream():
             return
 
         context = get_current_context()
-        context["handsfree_mode_actions_enabled"] = mode_actions_allowed
+        context["mode_actions_enabled"] = mode_actions_allowed
+        context["mode_action_request_source"] = mode_action_source
+        context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
         current_before_llm = motion.current_target()
         timings = {}
         streamed_text = ""

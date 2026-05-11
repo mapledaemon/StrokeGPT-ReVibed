@@ -419,6 +419,100 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_typed_chat_mode_action_requires_opt_in(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_chat_mode_actions = settings.allow_llm_mode_actions_in_chat
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.allow_llm_mode_actions_in_chat = False
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I can keep talking.",
+                "move": None,
+                "mode_action": "start_freestyle",
+                "new_mood": None,
+            }), mock.patch.object(web, "start_background_mode") as start_background_mode, \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "say hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "chat",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["mode_action"], "")
+            self.assertFalse(data["mode_action_applied"])
+            start_background_mode.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            settings.allow_llm_mode_actions_in_chat = original_chat_mode_actions
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_typed_chat_mode_action_can_start_visible_mode_when_enabled(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_chat_mode_actions = settings.allow_llm_mode_actions_in_chat
+        captured_contexts = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.allow_llm_mode_actions_in_chat = True
+
+            def fake_response(_history, context):
+                captured_contexts.append(dict(context))
+                return {
+                    "chat": "Starting Freestyle.",
+                    "move": None,
+                    "mode_action": "start_freestyle",
+                    "new_mood": None,
+                }
+
+            with mock.patch.object(llm, "get_chat_response", side_effect=fake_response), \
+                    mock.patch.object(web, "start_background_mode") as start_background_mode, \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "surprise me",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "chat",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["mode_action"], "start_freestyle")
+            self.assertTrue(data["mode_action_applied"])
+            start_background_mode.assert_called_once_with(
+                web.freestyle_mode_logic,
+                "Starting adaptive Freestyle.",
+                mode_name="freestyle",
+            )
+            self.assertTrue(captured_contexts[-1]["mode_actions_enabled"])
+            self.assertFalse(captured_contexts[-1]["handsfree_mode_actions_enabled"])
+            self.assertEqual(captured_contexts[-1]["mode_action_request_source"], "typed chat")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            settings.allow_llm_mode_actions_in_chat = original_chat_mode_actions
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_handsfree_without_mode_action_still_relays_feedback_to_active_mode(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -497,6 +591,40 @@ class WebChatRouteTests(WebTestCase):
             app_state.auto_mode_active_task = original_task
             app_state.user_signal_event.clear()
             app_state.mode_message_event.clear()
+
+    def test_set_llm_permissions_saves_chat_mode_action_toggle(self):
+        from strokegpt.web import settings
+
+        original = (
+            settings.allow_llm_edge_in_freestyle,
+            settings.allow_llm_edge_in_chat,
+            settings.allow_llm_mode_actions_in_chat,
+            settings.save,
+        )
+        try:
+            settings.save = lambda *args, **kwargs: None
+            response = self.client.post("/set_llm_edge_permissions", json={
+                "allow_llm_edge_in_freestyle": False,
+                "allow_llm_edge_in_chat": False,
+                "allow_llm_mode_actions_in_chat": True,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertFalse(settings.allow_llm_edge_in_freestyle)
+            self.assertFalse(settings.allow_llm_edge_in_chat)
+            self.assertTrue(settings.allow_llm_mode_actions_in_chat)
+            self.assertFalse(data["allow_llm_edge_in_freestyle"])
+            self.assertFalse(data["allow_llm_edge_in_chat"])
+            self.assertTrue(data["allow_llm_mode_actions_in_chat"])
+        finally:
+            (
+                settings.allow_llm_edge_in_freestyle,
+                settings.allow_llm_edge_in_chat,
+                settings.allow_llm_mode_actions_in_chat,
+                settings.save,
+            ) = original
 
     def test_memory_toggle_route_updates_runtime_state(self):
         import strokegpt.web as web

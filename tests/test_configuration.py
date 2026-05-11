@@ -66,6 +66,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(saved["motion_feedback_auto_disable"])
         self.assertTrue(saved["allow_llm_edge_in_freestyle"])
         self.assertTrue(saved["allow_llm_edge_in_chat"])
+        self.assertFalse(saved["allow_llm_mode_actions_in_chat"])
         self.assertTrue(saved["voice_input_noise_suppression"])
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
@@ -102,6 +103,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.motion_feedback_auto_disable)
         self.assertTrue(settings.allow_llm_edge_in_freestyle)
         self.assertTrue(settings.allow_llm_edge_in_chat)
+        self.assertFalse(settings.allow_llm_mode_actions_in_chat)
         self.assertTrue(settings.voice_input_noise_suppression)
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
@@ -119,6 +121,7 @@ class ModelConfigurationTests(unittest.TestCase):
         fake_path = FakePath(json.dumps({
             "allow_llm_edge_in_freestyle": False,
             "allow_llm_edge_in_chat": False,
+            "allow_llm_mode_actions_in_chat": True,
         }))
         settings = SettingsManager("settings.json")
         settings.file_path = fake_path
@@ -128,8 +131,10 @@ class ModelConfigurationTests(unittest.TestCase):
         saved = json.loads(fake_path.written)
         self.assertFalse(settings.allow_llm_edge_in_freestyle)
         self.assertFalse(settings.allow_llm_edge_in_chat)
+        self.assertTrue(settings.allow_llm_mode_actions_in_chat)
         self.assertFalse(saved["allow_llm_edge_in_freestyle"])
         self.assertFalse(saved["allow_llm_edge_in_chat"])
+        self.assertTrue(saved["allow_llm_mode_actions_in_chat"])
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -299,7 +304,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("CHAT EDGE PERMISSION", prompt)
         self.assertIn("Do not choose edge-specific fixed `move.pattern` ids", prompt)
 
-    def test_llm_prompt_includes_handsfree_mode_action_schema_only_when_enabled(self):
+    def test_llm_prompt_includes_mode_action_schema_only_when_enabled(self):
         service = LLMService(url="http://localhost:11434/api/chat")
         base_context = {
             "persona_desc": "An energetic and passionate girlfriend",
@@ -313,18 +318,20 @@ class ModelConfigurationTests(unittest.TestCase):
         }
 
         normal_prompt = service._build_system_prompt(base_context)
-        handsfree_prompt = service._build_system_prompt({
+        mode_action_prompt = service._build_system_prompt({
             **base_context,
-            "handsfree_mode_actions_enabled": True,
+            "mode_actions_enabled": True,
+            "mode_action_request_source": "typed chat",
             "active_mode": "freestyle",
         })
 
         self.assertNotIn('"mode_action"', normal_prompt)
-        self.assertIn('"mode_action"', handsfree_prompt)
-        self.assertIn("HANDS-FREE MODE ACTIONS", handsfree_prompt)
-        self.assertIn("Active mode: `freestyle`", handsfree_prompt)
-        self.assertIn("start_legacy_auto", handsfree_prompt)
-        self.assertIn("legacy scripted Auto takeover loop", handsfree_prompt)
+        self.assertIn('"mode_action"', mode_action_prompt)
+        self.assertIn("MODE ACTIONS", mode_action_prompt)
+        self.assertIn("typed chat with mode actions enabled", mode_action_prompt)
+        self.assertIn("Active mode: `freestyle`", mode_action_prompt)
+        self.assertIn("start_legacy_auto", mode_action_prompt)
+        self.assertIn("legacy scripted Auto takeover loop", mode_action_prompt)
 
     def test_llm_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")

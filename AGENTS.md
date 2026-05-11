@@ -191,6 +191,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   and route normalized actions through the same preset-mode start/stop and
   close-signal helpers used by visible controls. If no mode action is chosen
   while a mode is active, keep relaying the transcript to the active planner.
+- Typed chat can optionally expose the same narrow LLM `mode_action` field
+  behind the Motion > LLM Mode Permissions toggle. Keep reviewed/manual voice
+  transcript sends out of this path until they get their own explicit product
+  decision.
 - Visible preset-mode buttons should start modes through explicit
   `/start_*_mode` routes. Do not route sidebar mode starts through chat text
   just to reuse natural-language intent parsing.

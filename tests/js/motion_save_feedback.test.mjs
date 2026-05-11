@@ -303,6 +303,37 @@ describe('motion/audio save feedback', () => {
         assert.strictEqual(getStubElement('status-text').textContent, 'baseline');
     });
 
+    it('saveLlmEdgePermissions includes typed-chat mode action permission', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                allow_llm_edge_in_freestyle: true,
+                allow_llm_edge_in_chat: false,
+                allow_llm_mode_actions_in_chat: true,
+                motion_preferences: {prompt: '', summary: ''},
+            });
+        };
+        getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
+        getStubElement('allow-llm-edge-chat-checkbox').checked = false;
+        getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
+
+        getStubElement('save-llm-edge-permissions-btn').click();
+        await flushAsyncHandlers();
+
+        assert.deepStrictEqual(requests, [[
+            '/set_llm_edge_permissions',
+            {
+                allow_llm_edge_in_freestyle: true,
+                allow_llm_edge_in_chat: false,
+                allow_llm_mode_actions_in_chat: true,
+            },
+        ]]);
+        assert.strictEqual(state.allowLlmModeActionsInChat, true);
+        assert.strictEqual(getStubElement('llm-edge-permissions-status').textContent, 'LLM permissions saved.');
+    });
+
     it('toggleMotionPause surfaces the backend message on global status', async () => {
         installBackendError('Pause request failed.');
 

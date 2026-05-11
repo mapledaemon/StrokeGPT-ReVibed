@@ -146,11 +146,11 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
   falling back to HAMP/current scripted Auto arcs.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
-- Finish the visible-mode action audit after the hands-free path. Hands-free
-  voice can now expose a guarded `mode_action` field for Freestyle, Edge, Milk,
-  Legacy Auto, Stop, and I'm Close; ordinary typed chat still needs a separate
-  decision on whether model-requested mode changes should be allowed outside
-  that opt-in voice flow.
+- Finish the visible-mode action audit after the hands-free and typed-chat
+  gates. Hands-free voice and ordinary typed chat can expose a guarded
+  `mode_action` field only through their explicit settings toggles; reviewed
+  voice transcript sends still need a separate decision before they can request
+  model-selected mode changes.
 - If the old Auto loop stays visible, keep labeling it as Legacy Auto and
   treat it as a scripted takeover mode, not Freestyle legacy. Avoid expanding
   it toward adaptive behavior; new autonomous/adaptive work should prefer
