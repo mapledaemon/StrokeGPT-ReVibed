@@ -144,6 +144,23 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_streaming_chat_extractor_parses_incremental_escapes(self):
+        from strokegpt.web import _StreamingChatTextExtractor
+
+        extractor = _StreamingChatTextExtractor()
+        chunks = [
+            '{"move":null,',
+            '"chat":"Line 1\\n',
+            'Line 2 \\u2764',
+            '","new_mood":null}',
+        ]
+
+        deltas = [extractor.append(chunk) for chunk in chunks]
+
+        self.assertEqual("".join(deltas), "Line 1\nLine 2 \u2764")
+        self.assertEqual(json.loads(extractor.raw_content())["chat"], "Line 1\nLine 2 \u2764")
+        self.assertTrue(extractor.has_streamed_text())
+
     def test_send_message_keeps_llm_transport_error_out_of_dialogue_state(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 

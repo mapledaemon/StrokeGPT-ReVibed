@@ -307,6 +307,9 @@ class VoiceInputService:
         self.vad_speech_pad_ms = DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS
         self._model = None
         self._model_key = None
+        self._model_cached_key = None
+        self._model_cached_value = False
+        self._model_cached_checked_at = 0.0
         self.last_error = ""
         self.last_transcript = ""
         self.last_timings = {}
@@ -350,6 +353,7 @@ class VoiceInputService:
         if provider != self.provider or model != self.model_name:
             self._model = None
             self._model_key = None
+            self._clear_model_cached_status()
         self.provider = provider
         self.enabled = enabled
         self.model_name = model
@@ -400,9 +404,20 @@ class VoiceInputService:
                 tokens.add(f"faster-whisper-{tail_token}")
         return {token for token in tokens if token}
 
-    def is_model_cached(self):
-        if self._model is not None:
-            return True
+    def _model_cached_status_key(self):
+        return (self.provider, self.model_name, self.effective_model_cache_dir())
+
+    def _clear_model_cached_status(self):
+        self._model_cached_key = None
+        self._model_cached_value = False
+        self._model_cached_checked_at = 0.0
+
+    def _set_model_cached_status(self, value):
+        self._model_cached_key = self._model_cached_status_key()
+        self._model_cached_value = bool(value)
+        self._model_cached_checked_at = time.monotonic()
+
+    def _scan_model_cache(self):
         cache_dir = self.effective_model_cache_dir()
         if not cache_dir or not os.path.isdir(cache_dir):
             return False
@@ -420,6 +435,24 @@ class VoiceInputService:
             if entries_seen >= _MODEL_CACHE_SCAN_LIMIT:
                 break
         return False
+
+    def is_model_cached(self, *, refresh=False):
+        if self._model is not None:
+            return True
+
+        key = self._model_cached_status_key()
+        cache_age = time.monotonic() - self._model_cached_checked_at
+        if (
+            not refresh
+            and self._model_cached_key == key
+            and self._model_cached_value
+            and cache_age < 2.0
+        ):
+            return self._model_cached_value
+
+        cached = self._scan_model_cache()
+        self._set_model_cached_status(cached)
+        return cached
 
     def status(self):
         dependency_available = self.dependency_available()
@@ -661,6 +694,7 @@ class VoiceInputService:
     def preload_model(self):
         try:
             load_ms = self._load_model()
+            self._set_model_cached_status(True)
             self.last_error = ""
             if load_ms:
                 self.last_timings = {"model_load_ms": load_ms}

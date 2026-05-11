@@ -1125,6 +1125,10 @@ class MotionController:
         previous_command_ended_at = None
         sample_index = 0
         program_range = continuous_plan_depth_range(plan, target)
+        plan_name = str(getattr(plan, "name", "") or "continuous")
+        cycle_ms = round(plan.duration_seconds * 1000.0, 1)
+        phase_offset_ms = round(phase_offset_seconds * 1000.0, 1)
+        morph_ms = round(morph_seconds * 1000.0, 1)
 
         try:
             while True:
@@ -1145,7 +1149,7 @@ class MotionController:
                         start_target,
                         sampled,
                         amount,
-                        f"{sampled.label or plan.name} morph",
+                        f"{sampled.label or plan_name} morph",
                     )
                 sampled = self._limit_continuous_step(previous_target, sampled)
                 velocity = self._position_velocity(previous_target, sampled, interval)
@@ -1161,9 +1165,9 @@ class MotionController:
                 extras = {
                     "continuous": True,
                     "sample_index": sample_index,
-                    "cycle_ms": round(plan.duration_seconds * 1000.0, 1),
-                    "phase_offset_ms": round(phase_offset_seconds * 1000.0, 1),
-                    "morph_ms": round(morph_seconds * 1000.0, 1),
+                    "cycle_ms": cycle_ms,
+                    "phase_offset_ms": phase_offset_ms,
+                    "morph_ms": morph_ms,
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
                 if program_range is not None:

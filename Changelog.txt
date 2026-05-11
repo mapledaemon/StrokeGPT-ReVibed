@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - PR #158 - Hot Path Speedups
+----------------------------------------
+
+Branch: codex/hot-path-speedups
+
+- Streamed chat now parses only newly arrived Ollama JSON chunks while still
+  validating the final response with `json.loads`, removing the repeated
+  full-buffer join and rescan on every delta.
+- Browser polling loops now skip overlapping timer ticks for chat, motion, and
+  download/status refreshes instead of stacking duplicate backend requests when
+  a previous poll is still in flight.
+- Continuous motion now reuses per-plan trace constants inside the live sample
+  loop instead of recomputing unchanged cycle/phase/morph values for every
+  device command.
+- Voice input status reuses a recent positive model-cache scan result, avoiding
+  repeated Hugging Face cache tree walks after a model is already known to be
+  cached while still refreshing uncached states normally.
+
+
 2026-05-11 - PR #157 - Startup Speedups
 ----------------------------------------
 

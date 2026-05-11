@@ -1423,6 +1423,76 @@ def _streamed_chat_text_prefix(raw_content):
     return _json_string_prefix(raw_content, match.end() - 1)
 
 
+class _StreamingChatTextExtractor:
+    """Incrementally extracts the ``chat`` string from streamed LLM JSON."""
+
+    def __init__(self):
+        self._raw_parts = []
+        self._search_text = ""
+        self._streamed_chars = []
+        self._found_chat = False
+        self._complete = False
+        self._escape_pending = False
+        self._unicode_digits = None
+        self._stalled = False
+
+    def append(self, chunk):
+        text = str(chunk or "")
+        if not text:
+            return ""
+        self._raw_parts.append(text)
+        if self._complete or self._stalled:
+            return ""
+
+        if not self._found_chat:
+            self._search_text += text
+            match = CHAT_FIELD_RE.search(self._search_text)
+            if not match:
+                return ""
+            text = self._search_text[match.end():]
+            self._search_text = ""
+            self._found_chat = True
+
+        return self._append_chat_text(text)
+
+    def _append_chat_text(self, text):
+        start_index = len(self._streamed_chars)
+        for ch in text:
+            if self._unicode_digits is not None:
+                if not re.fullmatch(r"[0-9a-fA-F]", ch):
+                    self._stalled = True
+                    break
+                self._unicode_digits += ch
+                if len(self._unicode_digits) == 4:
+                    self._streamed_chars.append(chr(int(self._unicode_digits, 16)))
+                    self._unicode_digits = None
+                    self._escape_pending = False
+                continue
+
+            if self._escape_pending:
+                if ch == "u":
+                    self._unicode_digits = ""
+                    continue
+                self._streamed_chars.append(JSON_ESCAPE_MAP.get(ch, ch))
+                self._escape_pending = False
+                continue
+
+            if ch == '"':
+                self._complete = True
+                break
+            if ch == "\\":
+                self._escape_pending = True
+                continue
+            self._streamed_chars.append(ch)
+        return "".join(self._streamed_chars[start_index:])
+
+    def raw_content(self):
+        return "".join(self._raw_parts)
+
+    def has_streamed_text(self):
+        return bool(self._streamed_chars)
+
+
 def _chat_stream_event(event_type, **payload):
     body = {"type": event_type, **payload}
     return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -1646,20 +1716,16 @@ def handle_user_message_stream():
         context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
         current_before_llm = motion.current_target()
         timings = {}
-        streamed_text = ""
-        raw_parts = []
+        stream_extractor = _StreamingChatTextExtractor()
         try:
             yield _chat_stream_event("status", status="generating")
             llm_started = time.perf_counter()
             for chunk in llm.iter_chat_response_content(app_state.chat_history, context):
-                raw_parts.append(chunk)
-                chat_prefix, _complete = _streamed_chat_text_prefix("".join(raw_parts))
-                if len(chat_prefix) > len(streamed_text):
-                    delta = chat_prefix[len(streamed_text):]
-                    streamed_text = chat_prefix
+                delta = stream_extractor.append(chunk)
+                if delta:
                     yield _chat_stream_event("delta", text=delta)
             timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
-            raw_content = "".join(raw_parts)
+            raw_content = stream_extractor.raw_content()
             try:
                 llm_response = json.loads(raw_content)
             except json.JSONDecodeError as exc:
@@ -1685,7 +1751,7 @@ def handle_user_message_stream():
             current_before_llm=current_before_llm,
             request_started=request_started,
             timings=timings,
-            streamed_to_client=bool(streamed_text),
+            streamed_to_client=stream_extractor.has_streamed_text(),
             mode_actions_allowed=mode_actions_allowed,
             relay_active_mode_on_no_action=active_mode_before_llm,
         )
