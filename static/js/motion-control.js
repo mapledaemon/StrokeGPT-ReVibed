@@ -698,47 +698,6 @@ function setHandyCylinderPosition(depth) {
     }
 }
 
-function setHandyCylinderRange(range) {
-    if (!el.handyCylinderRange || !range) return;
-    let normalized = normalizedPercentRange(range.min, range.max, 0, 100);
-    if (normalized.max - normalized.min < 2) {
-        const center = (normalized.min + normalized.max) / 2;
-        normalized = normalizedPercentRange(center - 1, center + 1, 0, 100);
-    }
-    const height = Math.max(2, clampPercent(normalized.max - normalized.min, 100));
-    const top = Math.min(100 - height, clampPercent(normalized.min, 0));
-    el.handyCylinderRange.style.top = `${top}%`;
-    el.handyCylinderRange.style.height = `${height}%`;
-}
-
-function physicalDepthRange(range, diagnostics = {}) {
-    if (!range || range.min === undefined || range.max === undefined) return null;
-    return normalizedPercentRange(
-        physicalDepthPercent(range.min, diagnostics),
-        physicalDepthPercent(range.max, diagnostics),
-        0,
-        100,
-    );
-}
-
-function tracePointDepthRange(points, diagnostics = {}) {
-    const depths = points
-        .map(point => Number(point?.depth))
-        .filter(depth => Number.isFinite(depth))
-        .map(depth => physicalDepthPercent(depth, diagnostics));
-    if (!depths.length) return null;
-    return normalizedPercentRange(Math.min(...depths), Math.max(...depths), 0, 100);
-}
-
-function latestTraceProgramRange(payload = {}, diagnostics = {}) {
-    const trace = Array.isArray(payload.trace) ? payload.trace : [];
-    for (let index = trace.length - 1; index >= 0; index -= 1) {
-        const range = physicalDepthRange(trace[index]?.program_range, diagnostics);
-        if (range) return range;
-    }
-    return null;
-}
-
 function positionBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
     const trace = Array.isArray(payload.trace) ? payload.trace : [];
     if (trace.length < 2) return physicalDepthPercent(diagnostics.depth, diagnostics);
@@ -816,22 +775,6 @@ function continuousBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSecon
     return traceDepthAt(points, visualTime, diagnostics);
 }
 
-function cylinderProgramRange(payload = {}, diagnostics = {}) {
-    const explicitRange = latestTraceProgramRange(payload, diagnostics);
-    if (explicitRange) return explicitRange;
-
-    const trace = Array.isArray(payload.trace) ? payload.trace : [];
-    if (payload.backend === 'continuous') {
-        const continuousRange = tracePointDepthRange(recentContinuousTracePoints(payload), diagnostics);
-        if (continuousRange) return continuousRange;
-    }
-    if (payload.backend === 'position') {
-        const positionRange = tracePointDepthRange(trace.filter(point => point && Number.isFinite(Number(point.frame_index))), diagnostics);
-        if (positionRange) return positionRange;
-    }
-    return activeStrokeZone(diagnostics);
-}
-
 function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
     const diagnostics = payload.diagnostics || {};
     const restingPosition = physicalDepthPercent(diagnostics.depth, diagnostics);
@@ -856,8 +799,6 @@ function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
 }
 
 function updateHandyCylinder(payload = {}) {
-    const diagnostics = payload.diagnostics || {};
-    setHandyCylinderRange(cylinderProgramRange(payload, diagnostics));
     setHandyCylinderPosition(cylinderAnimatedDepth(payload));
 }
 

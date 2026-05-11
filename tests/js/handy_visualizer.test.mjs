@@ -1,6 +1,6 @@
-// Behavioral coverage for the sidebar Handy visualizer. The cylinder should
-// map its green band to the active program/slide range and estimate the purple
-// position line from the active backend's commanded motion output.
+// Behavioral coverage for the sidebar Handy visualizer. The cylinder's lighter
+// oval is a static track; only the purple horizontal slider line should move
+// from the active backend's commanded motion output.
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,6 +56,13 @@ function continuousPayload(overrides = {}) {
     };
 }
 
+function primeStaticTrack() {
+    const range = getStubElement('handy-cylinder-range');
+    range.style.top = '8%';
+    range.style.height = '84%';
+    return range;
+}
+
 describe('Handy visualizer tracking', () => {
     let originalFetch;
     let originalDateNow;
@@ -64,6 +71,7 @@ describe('Handy visualizer tracking', () => {
         originalFetch = globalThis.fetch;
         originalDateNow = Date.now;
         [
+            'handy-cylinder-range',
             'handy-cylinder-position',
             'motion-speed-meter-fill',
             'motion-speed-meter-value',
@@ -82,6 +90,7 @@ describe('Handy visualizer tracking', () => {
         state.activeModeName = '';
         state.activeModeElapsedSeconds = null;
         state.connectionLost = false;
+        primeStaticTrack();
     });
 
     afterEach(() => {
@@ -113,6 +122,8 @@ describe('Handy visualizer tracking', () => {
         updateMotionObservability(state.motionObservability);
 
         assert.equal(position.style.top, '88%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
     });
 
     it('does not replay stale continuous trace windows as live motion', () => {
@@ -129,10 +140,10 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-range').style.height, '84%');
     });
 
-    it('maps finite position playback to its program range', () => {
+    it('keeps the static track fixed during finite position playback', () => {
         Date.now = () => 3_000_000;
 
-        updateMotionObservability({
+        const payload = {
             backend: 'position',
             playback_active: true,
             last_command_time: 3000,
@@ -149,14 +160,23 @@ describe('Handy visualizer tracking', () => {
                 {t: 2999.90, depth: 20, speed: 50, physical_speed: 50, frame_index: 0, frame_count: 2, program_range: {min: 20, max: 70}},
                 {t: 3000.00, depth: 70, speed: 50, physical_speed: 50, frame_index: 1, frame_count: 2, program_range: {min: 20, max: 70}},
             ],
-        });
+        };
+        updateMotionObservability(payload);
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '20%');
-        assert.equal(range.style.height, '50%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '20%');
+
+        Date.now = () => 3_001_000;
+        updateMotionObservability(payload);
+
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '70%');
     });
 
-    it('maps HAMP legacy motion to the active slide window and phase estimate', () => {
+    it('maps HAMP legacy motion to a phase estimate without moving the static track', () => {
         Date.now = () => 4_000_500;
 
         updateMotionObservability({
@@ -178,8 +198,8 @@ describe('Handy visualizer tracking', () => {
         });
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '25%');
-        assert.equal(range.style.height, '50%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
         assert.notEqual(getStubElement('handy-cylinder-position').style.top, '50%');
     });
 });
