@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-11 - Unreleased - Typed Chat Mode Action Toggle
---------------------------------------------------------
+2026-05-11 - PR #151 - Typed Chat Mode Action Toggle
+-----------------------------------------------------
 
 Branch: codex/chat-mode-actions-toggle
 
