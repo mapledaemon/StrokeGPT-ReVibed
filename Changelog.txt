@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - Unreleased - Handy Command Trace Diagnostics
+----------------------------------------------------------
+
+Branch: codex/handy-command-trace-diagnostics
+
+- Added non-secret Handy command result diagnostics:
+    - `HandyController` now records the last command path, success/failure,
+      HTTP status, elapsed milliseconds, safe motion body fields, and error
+      text without storing the connection key.
+    - `HandyController.diagnostics()` includes the last command result so
+      `/get_updates` motion observability can explain device-side failures.
+    - Handy request failures now print through the intended stderr path instead
+      of hitting a missing `sys` import.
+- Added Handy command success/failure metadata to motion trace rows so
+  continuous and finite position playback can distinguish planner timing from
+  rejected or failed `hdsp/xava` commands during device debugging.
+- Surfaced failed Handy commands in the debug motion sequence text.
+
+
 2026-05-11 - PR #152 - Editable Ollama Model Options
 -----------------------------------------------------
 

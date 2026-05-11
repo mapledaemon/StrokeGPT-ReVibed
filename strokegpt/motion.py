@@ -791,8 +791,35 @@ class MotionController:
 
     def _apply_step(self, target: MotionTarget, source: str = "target") -> None:
         target = target.rounded()
-        self.handy.move(target.speed, target.depth, target.stroke_range)
+        result = self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
+        self._augment_last_trace(self._handy_command_trace_extras(result))
+
+    def _handy_command_trace_extras(self, result: Any) -> dict[str, Any]:
+        last_command = None
+        if hasattr(self.handy, "last_command_result"):
+            try:
+                last_command = self.handy.last_command_result()
+            except Exception:
+                last_command = None
+
+        extras: dict[str, Any] = {"handy_ok": result is not False}
+        if not isinstance(last_command, dict):
+            return extras
+
+        path = str(last_command.get("path") or "").strip()
+        if path:
+            extras["handy_path"] = path
+        if "status_code" in last_command:
+            extras["handy_status"] = last_command.get("status_code")
+        if "elapsed_ms" in last_command:
+            extras["handy_elapsed_ms"] = last_command.get("elapsed_ms")
+        error = str(last_command.get("error") or "").strip()
+        if error:
+            extras["handy_error"] = error
+        if last_command.get("ok") is False:
+            extras["handy_ok"] = False
+        return extras
 
     def _depth_range_for_targets(self, targets: Iterable[Any]) -> Optional[dict[str, int]]:
         depths: list[float] = []
@@ -954,18 +981,20 @@ class MotionController:
         stop_on_target: bool = True,
         velocity: int | None = None,
         source: str = "position",
-    ) -> None:
+    ) -> bool:
         target = target.rounded()
         if hasattr(self.handy, "move_to_depth"):
-            self.handy.move_to_depth(
+            result = self.handy.move_to_depth(
                 target.speed,
                 target.depth,
                 stop_on_target=stop_on_target,
                 velocity=velocity,
             )
         else:
-            self.handy.move(target.speed, target.depth, target.stroke_range)
+            result = self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
+        self._augment_last_trace(self._handy_command_trace_extras(result))
+        return result is not False
 
     def apply_continuous_target(
         self,

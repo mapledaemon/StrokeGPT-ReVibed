@@ -91,6 +91,11 @@ export function formatMotionSequenceText(payload = {}, level = 'compact') {
         const frame = formatMotionFrame(point);
         if (frame) parts.push(frame);
         parts.push(...formatMotionTraceTiming(point));
+        if (point.handy_ok === false) {
+            const path = String(point.handy_path || 'command').trim();
+            const status = point.handy_status !== undefined ? ` ${point.handy_status}` : '';
+            parts.push(`Handy ${path}${status} failed`);
+        }
         if (point.is_pass_through_final) parts.push('pass-through final');
         parts.push(payload.playback_active ? 'playback active' : 'playback idle');
     }

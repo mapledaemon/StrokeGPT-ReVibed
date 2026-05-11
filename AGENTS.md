@@ -164,6 +164,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   pass must still allow `move: null` for conversational or informational
   requests.
 - Keep motion transitions smooth and clamped to user settings.
+- `HandyController.diagnostics()` includes the last non-secret Handy command
+  result (`path`, `ok`, status, elapsed milliseconds, safe body fields, and
+  error text). Motion trace rows may mirror that as `handy_ok` /
+  `handy_path` / `handy_status` / `handy_error`; use those fields to separate
+  planner waits from device/API rejection during real-device debugging.
 - `strokegpt/motion_patterns.py` prepares pattern actions before expansion: sort/dedupe, minimum interval filtering, repeat expansion, eased interpolation, large-step limiting, and redundant point simplification. Keep that pipeline dependency-free unless a larger funscript importer is deliberately added.
 - `strokegpt/motion_preferences.py` turns enabled fixed patterns and thumbs
   feedback into simple LLM-facing weights. Disabled fixed patterns should stay

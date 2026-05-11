@@ -2,12 +2,14 @@ import importlib.machinery
 import sys
 import types
 import unittest
+from unittest import mock
 
 requests_module = types.ModuleType("requests")
 requests_module.__spec__ = importlib.machinery.ModuleSpec("requests", loader=None)
 requests_module.exceptions = types.SimpleNamespace(RequestException=Exception)
 sys.modules.setdefault("requests", requests_module)
 
+import strokegpt.handy as handy_module
 from strokegpt.handy import HandyController
 
 
@@ -18,7 +20,16 @@ class RecordingHandyController(HandyController):
 
     def _send_command(self, path, body=None):
         self.commands.append((path, body or {}))
+        self._record_command_result(path, body, ok=True, status_code=204, elapsed_ms=0)
         return True
+
+
+class FakeResponse:
+    def __init__(self, status_code=204):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        return None
 
 
 class HandyControllerTests(unittest.TestCase):
@@ -94,6 +105,49 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["slide_bounds"], {"min": 5, "max": 75})
         self.assertEqual(diagnostics["velocity"], 45)
         self.assertTrue(diagnostics["hamp_started"])
+        self.assertEqual(diagnostics["last_command"]["path"], "hamp/velocity")
+        self.assertTrue(diagnostics["last_command"]["ok"])
+        self.assertEqual(diagnostics["last_command"]["status_code"], 204)
+
+    def test_send_command_records_success_without_secret_headers(self):
+        handy = HandyController(handy_key="secret")
+
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=204),
+            create=True,
+        ) as put:
+            self.assertTrue(handy._send_command("hdsp/xava", {"position": 22.5, "velocity": 40}))
+
+        _args, kwargs = put.call_args
+        self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
+        diagnostics = handy.diagnostics()
+        self.assertEqual(
+            diagnostics["last_command"],
+            {
+                "path": "hdsp/xava",
+                "ok": True,
+                "status_code": 204,
+                "elapsed_ms": diagnostics["last_command"]["elapsed_ms"],
+                "body": {"position": 22.5, "velocity": 40},
+            },
+        )
+        self.assertNotIn("secret", str(diagnostics["last_command"]))
+
+    def test_send_command_records_failure_instead_of_raising_name_error(self):
+        handy = HandyController(handy_key="secret")
+        error = handy_module.requests.exceptions.RequestException("device offline")
+        error.response = FakeResponse(status_code=503)
+
+        with mock.patch("strokegpt.handy.requests.put", side_effect=error, create=True):
+            self.assertFalse(handy._send_command("slide", {"min": 10, "max": 90}))
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["last_command"]["path"], "slide")
+        self.assertFalse(diagnostics["last_command"]["ok"])
+        self.assertEqual(diagnostics["last_command"]["status_code"], 503)
+        self.assertEqual(diagnostics["last_command"]["body"], {"min": 10, "max": 90})
+        self.assertIn("device offline", diagnostics["last_command"]["error"])
 
     def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
         handy = RecordingHandyController()
