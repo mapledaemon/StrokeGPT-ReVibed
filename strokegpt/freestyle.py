@@ -336,13 +336,14 @@ def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rn
     return choices
 
 
-def _apply_freestyle_choices(motion_controller, choices, rng):
+def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=None):
     if getattr(motion_controller, "backend", "") == "continuous":
         if not choices or not hasattr(motion_controller, "apply_continuous_target"):
             return False
         return motion_controller.apply_continuous_target(
             choices[0].target,
             source="freestyle planner",
+            trace_metadata=trace_metadata,
         )
 
     frames, _current = _freestyle_choice_frames(choices, motion_controller.current_target(), rng)

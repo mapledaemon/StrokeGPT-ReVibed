@@ -504,6 +504,36 @@ class MotionControllerTests(unittest.TestCase):
         self.assertLessEqual(large, CONTINUOUS_MAX_MORPH_SECONDS)
         self.assertGreater(large, 0.65)
 
+    def test_continuous_trace_includes_supplied_mode_metadata(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+
+        try:
+            applied = controller.apply_continuous_target(
+                MotionTarget(50, 50, 70, "stroke"),
+                source="freestyle planner",
+                trace_metadata={
+                    "mode": "freestyle",
+                    "freestyle_pattern_id": "stroke",
+                    "freestyle_planner_sleep_ms": 1200.0,
+                    "sample_index": 999,
+                },
+            )
+            self.assertTrue(applied)
+            self.assertTrue(self.wait_until(lambda: len(handy.position_moves) >= 1), handy.position_moves)
+
+            point = next(
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous") and point.get("source") == "freestyle planner"
+            )
+            self.assertEqual(point["mode"], "freestyle")
+            self.assertEqual(point["freestyle_pattern_id"], "stroke")
+            self.assertEqual(point["freestyle_planner_sleep_ms"], 1200.0)
+            self.assertEqual(point["sample_index"], 0)
+        finally:
+            controller.stop()
+
     def test_continuous_backend_routes_plain_chat_targets_through_position_smoothing(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)

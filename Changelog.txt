@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - PR #149 - Freestyle Continuous Trace Metadata
+-----------------------------------------------------------
+
+Branch: codex/freestyle-continuous-trace
+
+- Added Freestyle-specific diagnostics to the continuous motion trace:
+    - Continuous Freestyle planner starts now pass trace metadata into
+      `MotionController.apply_continuous_target()`, including the selected
+      pattern id/name, score, mood, loop step, feedback/close-style flags, and
+      the planner's intended sleep interval.
+    - Continuous trace entries preserve core controller fields such as
+      `sample_index`, `cycle_ms`, `command_ms`, `gap_ms`, and `program_range`
+      even when caller metadata uses a conflicting key.
+    - The Freestyle helper keeps the same position-backend behavior while
+      forwarding metadata only for the continuous backend.
+- This gives on-device Freestyle debugging a single trace row that can
+  distinguish "planner chose this pattern and is waiting N ms" from controller
+  command timing and Handy response timing.
+
+
 2026-05-10 - PR #148 - Continuous Program Range Cache
 ------------------------------------------------------
 

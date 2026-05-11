@@ -58,9 +58,12 @@ Follow-up work:
   pattern set.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
-- Instrument the normal Freestyle command loop and Handy command responses to
-  distinguish planner gaps, XAVA command completion, rejected commands, and
-  device-side position-mode behavior.
+- Use the normal Freestyle trace metadata (`freestyle_pattern_id`,
+  `freestyle_planner_sleep_ms`, choice score/mood, and controller `gap_ms` /
+  `command_ms`) during device testing to distinguish planner waits from
+  controller command timing. Add explicit Handy response/rejection details if
+  real logs still cannot separate XAVA command completion from device-side
+  position-mode behavior.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.
