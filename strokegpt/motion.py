@@ -30,6 +30,8 @@ TURN_BRAKE_SPEED_FACTOR = 0.45
 POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
 CONTINUOUS_SAMPLE_INTERVAL_SECONDS = 0.16
 CONTINUOUS_MORPH_SECONDS = 0.65
+CONTINUOUS_MIN_MORPH_SECONDS = 0.32
+CONTINUOUS_MAX_MORPH_SECONDS = 1.15
 
 
 def _depth_direction(start: "MotionTarget", end: "MotionTarget", threshold: float = 7.0) -> int:
@@ -102,6 +104,14 @@ class TransitionLimits:
     max_speed_delta: float = 25.0
     max_depth_delta: float = 25.0
     max_range_delta: float = 30.0
+
+
+@dataclass(frozen=True)
+class ContinuousPhaseState:
+    key: tuple[Any, ...]
+    generation: int
+    started_at: float
+    offset_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -645,6 +655,7 @@ class MotionController:
         self._frame_playback_active = False
         self._last_position_command_ended_at = None
         self._last_position_batch_ended_at = None
+        self._continuous_phase_state: Optional[ContinuousPhaseState] = None
         self._pause_event = threading.Event()
 
     def set_backend(self, backend: str) -> None:
@@ -961,14 +972,23 @@ class MotionController:
         if plan is None:
             return False
 
+        started_at = time.monotonic()
+        plan_key = self._continuous_plan_key(plan)
         with self._lock:
+            phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
             self._generation += 1
             generation = self._generation
+            self._continuous_phase_state = ContinuousPhaseState(
+                key=plan_key,
+                generation=generation,
+                started_at=started_at,
+                offset_seconds=phase_offset_seconds,
+            )
         self._set_frame_playback_active(True)
 
         thread = threading.Thread(
             target=self._run_continuous_plan,
-            args=(plan, target.clamped(), source, generation),
+            args=(plan, target.clamped(), source, generation, started_at, phase_offset_seconds),
             daemon=True,
         )
         thread.start()
@@ -986,6 +1006,22 @@ class MotionController:
         from .motion_patterns import continuous_motion_plan
 
         return continuous_motion_plan(pattern)
+
+    def _continuous_plan_key(self, plan) -> tuple[Any, ...]:
+        duration = round(float(getattr(plan, "duration_seconds", 0.0) or 0.0), 4)
+        return (
+            str(getattr(plan, "name", "") or ""),
+            tuple(getattr(plan, "actions", ()) or ()),
+            duration,
+        )
+
+    def _continuous_phase_offset_seconds(self, plan, plan_key: tuple[Any, ...], now: float) -> float:
+        state = self._continuous_phase_state
+        if state is None or state.generation != self._generation or state.key != plan_key:
+            return 0.0
+        cycle_seconds = max(0.1, float(getattr(plan, "duration_seconds", 0.1) or 0.1))
+        elapsed = state.offset_seconds + max(0.0, now - state.started_at)
+        return elapsed % cycle_seconds
 
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
@@ -1019,13 +1055,37 @@ class MotionController:
             f"{target.label or 'continuous'} step limited",
         )
 
-    def _run_continuous_plan(self, plan, target: MotionTarget, source: str, generation: int) -> None:
+    def _continuous_morph_seconds(self, start: MotionTarget, target: MotionTarget) -> float:
+        start = start.clamped()
+        target = target.clamped()
+        motion_delta = max(
+            abs(target.speed - start.speed) / 80.0,
+            abs(target.depth - start.depth) / 70.0,
+            abs(target.stroke_range - start.stroke_range) / 70.0,
+        )
+        return _clamp(
+            CONTINUOUS_MIN_MORPH_SECONDS + motion_delta * CONTINUOUS_MORPH_SECONDS,
+            CONTINUOUS_MIN_MORPH_SECONDS,
+            CONTINUOUS_MAX_MORPH_SECONDS,
+        )
+
+    def _run_continuous_plan(
+        self,
+        plan,
+        target: MotionTarget,
+        source: str,
+        generation: int,
+        started_at: float,
+        phase_offset_seconds: float,
+    ) -> None:
         from .motion_patterns import sample_continuous_plan
 
         interval = self._continuous_sample_interval()
-        started_at = time.monotonic()
         next_tick = started_at
+        phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
         start_target = self.current_target()
+        initial_sample = sample_continuous_plan(plan, target, phase_offset_seconds)
+        morph_seconds = self._continuous_morph_seconds(start_target, initial_sample)
         previous_target = start_target
         previous_command_ended_at = None
         sample_index = 0
@@ -1049,9 +1109,10 @@ class MotionController:
 
                 now = time.monotonic()
                 elapsed = max(0.0, now - started_at)
-                sampled = sample_continuous_plan(plan, target, elapsed)
-                if elapsed < CONTINUOUS_MORPH_SECONDS:
-                    amount = _minimum_jerk(elapsed / CONTINUOUS_MORPH_SECONDS)
+                sample_elapsed = phase_offset_seconds + elapsed
+                sampled = sample_continuous_plan(plan, target, sample_elapsed)
+                if elapsed < morph_seconds:
+                    amount = _minimum_jerk(elapsed / morph_seconds)
                     sampled = self._interpolate_target(
                         start_target,
                         sampled,
@@ -1073,6 +1134,8 @@ class MotionController:
                     "continuous": True,
                     "sample_index": sample_index,
                     "cycle_ms": round(plan.duration_seconds * 1000.0, 1),
+                    "phase_offset_ms": round(phase_offset_seconds * 1000.0, 1),
+                    "morph_ms": round(morph_seconds * 1000.0, 1),
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
                 if program_range is not None:

@@ -8,8 +8,29 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Smooth Continuous Motion Sampler (Wrap + Catmull-Rom + Jitter)
-----------------------------------------------------------------------------------------
+2026-05-10 - Unreleased - Continuous Motion Phase And Morph Follow-Up
+----------------------------------------------------------------------
+
+Branch: codex/continuous-phase-morph
+
+- Follow-up to PR #146's continuous fixed-pattern sampler work:
+    - Same-pattern continuous target updates now preserve the active pattern
+      phase instead of restarting the sampler at phase zero. Speed/depth/range
+      tweaks to a running pattern keep the rhythm moving while the controller
+      eases from the current commanded position into the updated target
+      window.
+    - Continuous morph-in timing now scales with the gap between the current
+      target and the first sampled target. Small tweaks settle faster than the
+      old fixed 650 ms bridge, while large depth/range/speed jumps get a
+      longer bounded bridge before normal sampling takes over.
+    - Continuous trace entries include `phase_offset_ms` and `morph_ms` so
+      diagnostics can distinguish preserved rhythm from the easing bridge.
+- Updated the previously merged continuous sampler changelog heading from
+  `Unreleased` to PR #146.
+
+
+2026-05-10 - PR #146 - Smooth Continuous Motion Sampler (Wrap + Catmull-Rom + Jitter)
+------------------------------------------------------------------------------------
 
 Branch: claude-continuous-motion-fluidity
 
