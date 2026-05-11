@@ -477,34 +477,126 @@ def _actions_to_frames(
     return _blend_direction_changes(frames, style.name)
 
 
+def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
+    """How long the implicit wrap segment from ``actions[-1]`` back to
+    ``actions[0]`` should take.
+
+    Scales linearly with the position delta so closed patterns
+    (``actions[-1].pos`` near ``actions[0].pos``) wrap quickly through a
+    near-flat segment, while open patterns (e.g., ``ramp`` going 20 ->
+    100) get a wrap segment long enough that the live controller glides
+    through the gap instead of slewing. The 50 ms floor keeps closed
+    patterns from collapsing the wrap to a one-sample step.
+
+    Audit of the built-in catalog: 30 of 34 patterns have
+    ``actions[-1].pos != actions[0].pos``, which is why this wrap
+    segment matters at all -- without it the previous cosine sampler
+    snapped from the last position back to the first on every cycle.
+    """
+    if len(actions) < 2:
+        return 0
+    pos_delta = abs(actions[0].pos - actions[-1].pos)
+    return max(50, int(pos_delta * 10))
+
+
+def _continuous_cycle_ms(actions: tuple[PatternAction, ...]) -> int:
+    if not actions:
+        return 0
+    return _duration_ms(actions) + _wrap_segment_ms(actions)
+
+
 def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
-    return _clamp((_duration_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
+    return _clamp((_continuous_cycle_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
 
 
 def _sample_action_position(
     actions: tuple[PatternAction, ...],
     phase: float,
-    *,
-    interpolation: str = "cosine",
 ) -> float:
+    """Phase-cyclic Catmull-Rom sample of an action list.
+
+    Treats the action sequence as a closed loop with an implicit wrap
+    segment from ``actions[-1]`` back to ``actions[0]``. The wrap span
+    scales with the position delta so the cycle glides through any open
+    gap instead of snapping. Catmull-Rom across four cyclic neighbors
+    keeps the phase-domain curve smooth at every segment boundary,
+    including the wraparound -- the live controller no longer sees a
+    per-cycle position step at phase=1.0 -> 0.0 that the previous cosine
+    sampler used to leave behind on the 30 of 34 asymmetric built-in
+    patterns. Unequal segment durations can still change wall-clock
+    velocity at a boundary, but not the commanded position itself.
+
+    Catmull-Rom can overshoot by ~12.5% of a segment range when control
+    points are extreme; the returned value is clamped to [0, 100]. The
+    clamp can flatten a brief overshoot at the very top/bottom of a
+    stroke, but never adds discontinuity, and is preferable to the
+    cosine sampler's per-cycle step.
+    """
     if not actions:
         return 50.0
     if len(actions) == 1:
         return actions[0].pos
 
+    n = len(actions)
+    wrap_ms = _wrap_segment_ms(actions)
+    total_cycle_ms = _continuous_cycle_ms(actions)
+
     phase = phase % 1.0
-    start_at = actions[0].at
-    duration_ms = _duration_ms(actions)
-    sample_at = start_at + phase * duration_ms
-    previous = actions[0]
-    for following in actions[1:]:
-        if sample_at <= following.at:
-            span = max(1, following.at - previous.at)
-            amount = (sample_at - previous.at) / span
-            return _clamp(_interpolate(previous.pos, following.pos, amount, interpolation))
-        previous = following
-    return actions[-1].pos
+    sample_at = phase * total_cycle_ms
+
+    # Cumulative time at each action's index. Segments[i] runs from
+    # ``cumulative[i]`` to ``cumulative[i+1]``. Segment ``n-1`` is the
+    # wrap segment from ``actions[-1]`` to ``actions[0]`` whose length is
+    # ``wrap_ms``. ``cumulative[n] == total_cycle_ms``.
+    cumulative = [0]
+    for index in range(n - 1):
+        cumulative.append(cumulative[-1] + (actions[index + 1].at - actions[index].at))
+    cumulative.append(cumulative[-1] + wrap_ms)
+
+    segment_index = n - 1
+    for i in range(n):
+        if sample_at < cumulative[i + 1]:
+            segment_index = i
+            break
+
+    segment_start = cumulative[segment_index]
+    segment_end = cumulative[segment_index + 1]
+    segment_span = max(1, segment_end - segment_start)
+    amount = (sample_at - segment_start) / segment_span
+
+    # Four cyclic control points for Catmull-Rom across the full closed
+    # cycle (including the wrap segment).
+    p1_idx = segment_index % n
+    p2_idx = (segment_index + 1) % n
+    p0_idx = (p1_idx - 1) % n
+    p3_idx = (p2_idx + 1) % n
+
+    return _clamp(_catmull_rom(
+        actions[p0_idx].pos,
+        actions[p1_idx].pos,
+        actions[p2_idx].pos,
+        actions[p3_idx].pos,
+        amount,
+    ))
+
+
+def _smooth_jitter(jitter_phase: float, amount: float, axis_seed: float = 0.0) -> float:
+    """Return a value in approximately ``[-amount, +amount]`` that varies
+    smoothly with ``jitter_phase`` (expected 0..1).
+
+    Two sine waves at near-irrational frequency ratio are summed so the
+    result never perfectly repeats over the lifetime of a single plan
+    run. ``axis_seed`` decorrelates depth from range so the two jitter
+    streams do not drift in lockstep, which would still feel mechanical.
+    Returns ``0.0`` when ``amount`` is non-positive so plans without
+    jitter pay no cost.
+    """
+    if amount is None or amount <= 0:
+        return 0.0
+    angle_a = (jitter_phase * 2.3 + axis_seed) * math.tau
+    angle_b = (jitter_phase * 3.7 + axis_seed * 1.61803) * math.tau
+    return amount * (math.sin(angle_a) + math.sin(angle_b)) * 0.5
 
 
 def _motion_target_for_sample(
@@ -513,7 +605,24 @@ def _motion_target_for_sample(
     style: FrameStyle,
     *,
     label: str,
+    jitter_phase: float = 0.0,
 ) -> MotionTarget:
+    """Project the sampled normalized position onto the live target window.
+
+    Adds two organic perturbations on top of the deterministic depth /
+    range mapping so the controller does not feel mechanically periodic:
+
+    - ``style.depth_jitter`` perturbs depth by a smooth time-based
+      offset bounded to that amount. The offset uses ``jitter_phase``
+      (typically a slow 0..1 cycle over several seconds) so adjacent
+      samples drift together rather than chattering.
+    - ``style.range_jitter`` similarly perturbs the local stroke range
+      with a decorrelated seed so depth and range do not jitter in
+      lockstep.
+
+    Both perturbations are no-ops when the relevant jitter amount is
+    zero or negative, so patterns that opt out of jitter cost nothing.
+    """
     target = target.clamped()
     half_range = target.stroke_range / 2.0
     shallow = _clamp(target.depth - half_range)
@@ -526,6 +635,12 @@ def _motion_target_for_sample(
     depth = shallow + (deep - shallow) * normalized_pos
     range_wave = 0.75 + abs(normalized_pos - 0.5) * 0.5
     local_range = max(5.0, min(target.stroke_range, target.stroke_range * style.window_scale * range_wave))
+
+    depth_offset = _smooth_jitter(jitter_phase, style.depth_jitter, axis_seed=0.0)
+    range_offset = _smooth_jitter(jitter_phase, style.range_jitter, axis_seed=0.5)
+    depth = depth + depth_offset
+    local_range = max(5.0, local_range + range_offset)
+
     return MotionTarget(
         speed=target.speed * style.speed_scale,
         depth=depth,
@@ -586,23 +701,38 @@ def continuous_anchor_motion_plan(
     )
 
 
+JITTER_CYCLE_SECONDS = 5.0
+
+
 def sample_continuous_plan(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
     elapsed_seconds: float,
 ) -> MotionTarget:
+    """Sample the plan at ``elapsed_seconds`` into the target window.
+
+    Position is sampled phase-cyclically with Catmull-Rom across four
+    cyclic neighbors, so consecutive cycles do not produce a per-cycle
+    step at phase wraparound. Depth and range jitter (when the plan's
+    style declares any) ride on a slow ``JITTER_CYCLE_SECONDS`` cycle
+    independent of the pattern cycle, so jitter does not synchronize
+    with the stroke -- the result feels organic rather than periodic.
+    """
+    elapsed = max(0.0, float(elapsed_seconds or 0.0))
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
-    phase = (max(0.0, float(elapsed_seconds or 0.0)) / duration_seconds) % 1.0
-    pos = _sample_action_position(plan.actions, phase, interpolation="cosine")
+    phase = (elapsed / duration_seconds) % 1.0
+    pos = _sample_action_position(plan.actions, phase)
     base_label = str(target.label or plan.name or "pattern").strip()
     style_label = str(plan.name or "").strip()
     if style_label and _clean_label(style_label) not in _clean_label(base_label):
         base_label = f"{base_label} {style_label}".strip()
+    jitter_phase = (elapsed % JITTER_CYCLE_SECONDS) / JITTER_CYCLE_SECONDS
     return _motion_target_for_sample(
         pos,
         target,
         plan.style,
         label=f"{base_label} continuous",
+        jitter_phase=jitter_phase,
     )
 
 

@@ -4,6 +4,8 @@ import unittest
 from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import (
     PATTERNS,
+    JITTER_CYCLE_SECONDS,
+    FrameStyle,
     MotionPattern,
     PatternAction,
     expand_anchor_program,
@@ -19,6 +21,9 @@ from strokegpt.motion_patterns import (
     prepare_anchor_actions,
     prepare_pattern_actions,
     repeat_actions,
+    _motion_target_for_sample,
+    _sample_action_position,
+    _smooth_jitter,
 )
 from strokegpt.motion_scripts import EDGING_ARCS, MILKING_ARCS, MotionScriptPlanner
 
@@ -109,6 +114,150 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertIn("continuous", first.label)
         self.assertNotEqual(round(first.depth), round(later.depth))
         self.assertGreaterEqual(first.stroke_range, 5)
+
+    def test_continuous_motion_plan_duration_includes_wrap_segment(self):
+        # ``ramp`` is strongly asymmetric (20 -> 100). Its implicit wrap
+        # segment must contribute real cycle time; otherwise the sampler
+        # glides through the gap only by compressing the authored ramp.
+        ramp = continuous_motion_plan("ramp")
+        self.assertIsNotNone(ramp)
+        self.assertAlmostEqual(ramp.duration_seconds, 1.8)
+
+        # Symmetric patterns still get the small 50 ms wrap floor so the
+        # closed loop has an explicit nonzero segment at phase wraparound.
+        stroke = continuous_motion_plan("stroke")
+        self.assertIsNotNone(stroke)
+        self.assertAlmostEqual(stroke.duration_seconds, 0.95)
+
+    def test_sample_action_position_is_phase_cyclic(self):
+        # A closed pattern: positions at the same depth at start and end.
+        actions = (
+            PatternAction(0, 20),
+            PatternAction(250, 80),
+            PatternAction(500, 80),
+            PatternAction(750, 20),
+        )
+        # The wraparound segment (from actions[-1] back to actions[0]) is
+        # sampled at phase~1.0. With the old cosine sampler this returned
+        # actions[-1].pos and produced a step on the next cycle's phase=0
+        # sample. With cyclic Catmull-Rom the value at phase very close to
+        # 1.0 should be near phase=0's value: a small fraction of a unit,
+        # not the 60-unit jump the cosine sampler could leave behind.
+        edge = _sample_action_position(actions, 0.9995)
+        start = _sample_action_position(actions, 0.0005)
+        self.assertLess(abs(edge - start), 1.5)
+
+    def test_sample_action_position_smooths_per_cycle_step(self):
+        # An asymmetric closed pattern: actions[-1].pos != actions[0].pos
+        # is the case that historically created the per-cycle position
+        # jump in cosine sampling. Catmull-Rom across cyclic neighbors
+        # should keep adjacent samples close even right across the wrap.
+        actions = (
+            PatternAction(0, 40),
+            PatternAction(400, 80),
+            PatternAction(800, 60),
+        )
+        # Sample densely around the cycle boundary and confirm no large
+        # per-step jump.
+        samples = [_sample_action_position(actions, phase / 200.0) for phase in range(0, 201)]
+        deltas = [abs(samples[i + 1] - samples[i]) for i in range(len(samples) - 1)]
+        self.assertLess(
+            max(deltas),
+            6.0,
+            "no single phase step should jump more than ~6 units on a 200-sample sweep",
+        )
+
+    def test_sample_action_position_clamps_to_zero_hundred(self):
+        # Catmull-Rom can overshoot up to ~12.5% of a segment range with
+        # extreme control points. The sampler must clamp the result so a
+        # spike at the top/bottom of a stroke never produces an
+        # out-of-range depth that would later confuse the controller.
+        actions = (
+            PatternAction(0, 0),
+            PatternAction(100, 100),
+            PatternAction(200, 0),
+            PatternAction(300, 100),
+        )
+        for phase in (i / 99 for i in range(100)):
+            value = _sample_action_position(actions, phase)
+            self.assertGreaterEqual(value, 0.0)
+            self.assertLessEqual(value, 100.0)
+
+    def test_smooth_jitter_is_bounded_and_zero_when_amount_zero(self):
+        self.assertEqual(_smooth_jitter(0.0, 0.0), 0.0)
+        self.assertEqual(_smooth_jitter(0.5, 0.0), 0.0)
+        self.assertEqual(_smooth_jitter(0.0, -5.0), 0.0)
+        for phase in (i / 99 for i in range(100)):
+            value = _smooth_jitter(phase, 4.0)
+            # Two summed sines averaged at 0.5; magnitude bounded by amount.
+            self.assertLessEqual(abs(value), 4.0 + 1e-9)
+
+    def test_smooth_jitter_axes_are_decorrelated(self):
+        # Depth and range use different ``axis_seed`` values so a single
+        # phase produces different perturbations on each axis. Without
+        # decorrelation depth and range would drift in lockstep.
+        depth_track = [_smooth_jitter(phase / 49, 5.0, axis_seed=0.0) for phase in range(50)]
+        range_track = [_smooth_jitter(phase / 49, 5.0, axis_seed=0.5) for phase in range(50)]
+        self.assertNotEqual(depth_track, range_track)
+        # Confirm samples co-occur at the same phase but differ in value.
+        mismatches = sum(1 for d, r in zip(depth_track, range_track) if abs(d - r) > 0.5)
+        self.assertGreater(mismatches, 25, "axes should diverge across half the sweep")
+
+    def test_smooth_jitter_is_deterministic(self):
+        self.assertEqual(_smooth_jitter(0.42, 3.0), _smooth_jitter(0.42, 3.0))
+        self.assertEqual(_smooth_jitter(0.0, 2.0), _smooth_jitter(0.0, 2.0))
+
+    def test_motion_target_for_sample_applies_jitter(self):
+        # With non-zero depth/range jitter the projected target should
+        # differ across two ``jitter_phase`` values that map to distinct
+        # smooth-jitter outputs, while the deterministic position mapping
+        # itself stays the same. With zero jitter the result is identical.
+        target = MotionTarget(60, 50, 70, "stroke")
+        style = FrameStyle(name="stroke", depth_jitter=4.0, range_jitter=3.0)
+        a = _motion_target_for_sample(50.0, target, style, label="stroke", jitter_phase=0.10)
+        b = _motion_target_for_sample(50.0, target, style, label="stroke", jitter_phase=0.30)
+        self.assertNotEqual((a.depth, a.stroke_range), (b.depth, b.stroke_range))
+        self.assertEqual(a.label, "stroke")
+
+        style_no_jitter = FrameStyle(name="stroke", depth_jitter=0.0, range_jitter=0.0)
+        c = _motion_target_for_sample(50.0, target, style_no_jitter, label="stroke", jitter_phase=0.10)
+        d = _motion_target_for_sample(50.0, target, style_no_jitter, label="stroke", jitter_phase=0.30)
+        self.assertEqual((c.depth, c.stroke_range), (d.depth, d.stroke_range))
+
+    def test_sample_continuous_plan_uses_independent_jitter_cycle(self):
+        # The jitter cycle is decoupled from the pattern cycle so jitter
+        # does not synchronize with the stroke. Verify by sampling the
+        # same plan-cycle phase at two different elapsed times that fall
+        # at distinct jitter-cycle phases.
+        plan = continuous_motion_plan("stroke")
+        # FrameStyles on PATTERNS may or may not declare jitter; force a
+        # jitter-bearing style for this test to isolate the new path.
+        styled_plan = plan.__class__(
+            name=plan.name,
+            actions=plan.actions,
+            style=FrameStyle(
+                name=plan.style.name,
+                window_scale=plan.style.window_scale,
+                speed_scale=plan.style.speed_scale,
+                tempo_scale=plan.style.tempo_scale,
+                depth_jitter=5.0,
+                range_jitter=3.0,
+            ),
+            duration_seconds=plan.duration_seconds,
+        )
+        target = MotionTarget(50, 50, 80, "stroke")
+        same_phase_a = sample_continuous_plan(styled_plan, target, 0.25 * styled_plan.duration_seconds)
+        same_phase_b = sample_continuous_plan(
+            styled_plan,
+            target,
+            0.25 * styled_plan.duration_seconds + JITTER_CYCLE_SECONDS / 4.0,
+        )
+        # Same plan-phase, different jitter-phase => same nominal sampled
+        # position but different jittered depth/range.
+        self.assertNotEqual(
+            (round(same_phase_a.depth, 2), round(same_phase_a.stroke_range, 2)),
+            (round(same_phase_b.depth, 2), round(same_phase_b.stroke_range, 2)),
+        )
 
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:
