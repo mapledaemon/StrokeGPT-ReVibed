@@ -23,9 +23,7 @@ def _web():
 
 
 def _voice_input_payload(web, status="success"):
-    payload = web.voice_input.status()
-    payload["status"] = status
-    return payload
+    return web.voice_input_status_payload(status=status)
 
 
 def _browse_directory(title):
@@ -114,6 +112,11 @@ def set_voice_input_route():
         "silence_trim",
         web.settings.voice_input_silence_trim,
     )
+    hands_free_mode_actions = web._request_bool_value(
+        data,
+        "hands_free_mode_actions",
+        web.settings.voice_input_hands_free_mode_actions,
+    )
     beam_size = web.settings._normalize_voice_input_beam_size(
         data.get("beam_size", web.settings.voice_input_beam_size)
     )
@@ -149,6 +152,7 @@ def set_voice_input_route():
     web.settings.voice_input_noise_floor_rms = noise_floor_rms
     web.settings.voice_input_audio_preprocessing = audio_preprocessing
     web.settings.voice_input_silence_trim = silence_trim
+    web.settings.voice_input_hands_free_mode_actions = hands_free_mode_actions
     web.settings.voice_input_beam_size = beam_size
     web.settings.voice_input_condition_on_previous_text = condition_on_previous_text
     web.settings.voice_input_vad_threshold = vad_threshold
@@ -218,13 +222,13 @@ def preload_voice_input_model_route():
         return jsonify({
             "status": "unavailable",
             "message": str(exc),
-            "voice_input_status": web.voice_input.status(),
+            "voice_input_status": _voice_input_payload(web),
         }), 409
     except VoiceInputError as exc:
         return jsonify({
             "status": "error",
             "message": str(exc),
-            "voice_input_status": web.voice_input.status(),
+            "voice_input_status": _voice_input_payload(web),
         }), 500
     payload = _voice_input_payload(web)
     payload["message"] = message
@@ -277,13 +281,13 @@ def transcribe_voice_route():
         return jsonify({
             "status": "unavailable",
             "message": str(exc),
-            "voice_input_status": web.voice_input.status(),
+            "voice_input_status": _voice_input_payload(web),
         }), 409
     except VoiceInputError as exc:
         return jsonify({
             "status": "error",
             "message": str(exc),
-            "voice_input_status": web.voice_input.status(),
+            "voice_input_status": _voice_input_payload(web),
         }), 500
     finally:
         try:
@@ -300,5 +304,5 @@ def transcribe_voice_route():
             result.setdefault("message", "I didn't catch that.")
     else:
         result["message"] = "Transcript ready."
-    result["voice_input_status"] = web.voice_input.status()
+    result["voice_input_status"] = _voice_input_payload(web)
     return jsonify(result)

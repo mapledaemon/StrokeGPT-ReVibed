@@ -482,8 +482,14 @@ def settings_payload():
         motion_patterns=_motion_pattern_catalog_payload(),
         motion_preferences=_motion_preference_payload(),
         diagnostics_levels=_diagnostics_level_options(),
-        voice_input_status=voice_input.status(),
+        voice_input_status=voice_input_status_payload(),
     )
+
+def voice_input_status_payload(status="success"):
+    payload = voice_input.status()
+    payload["status"] = status
+    payload["hands_free_mode_actions"] = bool(settings.voice_input_hands_free_mode_actions)
+    return payload
 
 def setup_check_payload():
     return payloads.setup_check_payload(
@@ -735,6 +741,8 @@ def _target_from_llm_response_move(response, current):
 
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):
+        return response, False
+    if context.get("handsfree_mode_actions_enabled") and _normalize_llm_mode_action(response.get("mode_action")):
         return response, False
     target = _target_from_llm_response_move(response, current)
     needs_repair = (
@@ -1011,6 +1019,7 @@ def get_current_context():
         use_long_term_memory = app_state.use_long_term_memory
         edging_start_time = app_state.edging_start_time
         special_persona_mode = app_state.special_persona_mode
+        active_mode_name = _active_mode_name()
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
@@ -1021,6 +1030,7 @@ def get_current_context():
         'use_long_term_memory': use_long_term_memory,
         'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,
         'allow_llm_edge_in_freestyle': settings.allow_llm_edge_in_freestyle,
+        'active_mode': active_mode_name,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
     if edging_start_time:
@@ -1194,6 +1204,14 @@ def _handle_chat_commands(text, allow_motion=True):
         _clear_motion_pause_state()
         app_state.auto_mode_active_task.stop()
         return True, jsonify({"status": "auto_stopped"})
+    if intent.kind == "milking" and _active_mode_can_receive_close_signal():
+        ok, mode_name, message = _signal_active_mode_close()
+        if ok:
+            return True, jsonify({
+                "status": "close_signaled",
+                "mode": mode_name,
+                "message": message,
+            })
     if intent.kind == "edging":
         start_background_mode(edging_mode_logic, "Let's play an edging game...", mode_name='edging')
         return True, jsonify({"status": "edging_started"})
@@ -1209,10 +1227,135 @@ def _handle_chat_commands(text, allow_motion=True):
         return True, jsonify({"status": "move_applied", "matched": intent.matched})
     return False, None
 
-def _relay_message_to_active_mode(user_input):
+def _queue_message_to_active_mode(user_input):
     app_state.mode_message_queue.append(user_input)
     app_state.mode_message_event.set()
+
+def _relay_message_to_active_mode(user_input):
+    _queue_message_to_active_mode(user_input)
     return jsonify({"status": "message_relayed_to_active_mode"})
+
+def _active_mode_name():
+    active_task = app_state.auto_mode_active_task
+    return str(getattr(active_task, "name", "") or "") if active_task else ""
+
+def _active_mode_can_receive_close_signal():
+    return _active_mode_name() in {"edging", "milking", "freestyle"}
+
+def _signal_active_mode_close():
+    mode_name = _active_mode_name()
+    if mode_name in {"edging", "milking", "freestyle"}:
+        app_state.user_signal_event.set()
+        app_state.mode_message_event.set()
+        label = {
+            "edging": "Edging",
+            "milking": "Milking",
+            "freestyle": "Freestyle",
+        }.get(mode_name, "Mode")
+        return True, mode_name, f"{label} close signal sent."
+    return False, mode_name, "Edge, milking, or Freestyle mode not active."
+
+def _normalize_request_source(value):
+    cleaned = re.sub(r"[^a-z0-9_:-]+", "_", str(value or "chat").strip().lower()).strip("_")
+    return cleaned or "chat"
+
+def _request_allows_handsfree_mode_actions(data):
+    return (
+        bool(settings.voice_input_hands_free_mode_actions)
+        and settings.voice_input_mode == "hands_free"
+        and _normalize_request_source(data.get("source")) == "voice_hands_free"
+    )
+
+LLM_MODE_ACTION_ALIASES = {
+    "continue": "continue_mode",
+    "continue_mode": "continue_mode",
+    "keep_going": "continue_mode",
+    "keep-going": "continue_mode",
+    "relay": "continue_mode",
+    "close": "close_signal",
+    "close_signal": "close_signal",
+    "im_close": "close_signal",
+    "i_m_close": "close_signal",
+    "i'm_close": "close_signal",
+    "edge_signal": "close_signal",
+    "freestyle": "start_freestyle",
+    "start_freestyle": "start_freestyle",
+    "adaptive": "start_freestyle",
+    "adaptive_motion": "start_freestyle",
+    "edging": "start_edging",
+    "edge": "start_edging",
+    "edge_me": "start_edging",
+    "start_edging": "start_edging",
+    "milking": "start_milking",
+    "milk": "start_milking",
+    "milk_me": "start_milking",
+    "finish": "start_milking",
+    "finish_me": "start_milking",
+    "start_milking": "start_milking",
+    "auto": "start_legacy_auto",
+    "auto_mode": "start_legacy_auto",
+    "legacy_auto": "start_legacy_auto",
+    "start_auto": "start_legacy_auto",
+    "start_auto_mode": "start_legacy_auto",
+    "start_legacy_auto": "start_legacy_auto",
+    "take_over": "start_legacy_auto",
+    "stop": "stop_mode",
+    "stop_mode": "stop_mode",
+    "manual": "stop_mode",
+    "manual_control": "stop_mode",
+}
+
+def _normalize_llm_mode_action(value):
+    if value is None:
+        return ""
+    cleaned = str(value or "").strip().lower()
+    if not cleaned or cleaned in {"none", "null", "false", "no_action"}:
+        return ""
+    cleaned = re.sub(r"[^a-z0-9']+", "_", cleaned).strip("_")
+    return LLM_MODE_ACTION_ALIASES.get(cleaned, "")
+
+def _start_mode_for_llm_action(action):
+    mode_map = {
+        "start_freestyle": (freestyle_mode_logic, "Starting adaptive Freestyle.", "freestyle", "Freestyle started."),
+        "start_edging": (edging_mode_logic, "Let's play an edging game...", "edging", "Edging mode started."),
+        "start_milking": (milking_mode_logic, "You're so close... I'm taking over completely now.", "milking", "Milking mode started."),
+        "start_legacy_auto": (auto_mode_logic, "Starting legacy Auto.", "auto", "Legacy Auto started."),
+    }
+    entry = mode_map.get(action)
+    if not entry:
+        return False, ""
+    mode_logic, initial_message, mode_name, message = entry
+    if _active_mode_name() == mode_name:
+        app_state.mode_message_event.set()
+        return True, f"{message} Already active."
+    start_background_mode(mode_logic, initial_message, mode_name=mode_name)
+    return True, message
+
+def _apply_llm_mode_action(response):
+    if not isinstance(response, dict):
+        return "", False, ""
+    action = _normalize_llm_mode_action(response.get("mode_action"))
+    if not action:
+        return "", False, ""
+    if action == "continue_mode":
+        if app_state.auto_mode_active_task:
+            app_state.mode_message_event.set()
+            return action, True, "Continuing active mode."
+        return action, False, "No active mode to continue."
+    if action == "close_signal":
+        ok, _mode_name, message = _signal_active_mode_close()
+        if ok:
+            return action, True, message
+        ok, message = _start_mode_for_llm_action("start_milking")
+        return action, ok, message
+    if action == "stop_mode":
+        _clear_motion_pause_state()
+        if app_state.auto_mode_active_task:
+            app_state.auto_mode_active_task.stop()
+        _stop_motion_training()
+        return action, True, "Stopping active mode."
+    ok, message = _start_mode_for_llm_action(action)
+    return action, ok, message
 
 CHAT_FIELD_RE = re.compile(r'"chat"\s*:\s*"')
 JSON_ESCAPE_MAP = {
@@ -1286,6 +1429,8 @@ def _finalize_llm_chat_response(
     request_started,
     timings,
     streamed_to_client=False,
+    mode_actions_allowed=False,
+    relay_active_mode_on_no_action=False,
 ):
     motion_repaired = False
     llm_response = _coerce_llm_response(llm_response)
@@ -1339,8 +1484,23 @@ def _finalize_llm_chat_response(
     if new_mood := llm_response.get("new_mood"):
         with app_state.lock:
             app_state.current_mood = new_mood
+    mode_action = ""
+    mode_action_applied = False
+    mode_action_message = ""
+    if mode_actions_allowed:
+        mode_action_started = time.perf_counter()
+        mode_action, mode_action_applied, mode_action_message = _apply_llm_mode_action(llm_response)
+        timings["mode_action_ms"] = int((time.perf_counter() - mode_action_started) * 1000)
+    active_mode_message_relayed = False
+    if (
+        relay_active_mode_on_no_action
+        and app_state.auto_mode_active_task
+        and (not mode_action or mode_action == "continue_mode")
+    ):
+        _queue_message_to_active_mode(user_input)
+        active_mode_message_relayed = True
     motion_applied = False
-    if not app_state.auto_mode_active_task:
+    if not app_state.auto_mode_active_task and not mode_action_applied:
         motion_started = time.perf_counter()
         target = _apply_llm_response_move(
             llm_response,
@@ -1358,6 +1518,10 @@ def _finalize_llm_chat_response(
         "chat_streamed": bool(streamed_to_client),
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
+        "mode_action": mode_action,
+        "mode_action_applied": mode_action_applied,
+        "mode_action_message": mode_action_message,
+        "active_mode_message_relayed": active_mode_message_relayed,
         "timings": timings,
     }
 
@@ -1367,6 +1531,7 @@ def handle_user_message():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
+    mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
     if (p := data.get('persona_desc')) and p != settings.persona_desc:
         settings.set_persona_prompt(p); settings.save()
@@ -1384,10 +1549,12 @@ def handle_user_message():
     )
     if handled: return response
 
-    if app_state.auto_mode_active_task:
+    active_mode_before_llm = bool(app_state.auto_mode_active_task)
+    if active_mode_before_llm and not mode_actions_allowed:
         return _relay_message_to_active_mode(user_input)
 
     context = get_current_context()
+    context["handsfree_mode_actions_enabled"] = mode_actions_allowed
     current_before_llm = motion.current_target()
     timings = {}
     try:
@@ -1409,6 +1576,8 @@ def handle_user_message():
         current_before_llm=current_before_llm,
         request_started=request_started,
         timings=timings,
+        mode_actions_allowed=mode_actions_allowed,
+        relay_active_mode_on_no_action=active_mode_before_llm,
     ))
 
 
@@ -1417,6 +1586,7 @@ def handle_user_message_stream():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
+    mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
     def generate():
         if (p := data.get('persona_desc')) and p != settings.persona_desc:
@@ -1441,12 +1611,14 @@ def handle_user_message_stream():
             yield _chat_stream_event("final", data=response.get_json(silent=True) or {"status": "ok"})
             return
 
-        if app_state.auto_mode_active_task:
+        active_mode_before_llm = bool(app_state.auto_mode_active_task)
+        if active_mode_before_llm and not mode_actions_allowed:
             response = _relay_message_to_active_mode(user_input)
             yield _chat_stream_event("final", data=response.get_json(silent=True) or {"status": "message_relayed_to_active_mode"})
             return
 
         context = get_current_context()
+        context["handsfree_mode_actions_enabled"] = mode_actions_allowed
         current_before_llm = motion.current_target()
         timings = {}
         streamed_text = ""
@@ -1489,6 +1661,8 @@ def handle_user_message_stream():
             request_started=request_started,
             timings=timings,
             streamed_to_client=bool(streamed_text),
+            mode_actions_allowed=mode_actions_allowed,
+            relay_active_mode_on_no_action=active_mode_before_llm,
         )
         yield _chat_stream_event("final", data=final_payload)
 

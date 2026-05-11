@@ -209,11 +209,12 @@ function handleSendMessageStatus(data) {
     }
     const actionStatusMessages = {
         stopped: 'Stopping.',
-        auto_started: 'Auto mode started.',
-        auto_stopped: 'Auto mode stopped.',
+        auto_started: 'Legacy Auto started.',
+        auto_stopped: 'Legacy Auto stopped.',
         freestyle_started: 'Freestyle started.',
         edging_started: 'Edging mode started.',
         milking_started: 'Milking mode started.',
+        close_signaled: "I'm Close signal sent.",
         move_applied: 'Motion command applied.',
         konami_code_activated: 'Special pattern started.',
     };
@@ -384,7 +385,7 @@ async function sendUserMessageStream(requestOptions, startedAt) {
     };
 }
 
-export async function sendUserMessage(message) {
+export async function sendUserMessage(message, {source = 'chat'} = {}) {
     const startedAt = performance.now();
     const persona = el.personaInput.value.trim();
     const blockedMessage = chatSendBlockedMessage();
@@ -410,7 +411,12 @@ export async function sendUserMessage(message) {
         const requestOptions = {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message, key: state.myHandyKey, persona_desc: state.myPersonaDescription}),
+            body: JSON.stringify({
+                message,
+                key: state.myHandyKey,
+                persona_desc: state.myPersonaDescription,
+                source,
+            }),
         };
         if (chatStreamingSupported()) {
             const streamedResult = await sendUserMessageStream(requestOptions, startedAt);

@@ -323,6 +323,155 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_im_close_chat_signals_active_mode_instead_of_restarting_milk(self):
+        from strokegpt.web import app_state, handy, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_task = app_state.auto_mode_active_task
+        app_state.user_signal_event.clear()
+        app_state.mode_message_event.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            app_state.auto_mode_active_task = SimpleNamespace(name="freestyle", stop=lambda: None)
+
+            response = self.client.post("/send_message", json={
+                "message": "I'm close",
+                "key": "test-key",
+                "persona_desc": settings.persona_desc,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "close_signaled")
+            self.assertEqual(data["mode"], "freestyle")
+            self.assertTrue(app_state.user_signal_event.is_set())
+            self.assertTrue(app_state.mode_message_event.is_set())
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            app_state.auto_mode_active_task = original_task
+            app_state.user_signal_event.clear()
+            app_state.mode_message_event.clear()
+            app_state.chat_history.clear()
+
+    def test_handsfree_llm_mode_action_can_signal_active_mode(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_task = app_state.auto_mode_active_task
+        original_handsfree_actions = settings.voice_input_hands_free_mode_actions
+        original_voice_mode = settings.voice_input_mode
+        captured_contexts = []
+        app_state.user_signal_event.clear()
+        app_state.mode_message_event.clear()
+        app_state.mode_message_queue.clear()
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.voice_input_hands_free_mode_actions = True
+            settings.voice_input_mode = "hands_free"
+            app_state.auto_mode_active_task = SimpleNamespace(name="freestyle", stop=lambda: None)
+
+            def fake_response(_history, context):
+                captured_contexts.append(dict(context))
+                return {
+                    "chat": "I heard you. Holding the edge.",
+                    "move": None,
+                    "mode_action": "close_signal",
+                    "new_mood": None,
+                }
+
+            with mock.patch.object(llm, "get_chat_response", side_effect=fake_response), \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "keep me right at the edge",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "voice_hands_free",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["mode_action"], "close_signal")
+            self.assertTrue(data["mode_action_applied"])
+            self.assertFalse(data["active_mode_message_relayed"])
+            self.assertTrue(app_state.user_signal_event.is_set())
+            self.assertTrue(app_state.mode_message_event.is_set())
+            self.assertEqual(list(app_state.mode_message_queue), [])
+            self.assertTrue(captured_contexts[-1]["handsfree_mode_actions_enabled"])
+            self.assertEqual(captured_contexts[-1]["active_mode"], "freestyle")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            settings.voice_input_hands_free_mode_actions = original_handsfree_actions
+            settings.voice_input_mode = original_voice_mode
+            app_state.auto_mode_active_task = original_task
+            app_state.user_signal_event.clear()
+            app_state.mode_message_event.clear()
+            app_state.mode_message_queue.clear()
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_handsfree_without_mode_action_still_relays_feedback_to_active_mode(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_task = app_state.auto_mode_active_task
+        original_handsfree_actions = settings.voice_input_hands_free_mode_actions
+        original_voice_mode = settings.voice_input_mode
+        app_state.user_signal_event.clear()
+        app_state.mode_message_event.clear()
+        app_state.mode_message_queue.clear()
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.voice_input_hands_free_mode_actions = True
+            settings.voice_input_mode = "hands_free"
+            app_state.auto_mode_active_task = SimpleNamespace(name="edging", stop=lambda: None)
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I will keep that shape.",
+                "move": {"zone": "tip", "pattern": "tease"},
+                "mode_action": None,
+                "new_mood": None,
+            }), mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "focus on the tip",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "voice_hands_free",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["mode_action"], "")
+            self.assertFalse(data["mode_action_applied"])
+            self.assertTrue(data["active_mode_message_relayed"])
+            self.assertEqual(list(app_state.mode_message_queue), ["focus on the tip"])
+            self.assertTrue(app_state.mode_message_event.is_set())
+            self.assertFalse(app_state.user_signal_event.is_set())
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            settings.voice_input_hands_free_mode_actions = original_handsfree_actions
+            settings.voice_input_mode = original_voice_mode
+            app_state.auto_mode_active_task = original_task
+            app_state.user_signal_event.clear()
+            app_state.mode_message_event.clear()
+            app_state.mode_message_queue.clear()
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_close_signal_wakes_edging_milking_or_freestyle_mode(self):
         from strokegpt.web import app_state
 

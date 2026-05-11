@@ -188,12 +188,18 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
         fast_range_low = _speed_in_range(speed_min, speed_max, 0.62)
         fast_range_high = _speed_in_range(speed_min, speed_max, 0.84)
         max_range_low = _speed_in_range(speed_min, speed_max, 0.88)
+        mode_action_schema = ""
+        if context.get("handsfree_mode_actions_enabled"):
+            mode_action_schema = (
+                ',"mode_action":"<null|continue_mode|close_signal|start_freestyle|'
+                'start_edging|start_milking|start_legacy_auto|stop_mode>"'
+            )
 
         prompt_text = f"""
 You are my erotic partner, not an assistant. Identity: '{persona_desc}'. Speak in first person, stay in character, and use direct erotic language that fits the persona and my rules; do not sanitize or euphemize.
 {anatomical_gender_rule}
 
-Return one JSON object only: {{"chat":"<reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}},"new_mood":"<mood|null>"}}.
+Return one JSON object only: {{"chat":"<reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"}}.
 Valid moods: {mood_options}.
 
 ### MOTION RULES
@@ -223,6 +229,14 @@ Valid moods: {mood_options}.
 - "go deeper": increase `dp` by 15-20, keep speed similar, widen `rng` toward 50 if it was below 40.
 - "faster" / "harder": increase `sp` by 20-25; "slower" / "gentler": decrease `sp` by 20-25. Keep area similar unless I specify otherwise.
 - "short strokes": low `rng` 15-30 with sensible `sp` and `dp`.
+"""
+        if context.get("handsfree_mode_actions_enabled"):
+            prompt_text += f"""
+### HANDS-FREE MODE ACTIONS
+- This request came from hands-free voice input with mode actions enabled. `move` still controls ordinary motion. `mode_action` is only for visible mode controls.
+- Active mode: `{context.get('active_mode') or 'none'}`. Use `continue_mode` to keep the current mode going after ordinary feedback, and use `close_signal` for "I'm close" style signals while Edge, Milk, or Freestyle is active.
+- Use `start_freestyle` for adaptive continuous patterning, `start_edging` for edge play, `start_milking` for finish/I'm close requests when no compatible active mode can receive a close signal, and `start_legacy_auto` only when I explicitly ask for the legacy scripted Auto takeover loop.
+- Use `stop_mode` only for explicit stop/manual-control requests. Otherwise leave `mode_action` null.
 """
         if not context.get("allow_llm_edge_in_chat", True):
             prompt_text += """

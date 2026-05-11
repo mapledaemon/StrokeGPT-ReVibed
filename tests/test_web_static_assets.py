@@ -246,6 +246,10 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="voice-input-submit-preview" name="voice-input-submit-mode" value="preview" checked', page)
             self.assertIn('id="voice-input-submit-auto" name="voice-input-submit-mode" value="auto_submit"', page)
             self.assertIn('value="auto_submit"', page)
+            self.assertIn('id="voice-input-advanced-flow-panel" class="voice-input-advanced-panel"', page)
+            self.assertIn("<summary>Advanced Flow</summary>", page)
+            self.assertIn('id="voice-input-hands-free-mode-actions-checkbox" data-requires-backend', page)
+            self.assertIn("Let hands-free voice let the model choose mode actions", page)
             self.assertIn('id="voice-input-tuning-control" class="voice-input-tuning-group"', page)
             self.assertIn("<legend>Hands-Free Tuning</legend>", page)
             self.assertIn('id="voice-input-sensitivity-slider"', page)
@@ -295,6 +299,7 @@ class WebStaticAssetTests(WebTestCase):
             )
             self.assertNotIn('id="voice-input-advanced-capture-panel" class="voice-input-advanced-panel" open', page)
             self.assertNotIn('id="voice-input-advanced-recognition-panel" class="voice-input-advanced-panel" open', page)
+            self.assertNotIn('id="voice-input-advanced-flow-panel" class="voice-input-advanced-panel" open', page)
             self.assertIn('class="model-actions"', page)
             self.assertIn('class="model-actions model-actions-wide"', page)
         finally:
@@ -562,6 +567,8 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("voiceInputNoiseFloorRms", script)
         self.assertIn("voiceInputAudioPreprocessing", script)
         self.assertIn("voiceInputSilenceTrim", script)
+        self.assertIn("voiceInputHandsFreeModeActions", script)
+        self.assertIn("voiceInputPendingSource", script)
         self.assertIn("voiceInputBeamSize", script)
         self.assertIn("voiceInputConditionOnPreviousText", script)
         self.assertIn("voiceInputVadThreshold", script)
@@ -603,6 +610,9 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("function prepareVoiceBlobForUpload", script)
         self.assertIn("audio_preprocessing", script)
         self.assertIn("silence_trim", script)
+        self.assertIn("hands_free_mode_actions", script)
+        self.assertIn("voiceChatSourceForRecording", script)
+        self.assertIn("voice_hands_free", script)
         self.assertIn("function calibrateVoiceInputNoise", script)
         self.assertIn("collectRmsSamples(analyser, VOICE_INPUT_NOISE_CALIBRATION_MS)", script)
         self.assertIn("Calibrating room noise. Stay quiet for 2 seconds", script)
@@ -655,7 +665,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("ASR took", script)
         self.assertIn("Model load:", script)
         self.assertIn("auto_submit", script)
-        self.assertIn("await submitVoiceTranscriptToChat(transcript)", script)
+        self.assertIn("await submitVoiceTranscriptToChat(transcript, {source: chatSource})", script)
 
     def test_chat_messages_are_rendered_as_text_nodes(self):
         script = self.frontend_scripts()
@@ -690,6 +700,8 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("await pollChatUpdates()", script)
         self.assertIn("elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt))", script)
         self.assertIn("return {data: null, handled: false, elapsed_ms: 0, skipped: true}", script)
+        self.assertIn("source = 'chat'", script)
+        self.assertIn("source,", script)
 
     def test_frontend_js_preserves_scrollback_when_user_is_reading(self):
         script = self.frontend_scripts()

@@ -13,12 +13,10 @@ def _web():
 @modes_blueprint.route('/signal_edge', methods=['POST'])
 def signal_edge_route():
     web = _web()
-    active_task = web.app_state.auto_mode_active_task
-    if active_task and active_task.name in {'edging', 'milking', 'freestyle'}:
-        web.app_state.user_signal_event.set()
-        web.app_state.mode_message_event.set()
-        return jsonify({"status": "signaled", "mode": active_task.name})
-    return jsonify({"status": "ignored", "message": "Edge, milking, or Freestyle mode not active."}), 400
+    ok, mode_name, message = web._signal_active_mode_close()
+    if ok:
+        return jsonify({"status": "signaled", "mode": mode_name})
+    return jsonify({"status": "ignored", "message": message}), 400
 
 
 @modes_blueprint.route('/toggle_motion_pause', methods=['POST'])

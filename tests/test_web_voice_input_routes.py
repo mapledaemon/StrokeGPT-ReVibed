@@ -33,6 +33,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertIn("noise_floor_rms", data["voice_input_status"])
             self.assertIn("audio_preprocessing", data["voice_input_status"])
             self.assertIn("silence_trim", data["voice_input_status"])
+            self.assertIn("hands_free_mode_actions", data["voice_input_status"])
+            self.assertIn("voice_input_hands_free_mode_actions", data)
             self.assertIn("beam_size", data["voice_input_status"])
             self.assertIn("condition_on_previous_text", data["voice_input_status"])
             self.assertIn("vad_threshold", data["voice_input_status"])
@@ -70,6 +72,7 @@ class WebVoiceInputRouteTests(WebTestCase):
                 "noise_floor_rms": 0.0234,
                 "audio_preprocessing": False,
                 "silence_trim": False,
+                "hands_free_mode_actions": True,
                 "beam_size": 4,
                 "condition_on_previous_text": True,
                 "vad_threshold": 0.38,
@@ -95,6 +98,7 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(settings.voice_input_noise_floor_rms, 0.0234)
             self.assertFalse(settings.voice_input_audio_preprocessing)
             self.assertFalse(settings.voice_input_silence_trim)
+            self.assertTrue(settings.voice_input_hands_free_mode_actions)
             self.assertEqual(settings.voice_input_beam_size, 4)
             self.assertTrue(settings.voice_input_condition_on_previous_text)
             self.assertEqual(settings.voice_input_vad_threshold, 0.38)
@@ -124,6 +128,7 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(data["noise_floor_rms"], 0.0234)
             self.assertFalse(data["audio_preprocessing"])
             self.assertFalse(data["silence_trim"])
+            self.assertTrue(data["hands_free_mode_actions"])
             self.assertEqual(data["beam_size"], 4)
             self.assertTrue(data["condition_on_previous_text"])
             self.assertEqual(data["vad_threshold"], 0.38)

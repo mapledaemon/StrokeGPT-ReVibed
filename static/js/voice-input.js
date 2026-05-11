@@ -159,6 +159,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
         `Recording: ${formatMs(state.voiceInputLastRecordingMs)} | Upload: ${formatMs(state.voiceInputLastUploadMs)} | Clip: ${formatBytes(state.voiceInputLastBlobBytes)}`,
         `Hands-free: ${handsFreeSensitivity()}% | Silence: ${formatMs(handsFreeSilenceMs())} | Clip: ${formatMs(minRecordingMs())}-${formatMs(maxRecordingMs())}`,
+        `Hands-free flow: ${state.voiceInputHandsFreeModeActions ? 'model mode actions on' : 'transcript only'}`,
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
         `Recognition: fallback beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
         `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
@@ -237,12 +238,12 @@ function slowAsrWarning(payload) {
     return `ASR took ${formatMs(transcribeMs)}. On CPU-only machines, use tiny.en or a GPU for lower latency.`;
 }
 
-async function submitVoiceTranscriptToChat(transcript) {
+async function submitVoiceTranscriptToChat(transcript, {source = 'voice_input'} = {}) {
     state.voiceInputLastChatMs = null;
     state.voiceInputLastChatTimings = {};
     updateVoiceInputDiagnostics();
     const startedAt = performance.now();
-    const result = await submitVoiceTranscript(transcript);
+    const result = await submitVoiceTranscript(transcript, {source});
     state.voiceInputLastChatMs = Number.isFinite(result?.elapsed_ms)
         ? result.elapsed_ms
         : Math.max(0, Math.round(performance.now() - startedAt));
@@ -428,6 +429,7 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
         state.voiceInputAutoGainControl = Boolean(el.voiceInputAutoGainControlCheckbox?.checked);
         state.voiceInputAudioPreprocessing = Boolean(el.voiceInputAudioPreprocessingCheckbox?.checked);
         state.voiceInputSilenceTrim = Boolean(el.voiceInputSilenceTrimCheckbox?.checked);
+        state.voiceInputHandsFreeModeActions = Boolean(el.voiceInputHandsFreeModeActionsCheckbox?.checked);
         state.voiceInputConditionOnPreviousText = Boolean(el.voiceInputConditionPreviousCheckbox?.checked);
     }
     if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
@@ -445,6 +447,7 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
     if (el.voiceInputAutoGainControlCheckbox) el.voiceInputAutoGainControlCheckbox.checked = state.voiceInputAutoGainControl;
     if (el.voiceInputAudioPreprocessingCheckbox) el.voiceInputAudioPreprocessingCheckbox.checked = state.voiceInputAudioPreprocessing;
     if (el.voiceInputSilenceTrimCheckbox) el.voiceInputSilenceTrimCheckbox.checked = state.voiceInputSilenceTrim;
+    if (el.voiceInputHandsFreeModeActionsCheckbox) el.voiceInputHandsFreeModeActionsCheckbox.checked = state.voiceInputHandsFreeModeActions;
     if (el.voiceInputConditionPreviousCheckbox) el.voiceInputConditionPreviousCheckbox.checked = state.voiceInputConditionOnPreviousText;
     if (el.voiceInputNoiseFloorVal) {
         const floor = voiceInputNoiseFloorRms();
@@ -530,6 +533,11 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputNoiseFloorRms = status.noise_floor_rms ?? data.voice_input_noise_floor_rms ?? DEFAULT_NOISE_FLOOR_RMS;
     state.voiceInputAudioPreprocessing = Boolean(status.audio_preprocessing ?? data.voice_input_audio_preprocessing ?? true);
     state.voiceInputSilenceTrim = Boolean(status.silence_trim ?? data.voice_input_silence_trim ?? true);
+    state.voiceInputHandsFreeModeActions = Boolean(
+        status.hands_free_mode_actions
+        ?? data.voice_input_hands_free_mode_actions
+        ?? false,
+    );
     state.voiceInputBeamSize = status.beam_size ?? data.voice_input_beam_size ?? DEFAULT_VOICE_INPUT_BEAM_SIZE;
     state.voiceInputConditionOnPreviousText = Boolean(
         status.condition_on_previous_text
@@ -597,6 +605,7 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         noise_floor_rms: voiceInputNoiseFloorRms(),
         audio_preprocessing: state.voiceInputAudioPreprocessing,
         silence_trim: state.voiceInputSilenceTrim,
+        hands_free_mode_actions: state.voiceInputHandsFreeModeActions,
         beam_size: voiceInputBeamSize(),
         condition_on_previous_text: state.voiceInputConditionOnPreviousText,
         vad_threshold: voiceInputVadThreshold(),
@@ -949,7 +958,11 @@ async function requestVoiceTranscription(blob, filename, message) {
     }
 }
 
-async function transcribeVoiceBlob(blob) {
+function voiceChatSourceForRecording(source) {
+    return source === 'hands_free' ? 'voice_hands_free' : 'voice_input';
+}
+
+async function transcribeVoiceBlob(blob, {source = 'manual'} = {}) {
     const prepared = await prepareVoiceBlobForUpload(blob);
     const payload = await requestVoiceTranscription(prepared.blob, prepared.filename, 'Transcribing voice input...');
     if (!payload) return;
@@ -960,12 +973,13 @@ async function transcribeVoiceBlob(blob) {
         return;
     }
     const slowWarning = slowAsrWarning(payload);
+    const chatSource = voiceChatSourceForRecording(source);
     if (state.voiceInputSubmitMode === 'auto_submit') {
         hideTranscriptPreview();
-        await submitVoiceTranscriptToChat(transcript);
+        await submitVoiceTranscriptToChat(transcript, {source: chatSource});
         voiceStatusMessage(slowWarning || 'Voice transcript sent.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     } else {
-        showTranscriptPreview(transcript);
+        showTranscriptPreview(transcript, chatSource);
         voiceStatusMessage(slowWarning || 'Transcript ready to review.', slowWarning ? 'var(--yellow)' : 'var(--cyan)', slowWarning ? {issue: true} : {clearIssue: true});
     }
 }
@@ -991,7 +1005,7 @@ async function startRecording(source = 'manual') {
             setVoiceButtonState();
             if (duration >= minRecordingMs()) {
                 const blob = new Blob(state.voiceInputChunks, {type: state.voiceInputRecorder.mimeType || 'audio/webm'});
-                await transcribeVoiceBlob(blob);
+                await transcribeVoiceBlob(blob, {source});
             } else if (source !== 'hands_free') {
                 voiceStatusMessage('Recording was too short. Hold the microphone button long enough to capture a full command.', 'var(--yellow)', {issue: true});
             }
@@ -1173,24 +1187,27 @@ function stopHandsFree(message = 'Hands-free listening stopped.') {
     setVoiceButtonState();
 }
 
-function showTranscriptPreview(transcript) {
+function showTranscriptPreview(transcript, source = 'voice_input') {
     state.voiceInputPendingTranscript = transcript;
+    state.voiceInputPendingSource = source;
     if (el.voiceTranscriptText) el.voiceTranscriptText.textContent = transcript;
     if (el.voiceTranscriptPreview) el.voiceTranscriptPreview.hidden = false;
 }
 
 function hideTranscriptPreview() {
     state.voiceInputPendingTranscript = '';
+    state.voiceInputPendingSource = '';
     if (el.voiceTranscriptText) el.voiceTranscriptText.textContent = '';
     if (el.voiceTranscriptPreview) el.voiceTranscriptPreview.hidden = true;
 }
 
 async function sendPendingTranscript() {
     const transcript = state.voiceInputPendingTranscript.trim();
+    const source = state.voiceInputPendingSource || 'voice_input';
     hideTranscriptPreview();
     if (transcript) {
-        const result = await submitVoiceTranscriptToChat(transcript);
-        if (result?.blocked) showTranscriptPreview(transcript);
+        const result = await submitVoiceTranscriptToChat(transcript, {source});
+        if (result?.blocked) showTranscriptPreview(transcript, source);
     }
 }
 
@@ -1262,6 +1279,7 @@ export function initVoiceInputControls({sendUserMessage}) {
         el.voiceInputAutoGainControlCheckbox,
         el.voiceInputAudioPreprocessingCheckbox,
         el.voiceInputSilenceTrimCheckbox,
+        el.voiceInputHandsFreeModeActionsCheckbox,
         el.voiceInputConditionPreviousCheckbox,
     ].forEach(input => input?.addEventListener('change', () => updateVoiceInputTuningReadouts()));
     el.calibrateVoiceInputNoiseBtn?.addEventListener('click', calibrateVoiceInputNoise);

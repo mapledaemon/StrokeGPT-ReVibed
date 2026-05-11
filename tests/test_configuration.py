@@ -72,6 +72,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["voice_input_noise_floor_rms"], 0.0)
         self.assertTrue(saved["voice_input_audio_preprocessing"])
         self.assertTrue(saved["voice_input_silence_trim"])
+        self.assertFalse(saved["voice_input_hands_free_mode_actions"])
         self.assertEqual(saved["voice_input_beam_size"], 5)
         self.assertFalse(saved["voice_input_condition_on_previous_text"])
         self.assertEqual(saved["voice_input_vad_threshold"], 0.5)
@@ -107,6 +108,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.voice_input_noise_floor_rms, 0.0)
         self.assertTrue(settings.voice_input_audio_preprocessing)
         self.assertTrue(settings.voice_input_silence_trim)
+        self.assertFalse(settings.voice_input_hands_free_mode_actions)
         self.assertEqual(settings.voice_input_beam_size, 5)
         self.assertFalse(settings.voice_input_condition_on_previous_text)
         self.assertEqual(settings.voice_input_vad_threshold, 0.5)
@@ -296,6 +298,33 @@ class ModelConfigurationTests(unittest.TestCase):
 
         self.assertIn("CHAT EDGE PERMISSION", prompt)
         self.assertIn("Do not choose edge-specific fixed `move.pattern` ids", prompt)
+
+    def test_llm_prompt_includes_handsfree_mode_action_schema_only_when_enabled(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+        base_context = {
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "",
+        }
+
+        normal_prompt = service._build_system_prompt(base_context)
+        handsfree_prompt = service._build_system_prompt({
+            **base_context,
+            "handsfree_mode_actions_enabled": True,
+            "active_mode": "freestyle",
+        })
+
+        self.assertNotIn('"mode_action"', normal_prompt)
+        self.assertIn('"mode_action"', handsfree_prompt)
+        self.assertIn("HANDS-FREE MODE ACTIONS", handsfree_prompt)
+        self.assertIn("Active mode: `freestyle`", handsfree_prompt)
+        self.assertIn("start_legacy_auto", handsfree_prompt)
+        self.assertIn("legacy scripted Auto takeover loop", handsfree_prompt)
 
     def test_llm_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")

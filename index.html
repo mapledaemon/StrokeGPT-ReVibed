@@ -103,7 +103,7 @@
             <h3>Control Actions</h3>
             <div class="control-action-stack">
                 <button id="pause-resume-btn" class="my-button" title="Hotkey: Play/Pause media key" data-requires-backend>Resume/Pause</button>
-                <button id="start-auto-btn" class="my-button" data-requires-backend>Start Auto</button>
+                <button id="start-auto-btn" class="my-button" title="Start the legacy scripted Auto loop. Use Freestyle for adaptive patterning." data-requires-backend>Legacy Auto</button>
                 <button id="stop-auto-btn" class="my-button" title="Hotkey: Stop media key" data-requires-backend>Stop Auto</button>
                 <button id="toggle-memory-btn" class="my-button" data-requires-backend>Memories: ON</button>
                 <button id="im-close-btn" class="my-button sidebar-button milking" style="display: none;" title="Hotkey: double-tap Shift" data-requires-backend>I'm Close!</button>
@@ -207,6 +207,14 @@
                             <label><input type="radio" id="voice-input-submit-auto" name="voice-input-submit-mode" value="auto_submit"><span data-choice-label="voice-input-submit-auto">Auto-send transcript</span></label>
                         </div>
                     </fieldset>
+                    <details id="voice-input-advanced-flow-panel" class="voice-input-advanced-panel">
+                        <summary>Advanced Flow</summary>
+                        <fieldset id="voice-input-hands-free-action-control" class="voice-input-tuning-group" data-requires-backend>
+                            <legend>Hands-Free Mode Actions</legend>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-mode-actions-checkbox" data-requires-backend> Let hands-free voice let the model choose mode actions</label>
+                            <div class="settings-help">Allows hands-free transcripts to request guarded mode actions such as Freestyle, Edge, Milk, Legacy Auto, Stop, or I'm Close.</div>
+                        </fieldset>
+                    </details>
                     <fieldset id="voice-input-tuning-control" class="voice-input-tuning-group">
                         <legend>Hands-Free Tuning</legend>
                         <div class="slider-container voice-input-sensitivity-row">

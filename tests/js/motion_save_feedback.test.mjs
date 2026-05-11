@@ -283,9 +283,9 @@ describe('motion/audio save feedback', () => {
         await flushAsyncHandlers();
 
         assert.deepStrictEqual(calls, [['/start_auto_mode', 'POST']]);
-        assert.strictEqual(getStubElement('status-text').textContent, 'Auto mode started.');
+        assert.strictEqual(getStubElement('status-text').textContent, 'Legacy Auto started.');
         assert.strictEqual(getStubElement('active-mode-status').hidden, false);
-        assert.strictEqual(getStubElement('active-mode-label').textContent, 'Auto');
+        assert.strictEqual(getStubElement('active-mode-label').textContent, 'Legacy Auto');
         assert.strictEqual(getStubElement('edging-timer').textContent, '00:00');
         assert.strictEqual(getStubElement('im-close-btn').style.display, 'none');
         assert.strictEqual(state.activeModeName, 'auto');

@@ -8,6 +8,35 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - PR #150 - Hands-Free Mode Actions
+-----------------------------------------------
+
+Branch: codex/handsfree-mode-actions
+
+- Added an advanced Voice setting for hands-free mode actions:
+    - Hands-free voice auto-submit now tags chat requests as
+      `voice_hands_free` so the backend can distinguish them from typed chat
+      and reviewed/manual voice sends.
+    - When the saved Voice mode is Hands-free and the new toggle is enabled,
+      the chat prompt exposes a narrow `mode_action` field for guarded mode
+      actions: continue current mode, send an I'm Close signal, start
+      Freestyle, Edge, Milk, Legacy Auto, or stop the active mode.
+    - The connector normalizes the model's `mode_action` and routes it through
+      the same background-mode start/stop/close-signal guard rails as the UI
+      controls; it never gives the model a raw device-control shortcut.
+- Preserved active-mode feedback behavior:
+    - If a hands-free model response does not choose a mode action, the
+      transcript is still queued into the active mode planner so motion
+      feedback such as "focus on the tip" is not lost.
+    - Explicit "I'm close" chat text now wakes Edge, Milk, or Freestyle as a
+      close signal instead of restarting Milk while a compatible mode is
+      already running.
+- Renamed the old Auto control in the browser UI to Legacy Auto while keeping
+  route names, status ids, and persisted mode names compatible. The old Auto
+  loop is treated as a legacy scripted takeover mode, not as Freestyle legacy;
+  adaptive continuation work should build on Freestyle or a successor planner.
+
+
 2026-05-11 - PR #149 - Freestyle Continuous Trace Metadata
 -----------------------------------------------------------
 
