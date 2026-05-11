@@ -15,7 +15,10 @@ def _web():
 @settings_blueprint.route('/check_settings')
 def check_settings_route():
     web = _web()
-    return jsonify(web.settings_payload())
+    return jsonify(web.settings_payload(
+        include_live_ollama_status=False,
+        include_motion_preferences=False,
+    ))
 
 
 @settings_blueprint.route('/setup_check')
