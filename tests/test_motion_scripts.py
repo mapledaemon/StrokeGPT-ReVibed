@@ -115,6 +115,20 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertNotEqual(round(first.depth), round(later.depth))
         self.assertGreaterEqual(first.stroke_range, 5)
 
+    def test_continuous_motion_plan_duration_includes_wrap_segment(self):
+        # ``ramp`` is strongly asymmetric (20 -> 100). Its implicit wrap
+        # segment must contribute real cycle time; otherwise the sampler
+        # glides through the gap only by compressing the authored ramp.
+        ramp = continuous_motion_plan("ramp")
+        self.assertIsNotNone(ramp)
+        self.assertAlmostEqual(ramp.duration_seconds, 1.8)
+
+        # Symmetric patterns still get the small 50 ms wrap floor so the
+        # closed loop has an explicit nonzero segment at phase wraparound.
+        stroke = continuous_motion_plan("stroke")
+        self.assertIsNotNone(stroke)
+        self.assertAlmostEqual(stroke.duration_seconds, 0.95)
+
     def test_sample_action_position_is_phase_cyclic(self):
         # A closed pattern: positions at the same depth at start and end.
         actions = (

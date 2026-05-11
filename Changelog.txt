@@ -43,15 +43,18 @@ Branch: claude-continuous-motion-fluidity
       milliseconds scaled by the position delta between
       `actions[-1].pos` and `actions[0].pos`. Closed patterns get a
       near-flat 50 ms floor; open patterns scale up so the controller
-      has time to glide through the gap instead of slewing. The phase
-      cycle is now `(actions[-1].at - actions[0].at) + wrap_ms`.
+      has time to glide through the gap instead of slewing. The plan
+      cycle duration and phase sampler both use
+      `(actions[-1].at - actions[0].at) + wrap_ms`, so the wrap segment
+      gets real elapsed time instead of compressing the authored action
+      spans.
     - `_sample_action_position(actions, phase)` rewritten to sample
       via cyclic Catmull-Rom across four neighbors. Walks a cumulative-
       time table that includes the wrap segment, so every position in
-      `[0, total_cycle_ms)` maps to a smooth point on a C^1-continuous
-      curve. Catmull-Rom's <=12.5% overshoot is clamped to [0, 100] so
-      a spike at stroke top/bottom never sends the controller an
-      out-of-range depth.
+      `[0, total_cycle_ms)` maps to a smooth phase-domain curve.
+      Catmull-Rom's <=12.5% overshoot is clamped to [0, 100] so a spike
+      at stroke top/bottom never sends the controller an out-of-range
+      depth.
     - `_motion_target_for_sample` now applies smooth time-based jitter
       via a new `_smooth_jitter(jitter_phase, amount, axis_seed)`
       helper. Two sine waves at near-irrational frequency ratio

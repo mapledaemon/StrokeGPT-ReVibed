@@ -477,11 +477,6 @@ def _actions_to_frames(
     return _blend_direction_changes(frames, style.name)
 
 
-def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
-    tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
-    return _clamp((_duration_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
-
-
 def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
     """How long the implicit wrap segment from ``actions[-1]`` back to
     ``actions[0]`` should take.
@@ -504,6 +499,17 @@ def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
     return max(50, int(pos_delta * 10))
 
 
+def _continuous_cycle_ms(actions: tuple[PatternAction, ...]) -> int:
+    if not actions:
+        return 0
+    return _duration_ms(actions) + _wrap_segment_ms(actions)
+
+
+def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
+    tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
+    return _clamp((_continuous_cycle_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
+
+
 def _sample_action_position(
     actions: tuple[PatternAction, ...],
     phase: float,
@@ -514,10 +520,12 @@ def _sample_action_position(
     segment from ``actions[-1]`` back to ``actions[0]``. The wrap span
     scales with the position delta so the cycle glides through any open
     gap instead of snapping. Catmull-Rom across four cyclic neighbors
-    keeps the curve C^1-continuous at every segment boundary, including
-    the wraparound -- the live controller no longer sees a per-cycle
-    position step at phase=1.0 -> 0.0 that the previous cosine sampler
-    used to leave behind on the 30 of 34 asymmetric built-in patterns.
+    keeps the phase-domain curve smooth at every segment boundary,
+    including the wraparound -- the live controller no longer sees a
+    per-cycle position step at phase=1.0 -> 0.0 that the previous cosine
+    sampler used to leave behind on the 30 of 34 asymmetric built-in
+    patterns. Unequal segment durations can still change wall-clock
+    velocity at a boundary, but not the commanded position itself.
 
     Catmull-Rom can overshoot by ~12.5% of a segment range when control
     points are extreme; the returned value is clamped to [0, 100]. The
@@ -532,8 +540,7 @@ def _sample_action_position(
 
     n = len(actions)
     wrap_ms = _wrap_segment_ms(actions)
-    inter_ms = max(1, actions[-1].at - actions[0].at)
-    total_cycle_ms = inter_ms + wrap_ms
+    total_cycle_ms = _continuous_cycle_ms(actions)
 
     phase = phase % 1.0
     sample_at = phase * total_cycle_ms
