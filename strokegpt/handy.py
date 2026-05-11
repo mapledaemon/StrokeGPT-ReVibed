@@ -19,6 +19,7 @@ class HandyController:
         self._hamp_started = False
         self._last_slide_bounds = None
         self._last_velocity = None
+        self._last_command_result = None
 
     def set_api_key(self, key):
         if key != self.handy_key:
@@ -38,15 +39,70 @@ class HandyController:
         self._last_slide_bounds = None
         self._last_velocity = None
 
+    def _safe_command_body(self, body):
+        if not isinstance(body, dict):
+            return {}
+        result = {}
+        for key in ("mode", "min", "max", "position", "velocity", "stopOnTarget"):
+            if key in body:
+                result[key] = body[key]
+        return result
+
+    def _record_command_result(self, path, body=None, *, ok, status_code=None, elapsed_ms=None, error=""):
+        result = {
+            "path": str(path or ""),
+            "ok": bool(ok),
+        }
+        if status_code is not None:
+            try:
+                result["status_code"] = int(status_code)
+            except (TypeError, ValueError):
+                result["status_code"] = str(status_code)
+        if elapsed_ms is not None:
+            try:
+                result["elapsed_ms"] = round(float(elapsed_ms), 1)
+            except (TypeError, ValueError):
+                pass
+        safe_body = self._safe_command_body(body)
+        if safe_body:
+            result["body"] = safe_body
+        if error:
+            result["error"] = str(error)[:180]
+        self._last_command_result = result
+
+    def last_command_result(self):
+        return dict(self._last_command_result) if self._last_command_result else None
+
     def _send_command(self, path, body=None):
         if not self.handy_key:
+            self._record_command_result(path, body, ok=False, error="missing Handy key")
             return False
         headers = {"Content-Type": "application/json", "X-Connection-Key": self.handy_key}
+        started_at = time.monotonic()
+        response = None
         try:
             response = requests.put(f"{self.base_url}{path}", headers=headers, json=body or {}, timeout=10)
             response.raise_for_status()
+            elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            self._record_command_result(
+                path,
+                body,
+                ok=True,
+                status_code=getattr(response, "status_code", None),
+                elapsed_ms=elapsed_ms,
+            )
             return True
         except requests.exceptions.RequestException as e:
+            elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            error_response = getattr(e, "response", None) or response
+            self._record_command_result(
+                path,
+                body,
+                ok=False,
+                status_code=getattr(error_response, "status_code", None),
+                elapsed_ms=elapsed_ms,
+                error=e,
+            )
             print(f"[HANDY ERROR] Problem: {e}", file=sys.stderr)
             return False
 
@@ -108,20 +164,21 @@ class HandyController:
         It scales the provided values to the user's calibrated limits.
         """
         if not self.handy_key:
-            return
+            self._record_command_result("hamp/move", ok=False, error="missing Handy key")
+            return False
 
         # A speed of 0 is a special command to stop all movement.
         if speed is not None and speed == 0:
             self.stop()
-            return
+            return True
 
         # Handle cases where the AI might still send null values
         if speed is None or depth is None or stroke_range is None:
             print("[WARN] Incomplete move received from AI, ignoring.")
-            return
+            return False
 
         if not self._ensure_hamp():
-            return
+            return False
 
         # Set slide range based on depth and stroke_range
         relative_pos_pct = self._safe_percent(depth)
@@ -151,23 +208,25 @@ class HandyController:
         # the new focus area using the previous high speed.
         velocity_first = self._last_velocity is not None and final_physical_speed < self._last_velocity
         if velocity_first and not self._send_velocity(final_physical_speed):
-            return
+            return False
 
         if not self._send_slide_bounds(slide_min, slide_max):
-            return
+            return False
 
         if not velocity_first and not self._send_velocity(final_physical_speed):
-            return
+            return False
 
         # Update state variables for the next command
         self.last_stroke_speed = final_physical_speed
         self.last_relative_speed = relative_speed_pct
         self.last_depth_pos = int(round(relative_pos_pct))
         self.last_stroke_range = int(round(relative_range_pct))
+        return True
 
     def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None):
         """Move to a single calibrated depth target for pattern previews."""
         if not self.handy_key:
+            self._record_command_result("hdsp/xava", ok=False, error="missing Handy key")
             return False
         if speed is not None and speed == 0:
             self.stop()
@@ -230,11 +289,12 @@ class HandyController:
 
     def stop(self):
         """Stops all movement."""
-        self._send_command("hamp/stop")
+        stopped = self._send_command("hamp/stop")
         self.last_stroke_speed = 0
         self.last_relative_speed = 0
         self._hamp_started = False
         self._reset_motion_cache()
+        return stopped
 
     def diagnostics(self):
         slide_bounds = None
@@ -277,6 +337,7 @@ class HandyController:
             "velocity": self._last_velocity,
             "mode": self._current_mode,
             "hamp_started": self._hamp_started,
+            "last_command": self.last_command_result(),
         }
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):

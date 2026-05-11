@@ -44,6 +44,26 @@ class FakeHandy:
         self.last_relative_speed = 0
 
 
+class FailingPositionHandy(FakeHandy):
+    def __init__(self):
+        super().__init__()
+        self._last_command = None
+
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None):
+        self.position_moves.append((speed, depth, stop_on_target, velocity))
+        self._last_command = {
+            "path": "hdsp/xava",
+            "ok": False,
+            "status_code": 503,
+            "elapsed_ms": 12.5,
+            "error": "device offline",
+        }
+        return False
+
+    def last_command_result(self):
+        return dict(self._last_command) if self._last_command else None
+
+
 class IntentMatcherTests(unittest.TestCase):
     def setUp(self):
         self.matcher = IntentMatcher()
@@ -789,6 +809,23 @@ class MotionControllerTests(unittest.TestCase):
         # can tell the planner-side wait apart from per-frame stalls.
         first_frame_points = [point for point in position_points if point.get("frame_index") == 0]
         self.assertTrue(any("batch_gap_ms" in point for point in first_frame_points))
+
+    def test_position_trace_records_failed_handy_command(self):
+        controller = MotionController(FailingPositionHandy(), step_delay=0)
+        frames = [
+            SimpleNamespace(target=MotionTarget(50, 35, 40, label="one"), delay_factor=0.0, phase="pattern"),
+        ]
+
+        completed = controller.apply_position_frames(frames, stop_after=False)
+
+        self.assertTrue(completed)
+        snapshot = controller.observability_snapshot()
+        point = next(point for point in snapshot["trace"] if "frame_index" in point)
+        self.assertFalse(point["handy_ok"])
+        self.assertEqual(point["handy_path"], "hdsp/xava")
+        self.assertEqual(point["handy_status"], 503)
+        self.assertEqual(point["handy_elapsed_ms"], 12.5)
+        self.assertEqual(point["handy_error"], "device offline")
 
 
 if __name__ == "__main__":
