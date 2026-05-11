@@ -38,6 +38,21 @@ def _speed_in_range(speed_min, speed_max, ratio):
     return max(speed_min, min(speed_max, int(round(speed_min + (width * ratio)))))
 
 
+def _motion_style_instruction(style):
+    style = str(style or "balanced").strip().lower().replace("-", "_").replace(" ", "_")
+    instructions = {
+        "smooth": "smooth - favor eased transitions, flowing anchors, and fewer abrupt reversals.",
+        "steady": "steady - favor consistent rhythm and moderate variation unless I ask for a change.",
+        "teasing": "teasing - favor lighter shallow/mid emphasis, shorter accents, and restrained intensity unless I ask for more.",
+        "pulsing": "pulsing - favor pressure pulses, holds, and recurring accents over constant speed.",
+        "ramping": "ramping - favor gradual build-ups and releases using speed/range changes over sudden jumps.",
+        "high_variation": "high_variation - favor wider variation in zone, speed, range, and pattern while staying inside limits.",
+        "full_range": "full_range - favor longer travel through more of the calibrated range unless I ask for tight motion.",
+        "freestyle": "freestyle - favor loose pattern variety and adaptive movement while staying bounded by safety limits.",
+    }
+    return instructions.get(style, "balanced - choose a sensible mix of rhythm, range, and variation.")
+
+
 class LLMService:
     def __init__(self, url, model=DEFAULT_MODEL):
         self.url = url
@@ -254,6 +269,10 @@ Valid moods: {mood_options}.
             prompt_text += str(context.get('motion_preferences')).strip()
             prompt_text += "\n"
 
+        prompt_text += "\n### MOTION STYLE PREFERENCE:\n"
+        prompt_text += _motion_style_instruction(context.get("motion_style"))
+        prompt_text += "\nTreat this as a bounded bias, not permission to ignore explicit user wording or speed/depth limits.\n"
+
         if context.get('edging_elapsed_time'):
             prompt_text += f"""
 ### EDGING TIMER
@@ -323,6 +342,7 @@ State:
 - current_depth: {current_target.get("depth")}
 - current_range: {current_target.get("stroke_range")}
 - current_mood: {context.get("current_mood")}
+- motion_style: {_motion_style_instruction(context.get("motion_style"))}
 - edging_elapsed_time: {context.get("edging_elapsed_time")}
 """
         messages = [

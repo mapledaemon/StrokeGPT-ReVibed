@@ -93,6 +93,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "motion-depth-max-slider",
             "test-motion-depth-range",
             "save-motion-depth-range",
+            "motion-style-select",
+            "save-motion-style-btn",
             "save-motion-backend-btn",
             "save-motion-speed-limits",
             "save-timings-btn",

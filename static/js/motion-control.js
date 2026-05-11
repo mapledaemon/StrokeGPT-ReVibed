@@ -180,6 +180,40 @@ function renderMotionBackendOptions(options = [], currentBackend = 'continuous')
     updateMotionBackendUi(currentBackend);
 }
 
+function motionStyleDetails(styleId) {
+    return state.motionStyleOptions.find(style => style.id === styleId) || {
+        id: 'balanced',
+        label: 'Balanced',
+        description: 'Let the model choose a sensible mix.',
+    };
+}
+
+function updateMotionStyleUi(styleId) {
+    const validIds = (state.motionStyleOptions || []).map(style => style.id);
+    state.motionStyle = validIds.includes(styleId) ? styleId : 'balanced';
+    if (el.motionStyleSelect) el.motionStyleSelect.value = state.motionStyle;
+    const details = motionStyleDetails(state.motionStyle);
+    if (el.motionStyleStatus) {
+        el.motionStyleStatus.textContent = `Current style: ${details.label}. ${details.description || ''}`.trim();
+    }
+}
+
+function renderMotionStyleOptions(options = [], currentStyle = 'balanced') {
+    state.motionStyleOptions = options.length ? options : [
+        {id: 'balanced', label: 'Balanced', description: 'Let the model choose a sensible mix.'},
+    ];
+    if (el.motionStyleSelect) {
+        el.motionStyleSelect.replaceChildren();
+        state.motionStyleOptions.forEach(style => {
+            const option = D.createElement('option');
+            option.value = style.id;
+            option.textContent = style.label;
+            el.motionStyleSelect.appendChild(option);
+        });
+    }
+    updateMotionStyleUi(currentStyle);
+}
+
 function updateMemoryToggleUi(enabled) {
     state.useLongTermMemory = Boolean(enabled);
     if (!el.toggleMemoryBtn) return;
@@ -211,6 +245,7 @@ export function populateMotionSettings(data = {}) {
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
+    renderMotionStyleOptions(data.motion_style_options || state.motionStyleOptions, data.motion_style || state.motionStyle);
     setSliderValue(el.motionSpeedMinSlider, el.motionSpeedMinVal, data.min_speed ?? state.motionMinSpeed);
     setSliderValue(el.motionSpeedMaxSlider, el.motionSpeedMaxVal, data.max_speed ?? state.motionMaxSpeed);
     normalizeMotionSpeedLimits();
@@ -235,6 +270,21 @@ async function saveMotionBackend() {
         el.statusText.textContent = `Motion backend saved: ${motionBackendDetails(data.motion_backend).label}.`;
     } else {
         reportSaveFailure(el.motionBackendStatus, data, 'Could not save motion backend.');
+    }
+}
+
+async function saveMotionStyle() {
+    const motionStyle = el.motionStyleSelect?.value || 'balanced';
+    const data = await apiCall('/set_motion_style', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({motion_style: motionStyle}),
+    });
+    if (data && data.status === 'success') {
+        renderMotionStyleOptions(data.motion_style_options || state.motionStyleOptions, data.motion_style);
+        el.statusText.textContent = `Motion style saved: ${motionStyleDetails(data.motion_style).label}.`;
+    } else {
+        reportSaveFailure(el.motionStyleStatus || el.statusText, data, 'Could not save motion style.');
     }
 }
 
@@ -1035,6 +1085,8 @@ export function initMotionControls({sendUserMessage}) {
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
+    el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);
+    el.motionStyleSelect?.addEventListener('change', () => updateMotionStyleUi(el.motionStyleSelect.value));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);

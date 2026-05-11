@@ -22,6 +22,18 @@ DEFAULT_PERSONA_PROMPTS = [
 ]
 DEFAULT_MOTION_BACKEND = "continuous"
 MOTION_BACKENDS = {"continuous", "position", "hamp"}
+DEFAULT_MOTION_STYLE = "balanced"
+MOTION_STYLES = {
+    "balanced",
+    "smooth",
+    "steady",
+    "teasing",
+    "pulsing",
+    "ramping",
+    "high_variation",
+    "full_range",
+    "freestyle",
+}
 DEFAULT_DIAGNOSTICS_LEVEL = "compact"
 DIAGNOSTICS_LEVELS = {"compact", "status", "debug"}
 VOICE_INPUT_PROVIDER_DISABLED = "disabled"
@@ -119,6 +131,7 @@ def default_settings_dict():
         "motion_pattern_feedback_history": [],
         "motion_pattern_weights": {},
         "motion_backend": DEFAULT_MOTION_BACKEND,
+        "motion_style": DEFAULT_MOTION_STYLE,
         "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "ollama_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "motion_feedback_auto_disable": False,
@@ -237,6 +250,7 @@ class SettingsManager:
         )
         self.motion_pattern_weights = self._normalize_weight_map(data.get("motion_pattern_weights", {}))
         self.motion_backend = self._normalize_motion_backend(data.get("motion_backend", defaults["motion_backend"]))
+        self.motion_style = self._normalize_motion_style(data.get("motion_style", defaults["motion_style"]))
         self.motion_diagnostics_level = self._normalize_diagnostics_level(
             data.get("motion_diagnostics_level", defaults["motion_diagnostics_level"])
         )
@@ -461,6 +475,7 @@ class SettingsManager:
             ),
             "motion_pattern_weights": self._normalize_weight_map(self.motion_pattern_weights),
             "motion_backend": self._normalize_motion_backend(self.motion_backend),
+            "motion_style": self._normalize_motion_style(self.motion_style),
             "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
             "ollama_diagnostics_level": self._normalize_diagnostics_level(self.ollama_diagnostics_level),
             "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
@@ -616,6 +631,18 @@ class SettingsManager:
         if cleaned in {"position", "position_script", "flexible_position", "flexible"}:
             return "position"
         return DEFAULT_MOTION_BACKEND
+
+    def _normalize_motion_style(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"varied", "default", "normal"}:
+            return "balanced"
+        if cleaned in {"high_variance", "variation", "variety"}:
+            return "high_variation"
+        if cleaned in {"full", "wide", "full_stroke", "full_strokes"}:
+            return "full_range"
+        if cleaned in MOTION_STYLES:
+            return cleaned
+        return DEFAULT_MOTION_STYLE
 
     def _normalize_voice_input_provider(self, value):
         cleaned = str(value or "").strip().lower()

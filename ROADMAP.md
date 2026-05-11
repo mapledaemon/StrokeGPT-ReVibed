@@ -168,13 +168,12 @@ Why next: this is a clean way to steer model behavior without hidden prompt
 drift, and it slots in after the persona audit so style preferences and
 persona prompts stay separable.
 
-- Add a user-visible motion style selector for broad movement feel, such as
-  smooth, steady, teasing, pulsing, ramping, high-variation, full-range, or
-  freestyle.
-- Store style preferences separately from persona prompts so users can
-  change character without losing device behavior preferences.
-- Include style preferences in model context as concise, inspectable
-  numeric or enumerated values rather than natural-language memory.
+- Validate whether the visible Motion Style selector's current choices map to
+  useful behavior in real chat and mode-control sessions, then rename or prune
+  styles that do not produce distinct enough motion.
+- Decide whether Freestyle and preset-mode planners should consume the saved
+  style directly in deterministic scoring, rather than relying only on the LLM
+  prompt/context bias.
 - Let users reset learned motion feedback and style preferences without a
   full settings reset.
 

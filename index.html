@@ -337,6 +337,22 @@
                     <div id="motion-backend-status" class="settings-help">Current backend: Continuous position.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
+                    <h4>Motion Style</h4>
+                    <select id="motion-style-select" class="select-box" data-requires-backend>
+                        <option value="balanced">Balanced</option>
+                        <option value="smooth">Smooth</option>
+                        <option value="steady">Steady</option>
+                        <option value="teasing">Teasing</option>
+                        <option value="pulsing">Pulsing</option>
+                        <option value="ramping">Ramping</option>
+                        <option value="high_variation">High variation</option>
+                        <option value="full_range">Full range</option>
+                        <option value="freestyle">Freestyle</option>
+                    </select>
+                    <button id="save-motion-style-btn" class="my-button" data-requires-backend>Save Motion Style</button>
+                    <div id="motion-style-status" class="settings-help">Current style: Balanced.</div>
+                </div>
+                <div class="settings-subsection motion-panel">
                     <h4>Speed Limits</h4>
                     <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider" data-requires-backend><span id="motion-speed-min-val">10%</span></div>
                     <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider" data-requires-backend><span id="motion-speed-max-val">80%</span></div>

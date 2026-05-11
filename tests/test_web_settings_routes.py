@@ -221,6 +221,29 @@ class WebSettingsRouteTests(WebTestCase):
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)
 
+    def test_motion_style_can_be_selected_and_reported(self):
+        from strokegpt.web import get_current_context, settings
+
+        original_style = settings.motion_style
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_motion_style", json={"motion_style": "full-range"})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["motion_style"], "full_range")
+            self.assertTrue(any(item["id"] == "full_range" for item in data["motion_style_options"]))
+            self.assertEqual(settings.motion_style, "full_range")
+            self.assertEqual(get_current_context()["motion_style"], "full_range")
+
+            response = self.client.get("/check_settings")
+            payload = response.get_json()
+            self.assertEqual(payload["motion_style"], "full_range")
+            self.assertTrue(any(item["id"] == "teasing" for item in payload["motion_style_options"]))
+        finally:
+            settings.motion_style = original_style
+
     def test_llm_edge_permissions_can_be_selected_and_saved(self):
         from strokegpt.web import settings
 

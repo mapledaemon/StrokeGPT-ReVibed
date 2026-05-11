@@ -364,6 +364,19 @@ def set_motion_backend_route():
     })
 
 
+@motion_blueprint.route('/set_motion_style', methods=['POST'])
+def set_motion_style_route():
+    web = _web()
+    data = web._request_json()
+    web.settings.motion_style = web.settings._normalize_motion_style(data.get("motion_style"))
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "motion_style": web.settings.motion_style,
+        "motion_style_options": payloads.motion_style_options(),
+    })
+
+
 @motion_blueprint.route('/set_llm_edge_permissions', methods=['POST'])
 def set_llm_edge_permissions_route():
     web = _web()

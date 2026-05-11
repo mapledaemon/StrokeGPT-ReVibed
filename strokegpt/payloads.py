@@ -1,6 +1,7 @@
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .settings import (
     DIAGNOSTICS_LEVELS,
+    MOTION_STYLES,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
@@ -51,6 +52,51 @@ def diagnostics_level_options():
         {"id": level, "label": labels[level]}
         for level in ("compact", "status", "debug")
         if level in DIAGNOSTICS_LEVELS
+    ]
+
+
+def motion_style_options():
+    labels = {
+        "balanced": "Balanced",
+        "smooth": "Smooth",
+        "steady": "Steady",
+        "teasing": "Teasing",
+        "pulsing": "Pulsing",
+        "ramping": "Ramping",
+        "high_variation": "High variation",
+        "full_range": "Full range",
+        "freestyle": "Freestyle",
+    }
+    descriptions = {
+        "balanced": "Let the model choose a sensible mix.",
+        "smooth": "Favor eased, flowing transitions.",
+        "steady": "Favor consistent rhythm and fewer abrupt changes.",
+        "teasing": "Favor lighter shallow/mid emphasis unless asked otherwise.",
+        "pulsing": "Favor pressure pulses and recurring accents.",
+        "ramping": "Favor gradual build-ups and releases.",
+        "high_variation": "Favor wider variation in speed, range, and zone.",
+        "full_range": "Favor longer travel through more of the calibrated range.",
+        "freestyle": "Favor looser pattern variety while staying inside limits.",
+    }
+    order = (
+        "balanced",
+        "smooth",
+        "steady",
+        "teasing",
+        "pulsing",
+        "ramping",
+        "high_variation",
+        "full_range",
+        "freestyle",
+    )
+    return [
+        {
+            "id": style,
+            "label": labels[style],
+            "description": descriptions[style],
+        }
+        for style in order
+        if style in MOTION_STYLES
     ]
 
 
@@ -636,6 +682,8 @@ def settings_payload(
         "min_speed": settings.min_speed,
         "max_speed": settings.max_speed,
         "motion_backend": settings.motion_backend,
+        "motion_style": settings.motion_style,
+        "motion_style_options": motion_style_options(),
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "ollama_diagnostics_level": settings.ollama_diagnostics_level,
         "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
