@@ -8,6 +8,100 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - Unreleased - Smooth Continuous Motion Sampler (Wrap + Catmull-Rom + Jitter)
+----------------------------------------------------------------------------------------
+
+Branch: claude-continuous-motion-fluidity
+
+- Quality review of the continuous motion backend that PR #118 shipped.
+  The phase-sampled control loop, generation-counter cancellation,
+  morph-in easing, velocity capping, and per-tick step limiting are all
+  solid. The sampler itself had three real gaps that this branch
+  addresses, all in `strokegpt/motion_patterns.py`:
+
+  1. Per-cycle position step at phase wraparound. The previous cosine
+     sampler returned `actions[-1].pos` at phase=1.0 and
+     `actions[0].pos` at phase=0.0. An audit of the built-in catalog
+     showed 30 of 34 patterns are asymmetric (e.g. `ramp` runs 20 ->
+     100, `milking-pressure-build` runs 12 -> 92), so almost every
+     pattern hit a hard position jump once per cycle. The controller's
+     `_limit_continuous_step` clamped that jump into a series of small
+     steps, but the perceived rhythm was still mechanical.
+  2. Cosine-only interpolation between adjacent actions. Cosine
+     produces a velocity discontinuity at every action boundary
+     (C^0 but not C^1). Catmull-Rom across four neighbors was already
+     used by `prepare_anchor_actions` for anchor programs, but the
+     live continuous sampler stuck with cosine.
+  3. Style depth/range jitter declared on `FrameStyle` was never
+     applied. `_motion_target_for_sample` ignored `style.depth_jitter`
+     and `style.range_jitter`. Patterns that opted into jitter got
+     none in continuous mode, which kept the sampled output
+     metronomically periodic.
+
+- Three concrete changes in `strokegpt/motion_patterns.py`:
+    - New `_wrap_segment_ms(actions)` returns a per-cycle wrap span in
+      milliseconds scaled by the position delta between
+      `actions[-1].pos` and `actions[0].pos`. Closed patterns get a
+      near-flat 50 ms floor; open patterns scale up so the controller
+      has time to glide through the gap instead of slewing. The phase
+      cycle is now `(actions[-1].at - actions[0].at) + wrap_ms`.
+    - `_sample_action_position(actions, phase)` rewritten to sample
+      via cyclic Catmull-Rom across four neighbors. Walks a cumulative-
+      time table that includes the wrap segment, so every position in
+      `[0, total_cycle_ms)` maps to a smooth point on a C^1-continuous
+      curve. Catmull-Rom's <=12.5% overshoot is clamped to [0, 100] so
+      a spike at stroke top/bottom never sends the controller an
+      out-of-range depth.
+    - `_motion_target_for_sample` now applies smooth time-based jitter
+      via a new `_smooth_jitter(jitter_phase, amount, axis_seed)`
+      helper. Two sine waves at near-irrational frequency ratio
+      (2.3 and 3.7 times tau) sum to a bounded perturbation that
+      varies smoothly with `jitter_phase` and never perfectly repeats.
+      Depth and range use decorrelated `axis_seed` values so they
+      drift independently rather than in lockstep. Zero-amount
+      jitter is a no-op.
+    - `sample_continuous_plan` computes a `jitter_phase` from
+      `elapsed_seconds % JITTER_CYCLE_SECONDS` (5 s) so jitter is
+      decoupled from the pattern cycle. Pattern cycle and jitter cycle
+      drift in and out of phase, which feels organic rather than
+      synchronized.
+
+- 10 new behavioral tests in `tests/test_motion_scripts.py`:
+    - `_sample_action_position` is phase-cyclic (phase~1.0 ~~ phase~0.0).
+    - No single-step position jump exceeds ~6 units on a 200-sample
+      sweep of an asymmetric pattern (the previous cosine sampler
+      failed this with ~60-unit jumps at the wrap).
+    - Sampler clamps to [0, 100] under Catmull-Rom overshoot conditions.
+    - `_smooth_jitter` is bounded, deterministic, zero on zero/negative
+      amount, and decorrelated across `axis_seed` values.
+    - `_motion_target_for_sample` applies jitter when `style` declares
+      it and stays identical with `style.depth_jitter ==
+      style.range_jitter == 0`.
+    - `sample_continuous_plan` produces distinct depth/range values at
+      the same pattern phase but different `jitter_phase`.
+
+- No new dependency. No behavior change for cosine-using callers
+  (there are none -- only `sample_continuous_plan` used the sampler,
+  and the `interpolation` parameter was always `"cosine"`; removed the
+  unused parameter). Existing
+  `test_continuous_motion_plan_samples_pattern_as_cycle` still passes
+  against the new sampler.
+
+- Validation: `python -m unittest discover -s tests` green at 336 /
+  111 skipped (was 326 / 111 -- +10 new sampler tests). `python -m
+  py_compile app.py strokegpt/*.py tests/*.py` clean.
+
+- Follow-ups deferred to keep this branch focused:
+    - Adaptive `CONTINUOUS_MORPH_SECONDS` scaling with depth-jump
+      magnitude in `motion.py`'s `_run_continuous_plan`.
+    - Phase continuity across target updates (currently each new
+      target resets the pattern cycle to phase=0; the morph easing
+      covers most of the visible effect, but preserving phase would
+      make same-pattern speed/depth tweaks even more seamless).
+    - Cache `program_range` on the plan instead of resampling 25
+      points every time `_run_continuous_plan` starts (minor perf).
+
+
 2026-05-10 - PR #145 - Handy Visualizer Position Fix
 -----------------------------------------------------
 
