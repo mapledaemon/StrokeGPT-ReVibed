@@ -521,6 +521,59 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(sleep_seconds, [0])
         self.assertTrue(any("Freestyle selecting Sway" in message for message in messages))
 
+    def test_freestyle_continuous_trace_metadata_describes_choice_and_sleep(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_calls = []
+
+        def apply_continuous_target(target, source="continuous pattern", trace_metadata=None):
+            motion.applied.append(target)
+            motion.continuous_calls.append((source, trace_metadata or {}))
+            return True
+
+        motion.apply_continuous_target = apply_continuous_target
+        stop_event = threading.Event()
+        remembered = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+        callbacks = {
+            "get_timings": lambda _mode: (1.25, 1.25),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+        }
+        sleep_seconds = []
+
+        def stop_after_iteration(event, seconds, *_args, **_kwargs):
+            sleep_seconds.append(seconds)
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(sleep_seconds, [1.25])
+        self.assertEqual(remembered, ["sway"])
+        self.assertEqual(len(motion.continuous_calls), 1)
+        source, metadata = motion.continuous_calls[0]
+        self.assertEqual(source, "freestyle planner")
+        self.assertEqual(metadata["mode"], "freestyle")
+        self.assertEqual(metadata["freestyle_step"], 0)
+        self.assertEqual(metadata["freestyle_pattern_id"], "sway")
+        self.assertEqual(metadata["freestyle_pattern_name"], "Sway")
+        self.assertEqual(metadata["freestyle_planner_sleep_ms"], 1250.0)
+        self.assertFalse(metadata["freestyle_feedback"])
+
     def test_freestyle_close_signal_asks_llm_for_milk_style(self):
         motion = FakeMotionController()
         stop_event = threading.Event()

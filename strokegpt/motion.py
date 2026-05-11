@@ -967,7 +967,12 @@ class MotionController:
             self.handy.move(target.speed, target.depth, target.stroke_range)
         self._record_target(target, source=source)
 
-    def apply_continuous_target(self, target: MotionTarget, source: str = "continuous pattern") -> bool:
+    def apply_continuous_target(
+        self,
+        target: MotionTarget,
+        source: str = "continuous pattern",
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
         plan = self._continuous_plan(target)
         if plan is None:
             return False
@@ -988,7 +993,7 @@ class MotionController:
 
         thread = threading.Thread(
             target=self._run_continuous_plan,
-            args=(plan, target.clamped(), source, generation, started_at, phase_offset_seconds),
+            args=(plan, target.clamped(), source, generation, started_at, phase_offset_seconds, trace_metadata),
             daemon=True,
         )
         thread.start()
@@ -1077,6 +1082,7 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        trace_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         from .motion_patterns import continuous_plan_depth_range, sample_continuous_plan
 
@@ -1135,6 +1141,9 @@ class MotionController:
                     extras["program_range"] = program_range
                 if previous_command_ended_at is not None:
                     extras["gap_ms"] = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
+                if trace_metadata:
+                    for key, value in trace_metadata.items():
+                        extras.setdefault(str(key), value)
                 self._augment_last_trace(extras)
 
                 previous_command_ended_at = send_ended_at

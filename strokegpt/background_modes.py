@@ -424,7 +424,22 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             send_message(choice.reason)
             next_message_at = step_count + rng.randint(3, 5)
 
-        if freestyle_helpers._apply_freestyle_choices(motion_controller, choices, rng):
+        sleep_seconds = random.uniform(min_time, max_time) if continuous_freestyle else 0
+        trace_metadata = None
+        if continuous_freestyle:
+            trace_metadata = {
+                "mode": "freestyle",
+                "freestyle_step": step_count,
+                "freestyle_pattern_id": choice.pattern_id,
+                "freestyle_pattern_name": choice.pattern_name,
+                "freestyle_score": round(choice.score, 1),
+                "freestyle_mood": choice.mood,
+                "freestyle_feedback": bool(feedback_target),
+                "freestyle_close_style": bool(close_style_target),
+                "freestyle_planner_sleep_ms": round(sleep_seconds * 1000.0, 1),
+            }
+
+        if freestyle_helpers._apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=trace_metadata):
             update_mood(choices[-1].mood)
             played_choices = choices[:1] if continuous_freestyle else choices
             for played_choice in played_choices:
@@ -433,7 +448,6 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             recent_ids[:] = recent_ids[-8:]
 
         step_count += 1 if continuous_freestyle else len(choices)
-        sleep_seconds = random.uniform(min_time, max_time) if continuous_freestyle else 0
         _sleep_with_stop(stop_event, sleep_seconds, message_event, pause_event)
 
 
