@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #148 - Continuous Program Range Cache
+------------------------------------------------------
+
+Branch: codex/continuous-program-range-cache
+
+- Follow-up to PR #146 / PR #147's continuous motion work:
+    - `ContinuousMotionPlan` now stores the sampled normalized min/max range
+      for its action curve when the plan is created.
+    - The continuous controller now projects that cached normalized range into
+      the target depth window for `program_range` trace metadata instead of
+      resampling `sample_continuous_plan()` 25 times every time a continuous
+      plan starts or a same-pattern update restarts the controller thread.
+    - `continuous_plan_depth_range()` keeps the visualizer range contract in
+      the motion-pattern module, including conservative depth-jitter padding,
+      so the controller no longer needs to know how to estimate pattern
+      extrema.
+- This completes the remaining PR #146 follow-up to cache `program_range` on
+  the continuous plan rather than resampling it in `_run_continuous_plan()`.
+
+
 2026-05-10 - PR #147 - Continuous Motion Phase And Morph Follow-Up
 -------------------------------------------------------------------
 
