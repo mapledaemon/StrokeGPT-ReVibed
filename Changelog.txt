@@ -8,6 +8,17 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #145 - Handy Visualizer Position Fix
+-----------------------------------------------------
+
+Branch: codex/fix-handy-visualizer-position
+
+- Fixed the Handy sidebar visualizer so runtime motion updates move only the
+  purple horizontal slider-position line. The lighter oval behind it remains a
+  static track instead of being resized or shifted as a dynamic program-range
+  background.
+
+
 2026-05-10 - PR #144 - Chat Realtime Streaming
 ------------------------------------------------
 
