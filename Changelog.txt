@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Startup Speedups
+-----------------------------
+
+Branch: codex/startup-speedups
+
+- Made `/check_settings` return a fast startup snapshot instead of waiting on
+  live Ollama `/api/tags` and `/api/ps` probes during first paint.
+- Removed the unused motion-preference blob from the startup settings payload;
+  routes that actually mutate or inspect motion preferences still return it.
+- Kept model availability current by refreshing `/ollama_status`
+  asynchronously after startup, with an explicit non-blocking "checking"
+  status until the live probe completes.
+- Deferred ElevenLabs imports until an API key or hosted voice generation
+  actually needs the client, reducing import/startup cost when voice output is
+  off or using local TTS.
+
+
 2026-05-11 - PR #156 - Motion Style Preference
 -----------------------------------------------
 

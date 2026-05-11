@@ -103,6 +103,7 @@ function modelSizeLabel(detail = {}) {
 }
 
 function modelStateLabel(detail = {}) {
+    if (detail.unchecked) return 'Checking';
     if (detail.running && detail.size_vram_label) return `${detail.size_vram_label} VRAM`;
     if (detail.running) return 'Running';
     if (detail.installed) return 'Installed';
@@ -114,6 +115,7 @@ function modelMetaLabel(detail = {}) {
 }
 
 function modelNeedsDownload(detail = {}) {
+    if (detail.unchecked) return false;
     return !detail.installed;
 }
 
@@ -267,6 +269,7 @@ export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
     const gpuStatus = status.gpu_status || {};
+    state.ollamaStatus = status;
     state.ollamaDownloadPolling = download.state === 'downloading';
     state.ollamaModelDetails = modelDetailsFromStatus(status);
     if (state.ollamaModels.length) {
@@ -291,9 +294,11 @@ export function updateOllamaStatus(status) {
         message += ` ${download.message}`;
     }
     el.ollamaModelStatus.textContent = message;
-    el.ollamaModelStatus.style.color = status.available && status.current_model_installed && !gpuStatus.warning && download.state !== 'downloading'
-        ? 'var(--cyan)'
-        : 'var(--yellow)';
+    el.ollamaModelStatus.style.color = status.unchecked
+        ? 'var(--comment)'
+        : status.available && status.current_model_installed && !gpuStatus.warning && download.state !== 'downloading'
+            ? 'var(--cyan)'
+            : 'var(--yellow)';
     if (el.downloadOllamaModelBtn) {
         el.downloadOllamaModelBtn.disabled = state.ollamaDownloadPolling;
         el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
@@ -304,6 +309,9 @@ export function updateOllamaStatus(status) {
 
 function chatModelBlockedMessage(status = {}) {
     const download = status.download || {};
+    if (status.unchecked) {
+        return '';
+    }
     if (download.state === 'downloading') {
         return `Ollama is downloading ${download.model || 'the selected model'} - chat is paused until it finishes.`;
     }

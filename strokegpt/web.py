@@ -355,13 +355,20 @@ def _ollama_running_models():
     models.sort(key=lambda item: item["name"].lower())
     return models
 
-def _ollama_status_payload():
+def _ollama_status_payload(live=True):
     # Service-bound adapter for ``payloads.ollama_status_payload()``: binds the
     # live ``settings``/``llm`` services and the local pull/installation helpers
     # so blueprint routes (and tests via ``mock.patch`` on the canonical
     # ``strokegpt.payloads.ollama_status_payload``) can reuse one entry point.
     # Do not add new ``web.*`` payload wrappers; extend ``strokegpt.payloads``
     # instead and bind services here.
+    if not live:
+        return payloads.ollama_status_pending_payload(
+            settings=settings,
+            llm=llm,
+            base_url=OLLAMA_BASE_URL,
+            pull_snapshot=_ollama_pull_snapshot,
+        )
     return payloads.ollama_status_payload(
         settings=settings,
         llm=llm,
@@ -465,7 +472,7 @@ def _start_ollama_pull(model):
 def get_persona_prompts_for_ui():
     return payloads.persona_prompts_for_ui(settings)
 
-def settings_payload():
+def settings_payload(*, include_live_ollama_status=True, include_motion_preferences=True):
     # Service-bound adapter for ``payloads.settings_payload()``: bundles the
     # runtime ``settings``/``llm``/``audio`` services and composed helpers so
     # blueprint routes can fetch the full settings dialog payload in one call.
@@ -478,9 +485,9 @@ def settings_payload():
         use_long_term_memory=app_state.use_long_term_memory,
         persona_prompts=get_persona_prompts_for_ui(),
         ollama_models=get_ollama_models_for_ui(),
-        ollama_status=_ollama_status_payload(),
+        ollama_status=_ollama_status_payload(live=include_live_ollama_status),
         motion_patterns=_motion_pattern_catalog_payload(),
-        motion_preferences=_motion_preference_payload(),
+        motion_preferences=_motion_preference_payload() if include_motion_preferences else None,
         diagnostics_levels=_diagnostics_level_options(),
         voice_input_status=voice_input_status_payload(),
     )

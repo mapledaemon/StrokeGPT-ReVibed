@@ -27,7 +27,7 @@ describe('setup Ollama GPU warning', () => {
         });
 
         const setupBox = getStubElement('setup-box');
-        assert.equal(setupBox.children[0].className, 'setup-warning');
+        assert.equal(setupBox.children[0].className, 'setup-warning setup-ollama-gpu-warning');
         assert.equal(
             setupBox.children[0].textContent,
             'Ollama reports the selected model is running in system memory only.',

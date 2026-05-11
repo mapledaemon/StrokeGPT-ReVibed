@@ -9,24 +9,41 @@ import {
     populateDiagnosticsSettings,
     populateModelOptions,
     populatePersonaPromptOptions,
+    refreshOllamaStatus,
     setPersonaPrompt,
     updateOllamaStatus,
 } from './settings.js';
+
+function applySetupOllamaGpuWarning(status = {}) {
+    const warning = status?.gpu_status?.setup_warning || '';
+    if (!el.setupBox) return;
+    Array.from(el.setupBox.children || []).forEach(node => {
+        if (node.classList?.contains('setup-ollama-gpu-warning')) {
+            node.parentNode?.removeChild?.(node);
+        }
+    });
+    if (!warning) return;
+    const node = D.createElement('div');
+    node.className = 'setup-warning setup-ollama-gpu-warning';
+    node.setAttribute('role', 'alert');
+    node.textContent = warning;
+    el.setupBox.prepend(node);
+}
+
+function refreshStartupOllamaStatus(data = {}) {
+    refreshOllamaStatus().then(status => {
+        if (!status) return;
+        data.ollama_status = status;
+        if (el.setupOverlay?.style?.display !== 'none') {
+            applySetupOllamaGpuWarning(status);
+        }
+    });
+}
 
 export function renderSetup(isReturningUser = false, data = {}) {
     el.setupOverlay.style.display = 'flex';
     let step = isReturningUser ? 2 : 1;
     let setupMinSpeed = data.min_speed ?? 10;
-
-    function applySetupOllamaGpuWarning() {
-        const warning = data.ollama_status?.gpu_status?.setup_warning || '';
-        if (!warning) return;
-        const node = D.createElement('div');
-        node.className = 'setup-warning';
-        node.setAttribute('role', 'alert');
-        node.textContent = warning;
-        el.setupBox.prepend(node);
-    }
 
     function displayStep() {
         el.setupBox.classList.remove('setup-check-box');
@@ -148,7 +165,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
                 }
             };
         }
-        applySetupOllamaGpuWarning();
+        applySetupOllamaGpuWarning(data.ollama_status);
     }
 
     displayStep();
@@ -188,6 +205,7 @@ export async function startupCheck() {
         }
         D.getElementById('splash-screen').style.display = 'none';
         renderSetup(true, data);
+        refreshStartupOllamaStatus(data);
     } else {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
@@ -203,6 +221,7 @@ export async function startupCheck() {
         updateLocalTtsStatus(data && data.local_tts_status);
         updateAudioProviderUi();
         populateVoiceInputSettings(data || {});
+        refreshStartupOllamaStatus(data || {});
         const startHandler = event => {
             if (event.key === 'Enter') {
                 D.removeEventListener('keydown', startHandler);

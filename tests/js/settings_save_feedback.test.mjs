@@ -399,4 +399,45 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.match(diagnostics.textContent, /GPU: Ollama reports the selected model is CPU-only/);
         assert.match(diagnostics.textContent, /GPU warning: Ollama reports the selected model is running in system memory only/);
     });
+
+    it('updateOllamaStatus treats startup unchecked status as non-blocking', () => {
+        const modelStatus = resetStubElement('ollama-model-status');
+        const input = resetStubElement('user-chat-input');
+        const send = resetStubElement('send-chat-btn');
+        const modelList = resetStubElement('ollama-model-list');
+        state.chatModelBlockedMessage = 'previous block';
+        state.ollamaModels = ['local/test-model:latest'];
+        state.ollamaCurrentModel = 'local/test-model:latest';
+
+        updateOllamaStatus({
+            unchecked: true,
+            available: null,
+            current_model: 'local/test-model:latest',
+            current_model_installed: null,
+            installed_model_names: [],
+            download: {},
+            diagnostics_level: 'compact',
+            llm_diagnostics: {},
+            model_details: {
+                'local/test-model:latest': {
+                    name: 'local/test-model:latest',
+                    size_label: '4.0 GB',
+                    unchecked: true,
+                },
+            },
+            message: 'Checking Ollama model status...',
+            gpu_status: {
+                state: 'unchecked',
+                message: 'Ollama GPU status will refresh after startup.',
+            },
+        });
+
+        assert.strictEqual(state.chatModelBlockedMessage, '');
+        assert.strictEqual(input.disabled, false);
+        assert.strictEqual(send.disabled, false);
+        assert.strictEqual(modelStatus.textContent, 'Checking Ollama model status...');
+        assert.strictEqual(modelStatus.style.color, 'var(--comment)');
+        assert.strictEqual(modelList.children[0].children[1].textContent, '4.0 GB - Checking');
+        assert.match(modelList.children[0].children[2].children[0].className, /ollama-model-action-spacer/);
+    });
 });

@@ -244,6 +244,18 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.motion_style = original_style
 
+    def test_check_settings_uses_fast_startup_payload(self):
+        with mock.patch("strokegpt.web._ollama_installed_models", side_effect=AssertionError("live Ollama probe")), \
+                mock.patch("strokegpt.web._ollama_running_models", side_effect=AssertionError("live Ollama probe")):
+            response = self.client.get("/check_settings")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ollama_status"]["unchecked"])
+        self.assertIsNone(data["ollama_status"]["available"])
+        self.assertNotIn("motion_preferences", data)
+        self.assertIn("motion_patterns", data)
+
     def test_llm_edge_permissions_can_be_selected_and_saved(self):
         from strokegpt.web import settings
 

@@ -232,6 +232,7 @@ export const state = {
     diagnosticsLevels: [],
     ollamaModels: [],
     ollamaCurrentModel: '',
+    ollamaStatus: {},
     ollamaModelDetails: {},
     motionFeedbackAutoDisable: false,
     allowLlmEdgeInFreestyle: true,

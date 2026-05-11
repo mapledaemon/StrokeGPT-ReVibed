@@ -321,6 +321,36 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
     return payload
 
 
+def ollama_status_pending_payload(*, settings, llm, base_url, pull_snapshot):
+    current_model = normalize_ollama_model(llm.model)
+    diagnostics_level = settings.ollama_diagnostics_level
+    model_options = ollama_models_for_ui(settings, llm)
+    gpu_status = ollama_gpu_status_payload(current_model, [])
+    gpu_status.update({
+        "state": "unchecked",
+        "message": "Ollama GPU status will refresh after startup.",
+    })
+    model_details = ollama_model_details_payload(model_options, [], [], current_model, gpu_status)
+    for detail in model_details.values():
+        detail["unchecked"] = True
+        detail["installed"] = None
+    return {
+        "available": None,
+        "unchecked": True,
+        "base_url": base_url,
+        "current_model": current_model,
+        "current_model_installed": None,
+        "installed_models": [],
+        "installed_model_names": [],
+        "download": pull_snapshot(),
+        "diagnostics_level": diagnostics_level,
+        "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),
+        "gpu_status": gpu_status,
+        "model_details": model_details,
+        "message": "Checking Ollama model status...",
+    }
+
+
 def _setup_check_item(item_id, label, status, detail):
     return {
         "id": item_id,
@@ -623,12 +653,12 @@ def settings_payload(
     ollama_models,
     ollama_status,
     motion_patterns,
-    motion_preferences,
     diagnostics_levels,
     voice_input_status,
+    motion_preferences=None,
 ):
     local_tts_status = audio.local_status()
-    return {
+    payload = {
         "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
@@ -694,7 +724,6 @@ def settings_payload(
         "diagnostics_levels": diagnostics_levels,
         "motion_backends": motion_backends_payload(),
         "motion_patterns": motion_patterns,
-        "motion_preferences": motion_preferences,
         "pfp": settings.profile_picture_b64,
         "timings": {
             "auto_min": settings.auto_min_time,
@@ -705,6 +734,9 @@ def settings_payload(
             "edging_max": settings.edging_max_time,
         },
     }
+    if motion_preferences is not None:
+        payload["motion_preferences"] = motion_preferences
+    return payload
 
 
 def motion_pattern_catalog_payload(pattern_library, settings, feedback_history_limit):

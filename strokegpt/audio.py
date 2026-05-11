@@ -10,10 +10,6 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from elevenlabs.client import ElevenLabs
-from elevenlabs import VoiceSettings
-
-
 class AudioService:
     LOCAL_ENGINE_CHATTERBOX = "chatterbox"
     LOCAL_ENGINE_CHATTERBOX_TURBO = "chatterbox_turbo"
@@ -129,7 +125,7 @@ class AudioService:
     def set_api_key(self, api_key):
         self.api_key = api_key
         try:
-            self.client = ElevenLabs(api_key=self.api_key)
+            self.client = self._elevenlabs_client_class()(api_key=self.api_key)
             return True
         except Exception as e:
             print(f"[ERROR] Failed to initialize ElevenLabs client: {e}")
@@ -370,7 +366,12 @@ class AudioService:
                 voice_id=self.voice_id,
                 text=text_to_speak,
                 model_id="eleven_multilingual_v2",
-                voice_settings=VoiceSettings(stability=0.4, similarity_boost=0.7, style=0.1, use_speaker_boost=True),
+                voice_settings=self._elevenlabs_voice_settings(
+                    stability=0.4,
+                    similarity_boost=0.7,
+                    style=0.1,
+                    use_speaker_boost=True,
+                ),
             )
 
             audio_bytes_data = b"".join(audio_stream)
@@ -535,6 +536,16 @@ class AudioService:
             from chatterbox.tts import ChatterboxTTS
 
             return ChatterboxTTS
+
+    def _elevenlabs_client_class(self):
+        from elevenlabs.client import ElevenLabs
+
+        return ElevenLabs
+
+    def _elevenlabs_voice_settings(self, **kwargs):
+        from elevenlabs import VoiceSettings
+
+        return VoiceSettings(**kwargs)
 
     def _encode_wav_bytes(self, waveform, sample_rate):
         if not hasattr(waveform, "detach"):
