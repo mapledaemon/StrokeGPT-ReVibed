@@ -378,11 +378,17 @@ def set_llm_edge_permissions_route():
         "allow_llm_edge_in_chat",
         web.settings.allow_llm_edge_in_chat,
     )
+    web.settings.allow_llm_mode_actions_in_chat = web._request_bool_value(
+        data,
+        "allow_llm_mode_actions_in_chat",
+        web.settings.allow_llm_mode_actions_in_chat,
+    )
     web.settings.save()
     return jsonify({
         "status": "success",
         "allow_llm_edge_in_freestyle": web.settings.allow_llm_edge_in_freestyle,
         "allow_llm_edge_in_chat": web.settings.allow_llm_edge_in_chat,
+        "allow_llm_mode_actions_in_chat": web.settings.allow_llm_mode_actions_in_chat,
         "motion_preferences": web._motion_preference_payload(),
     })
 

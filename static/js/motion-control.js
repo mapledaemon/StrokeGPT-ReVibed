@@ -193,6 +193,7 @@ export function populateMotionSettings(data = {}) {
     state.motionFeedbackAutoDisable = data.motion_feedback_auto_disable ?? state.motionFeedbackAutoDisable ?? false;
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
+    state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
     }
@@ -202,8 +203,11 @@ export function populateMotionSettings(data = {}) {
     if (el.allowLlmEdgeChatCheckbox) {
         el.allowLlmEdgeChatCheckbox.checked = Boolean(state.allowLlmEdgeInChat);
     }
+    if (el.allowLlmModeActionsChatCheckbox) {
+        el.allowLlmModeActionsChatCheckbox.checked = Boolean(state.allowLlmModeActionsInChat);
+    }
     if (el.llmEdgePermissionsStatus) {
-        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}.`;
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}.`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -994,14 +998,15 @@ async function saveLlmEdgePermissions() {
         body: JSON.stringify({
             allow_llm_edge_in_freestyle: Boolean(el.allowLlmEdgeFreestyleCheckbox?.checked),
             allow_llm_edge_in_chat: Boolean(el.allowLlmEdgeChatCheckbox?.checked),
+            allow_llm_mode_actions_in_chat: Boolean(el.allowLlmModeActionsChatCheckbox?.checked),
         }),
     });
     if (data && data.status === 'success') {
         populateMotionSettings(data);
-        if (el.llmEdgePermissionsStatus) el.llmEdgePermissionsStatus.textContent = 'LLM edge permissions saved.';
-        el.statusText.textContent = 'LLM edge permissions saved.';
+        if (el.llmEdgePermissionsStatus) el.llmEdgePermissionsStatus.textContent = 'LLM permissions saved.';
+        el.statusText.textContent = 'LLM permissions saved.';
     } else {
-        reportSaveFailure(el.llmEdgePermissionsStatus || el.statusText, data, 'Could not save LLM edge permissions.');
+        reportSaveFailure(el.llmEdgePermissionsStatus || el.statusText, data, 'Could not save LLM permissions.');
     }
 }
 

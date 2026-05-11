@@ -121,6 +121,7 @@ def default_settings_dict():
         "motion_feedback_auto_disable": False,
         "allow_llm_edge_in_freestyle": True,
         "allow_llm_edge_in_chat": True,
+        "allow_llm_mode_actions_in_chat": False,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -244,6 +245,10 @@ class SettingsManager:
         )
         self.allow_llm_edge_in_chat = bool(
             data.get("allow_llm_edge_in_chat", defaults["allow_llm_edge_in_chat"])
+        )
+        self.allow_llm_mode_actions_in_chat = _as_bool(
+            data.get("allow_llm_mode_actions_in_chat", defaults["allow_llm_mode_actions_in_chat"]),
+            defaults["allow_llm_mode_actions_in_chat"],
         )
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
@@ -454,6 +459,7 @@ class SettingsManager:
             "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
             "allow_llm_edge_in_freestyle": bool(self.allow_llm_edge_in_freestyle),
             "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
+            "allow_llm_mode_actions_in_chat": bool(self.allow_llm_mode_actions_in_chat),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,

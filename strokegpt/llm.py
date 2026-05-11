@@ -188,8 +188,13 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
         fast_range_low = _speed_in_range(speed_min, speed_max, 0.62)
         fast_range_high = _speed_in_range(speed_min, speed_max, 0.84)
         max_range_low = _speed_in_range(speed_min, speed_max, 0.88)
+        mode_actions_enabled = bool(
+            context.get("mode_actions_enabled")
+            or context.get("handsfree_mode_actions_enabled")
+        )
+        mode_action_source = str(context.get("mode_action_request_source") or "this request").strip() or "this request"
         mode_action_schema = ""
-        if context.get("handsfree_mode_actions_enabled"):
+        if mode_actions_enabled:
             mode_action_schema = (
                 ',"mode_action":"<null|continue_mode|close_signal|start_freestyle|'
                 'start_edging|start_milking|start_legacy_auto|stop_mode>"'
@@ -230,10 +235,10 @@ Valid moods: {mood_options}.
 - "faster" / "harder": increase `sp` by 20-25; "slower" / "gentler": decrease `sp` by 20-25. Keep area similar unless I specify otherwise.
 - "short strokes": low `rng` 15-30 with sensible `sp` and `dp`.
 """
-        if context.get("handsfree_mode_actions_enabled"):
+        if mode_actions_enabled:
             prompt_text += f"""
-### HANDS-FREE MODE ACTIONS
-- This request came from hands-free voice input with mode actions enabled. `move` still controls ordinary motion. `mode_action` is only for visible mode controls.
+### MODE ACTIONS
+- This request came from {mode_action_source} with mode actions enabled. `move` still controls ordinary motion. `mode_action` is only for visible mode controls.
 - Active mode: `{context.get('active_mode') or 'none'}`. Use `continue_mode` to keep the current mode going after ordinary feedback, and use `close_signal` for "I'm close" style signals while Edge, Milk, or Freestyle is active.
 - Use `start_freestyle` for adaptive continuous patterning, `start_edging` for edge play, `start_milking` for finish/I'm close requests when no compatible active mode can receive a close signal, and `start_legacy_auto` only when I explicitly ask for the legacy scripted Auto takeover loop.
 - Use `stop_mode` only for explicit stop/manual-control requests. Otherwise leave `mode_action` null.

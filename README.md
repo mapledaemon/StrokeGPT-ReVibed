@@ -138,6 +138,10 @@ backend still routes those requests through the same preset-mode guard rails
 as the buttons. Legacy Auto is the old scripted takeover loop; use Freestyle
 for adaptive pattern selection and continuation.
 
+The Motion tab has a separate off-by-default **Allow typed chat to request
+mode actions** toggle. It gives typed chat the same guarded mode-action path
+without changing reviewed voice transcript sends.
+
 NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Windows, use a compatible CUDA/PyTorch/NeMo environment such as WSL before selecting this provider.
 
 ## Troubleshooting
