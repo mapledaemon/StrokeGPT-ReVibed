@@ -72,6 +72,7 @@ class ContinuousMotionPlan:
     actions: tuple[PatternAction, ...]
     style: FrameStyle
     duration_seconds: float
+    normalized_range: tuple[float, float] = (0.0, 100.0)
 
 
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
@@ -581,6 +582,20 @@ def _sample_action_position(
     ))
 
 
+def _continuous_normalized_range(
+    actions: tuple[PatternAction, ...],
+    sample_count: int = 25,
+) -> tuple[float, float]:
+    if not actions:
+        return (50.0, 50.0)
+    sample_count = max(2, int(sample_count or 2))
+    positions = [
+        _sample_action_position(actions, index / (sample_count - 1))
+        for index in range(sample_count)
+    ]
+    return (min(positions), max(positions))
+
+
 def _smooth_jitter(jitter_phase: float, amount: float, axis_seed: float = 0.0) -> float:
     """Return a value in approximately ``[-amount, +amount]`` that varies
     smoothly with ``jitter_phase`` (expected 0..1).
@@ -649,6 +664,37 @@ def _motion_target_for_sample(
     ).clamped()
 
 
+def _depth_for_normalized_position(normalized_pos: float, target: MotionTarget) -> float:
+    target = target.clamped()
+    half_range = target.stroke_range / 2.0
+    shallow = _clamp(target.depth - half_range)
+    deep = _clamp(target.depth + half_range)
+    if deep - shallow < 5:
+        shallow = _clamp(target.depth - 2.5)
+        deep = _clamp(target.depth + 2.5)
+    return shallow + (deep - shallow) * (_clamp(normalized_pos) / 100.0)
+
+
+def continuous_plan_depth_range(
+    plan: ContinuousMotionPlan,
+    target: MotionTarget,
+) -> Optional[dict[str, int]]:
+    normalized_range = getattr(plan, "normalized_range", None)
+    if normalized_range is None:
+        normalized_range = _continuous_normalized_range(tuple(getattr(plan, "actions", ()) or ()))
+    if not normalized_range:
+        return None
+
+    low_pos, high_pos = sorted((float(normalized_range[0]), float(normalized_range[1])))
+    low_depth = _depth_for_normalized_position(low_pos, target)
+    high_depth = _depth_for_normalized_position(high_pos, target)
+    depth_jitter = max(0.0, float(getattr(plan.style, "depth_jitter", 0.0) or 0.0))
+    return {
+        "min": int(round(_clamp(min(low_depth, high_depth) - depth_jitter))),
+        "max": int(round(_clamp(max(low_depth, high_depth) + depth_jitter))),
+    }
+
+
 def continuous_motion_plan(pattern_name: str) -> Optional[ContinuousMotionPlan]:
     pattern = PATTERNS.get((pattern_name or "").lower())
     if not pattern:
@@ -673,6 +719,7 @@ def continuous_motion_plan_from_pattern(pattern: MotionPattern) -> Optional[Cont
         actions=actions,
         style=style,
         duration_seconds=_continuous_duration_seconds(actions, style),
+        normalized_range=_continuous_normalized_range(actions),
     )
 
 
@@ -698,6 +745,7 @@ def continuous_anchor_motion_plan(
         actions=actions,
         style=style,
         duration_seconds=_continuous_duration_seconds(actions, style),
+        normalized_range=_continuous_normalized_range(actions),
     )
 
 

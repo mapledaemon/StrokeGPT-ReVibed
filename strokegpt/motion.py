@@ -1078,7 +1078,7 @@ class MotionController:
         started_at: float,
         phase_offset_seconds: float,
     ) -> None:
-        from .motion_patterns import sample_continuous_plan
+        from .motion_patterns import continuous_plan_depth_range, sample_continuous_plan
 
         interval = self._continuous_sample_interval()
         next_tick = started_at
@@ -1089,14 +1089,7 @@ class MotionController:
         previous_target = start_target
         previous_command_ended_at = None
         sample_index = 0
-        program_range = self._depth_range_for_targets(
-            sample_continuous_plan(
-                plan,
-                target,
-                max(0.1, float(plan.duration_seconds or 0.1)) * index / 24.0,
-            )
-            for index in range(25)
-        )
+        program_range = continuous_plan_depth_range(plan, target)
 
         try:
             while True:

@@ -11,6 +11,7 @@ from strokegpt.motion_patterns import (
     expand_anchor_program,
     expand_motion_pattern,
     expand_pattern,
+    continuous_plan_depth_range,
     continuous_motion_plan,
     sample_continuous_plan,
     inject_intermediate_actions,
@@ -128,6 +129,27 @@ class MotionScriptPlannerTests(unittest.TestCase):
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
         self.assertAlmostEqual(stroke.duration_seconds, 0.95)
+
+    def test_continuous_plan_caches_projectable_normalized_range(self):
+        plan = continuous_motion_plan("ramp")
+        target = MotionTarget(60, 50, 80, "ramp")
+
+        self.assertIsNotNone(plan)
+        self.assertLessEqual(plan.normalized_range[0], 20.0)
+        self.assertGreaterEqual(plan.normalized_range[1], 100.0)
+
+        legacy_range = {
+            "min": round(min(
+                sample_continuous_plan(plan, target, plan.duration_seconds * index / 24.0).depth
+                for index in range(25)
+            )),
+            "max": round(max(
+                sample_continuous_plan(plan, target, plan.duration_seconds * index / 24.0).depth
+                for index in range(25)
+            )),
+        }
+
+        self.assertEqual(continuous_plan_depth_range(plan, target), legacy_range)
 
     def test_sample_action_position_is_phase_cyclic(self):
         # A closed pattern: positions at the same depth at start and end.
