@@ -203,6 +203,7 @@ export const el = {
     edgingTimer: D.getElementById('edging-timer'),
     easterEggOverlay: D.getElementById('easter-egg-overlay'),
     connectionLostBanner: D.getElementById('connection-lost-banner'),
+    multiTabWarningBanner: D.getElementById('multi-tab-warning-banner'),
 };
 
 export const state = {
@@ -292,6 +293,7 @@ export const state = {
     motionCylinderAnimationStarted: false,
     connectionLost: false,
     backendControlGuardInitialized: false,
+    singleActiveTabWarningInitialized: false,
 };
 
 export const BACKEND_REQUIRED_SELECTOR = '[data-requires-backend]';

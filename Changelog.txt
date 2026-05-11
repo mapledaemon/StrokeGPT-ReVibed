@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - Unreleased - Single Active Tab Warning
+----------------------------------------------------
+
+Branch: codex/single-active-tab-warning
+
+- Added a small browser-local warning banner when multiple StrokeGPT tabs are
+  open at the same time.
+- Added a `static/js/browser-session.js` module that uses local tab
+  heartbeats in `localStorage`, with a `BroadcastChannel` nudge when
+  available, to detect other recent tabs without changing backend session
+  state.
+- Updated the single-operator known-problem note to treat the warning as
+  expectation-setting rather than a step toward multi-user/session state.
+
+
 2026-05-11 - PR #153 - Handy Command Trace Diagnostics
 -------------------------------------------------------
 

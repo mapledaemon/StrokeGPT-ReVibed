@@ -269,8 +269,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - The original upstream repository did not include a local license file when this fork was prepared.
 - Runtime state is intentionally single-operator: one trusted active browser
   session, one Flask process, one Handy controller, and one shared settings
-  file. Multiple tabs share update queues and device state; document that
-  assumption instead of adding multi-user/session architecture by accident.
+  file. Multiple tabs share update queues and device state; keep the
+  browser-local multi-tab warning as expectation-setting instead of adding
+  multi-user/session architecture by accident.
 
 ## Development Commands
 

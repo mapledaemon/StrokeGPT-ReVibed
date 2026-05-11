@@ -34,6 +34,7 @@ WEB_DEPENDENCY_SKIP_REASON = f"missing app dependencies: {', '.join(MISSING_MODU
 FRONTEND_SCRIPT_PATHS = (
     "/static/app.js",
     "/static/js/context.js",
+    "/static/js/browser-session.js",
     "/static/js/settings.js",
     "/static/js/chat.js",
     "/static/js/audio.js",

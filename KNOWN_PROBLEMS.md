@@ -202,18 +202,19 @@ Remaining watch work:
 
 ## Single Active Browser Session Assumption
 
-Status: Documented / Watch
+Status: Warned / Watch
 
 The runtime is designed as one local Flask process controlling one Handy with
 one shared `AppState`, one `messages_for_ui` queue, one audio output queue, one
 settings file, and one active mode controller. That matches the local-machine
 product shape. The README now calls the app a single-operator local controller
 and the Troubleshooting section tells users to keep one active browser tab
-while controlling hardware.
+while controlling hardware. The browser now also shows a small warning when
+more than one active StrokeGPT tab is detected through local tab heartbeats.
 
 Follow-up work:
 
 - Avoid multi-user/session architecture unless the project direction changes;
   the near-term fix is expectation-setting, not auth or per-session state.
-- If repeated multi-tab confusion is observed, show a small in-app warning
-  rather than pretending the current shared queues are tab-isolated.
+- If repeated multi-tab confusion continues, refine the warning copy or
+  placement rather than pretending the current shared queues are tab-isolated.
