@@ -825,7 +825,7 @@ function startHandyCylinderAnimation() {
 
 function activeModeDisplayName(modeName) {
     return {
-        auto: 'Auto',
+        auto: 'Legacy Auto',
         edging: 'Edge',
         milking: 'Milk',
         freestyle: 'Freestyle',
@@ -949,15 +949,15 @@ async function dislikeLastMove() {
 }
 
 async function startAutoMode() {
-    el.statusText.textContent = 'Starting Auto mode...';
+    el.statusText.textContent = 'Starting Legacy Auto...';
     const data = await apiCall('/start_auto_mode', {method: 'POST'});
     if (data && data.status === 'auto_started') {
-        el.statusText.textContent = 'Auto mode started.';
+        el.statusText.textContent = 'Legacy Auto started.';
         if (el.imCloseBtn) el.imCloseBtn.style.display = 'none';
         updatePauseResumeUi(false);
         updateActiveModeTimer('auto', 0, false);
     } else {
-        reportSaveFailure(el.statusText, data, 'Could not start Auto mode.');
+        reportSaveFailure(el.statusText, data, 'Could not start Legacy Auto.');
     }
 }
 

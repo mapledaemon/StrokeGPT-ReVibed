@@ -140,6 +140,8 @@ class VoiceTranscriptionHelperTests(unittest.TestCase):
 
         # Caller-specific behaviors stay here.
         self.assertIn("submitVoiceTranscriptToChat", body)
+        self.assertIn("voiceChatSourceForRecording(source)", body)
+        self.assertIn("showTranscriptPreview(transcript, chatSource)", body)
         self.assertIn("showTranscriptPreview", body)
         self.assertIn("hideTranscriptPreview", body)
         self.assertIn("voiceInputSubmitMode", body)

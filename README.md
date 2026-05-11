@@ -129,6 +129,15 @@ python -m pip install -r requirements-parakeet.txt
 ```
 
 Use the existing **Download / Load Voice Input Model** button after selecting Parakeet. The first load can download multi-GB model files; the app does not fetch them at startup.
+
+The Voice tab's **Advanced Flow** section has an off-by-default hands-free
+mode-action toggle. When Voice mode is Hands-free and transcripts are sent
+through that path, this lets the local model request guarded mode actions such
+as Freestyle, Edge, Milk, Legacy Auto, Stop, or an I'm Close signal. The
+backend still routes those requests through the same preset-mode guard rails
+as the buttons. Legacy Auto is the old scripted takeover loop; use Freestyle
+for adaptive pattern selection and continuation.
+
 NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Windows, use a compatible CUDA/PyTorch/NeMo environment such as WSL before selecting this provider.
 
 ## Troubleshooting

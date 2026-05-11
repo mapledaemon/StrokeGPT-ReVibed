@@ -550,6 +550,7 @@ def settings_payload(
         "voice_input_noise_floor_rms": settings.voice_input_noise_floor_rms,
         "voice_input_audio_preprocessing": settings.voice_input_audio_preprocessing,
         "voice_input_silence_trim": settings.voice_input_silence_trim,
+        "voice_input_hands_free_mode_actions": settings.voice_input_hands_free_mode_actions,
         "voice_input_beam_size": settings.voice_input_beam_size,
         "voice_input_condition_on_previous_text": settings.voice_input_condition_on_previous_text,
         "voice_input_vad_threshold": settings.voice_input_vad_threshold,

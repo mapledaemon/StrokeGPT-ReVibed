@@ -120,11 +120,11 @@ less surprising before deeper pattern generation work, and several of these
 items are short follow-ups to PR #38 / PR #41 / PR #43.
 
 - Define remaining named motion semantics for deterministic speed ranges,
-  full-range behavior, and optional LLM-controlled auto timing.
-- Add an experimental "LLM-controlled auto timing" setting only if the timing
-  handler can stay bounded, visible, and reversible. If implemented, expose
-  the current timing/mood bias in diagnostics instead of hiding it in prompt
-  text.
+  full-range behavior, and adaptive timing in Freestyle or a successor mode.
+- Do not add LLM-controlled timing to the old Auto loop. If adaptive timing is
+  implemented, keep it bounded, visible, and reversible in Freestyle or a
+  successor planner, and expose the current timing/mood bias in diagnostics
+  instead of hiding it in prompt text.
 - Confirm Milk Me and natural-language milk requests actually use most or
   all of the safe calibrated range unless the user explicitly asks for
   short/tight motion. PR #38 added milk vocabulary; the on-device check
@@ -146,12 +146,15 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
   falling back to HAMP/current scripted Auto arcs.
 - Allow users to replace or import Edge/Milk mode scripts through the same
   visible pattern-management surface used for fixed and trained patterns.
-- Allow the LLM to request visible modes such as Freestyle, Edge Me, and
-  Milk Me through the same guard rails as the UI buttons, making sure chat
-  edge-blocking settings also affect model-requested mode changes.
-- Let the LLM activate an auto mode with a visible preference for motion
-  type/style, using the same settings limits and mode-start error handling as
-  manual mode buttons.
+- Finish the visible-mode action audit after the hands-free path. Hands-free
+  voice can now expose a guarded `mode_action` field for Freestyle, Edge, Milk,
+  Legacy Auto, Stop, and I'm Close; ordinary typed chat still needs a separate
+  decision on whether model-requested mode changes should be allowed outside
+  that opt-in voice flow.
+- If the old Auto loop stays visible, keep labeling it as Legacy Auto and
+  treat it as a scripted takeover mode, not Freestyle legacy. Avoid expanding
+  it toward adaptive behavior; new autonomous/adaptive work should prefer
+  Freestyle or a successor mode with visible planner controls.
 - Let preset modes speak occasionally without turning mode timers into
   repeated narration.
 - Make preset-mode speech natural-language narration rather than raw motion

@@ -186,6 +186,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - When Auto, Edge, or Milk mode is active, motion feedback from chat should be
   queued into the active mode planner and wake the mode loop. Do not apply it as
   a one-off command that the next scripted mode step can immediately overwrite.
+- Hands-free voice can optionally expose a narrow LLM `mode_action` field.
+  Keep it gated by saved Hands-free Voice mode plus the Advanced Flow toggle,
+  and route normalized actions through the same preset-mode start/stop and
+  close-signal helpers used by visible controls. If no mode action is chosen
+  while a mode is active, keep relaying the transcript to the active planner.
 - Visible preset-mode buttons should start modes through explicit
   `/start_*_mode` routes. Do not route sidebar mode starts through chat text
   just to reuse natural-language intent parsing.
@@ -221,6 +226,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Settings > Voice should not keep growing as a tuning console. Treat the current voice-input knobs as instrumentation until real microphone testing proves which defaults and recovery controls users need; routine UI should stay smaller than the backend's available ASR/browser-capture parameters.
 - Local faster-whisper voice input treats `language=auto` as English for live command latency, sends a short motion-command vocabulary prompt, starts recognition at beam 1, and reruns low-confidence clips with the configured beam size. The visible beam setting is the fallback quality beam, not the first-pass beam. Low-confidence rerun failures should reject the transcript instead of sending uncertain motion commands into chat.
 - NVIDIA Parakeet voice input is an optional provider behind the existing Settings > Voice provider selector. Keep `nvidia/parakeet-tdt-0.6b-v3` on the optional `requirements-parakeet.txt` / NeMo path, and do not add NeMo or multi-GB model downloads to the base install or startup path.
+- `auto_mode_logic`, `/start_auto_mode`, and persisted active mode `auto` are
+  legacy compatibility names for the scripted Legacy Auto takeover loop. Do
+  not treat this path as Freestyle legacy or expand it toward adaptive
+  behavior; adaptive continuation belongs in Freestyle or a successor planner.
 - The Model tab reports Ollama availability and has an explicit download button for selected or typed Ollama models. Do not hide large model downloads in startup code.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 - Before pushing a PR, provide a local PowerShell validation script for the
@@ -333,7 +342,7 @@ Current Up Next targets are:
 
 1. Freestyle Diagnostics And Mode Control Reliability: validate PR #42/#43
    diagnostics on-device, reproduce regular Freestyle stops, fix
-   Auto-to-Freestyle no-action cases, and verify Pause/Resume and hotkey
+   Legacy Auto-to-Freestyle no-action cases, and verify Pause/Resume and hotkey
    behavior on real hardware.
 2. Adapter Boundary Guardrails And Translation Audit: PRs #48-#75 paid down
    most compatibility shims; preserve real schema/safety adapters and keep

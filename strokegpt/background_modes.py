@@ -6,6 +6,10 @@ and the Freestyle planner helpers live in :mod:`strokegpt.freestyle`;
 this module imports from both and wires them into the long-running mode
 loops. The `random` binding and public type/constant compatibility exports
 are kept only where the compatibility surface still needs them.
+
+``auto_mode_logic`` is the legacy scripted Auto takeover loop. Keep the
+``auto`` route/state names for compatibility, but do not treat this path as
+Freestyle legacy or expand it toward adaptive Freestyle behavior.
 """
 
 import random

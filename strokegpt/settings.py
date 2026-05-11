@@ -45,6 +45,7 @@ DEFAULT_VOICE_INPUT_MAX_RECORDING_MS = 8000
 DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS = 0.0
 DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING = True
 DEFAULT_VOICE_INPUT_SILENCE_TRIM = True
+DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS = False
 DEFAULT_VOICE_INPUT_BEAM_SIZE = 5
 DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT = False
 DEFAULT_VOICE_INPUT_VAD_THRESHOLD = 0.5
@@ -102,6 +103,7 @@ def default_settings_dict():
         "voice_input_noise_floor_rms": DEFAULT_VOICE_INPUT_NOISE_FLOOR_RMS,
         "voice_input_audio_preprocessing": DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING,
         "voice_input_silence_trim": DEFAULT_VOICE_INPUT_SILENCE_TRIM,
+        "voice_input_hands_free_mode_actions": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
         "voice_input_beam_size": DEFAULT_VOICE_INPUT_BEAM_SIZE,
         "voice_input_condition_on_previous_text": DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
         "voice_input_vad_threshold": DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
@@ -339,6 +341,13 @@ class SettingsManager:
             data.get("voice_input_silence_trim", defaults["voice_input_silence_trim"]),
             defaults["voice_input_silence_trim"],
         )
+        self.voice_input_hands_free_mode_actions = _as_bool(
+            data.get(
+                "voice_input_hands_free_mode_actions",
+                defaults["voice_input_hands_free_mode_actions"],
+            ),
+            defaults["voice_input_hands_free_mode_actions"],
+        )
         self.voice_input_beam_size = self._normalize_voice_input_beam_size(
             data.get("voice_input_beam_size", defaults["voice_input_beam_size"])
         )
@@ -425,6 +434,7 @@ class SettingsManager:
             "voice_input_noise_floor_rms": self._normalize_voice_input_noise_floor_rms(self.voice_input_noise_floor_rms),
             "voice_input_audio_preprocessing": bool(self.voice_input_audio_preprocessing),
             "voice_input_silence_trim": bool(self.voice_input_silence_trim),
+            "voice_input_hands_free_mode_actions": bool(self.voice_input_hands_free_mode_actions),
             "voice_input_beam_size": self._normalize_voice_input_beam_size(self.voice_input_beam_size),
             "voice_input_condition_on_previous_text": bool(self.voice_input_condition_on_previous_text),
             "voice_input_vad_threshold": self._normalize_voice_input_vad_threshold(self.voice_input_vad_threshold),

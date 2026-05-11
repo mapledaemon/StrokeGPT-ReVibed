@@ -112,8 +112,9 @@ describe('chat action statuses', () => {
 
     const actionStatuses = [
         ['stopped', 'Stopping.'],
-        ['auto_started', 'Auto mode started.'],
-        ['auto_stopped', 'Auto mode stopped.'],
+        ['auto_started', 'Legacy Auto started.'],
+        ['auto_stopped', 'Legacy Auto stopped.'],
+        ['close_signaled', "I'm Close signal sent."],
         ['freestyle_started', 'Freestyle started.'],
         ['edging_started', 'Edging mode started.'],
         ['milking_started', 'Milking mode started.'],
