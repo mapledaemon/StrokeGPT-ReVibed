@@ -7,6 +7,7 @@ import { refreshOllamaStatus, initSettingsControls } from './js/settings.js';
 import { startupCheck } from './js/setup.js';
 import { initDiagnosticsControls } from './js/setup-check.js';
 import { initVoiceInputControls } from './js/voice-input.js';
+import { initSingleActiveTabWarning } from './js/browser-session.js';
 
 function startPollingLoops() {
     setInterval(pollChatUpdates, 1500);
@@ -19,6 +20,7 @@ function startPollingLoops() {
 
 function initApp() {
     initBackendRequiredControlGuard();
+    initSingleActiveTabWarning();
     resizeCanvas();
     updateAudioProviderUi();
     initChatControls();

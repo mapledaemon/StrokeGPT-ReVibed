@@ -86,7 +86,8 @@ Open the URL printed in the terminal (usually <http://127.0.0.1:5000>). If port 
 StrokeGPT-ReVibed is currently a single-operator local controller: one trusted
 local browser session, one Flask process, one Handy controller, and one shared
 settings file. Multiple tabs share queues and device state, so use one active
-tab while controlling hardware.
+tab while controlling hardware. The browser warns when it sees another recent
+StrokeGPT tab.
 
 ## First Run
 
@@ -158,7 +159,7 @@ NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Wi
 - **Windows blocks the install script** — the `Set-ExecutionPolicy` command above only relaxes the script policy for that PowerShell process; close and reopen if you need it back to default.
 - **Settings appear blocked or show connection errors** — confirm `python app.py` is still running. When the backend is unreachable, the browser shows a connection-lost banner and locks backend-required controls until a request succeeds again.
 - **Disk fills up unexpectedly** — Ollama and Chatterbox model weights are large. Make sure the drive used by Ollama has several GB free.
-- **Chat replies or status messages appear in the wrong tab** - use one active browser tab while controlling hardware. The app is a single-operator local controller; tabs share chat/update queues, settings, mode state, and the same Handy connection.
+- **Chat replies or status messages appear in the wrong tab** - use one active browser tab while controlling hardware. The app is a single-operator local controller; tabs share chat/update queues, settings, mode state, and the same Handy connection, and it warns when another recent tab is open.
 - **Lost saved settings** — `my_settings.json` lives in the project root. Keep it private; it can hold API keys and the Handy key.
 
 ## Development

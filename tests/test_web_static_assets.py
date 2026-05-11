@@ -11,6 +11,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/app.css": "text/css",
             "/static/app.js": "text/javascript",
             "/static/js/context.js": "text/javascript",
+            "/static/js/browser-session.js": "text/javascript",
             "/static/js/settings.js": "text/javascript",
             "/static/js/chat.js": "text/javascript",
             "/static/js/audio.js": "text/javascript",
@@ -57,6 +58,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="send-chat-btn" class="my-button" title="Send message"', page)
             self.assertIn('id="voice-control-buttons" role="group" aria-label="Voice controls"', page)
             self.assertIn('id="connection-lost-banner" role="alert" aria-live="assertive" hidden', page)
+            self.assertIn('id="multi-tab-warning-banner" role="status" aria-live="polite" hidden', page)
+            self.assertIn('Use one active tab while controlling hardware', page)
             self.assertIn('id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Start voice input" aria-label="Start voice input" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-requires-backend', page)
             self.assertIn('class="voice-control-mic-icon" aria-hidden="true"', page)
             self.assertIn('class="voice-control-caret" aria-hidden="true"', page)
@@ -316,6 +319,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("#chat-messages-container { display: flex; flex-direction: column;", css)
             self.assertIn("#connection-lost-banner { position: fixed;", css)
             self.assertIn("#connection-lost-banner[hidden] { display: none; }", css)
+            self.assertIn("#multi-tab-warning-banner { position: fixed; top: 42px;", css)
+            self.assertIn("#multi-tab-warning-banner[hidden] { display: none; }", css)
             self.assertIn("--shell-gutter: clamp(0.875rem, 2.4vw, 1.5rem)", css)
             self.assertIn("--sidebar-width: clamp(15.5rem, 20vw, 18.5rem)", css)
             self.assertIn("--chat-gutter: clamp(0.5rem, 1.25vw, 0.875rem)", css)
@@ -1031,12 +1036,14 @@ class WebStaticAssetTests(WebTestCase):
             response.close()
 
         self.assertIn("./js/settings.js", app_script)
+        self.assertIn("./js/browser-session.js", app_script)
         self.assertIn("./js/chat.js", app_script)
         self.assertIn("./js/audio.js", app_script)
         self.assertIn("./js/device-control.js", app_script)
         self.assertIn("./js/motion-control.js", app_script)
         self.assertIn("./js/setup.js", app_script)
         self.assertIn("./js/setup-check.js", app_script)
+        self.assertIn("initSingleActiveTabWarning()", app_script)
         self.assertIn("initDiagnosticsControls()", app_script)
 
 
