@@ -23,7 +23,7 @@ import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { initSettingsControls, setPersonaPrompt, updateOllamaStatus } from '../../static/js/settings.js';
+import { initSettingsControls, populateModelOptions, setPersonaPrompt, updateOllamaStatus } from '../../static/js/settings.js';
 import { state, reportSaveFailure, apiCall, setStatusMessage } from '../../static/js/context.js';
 
 
@@ -50,6 +50,7 @@ function jsonResponse(httpStatus, body) {
 
 describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
     let originalFetch;
+    let originalConfirm;
 
     before(() => {
         initSettingsControls({ addChatMessage: () => {} });
@@ -58,16 +59,26 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
     beforeEach(() => {
         // Reset state and the status element each test sees.
         resetStubElement('status-text');
+        resetStubElement('ollama-model-list');
+        resetStubElement('ollama-model-select');
+        resetStubElement('ollama-model-input');
+        resetStubElement('ollama-model-status');
         const statusText = getStubElement('status-text');
         statusText.textContent = 'baseline';
         state.connectionLost = false;
         state.myPersonaDescription = '';
+        state.ollamaModels = [];
+        state.ollamaCurrentModel = '';
+        state.ollamaModelDetails = {};
 
         originalFetch = globalThis.fetch;
+        originalConfirm = globalThis.window.confirm;
+        globalThis.window.confirm = () => true;
     });
 
     afterEach(() => {
         globalThis.fetch = originalFetch;
+        globalThis.window.confirm = originalConfirm;
     });
 
     function installFetchResult(response) {
@@ -274,6 +285,89 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
 
         assert.strictEqual(modelStatus.textContent, 'Model name is not available.');
         assert.strictEqual(modelStatus.style.color, 'var(--yellow)');
+    });
+
+    it('populateModelOptions renders model row actions and posts delete/download requests', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                ollama_model: 'current/model:latest',
+                ollama_models: ['current/model:latest', 'custom/model:tag'],
+                ollama_status: {
+                    available: true,
+                    current_model: 'current/model:latest',
+                    current_model_installed: true,
+                    installed_model_names: ['current/model:latest'],
+                    download: {},
+                    model_details: {
+                        'current/model:latest': {
+                            name: 'current/model:latest',
+                            size_label: '4.0 GB',
+                            installed: true,
+                        },
+                        'custom/model:tag': {
+                            name: 'custom/model:tag',
+                            size_label: '2.0 GB',
+                            installed: false,
+                        },
+                    },
+                    gpu_status: {},
+                    message: 'Current model is installed: current/model:latest',
+                },
+            });
+        };
+
+        populateModelOptions(
+            ['current/model:latest', 'custom/model:tag'],
+            'current/model:latest',
+            {
+                model_details: {
+                    'current/model:latest': {
+                        name: 'current/model:latest',
+                        size_label: '4.0 GB',
+                        installed: true,
+                        warning: 'The selected model is too large for the current hardware.',
+                    },
+                    'custom/model:tag': {
+                        name: 'custom/model:tag',
+                        size_label: '2.0 GB',
+                        installed: false,
+                    },
+                },
+            },
+        );
+
+        const list = getStubElement('ollama-model-list');
+        const select = getStubElement('ollama-model-select');
+        assert.strictEqual(list.children.length, 2);
+        assert.strictEqual(select.children[1].textContent, 'custom/model:tag (2.0 GB)');
+        assert.match(list.children[0].children[2].textContent, /too large/);
+        assert.strictEqual(list.children[1].children[1].textContent, '2.0 GB - Not installed');
+        const currentActions = list.children[0].children[3];
+        const customActions = list.children[1].children[2];
+        assert.strictEqual(currentActions.children.length, 2);
+        assert.strictEqual(currentActions.children[0].className, 'ollama-model-action-spacer');
+        assert.strictEqual(currentActions.children[1].disabled, true);
+        assert.strictEqual(customActions.children.length, 2);
+        assert.strictEqual(customActions.children[0].disabled, false);
+        assert.match(customActions.children[0].innerHTML, /<svg/);
+        assert.match(customActions.children[1].innerHTML, /<svg/);
+
+        customActions.children[0].click();
+        await flushAsyncClickHandlers();
+
+        customActions.children[1].click();
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests, [[
+            '/pull_ollama_model',
+            { model: 'custom/model:tag' },
+        ], [
+            '/delete_ollama_model',
+            { model: 'custom/model:tag' },
+        ]]);
     });
 
     it('updateOllamaStatus surfaces confirmed CPU-only model load as a warning', () => {

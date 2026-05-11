@@ -10,6 +10,8 @@ LEGACY_OLLAMA_MODEL = "huihui_ai/gemma-4-abliterated:e2b"
 DEFAULT_OLLAMA_MODELS = [
     DEFAULT_OLLAMA_MODEL,
     "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b",
+    "huihui_ai/granite4.1-abliterated:3b",
+    "huihui_ai/granite4.1-abliterated:8b",
     LEGACY_OLLAMA_MODEL,
 ]
 DEFAULT_PERSONA_PROMPT = "An energetic and passionate girlfriend"
@@ -70,6 +72,7 @@ def default_settings_dict():
         "ai_name": "BOT",
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
+        "ollama_model_hidden_defaults": [],
         "persona_desc": DEFAULT_PERSONA_PROMPT,
         "persona_prompts": list(DEFAULT_PERSONA_PROMPTS),
         "profile_picture_b64": "",
@@ -210,6 +213,9 @@ class SettingsManager:
         if loaded_model == LEGACY_OLLAMA_MODEL:
             loaded_model = DEFAULT_OLLAMA_MODEL
         self.ollama_model = loaded_model or DEFAULT_OLLAMA_MODEL
+        self.ollama_model_hidden_defaults = self._normalize_hidden_default_models(
+            data.get("ollama_model_hidden_defaults", defaults["ollama_model_hidden_defaults"])
+        )
         self.ollama_models = self._normalize_model_list(data.get("ollama_models", []), include_current=True)
 
         self.persona_desc = (
@@ -406,6 +412,7 @@ class SettingsManager:
             "ai_name": self.ai_name,
             "ollama_model": self.ollama_model,
             "ollama_models": self._normalize_model_list(self.ollama_models, include_current=True),
+            "ollama_model_hidden_defaults": list(self.ollama_model_hidden_defaults),
             "persona_desc": self.persona_desc,
             "persona_prompts": self.persona_prompt_options(),
             "profile_picture_b64": self.profile_picture_b64,
@@ -491,9 +498,23 @@ class SettingsManager:
 
             self.file_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
+    def _normalize_hidden_default_models(self, models):
+        defaults = {normalize_ollama_model(model) for model in DEFAULT_OLLAMA_MODELS}
+        hidden = []
+        for model in list(models or []):
+            normalized = normalize_ollama_model(model)
+            if normalized in defaults and normalized not in hidden:
+                hidden.append(normalized)
+        return hidden
+
     def _normalize_model_list(self, models, include_current=False):
         ordered = []
-        for model in list(DEFAULT_OLLAMA_MODELS) + list(models or []):
+        hidden_defaults = set(getattr(self, "ollama_model_hidden_defaults", []))
+        visible_defaults = [
+            model for model in DEFAULT_OLLAMA_MODELS
+            if normalize_ollama_model(model) not in hidden_defaults
+        ]
+        for model in visible_defaults + list(models or []):
             normalized = normalize_ollama_model(model)
             if normalized and normalized not in ordered:
                 ordered.append(normalized)
@@ -684,5 +705,29 @@ class SettingsManager:
         if not normalized:
             return False
         self.ollama_model = normalized
+        if normalized in getattr(self, "ollama_model_hidden_defaults", []):
+            self.ollama_model_hidden_defaults = [
+                model for model in self.ollama_model_hidden_defaults
+                if model != normalized
+            ]
         self.ollama_models = self._normalize_model_list(self.ollama_models, include_current=True)
         return True
+
+    def delete_ollama_model(self, model):
+        normalized = normalize_ollama_model(model)
+        if not normalized:
+            return False, "Model name is required."
+        if normalized == normalize_ollama_model(self.ollama_model):
+            return False, "Cannot delete the current Ollama model. Select another model first."
+        default_models = {normalize_ollama_model(item) for item in DEFAULT_OLLAMA_MODELS}
+        if normalized in default_models and normalized not in self.ollama_model_hidden_defaults:
+            self.ollama_model_hidden_defaults.append(normalized)
+        before = list(self.ollama_models)
+        self.ollama_models = [
+            item for item in self.ollama_models
+            if normalize_ollama_model(item) != normalized
+        ]
+        self.ollama_models = self._normalize_model_list(self.ollama_models, include_current=True)
+        if before == self.ollama_models and normalized not in default_models:
+            return False, "Model option was not in the saved list."
+        return True, "Model option deleted."

@@ -310,6 +310,25 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .model-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
 .model-actions-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ollama-model-list { display: grid; max-height: 9.5rem; overflow-y: auto; margin-top: 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; scrollbar-color: #3b4450 #101217; scrollbar-width: thin; }
+.ollama-model-list::-webkit-scrollbar { width: 8px; }
+.ollama-model-list::-webkit-scrollbar-track { background: #101217; }
+.ollama-model-list::-webkit-scrollbar-thumb { background: #3b4450; border-radius: 999px; }
+.ollama-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, 12rem) 4rem; align-items: center; column-gap: 12px; min-height: 2.45rem; padding: 7px 8px 7px 12px; border-bottom: 1px solid #242a33; }
+.ollama-model-row:last-child { border-bottom: 0; }
+.ollama-model-row.current { box-shadow: inset 3px 0 0 var(--cyan); }
+.ollama-model-row.warning { box-shadow: inset 3px 0 0 var(--yellow); }
+.ollama-model-name { grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); font-size: 0.82rem; line-height: 1.35; align-self: center; }
+.ollama-model-meta { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--comment); font-size: 0.74rem; line-height: 1.35; white-space: nowrap; text-align: right; align-self: center; }
+.ollama-model-warning { grid-column: 1 / -1; grid-row: 2; min-width: 0; overflow-wrap: anywhere; color: var(--yellow); font-size: 0.74rem; line-height: 1.3; padding-top: 1px; }
+.ollama-model-row-actions { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: 1.65rem 1.65rem; grid-auto-rows: 1.65rem; justify-content: end; align-items: center; justify-items: center; gap: 5px; width: calc(3.3rem + 5px); min-width: 0; align-self: center; }
+.ollama-model-row-actions > * { align-self: center; justify-self: center; }
+.ollama-model-action { box-sizing: border-box; appearance: none; -moz-appearance: none; width: 1.65rem; min-width: 1.65rem; max-width: 1.65rem; height: 1.65rem; min-height: 1.65rem; max-height: 1.65rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin: 0; border-color: #2d333d; background: transparent; box-shadow: none; overflow: hidden; overflow-wrap: normal; font-size: 0.9rem; line-height: 1; vertical-align: middle; transform: none; }
+.ollama-model-action-spacer { display: block; box-sizing: border-box; width: 1.65rem; min-width: 1.65rem; max-width: 1.65rem; height: 1.65rem; min-height: 1.65rem; max-height: 1.65rem; }
+.ollama-model-action svg { width: 0.88rem; height: 0.88rem; fill: currentColor; }
+.ollama-model-download:not(:disabled):hover { border-color: var(--cyan); color: var(--cyan); }
+.ollama-model-delete:not(:disabled):hover { border-color: var(--yellow); color: var(--yellow); }
+.ollama-model-action:hover, .ollama-model-action:active, .ollama-model-action:disabled:hover { transform: none; box-shadow: none; }
 .voice-actions .my-button, .motion-actions .my-button, .motion-pattern-actions .my-button, .model-actions .my-button { width: auto; min-width: 0; }
 .settings-status-line { min-height: 2rem; display: flex; align-items: center; padding: 7px 9px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.85em; line-height: 1.35; overflow-wrap: anywhere; }
 .browse-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }

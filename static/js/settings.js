@@ -72,6 +72,51 @@ export function normalizeModelName(model) {
     return (model || '').trim().replace(/\s*\/\s*/g, '/').replace(/\s*:\s*/g, ':');
 }
 
+function modelDetailsFromStatus(status = {}) {
+    const raw = status.model_details || {};
+    const details = {};
+    if (Array.isArray(raw)) {
+        raw.forEach(item => {
+            const name = normalizeModelName(item && item.name);
+            if (name) details[name] = item;
+        });
+        return details;
+    }
+    Object.entries(raw).forEach(([name, item]) => {
+        const normalized = normalizeModelName((item && item.name) || name);
+        if (normalized) details[normalized] = item || {};
+    });
+    return details;
+}
+
+function modelDetailFor(model) {
+    return state.ollamaModelDetails[normalizeModelName(model)] || {};
+}
+
+function modelOptionLabel(model) {
+    const detail = modelDetailFor(model);
+    return detail.size_label ? `${model} (${detail.size_label})` : model;
+}
+
+function modelSizeLabel(detail = {}) {
+    return detail.size_label || 'Size unknown';
+}
+
+function modelStateLabel(detail = {}) {
+    if (detail.running && detail.size_vram_label) return `${detail.size_vram_label} VRAM`;
+    if (detail.running) return 'Running';
+    if (detail.installed) return 'Installed';
+    return 'Not installed';
+}
+
+function modelMetaLabel(detail = {}) {
+    return `${modelSizeLabel(detail)} - ${modelStateLabel(detail)}`;
+}
+
+function modelNeedsDownload(detail = {}) {
+    return !detail.installed;
+}
+
 export function normalizePersonaPrompt(prompt) {
     return (prompt || '').trim().replace(/\s+/g, ' ');
 }
@@ -118,22 +163,100 @@ export async function setPersonaPrompt(prompt, savePrompt = true) {
     return data;
 }
 
-export function populateModelOptions(models = [], currentModel = '') {
+export function populateModelOptions(models = [], currentModel = '', status = null) {
     const uniqueModels = [];
     [currentModel, ...models].forEach(model => {
         const normalized = normalizeModelName(model);
         if (normalized && !uniqueModels.includes(normalized)) uniqueModels.push(normalized);
     });
+    if (status && status.model_details) state.ollamaModelDetails = modelDetailsFromStatus(status);
+    state.ollamaModels = uniqueModels;
+    state.ollamaCurrentModel = normalizeModelName(currentModel);
     el.ollamaModelSelect.innerHTML = '';
     uniqueModels.forEach(model => {
         const option = D.createElement('option');
         option.value = model;
-        option.textContent = model;
+        option.textContent = modelOptionLabel(model);
         el.ollamaModelSelect.appendChild(option);
     });
     if (currentModel) el.ollamaModelSelect.value = normalizeModelName(currentModel);
     el.ollamaModelInput.value = normalizeModelName(currentModel);
     el.ollamaModelStatus.textContent = currentModel ? `Current: ${normalizeModelName(currentModel)}` : 'No model selected.';
+    renderOllamaModelList(uniqueModels, currentModel);
+}
+
+function renderOllamaModelList(models = [], currentModel = '') {
+    if (!el.ollamaModelList) return;
+    const current = normalizeModelName(currentModel);
+    el.ollamaModelList.replaceChildren();
+    if (!models.length) {
+        const empty = D.createElement('div');
+        empty.className = 'settings-help';
+        empty.textContent = 'No saved model options.';
+        el.ollamaModelList.appendChild(empty);
+        return;
+    }
+    models.forEach(model => {
+        const detail = modelDetailFor(model);
+        const row = D.createElement('div');
+        row.className = 'ollama-model-row';
+        if (model === current) row.classList.add('current');
+        if (detail.warning) row.classList.add('warning');
+
+        const name = D.createElement('div');
+        name.className = 'ollama-model-name';
+        name.textContent = model;
+        row.appendChild(name);
+
+        const meta = D.createElement('div');
+        meta.className = 'ollama-model-meta';
+        meta.textContent = modelMetaLabel(detail);
+        row.appendChild(meta);
+
+        if (detail.warning) {
+            const warning = D.createElement('div');
+            warning.className = 'ollama-model-warning';
+            warning.textContent = detail.warning;
+            row.appendChild(warning);
+        }
+
+        const actions = D.createElement('div');
+        actions.className = 'ollama-model-row-actions';
+
+        if (modelNeedsDownload(detail)) {
+            const downloadButton = D.createElement('button');
+            downloadButton.type = 'button';
+            downloadButton.className = 'my-button ollama-model-action ollama-model-download';
+            downloadButton.innerHTML = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M12 3v10.2l3.6-3.6L17 11l-5 5-5-5 1.4-1.4 3.6 3.6V3h2Zm-7 15h14v2H5v-2Z"></path></svg>';
+            downloadButton.setAttribute('data-requires-backend', '');
+            downloadButton.title = `Download ${model}`;
+            downloadButton.setAttribute('aria-label', `Download ${model}`);
+            downloadButton.disabled = state.ollamaDownloadPolling;
+            downloadButton.addEventListener('click', () => downloadOllamaModel(model));
+            actions.appendChild(downloadButton);
+        } else {
+            const downloadSlot = D.createElement('span');
+            downloadSlot.className = 'ollama-model-action-spacer';
+            downloadSlot.setAttribute('aria-hidden', 'true');
+            actions.appendChild(downloadSlot);
+        }
+
+        const deleteButton = D.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'my-button ollama-model-action ollama-model-delete';
+        deleteButton.innerHTML = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm3 0v7h2v-7h-2Z"></path></svg>';
+        deleteButton.setAttribute('data-requires-backend', '');
+        deleteButton.title = model === current
+            ? 'Select another model before deleting this option'
+            : `Delete ${model}`;
+        deleteButton.setAttribute('aria-label', `Delete ${model}`);
+        deleteButton.disabled = model === current;
+        deleteButton.addEventListener('click', () => deleteOllamaModel(model));
+        actions.appendChild(deleteButton);
+        row.appendChild(actions);
+
+        el.ollamaModelList.appendChild(row);
+    });
 }
 
 function selectedOllamaModelForAction() {
@@ -144,6 +267,14 @@ export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
     const gpuStatus = status.gpu_status || {};
+    state.ollamaDownloadPolling = download.state === 'downloading';
+    state.ollamaModelDetails = modelDetailsFromStatus(status);
+    if (state.ollamaModels.length) {
+        renderOllamaModelList(state.ollamaModels, state.ollamaCurrentModel || status.current_model);
+        for (const option of Array.from(el.ollamaModelSelect?.children || [])) {
+            option.textContent = modelOptionLabel(option.value);
+        }
+    }
     const installedCount = (status.installed_model_names || []).length;
     let message = status.message || 'Ollama model status unavailable.';
     if (installedCount) message += ` Installed locally: ${installedCount}.`;
@@ -163,7 +294,6 @@ export function updateOllamaStatus(status) {
     el.ollamaModelStatus.style.color = status.available && status.current_model_installed && !gpuStatus.warning && download.state !== 'downloading'
         ? 'var(--cyan)'
         : 'var(--yellow)';
-    state.ollamaDownloadPolling = download.state === 'downloading';
     if (el.downloadOllamaModelBtn) {
         el.downloadOllamaModelBtn.disabled = state.ollamaDownloadPolling;
         el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
@@ -318,15 +448,33 @@ async function setOllamaModel(model) {
         body: JSON.stringify({model: normalized}),
     });
     if (data && data.status === 'success') {
-        populateModelOptions(data.ollama_models, data.ollama_model);
+        populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         updateOllamaStatus(data.ollama_status);
     } else {
         reportSaveFailure(el.ollamaModelStatus, data, `Could not set model to ${normalized}.`);
     }
 }
 
-async function downloadOllamaModel() {
-    const model = selectedOllamaModelForAction();
+async function deleteOllamaModel(model) {
+    const normalized = normalizeModelName(model);
+    if (!normalized) return;
+    const ok = window.confirm(`Delete ${normalized} from the model options list?`);
+    if (!ok) return;
+    const data = await apiCall('/delete_ollama_model', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model: normalized}),
+    });
+    if (data && data.status === 'success') {
+        populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
+        updateOllamaStatus(data.ollama_status);
+    } else {
+        reportSaveFailure(el.ollamaModelStatus, data, `Could not delete ${normalized}.`);
+    }
+}
+
+async function downloadOllamaModel(modelOverride = '') {
+    const model = normalizeModelName(typeof modelOverride === 'string' ? modelOverride : '') || selectedOllamaModelForAction();
     if (!model) {
         el.ollamaModelStatus.textContent = 'Enter or select an Ollama model first.';
         el.ollamaModelStatus.style.color = 'var(--yellow)';
@@ -342,7 +490,7 @@ async function downloadOllamaModel() {
         body: JSON.stringify({model}),
     });
     if (data) {
-        populateModelOptions(data.ollama_models, data.ollama_model);
+        populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         updateOllamaStatus(data.ollama_status);
     }
 }
