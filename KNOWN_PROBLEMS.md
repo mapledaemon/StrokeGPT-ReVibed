@@ -141,12 +141,17 @@ The front end renders those as `MODEL ERROR` bubbles with an error status tone,
 and the backend keeps them out of chat history, TTS, persona-turn countdowns,
 and motion application.
 
+The browser now prefers a streamed `/send_message_stream` path for normal
+chat. That path renders the `chat` field as Ollama streams JSON content, then
+waits for final JSON validation before applying motion or starting TTS; the
+existing `/send_message` path remains the fallback for browsers without
+readable fetch streams.
+
 Follow-up work:
 
-- Verify the chat-emit path runs in lockstep with the TTS-enqueue path for both
-  streamed and non-streamed Ollama responses. The current fix covers the
-  non-streamed `/send_message` response path; future streaming work should keep
-  the same "render once, play once" contract.
+- Verify the chat-emit path runs in lockstep with the TTS-enqueue path across
+  both streamed and non-streamed Ollama responses, especially when motion
+  repair replaces the streamed draft chat with corrected final text.
 - Confirm the front-end chat panel is not silently dropping ordinary assistant
   messages when a prior message is mid-render or while a mode transition is
   updating the status strip. Pair the next reproduction attempt with the

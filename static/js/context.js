@@ -271,6 +271,7 @@ export const state = {
     systemPromptsLoadedOnce: false,
     chatModelBlockedMessage: '',
     pendingQueuedBotEcho: '',
+    chatStreamingEnabled: true,
     motionPatterns: [],
     motionTraining: {state: 'idle', pattern_id: '', pattern_name: ''},
     motionTrainingSelectedPatternId: '',

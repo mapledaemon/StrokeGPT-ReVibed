@@ -75,18 +75,26 @@ class LLMService:
             "last_response_has_thinking": "<think" in raw_content.lower() or '"thinking"' in raw_content.lower(),
         }
 
+    def _request_payload(self, messages, temperature=0.3, *, stream=False):
+        return {
+            "model": self.model,
+            "stream": bool(stream),
+            "format": "json",
+            "options": {
+                "temperature": temperature,
+                "top_p": 0.95,
+                "repeat_penalty": 1.2,
+                "repeat_penalty_last_n": 40,
+            },
+            "messages": messages,
+        }
+
     def _talk_to_llm(self, messages, temperature=0.3):
         response = None
         started_at = time.monotonic()
         content = ""
         try:
-            response = requests.post(self.url, json={
-                "model": self.model,
-                "stream": False,
-                "format": "json",
-                "options": {"temperature": temperature, "top_p": 0.95, "repeat_penalty": 1.2, "repeat_penalty_last_n": 40},
-                "messages": messages
-            }, timeout=60)
+            response = requests.post(self.url, json=self._request_payload(messages, temperature), timeout=60)
             
             content = response.json()["message"]["content"]
             parsed = json.loads(content)
@@ -108,6 +116,43 @@ class LLMService:
             except Exception:
                  return {"chat": f"LLM Connection Error: {e}", "move": None, "new_mood": None}
             return {"chat": f"LLM Connection Error: {e}", "move": None, "new_mood": None}
+
+    def iter_response_content(self, messages, temperature=0.3):
+        response = None
+        started_at = time.monotonic()
+        content_parts = []
+        try:
+            response = requests.post(
+                self.url,
+                json=self._request_payload(messages, temperature, stream=True),
+                stream=True,
+                timeout=60,
+            )
+            response.raise_for_status()
+            for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                payload = json.loads(line)
+                piece = ((payload.get("message") or {}).get("content") or "")
+                if piece:
+                    content_parts.append(piece)
+                    yield piece
+                if payload.get("done"):
+                    break
+            self._record_diagnostics(
+                started_at=started_at,
+                response=response,
+                raw_content="".join(content_parts),
+            )
+        except (json.JSONDecodeError, KeyError, requests.exceptions.RequestException) as e:
+            self._record_diagnostics(
+                started_at=started_at,
+                response=response,
+                raw_content="".join(content_parts),
+                error=e,
+            )
+            print(f"Error streaming LLM response: {e}")
+            raise
 
     def _build_system_prompt(self, context):
         speed_min, speed_max = _context_speed_range(context)
@@ -218,6 +263,11 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
         system_prompt = self._build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}, *list(chat_history)]
         return self._talk_to_llm(messages, temperature)
+
+    def iter_chat_response_content(self, chat_history, context, temperature=0.3):
+        system_prompt = self._build_system_prompt(context)
+        messages = [{"role": "system", "content": system_prompt}, *list(chat_history)]
+        return self.iter_response_content(messages, temperature)
 
     def get_mode_decision(self, chat_history, context, *, mode, event, edge_count=0, current_target=None):
         speed_min, speed_max = _context_speed_range(context)

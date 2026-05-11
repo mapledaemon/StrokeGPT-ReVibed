@@ -233,7 +233,11 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 - Make message rendering robust to streamed and non-streamed Ollama
   responses, so the chat-emit path stays in lockstep with the TTS-enqueue
   path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
-  Voice Plays").
+  Voice Plays"). The first real-time rendering slice streams the `chat`
+  field out of Ollama's JSON response and keeps motion/TTS side effects
+  behind final JSON validation; continue validating repair-path replacement,
+  slow-model behavior, and browser fallback behavior before changing the
+  chat/motion contract further.
 - Continue investigating provider-specific or rapid-mode TTS cutoffs after the
   local Chatterbox WAV encoder's trailing silence cushion has been validated
   during real playback.

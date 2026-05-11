@@ -9,7 +9,7 @@ import time
 import types
 from pathlib import Path
 import requests
-from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from flask import Flask, Response, request, jsonify, render_template_string, send_from_directory, stream_with_context
 from werkzeug.utils import secure_filename
 
 from .app_state import APP_STATE_EXPORTS, AppState
@@ -1037,7 +1037,7 @@ def _is_llm_transport_error_text(text):
     clean = str(text or "").strip().lower()
     return clean.startswith(("llm connection error:", "llm request failed:"))
 
-def add_message_to_queue(text, add_to_history=True, queue_message=True, generate_audio=True):
+def add_message_to_queue(text, add_to_history=True, queue_message=True, generate_audio=True, streamed_to_client=False):
     if queue_message:
         app_state.messages_for_ui.append(text)
     if add_to_history:
@@ -1062,7 +1062,7 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
         #      the divergence is still worth surfacing.
         clean_for_log = re.sub(r'<[^>]+>', '', str(text or "")).strip()
         warning_for_ui = ""
-        if not queue_message:
+        if not queue_message and not streamed_to_client:
             print(
                 f"[WARN] TTS enqueued without chat-emit "
                 f"(queue_message=False, text_len={len(clean_for_log)}, "
@@ -1214,54 +1214,81 @@ def _relay_message_to_active_mode(user_input):
     app_state.mode_message_event.set()
     return jsonify({"status": "message_relayed_to_active_mode"})
 
-@app.route('/send_message', methods=['POST'])
-def handle_user_message():
-    request_started = time.perf_counter()
-    data = _request_json()
-    user_input = data.get('message', '').strip()
+CHAT_FIELD_RE = re.compile(r'"chat"\s*:\s*"')
+JSON_ESCAPE_MAP = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
 
-    if (p := data.get('persona_desc')) and p != settings.persona_desc:
-        settings.set_persona_prompt(p); settings.save()
-    if (k := data.get('key')) and k != settings.handy_key:
-        handy.set_api_key(k); settings.handy_key = k; settings.save()
-    
-    if not handy.handy_key: return jsonify({"status": "no_key_set"})
-    if not user_input: return jsonify({"status": "empty_message"})
 
-    app_state.chat_history.append({"role": "user", "content": user_input})
+def _json_string_prefix(text, opening_quote_index):
+    output = []
+    index = opening_quote_index + 1
+    while index < len(text):
+        ch = text[index]
+        if ch == '"':
+            return "".join(output), True
+        if ch != "\\":
+            output.append(ch)
+            index += 1
+            continue
+        index += 1
+        if index >= len(text):
+            break
+        escaped = text[index]
+        if escaped == "u":
+            digits = text[index + 1:index + 5]
+            if len(digits) < 4 or not re.fullmatch(r"[0-9a-fA-F]{4}", digits):
+                break
+            output.append(chr(int(digits, 16)))
+            index += 5
+            continue
+        output.append(JSON_ESCAPE_MAP.get(escaped, escaped))
+        index += 1
+    return "".join(output), False
 
-    handled, response = _handle_chat_commands(
-        user_input.lower(),
-        allow_motion=not app_state.auto_mode_active_task,
-    )
-    if handled: return response
 
-    if app_state.auto_mode_active_task:
-        return _relay_message_to_active_mode(user_input)
+def _streamed_chat_text_prefix(raw_content):
+    match = CHAT_FIELD_RE.search(raw_content or "")
+    if not match:
+        return "", False
+    return _json_string_prefix(raw_content, match.end() - 1)
 
-    context = get_current_context()
-    current_before_llm = motion.current_target()
+
+def _chat_stream_event(event_type, **payload):
+    body = {"type": event_type, **payload}
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def _coerce_llm_response(llm_response):
+    if isinstance(llm_response, dict):
+        return llm_response
+    print(f"[WARN] LLM returned non-dict response: {llm_response!r}")
+    return {
+        "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
+        "move": None,
+        "new_mood": None,
+    }
+
+
+def _finalize_llm_chat_response(
+    *,
+    user_input,
+    llm_response,
+    context,
+    current_before_llm,
+    request_started,
+    timings,
+    streamed_to_client=False,
+):
     motion_repaired = False
-    timings = {}
-    try:
-        llm_started = time.perf_counter()
-        llm_response = llm.get_chat_response(app_state.chat_history, context)
-        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
-    except Exception as exc:
-        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
-        print(f"[ERROR] LLM request failed: {exc}")
-        llm_response = {
-            "chat": f"LLM request failed: {exc}",
-            "move": None,
-            "new_mood": None,
-        }
-    if not isinstance(llm_response, dict):
-        print(f"[WARN] LLM returned non-dict response: {llm_response!r}")
-        llm_response = {
-            "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
-            "move": None,
-            "new_mood": None,
-        }
+    llm_response = _coerce_llm_response(llm_response)
     if not _is_llm_transport_error_text(llm_response.get("chat")):
         repair_started = time.perf_counter()
         llm_response, motion_repaired = _repair_llm_motion_response_if_needed(
@@ -1281,15 +1308,16 @@ def handle_user_message():
 
     if is_llm_transport_error:
         timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
-        return jsonify({
+        return {
             "status": "model_error",
             "message": "Model request failed. Check Ollama status and try again.",
             "chat": chat_text,
             "chat_queued": False,
+            "chat_streamed": bool(streamed_to_client),
             "motion_applied": False,
             "motion_repaired": False,
             "timings": timings,
-        })
+        }
 
     should_revert_persona = False
     with app_state.lock:
@@ -1304,8 +1332,9 @@ def handle_user_message():
     add_message_to_queue(
         chat_text,
         add_to_history=bool(str(raw_chat_text or "").strip()),
-        queue_message=True,
+        queue_message=not streamed_to_client,
         generate_audio=True,
+        streamed_to_client=streamed_to_client,
     )
     if new_mood := llm_response.get("new_mood"):
         with app_state.lock:
@@ -1322,14 +1351,152 @@ def handle_user_message():
         _remember_motion_pattern_from_target(target)
         timings["motion_apply_ms"] = int((time.perf_counter() - motion_started) * 1000)
     timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
-    return jsonify({
+    return {
         "status": "ok",
         "chat": chat_text,
-        "chat_queued": True,
+        "chat_queued": not streamed_to_client,
+        "chat_streamed": bool(streamed_to_client),
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
         "timings": timings,
-    })
+    }
+
+
+@app.route('/send_message', methods=['POST'])
+def handle_user_message():
+    request_started = time.perf_counter()
+    data = _request_json()
+    user_input = data.get('message', '').strip()
+
+    if (p := data.get('persona_desc')) and p != settings.persona_desc:
+        settings.set_persona_prompt(p); settings.save()
+    if (k := data.get('key')) and k != settings.handy_key:
+        handy.set_api_key(k); settings.handy_key = k; settings.save()
+
+    if not handy.handy_key: return jsonify({"status": "no_key_set"})
+    if not user_input: return jsonify({"status": "empty_message"})
+
+    app_state.chat_history.append({"role": "user", "content": user_input})
+
+    handled, response = _handle_chat_commands(
+        user_input.lower(),
+        allow_motion=not app_state.auto_mode_active_task,
+    )
+    if handled: return response
+
+    if app_state.auto_mode_active_task:
+        return _relay_message_to_active_mode(user_input)
+
+    context = get_current_context()
+    current_before_llm = motion.current_target()
+    timings = {}
+    try:
+        llm_started = time.perf_counter()
+        llm_response = llm.get_chat_response(app_state.chat_history, context)
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
+    except Exception as exc:
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
+        print(f"[ERROR] LLM request failed: {exc}")
+        llm_response = {
+            "chat": f"LLM request failed: {exc}",
+            "move": None,
+            "new_mood": None,
+        }
+    return jsonify(_finalize_llm_chat_response(
+        user_input=user_input,
+        llm_response=llm_response,
+        context=context,
+        current_before_llm=current_before_llm,
+        request_started=request_started,
+        timings=timings,
+    ))
+
+
+@app.route('/send_message_stream', methods=['POST'])
+def handle_user_message_stream():
+    request_started = time.perf_counter()
+    data = _request_json()
+    user_input = data.get('message', '').strip()
+
+    def generate():
+        if (p := data.get('persona_desc')) and p != settings.persona_desc:
+            settings.set_persona_prompt(p); settings.save()
+        if (k := data.get('key')) and k != settings.handy_key:
+            handy.set_api_key(k); settings.handy_key = k; settings.save()
+
+        if not handy.handy_key:
+            yield _chat_stream_event("final", data={"status": "no_key_set"})
+            return
+        if not user_input:
+            yield _chat_stream_event("final", data={"status": "empty_message"})
+            return
+
+        app_state.chat_history.append({"role": "user", "content": user_input})
+
+        handled, response = _handle_chat_commands(
+            user_input.lower(),
+            allow_motion=not app_state.auto_mode_active_task,
+        )
+        if handled:
+            yield _chat_stream_event("final", data=response.get_json(silent=True) or {"status": "ok"})
+            return
+
+        if app_state.auto_mode_active_task:
+            response = _relay_message_to_active_mode(user_input)
+            yield _chat_stream_event("final", data=response.get_json(silent=True) or {"status": "message_relayed_to_active_mode"})
+            return
+
+        context = get_current_context()
+        current_before_llm = motion.current_target()
+        timings = {}
+        streamed_text = ""
+        raw_parts = []
+        try:
+            yield _chat_stream_event("status", status="generating")
+            llm_started = time.perf_counter()
+            for chunk in llm.iter_chat_response_content(app_state.chat_history, context):
+                raw_parts.append(chunk)
+                chat_prefix, _complete = _streamed_chat_text_prefix("".join(raw_parts))
+                if len(chat_prefix) > len(streamed_text):
+                    delta = chat_prefix[len(streamed_text):]
+                    streamed_text = chat_prefix
+                    yield _chat_stream_event("delta", text=delta)
+            timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
+            raw_content = "".join(raw_parts)
+            try:
+                llm_response = json.loads(raw_content)
+            except json.JSONDecodeError as exc:
+                print(f"[WARN] LLM streamed invalid JSON: {exc}")
+                llm_response = {
+                    "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
+                    "move": None,
+                    "new_mood": None,
+                }
+        except Exception as exc:
+            timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000) if "llm_started" in locals() else 0
+            print(f"[ERROR] LLM stream failed: {exc}")
+            llm_response = {
+                "chat": f"LLM Connection Error: {exc}",
+                "move": None,
+                "new_mood": None,
+            }
+
+        final_payload = _finalize_llm_chat_response(
+            user_input=user_input,
+            llm_response=llm_response,
+            context=context,
+            current_before_llm=current_before_llm,
+            request_started=request_started,
+            timings=timings,
+            streamed_to_client=bool(streamed_text),
+        )
+        yield _chat_stream_event("final", data=final_payload)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/x-ndjson; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 def _read_uploaded_pattern_payload(upload):
     filename = secure_filename(upload.filename or "pattern.json")

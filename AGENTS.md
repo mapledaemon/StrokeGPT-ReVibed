@@ -191,10 +191,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   just to reuse natural-language intent parsing.
 - Keep natural language stop handling reliable. The explicit stop path should always interrupt active movement.
 - Browser audio uses `/get_updates` for JSON and `/get_audio` for audio bytes. Do not recombine them into one endpoint.
-- Chat replies from `/send_message` are rendered immediately by the initiating
-  browser when the response includes `chat` plus `chat_queued: true`; the next
-  `/get_updates` poll skips the matching queued echo so audio readiness can
-  still be polled without duplicating the message.
+- Normal chat prefers `/send_message_stream` so the initiating browser can
+  render the assistant's `chat` field while Ollama is still producing JSON.
+  Motion application, chat history, and TTS must still wait for final JSON
+  validation. The legacy `/send_message` route remains the non-streaming
+  fallback and still skips the matching queued echo on the next `/get_updates`
+  poll when it returns `chat` plus `chat_queued: true`.
 - `sendUserMessage()` owns the model-readiness send guard. When
   `state.chatModelBlockedMessage` is set by Ollama status, no caller should
   bypass it to POST `/send_message`; preserve draft text and surface the block

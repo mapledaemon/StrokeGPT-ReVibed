@@ -1,4 +1,4 @@
-import { D, apiCall, el, setStatusMessage, state } from './context.js';
+import { D, apiCall, el, fetchWithConnectionState, setStatusMessage, state } from './context.js';
 import { playQueuedAudio } from './audio.js';
 
 function appendPlainMessageText(parent, text) {
@@ -9,6 +9,63 @@ function appendPlainMessageText(parent, text) {
     });
 }
 
+function setChatCodeCopyButtonState(button, label, ariaLabel, restoreMs) {
+    if (!button) return;
+    const defaultLabel = button.dataset.defaultLabel || 'Copy';
+    const defaultAria = button.dataset.defaultAriaLabel || 'Copy code block';
+    button.textContent = label;
+    button.title = ariaLabel;
+    button.setAttribute('aria-label', ariaLabel);
+    if (button._chatCodeCopyTimer) globalThis.clearTimeout(button._chatCodeCopyTimer);
+    if (restoreMs > 0 && label !== defaultLabel) {
+        button._chatCodeCopyTimer = globalThis.setTimeout(() => {
+            button.textContent = defaultLabel;
+            button.title = defaultAria;
+            button.setAttribute('aria-label', defaultAria);
+            button._chatCodeCopyTimer = null;
+        }, restoreMs);
+    }
+}
+
+export async function copyChatCodeBlock(text, button, {clipboard = globalThis.navigator?.clipboard, restoreMs = 1500} = {}) {
+    if (!clipboard || typeof clipboard.writeText !== 'function') {
+        setChatCodeCopyButtonState(button, 'Unavailable', 'Clipboard copy unavailable', restoreMs);
+        return false;
+    }
+    try {
+        await clipboard.writeText(String(text ?? ''));
+        setChatCodeCopyButtonState(button, 'Copied', 'Code block copied', restoreMs);
+        return true;
+    } catch {
+        setChatCodeCopyButtonState(button, 'Failed', 'Code block copy failed', restoreMs);
+        return false;
+    }
+}
+
+function appendCodeBlock(parent, text) {
+    const code = String(text ?? '');
+    const wrapper = D.createElement('div');
+    wrapper.className = 'chat-code-block';
+    wrapper.setAttribute('role', 'group');
+    wrapper.setAttribute('aria-label', 'Code block');
+
+    const pre = D.createElement('pre');
+    pre.textContent = code;
+    const button = D.createElement('button');
+    button.type = 'button';
+    button.className = 'chat-code-copy-button';
+    button.dataset.defaultLabel = 'Copy';
+    button.dataset.defaultAriaLabel = 'Copy code block';
+    button.textContent = button.dataset.defaultLabel;
+    button.title = button.dataset.defaultAriaLabel;
+    button.setAttribute('aria-label', button.dataset.defaultAriaLabel);
+    button.addEventListener('click', () => copyChatCodeBlock(code, button));
+
+    wrapper.appendChild(pre);
+    wrapper.appendChild(button);
+    parent.appendChild(wrapper);
+}
+
 export function appendMessageText(parent, text) {
     const raw = String(text || '');
     const prePattern = /<pre>([\s\S]*?)<\/pre>|```[^\r\n`]*(?:\r?\n)([\s\S]*?)```/gi;
@@ -16,12 +73,15 @@ export function appendMessageText(parent, text) {
     let match;
     while ((match = prePattern.exec(raw)) !== null) {
         appendPlainMessageText(parent, raw.slice(cursor, match.index));
-        const pre = D.createElement('pre');
-        pre.textContent = match[1] ?? match[2];
-        parent.appendChild(pre);
+        appendCodeBlock(parent, match[1] ?? match[2]);
         cursor = prePattern.lastIndex;
     }
     appendPlainMessageText(parent, raw.slice(cursor));
+}
+
+function renderMessageText(parent, text) {
+    parent.replaceChildren();
+    appendMessageText(parent, text);
 }
 
 export const CHAT_BOTTOM_THRESHOLD_PX = 96;
@@ -56,7 +116,7 @@ export function chatMessageKind(sender, text) {
     return sender === 'BOT' ? 'bot' : 'user';
 }
 
-export function addChatMessage(sender, text, {forceScroll = false} = {}) {
+function insertChatMessage(sender, text, {forceScroll = false} = {}) {
     const shouldScroll = forceScroll || isChatNearBottom();
     const kind = chatMessageKind(sender, text);
     const speaker = kind === 'model-error' ? 'MODEL ERROR' : (sender === 'BOT' ? state.aiName : 'YOU');
@@ -89,6 +149,31 @@ export function addChatMessage(sender, text, {forceScroll = false} = {}) {
     } else {
         setJumpToLatestVisible(true);
     }
+    return {
+        messageEl,
+        bubble,
+        updateText(nextText) {
+            renderMessageText(bubble, nextText);
+            scrollChatToLatest();
+        },
+    };
+}
+
+export function addChatMessage(sender, text, {forceScroll = false} = {}) {
+    return insertChatMessage(sender, text, {forceScroll}).messageEl;
+}
+
+function startStreamingBotMessage() {
+    const entry = insertChatMessage('BOT', '', {forceScroll: true});
+    entry.messageEl.classList.add('streaming-bubble');
+    entry.messageEl.setAttribute('aria-busy', 'true');
+    return entry;
+}
+
+function finishStreamingBotMessage(entry) {
+    if (!entry) return;
+    entry.messageEl.classList.remove('streaming-bubble');
+    entry.messageEl.removeAttribute('aria-busy');
 }
 
 function clearTypingIndicator(statusMessage = '') {
@@ -164,6 +249,141 @@ export function chatSendBlockedMessage() {
     return state.chatModelBlockedMessage || '';
 }
 
+function chatStreamingSupported() {
+    return state.chatStreamingEnabled !== false
+        && typeof TextDecoder !== 'undefined'
+        && typeof ReadableStream !== 'undefined';
+}
+
+async function readChatStream(response, onEvent) {
+    const reader = response.body?.getReader?.();
+    if (!reader) return false;
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const {value, done} = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            onEvent(JSON.parse(line));
+        }
+        if (done) break;
+    }
+    if (buffer.trim()) onEvent(JSON.parse(buffer));
+    return true;
+}
+
+async function sendUserMessageStream(requestOptions, startedAt) {
+    let response;
+    try {
+        response = await fetchWithConnectionState('/send_message_stream', requestOptions);
+    } catch {
+        return {
+            data: null,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: false,
+        };
+    }
+    if (!response.ok) {
+        setStatusMessage(el.statusText, `Error: server returned ${response.status}.`, 'error');
+        return {
+            data: null,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: false,
+        };
+    }
+
+    let streamEntry = null;
+    let streamedText = '';
+    let finalData = null;
+    let consumed = false;
+    try {
+        consumed = await readChatStream(response, event => {
+            if (event.type === 'delta') {
+                if (!streamEntry) {
+                    clearTypingIndicator();
+                    streamEntry = startStreamingBotMessage();
+                }
+                streamedText += String(event.text || '');
+                streamEntry.updateText(streamedText);
+            } else if (event.type === 'final') {
+                finalData = event.data || null;
+            }
+        });
+    } catch (error) {
+        console.error('Chat stream failed:', error);
+        setStatusMessage(el.statusText, 'Chat stream failed before the model finished.', 'error');
+        finishStreamingBotMessage(streamEntry);
+        return {
+            data: null,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: Boolean(streamEntry),
+        };
+    }
+    if (!consumed) return null;
+    finishStreamingBotMessage(streamEntry);
+
+    if (streamEntry && finalData?.chat && finalData.chat !== streamedText) {
+        streamedText = String(finalData.chat);
+        streamEntry.updateText(streamedText);
+    }
+    if (!finalData) {
+        clearTypingIndicator('Message failed before the model could answer. Check the app terminal.');
+        return {
+            data: null,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: Boolean(streamEntry),
+        };
+    }
+    if (!streamEntry) {
+        const handled = handleSendMessageStatus(finalData);
+        if (handled) await pollChatUpdates();
+        return {
+            data: finalData,
+            handled,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: false,
+        };
+    }
+    if (finalData.status === 'model_error') {
+        setStatusMessage(
+            el.statusText,
+            finalData.message || 'Model request failed. Check Ollama status and try again.',
+            'error',
+        );
+        return {
+            data: finalData,
+            handled: false,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: true,
+        };
+    }
+    if (finalData.status && finalData.status !== 'ok') {
+        const handled = handleSendMessageStatus(finalData);
+        return {
+            data: finalData,
+            handled,
+            elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+            streamed: true,
+        };
+    }
+    clearTypingIndicator();
+    state.pendingQueuedBotEcho = '';
+    await pollChatUpdates();
+    return {
+        data: finalData,
+        handled: true,
+        elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+        streamed: true,
+    };
+}
+
 export async function sendUserMessage(message) {
     const startedAt = performance.now();
     const persona = el.personaInput.value.trim();
@@ -187,11 +407,16 @@ export async function sendUserMessage(message) {
         D.querySelector('#typing-indicator .speaker-name').textContent = state.aiName;
         el.typingIndicator.style.display = 'grid';
         scrollChatToLatest({force: true});
-        const data = await apiCall('/send_message', {
+        const requestOptions = {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({message, key: state.myHandyKey, persona_desc: state.myPersonaDescription}),
-        });
+        };
+        if (chatStreamingSupported()) {
+            const streamedResult = await sendUserMessageStream(requestOptions, startedAt);
+            if (streamedResult !== null) return streamedResult;
+        }
+        const data = await apiCall('/send_message', requestOptions);
         const handled = handleSendMessageStatus(data);
         if (handled) await pollChatUpdates();
         return {
