@@ -519,7 +519,9 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(motion.position_final_stop_on_target, [False])
         self.assertTrue(motion.position_frames)
         self.assertEqual(sleep_seconds, [0])
-        self.assertTrue(any("Freestyle selecting Sway" in message for message in messages))
+        self.assertTrue(any("Freestyle" in message for message in messages))
+        self.assertFalse(any("Freestyle selecting" in message for message in messages))
+        self.assertFalse(any("weight" in message.lower() for message in messages))
 
     def test_freestyle_continuous_trace_metadata_describes_choice_and_sleep(self):
         motion = FakeMotionController()
@@ -688,7 +690,8 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(remembered, ["sway", "sway", "sway", "sway", "sway", "sway"])
         self.assertTrue(freestyle_iterations)
         self.assertTrue(any("Holding the edge" in message for message in messages))
-        self.assertTrue(any("Backing off. Edge count: 1." in message for message in messages))
+        self.assertTrue(any("Backing off for a moment." in message for message in messages))
+        self.assertFalse(any("Edge count" in message for message in messages))
 
     def test_freestyle_close_signal_keeps_motion_running_while_llm_decides(self):
         motion = FakeMotionController()
@@ -852,7 +855,9 @@ class AutoModeThreadTests(unittest.TestCase):
         )
 
         self.assertEqual(choice.pattern_id, "flick")
-        self.assertIn("Flick", choice.reason)
+        self.assertEqual(choice.reason, "Following that direction in Freestyle.")
+        self.assertIn("Flick", choice.debug_reason)
+        self.assertNotIn("weight", choice.reason.lower())
 
     def test_freestyle_selector_skips_non_dict_and_recordless_candidates(self):
         current = MotionTarget(30, 40, 50)

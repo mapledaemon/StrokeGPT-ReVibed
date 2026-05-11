@@ -157,9 +157,10 @@ items are short follow-ups to PR #38 / PR #41 / PR #43.
   Freestyle or a successor mode with visible planner controls.
 - Let preset modes speak occasionally without turning mode timers into
   repeated narration.
-- Make preset-mode speech natural-language narration rather than raw motion
-  sequence readouts, so TTS does not describe internal pattern commands unless
-  a debug verbosity level explicitly asks for that.
+- Keep future preset-mode narration natural-language by default. Planner
+  diagnostics such as pattern ids, weights, scores, counters, and timing should
+  stay in trace/debug surfaces unless a user-visible debug verbosity option is
+  deliberately added.
 
 ### 4. Motion Style Preferences (M)
 

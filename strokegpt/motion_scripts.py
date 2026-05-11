@@ -274,7 +274,7 @@ class MotionScriptPlanner:
         steps[0] = ScriptStep(
             first_step.target,
             mood=first_step.mood,
-            message=f"Backing off. Edge count: {edge_count}.",
+            message="Backing off for a moment.",
             delay_factor=first_step.delay_factor,
         )
         steps.extend(

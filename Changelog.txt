@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Natural Mode Narration
+-----------------------------------
+
+Branch: codex/natural-mode-narration
+
+- Stopped routing Freestyle selector diagnostics through the normal chat/TTS
+  message path:
+    - Freestyle now speaks short natural narration such as "Keeping Freestyle
+      varied." instead of "Freestyle selecting <pattern>: <profile> profile,
+      weight <n>."
+    - The detailed selector explanation is still retained on the
+      `FreestyleChoice` as debug text for code-level diagnostics.
+- Changed the scripted Edge pullback message from an internal edge counter to
+  a user-facing "Backing off for a moment." line.
+
+
 2026-05-11 - PR #154 - Single Active Tab Warning
 -------------------------------------------------
 

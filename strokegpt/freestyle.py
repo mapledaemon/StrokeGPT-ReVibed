@@ -30,6 +30,7 @@ class FreestyleChoice:
     score: float
     mood: str
     reason: str
+    debug_reason: str = ""
 
 
 # Kept as a module-level alias so the local ``_slug_pattern_id`` name used
@@ -258,6 +259,22 @@ def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, curre
     return max(1.0, score)
 
 
+def _freestyle_narration(profile, feedback_target):
+    if feedback_target:
+        return "Following that direction in Freestyle."
+    by_kind = {
+        "quick-tip": "Keeping Freestyle quick and shallow.",
+        "pressure": "Adding slower pressure in Freestyle.",
+        "wide": "Opening Freestyle into wider strokes.",
+        "build": "Building Freestyle up gradually.",
+        "tease": "Keeping Freestyle light and teasing.",
+        "deep": "Moving Freestyle deeper.",
+        "finish": "Pushing Freestyle into a stronger finish rhythm.",
+        "balanced": "Keeping Freestyle varied.",
+    }
+    return by_kind.get(profile.get("kind"), "Keeping Freestyle varied.")
+
+
 def _weighted_freestyle_choice(choices, rng):
     if not choices:
         return None
@@ -297,11 +314,21 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
         profile = _freestyle_profile(pattern_id, pattern_name)
         score = _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids)
         target = _freestyle_target(pattern_id, pattern_name, profile, current, feedback_target, rng)
-        reason = (
+        debug_reason = (
             f"Freestyle selecting {pattern_name}: {profile['kind']} profile, "
             f"weight {int(round(_candidate_weight(candidate, record)))}."
         )
-        choices.append(FreestyleChoice(pattern_id, pattern_name, record, target, score, profile["mood"], reason))
+        reason = _freestyle_narration(profile, feedback_target)
+        choices.append(FreestyleChoice(
+            pattern_id,
+            pattern_name,
+            record,
+            target,
+            score,
+            profile["mood"],
+            reason,
+            debug_reason,
+        ))
 
     choices.sort(key=lambda choice: choice.score, reverse=True)
     explicit_matches = [
