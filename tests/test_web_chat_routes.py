@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -83,6 +84,60 @@ class WebChatRouteTests(WebTestCase):
                 updates.close()
             self.assertEqual(queued, ["This text should be visible and spoken."])
             self.assertEqual(spoken, ["This text should be visible and spoken."])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_send_message_stream_renders_deltas_without_queue_duplicate(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        spoken = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            chunks = iter([
+                '{"chat":"Visible ',
+                'as it arrives.","move":null,"new_mood":null}',
+            ])
+            with mock.patch.object(llm, "iter_chat_response_content", return_value=chunks), \
+                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+                response = self.client.post("/send_message_stream", json={
+                    "message": "say something",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                }, buffered=True)
+
+            self.assertEqual(response.status_code, 200)
+            events = [
+                json.loads(line)
+                for line in response.get_data(as_text=True).splitlines()
+                if line.strip()
+            ]
+            delta_text = "".join(event.get("text", "") for event in events if event["type"] == "delta")
+            final = [event["data"] for event in events if event["type"] == "final"][-1]
+            self.assertEqual(delta_text, "Visible as it arrives.")
+            self.assertEqual(final["status"], "ok")
+            self.assertEqual(final["chat"], "Visible as it arrives.")
+            self.assertTrue(final["chat_streamed"])
+            self.assertFalse(final["chat_queued"])
+
+            updates = self.client.get("/get_updates")
+            try:
+                queued = updates.get_json()["messages"]
+            finally:
+                updates.close()
+            self.assertEqual(queued, [])
+            self.assertEqual(list(app_state.chat_history), [
+                {"role": "user", "content": "say something"},
+                {"role": "assistant", "content": "Visible as it arrives."},
+            ])
+            self.assertEqual(spoken, ["Visible as it arrives."])
         finally:
             handy.handy_key = original_key
             settings.handy_key = original_settings_key

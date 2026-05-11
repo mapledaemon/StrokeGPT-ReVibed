@@ -29,6 +29,26 @@ function jsonResponse(httpStatus, body) {
     return factory();
 }
 
+function streamResponse(lines) {
+    const encoder = new TextEncoder();
+    const chunks = lines.map(line => encoder.encode(line));
+    return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/x-ndjson; charset=utf-8' },
+        body: {
+            getReader() {
+                return {
+                    async read() {
+                        if (chunks.length) return { value: chunks.shift(), done: false };
+                        return { value: undefined, done: true };
+                    },
+                };
+            },
+        },
+    };
+}
+
 function collectText(node) {
     if (!node || typeof node !== 'object') return '';
     let text = node.textContent || '';
@@ -70,11 +90,13 @@ describe('chat action statuses', () => {
         state.connectionLost = false;
         state.chatModelBlockedMessage = '';
         state.pendingQueuedBotEcho = '';
+        state.chatStreamingEnabled = false;
     });
 
     afterEach(() => {
         globalThis.fetch = originalFetch;
         globalThis.document.querySelector = originalQuerySelector;
+        state.chatStreamingEnabled = true;
     });
 
     function installChatResponses(sendPayload) {
@@ -150,6 +172,31 @@ describe('chat action statuses', () => {
         assert.deepStrictEqual(calls, ['/send_message', '/get_updates']);
         assert.strictEqual(occurrenceCount(chatText, 'Visible assistant reply.'), 1);
         assert.strictEqual(occurrenceCount(chatText, 'Background mode note.'), 1);
+        assert.strictEqual(state.pendingQueuedBotEcho, '');
+    });
+
+    it('renders streamed assistant deltas without waiting for the final chat payload', async () => {
+        state.chatStreamingEnabled = true;
+        const calls = [];
+        globalThis.fetch = async endpoint => {
+            calls.push(endpoint);
+            if (endpoint === '/send_message_stream') return streamResponse([
+                '{"type":"status","status":"generating"}\n',
+                '{"type":"delta","text":"Visible "}\n',
+                '{"type":"delta","text":"as it arrives."}\n',
+                '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":false}}\n',
+            ]);
+            if (endpoint === '/get_updates') return jsonResponse(200, { messages: [] });
+            return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
+        };
+
+        const result = await sendUserMessage('hello');
+        const chatText = collectText(getStubElement('chat-messages-container'));
+
+        assert.strictEqual(result.handled, true);
+        assert.strictEqual(result.streamed, true);
+        assert.deepStrictEqual(calls, ['/send_message_stream', '/get_updates']);
+        assert.strictEqual(occurrenceCount(chatText, 'Visible as it arrives.'), 1);
         assert.strictEqual(state.pendingQueuedBotEcho, '');
     });
 

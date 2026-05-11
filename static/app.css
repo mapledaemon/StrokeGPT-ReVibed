@@ -107,12 +107,17 @@ body.chat-model-unavailable #chat-messages-container { border-color: rgba(216, 1
 #bottom-input-area { display: grid; gap: var(--space-1); padding: var(--space-2) var(--shell-gutter); padding-bottom: max(var(--space-2), env(safe-area-inset-bottom)); border-top: 1px solid var(--background-lighter); background-color: var(--background); flex-shrink: 0; position: relative; }
 
 .chat-message-container { display: grid; grid-template-columns: var(--chat-message-side-gutter) minmax(0, 1fr) var(--chat-message-side-gutter); align-items: flex-end; column-gap: var(--space-2); width: 100%; max-width: 100%; margin: 0; animation: fadeIn 0.4s ease-out; }
+.chat-message-container.streaming-bubble .message-bubble::after { content: ""; display: inline-block; width: 0.45em; height: 1em; margin-left: 0.12em; vertical-align: -0.12em; background: var(--comment); animation: pulse 1s infinite; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 .chat-pfp { grid-column: 1; width: var(--chat-avatar-size); height: var(--chat-avatar-size); border-radius: 50%; object-fit: cover; justify-self: center; align-self: flex-end; }
 .message-content { grid-column: 2; display: flex; flex-direction: column; min-width: 0; max-width: min(100%, var(--chat-message-max-width)); }
 .message-bubble { padding: var(--chat-bubble-padding-block) var(--chat-bubble-padding-inline); border-radius: 8px; line-height: 1.5; overflow-wrap: anywhere; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
-.message-bubble pre { font-family: 'Courier New', Courier, monospace; font-size: 0.9em; text-align: left; white-space: pre-wrap; overflow-x: auto; }
+.chat-code-block { position: relative; width: 100%; margin: 0.55rem 0; overflow: hidden; border: 1px solid #2d333d; border-radius: 6px; background: #101217; }
+.message-bubble pre { margin: 0; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; line-height: 1.45; text-align: left; white-space: pre; overflow-x: auto; }
+.message-bubble .chat-code-block pre { padding: 0.78rem 3.9rem 0.78rem 0.78rem; }
+.chat-code-copy-button { position: absolute; top: 0.38rem; right: 0.38rem; min-height: 1.7rem; padding: 0.2rem 0.48rem; border: 1px solid rgba(127, 183, 163, 0.45); border-radius: 5px; background: rgba(20, 23, 30, 0.94); color: var(--foreground); font-size: 0.72rem; line-height: 1; cursor: pointer; }
+.chat-code-copy-button:hover, .chat-code-copy-button:focus-visible { border-color: var(--comment); background: rgba(127, 183, 163, 0.16); outline: none; }
 
 .bot-bubble .message-content { justify-self: start; align-items: flex-start; }
 .bot-bubble .message-bubble { background-color: var(--background-lighter); border: 1px solid #2d333d; border-top-left-radius: 4px; }

@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-10 - PR #144 - Chat Realtime Streaming
+------------------------------------------------
+
+Branch: codex/chat-realtime-streaming
+
+- Added a streaming chat response path that reads Ollama's streamed JSON,
+  renders the assistant chat text as it arrives, and waits for the final
+  validated JSON before applying motion or starting TTS.
+- Added a small copy affordance for rendered code blocks so the recent fenced
+  code support has an explicit copy/paste path without enabling broad Markdown.
+- Kept the existing non-streaming `/send_message` route as a fallback while
+  adding frontend and backend coverage for streamed deltas without duplicate
+  queued chat bubbles.
+
+
 2026-05-10 - PR #143 - Chat Fenced Code Rendering
 --------------------------------------------------
 
