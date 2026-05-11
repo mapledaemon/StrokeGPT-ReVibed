@@ -171,7 +171,7 @@ export async function startupCheck() {
             el.typingIndicatorPfp.src = data.pfp;
             if (el.profileMenuPfp) el.profileMenuPfp.src = data.pfp;
         }
-        populateModelOptions(data.ollama_models, data.ollama_model);
+        populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         populateDiagnosticsSettings(data);
         updateOllamaStatus(data.ollama_status);
         populateDeviceSettings(data);
@@ -190,7 +190,7 @@ export async function startupCheck() {
         renderSetup(true, data);
     } else {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
-        populateModelOptions(data && data.ollama_models, data && data.ollama_model);
+        populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
         populateDiagnosticsSettings(data || {});
         updateOllamaStatus(data && data.ollama_status);
         populateDeviceSettings(data || {});

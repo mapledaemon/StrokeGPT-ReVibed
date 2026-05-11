@@ -77,6 +77,24 @@ def set_ollama_model_route():
     })
 
 
+@settings_blueprint.route('/delete_ollama_model', methods=['POST'])
+def delete_ollama_model_route():
+    web = _web()
+    data = web._request_json()
+    model = normalize_ollama_model(data.get('model', ''))
+    ok, message = web.settings.delete_ollama_model(model)
+    if not ok:
+        return jsonify({"status": "error", "message": message}), 400
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "message": message,
+        "ollama_model": web.llm.model,
+        "ollama_models": web.get_ollama_models_for_ui(),
+        "ollama_status": web._ollama_status_payload(),
+    })
+
+
 @settings_blueprint.route('/ollama_status')
 def ollama_status_route():
     web = _web()

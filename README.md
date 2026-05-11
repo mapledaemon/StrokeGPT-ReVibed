@@ -103,7 +103,7 @@ Start conservatively. The Handy can be intense even at low speed values.
 Everything is in **Profile menu > Settings**. Tabs:
 
 - **Persona** — change the AI persona prompt and display name.
-- **Model** — pick or download Ollama models, switch the active model, see install state.
+- **Model** — pick, download, add, or delete saved Ollama model options; switch the active model; see install state, model sizes, and GPU/VRAM fit warnings. The default options include the current Gemma preset plus `huihui_ai/granite4.1-abliterated:3b` (2.1 GB) and `huihui_ai/granite4.1-abliterated:8b` (5.3 GB).
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
 - **Device** — Handy key, stroke range, range test.
 - **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.

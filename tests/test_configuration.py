@@ -50,6 +50,9 @@ class ModelConfigurationTests(unittest.TestCase):
         saved = json.loads(fake_path.written)
         self.assertEqual(saved["ollama_model"], DEFAULT_OLLAMA_MODEL)
         self.assertIn(DEFAULT_OLLAMA_MODEL, saved["ollama_models"])
+        self.assertIn("huihui_ai/granite4.1-abliterated:3b", saved["ollama_models"])
+        self.assertIn("huihui_ai/granite4.1-abliterated:8b", saved["ollama_models"])
+        self.assertEqual(saved["ollama_model_hidden_defaults"], [])
         self.assertEqual(saved["audio_provider"], "elevenlabs")
         self.assertFalse(saved["audio_enabled"])
         self.assertEqual(saved["local_tts_engine"], "chatterbox_turbo")
@@ -87,6 +90,9 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
 
         self.assertEqual(settings.ollama_model, DEFAULT_OLLAMA_MODEL)
+        self.assertIn("huihui_ai/granite4.1-abliterated:3b", settings.ollama_models)
+        self.assertIn("huihui_ai/granite4.1-abliterated:8b", settings.ollama_models)
+        self.assertEqual(settings.ollama_model_hidden_defaults, [])
         self.assertEqual(settings.audio_provider, "elevenlabs")
         self.assertFalse(settings.audio_enabled)
         self.assertEqual(settings.local_tts_engine, "chatterbox_turbo")
@@ -502,6 +508,32 @@ class ModelConfigurationTests(unittest.TestCase):
             normalize_ollama_model("nexusriot / Gemma-4-Uncensored-HauhauCS-Aggressive : e4b"),
             DEFAULT_OLLAMA_MODEL,
         )
+        self.assertIn(DEFAULT_OLLAMA_MODEL, settings.ollama_models)
+
+    def test_ollama_default_model_options_can_be_hidden(self):
+        settings = SettingsManager("settings.json")
+        model = "huihui_ai/granite4.1-abliterated:3b"
+
+        ok, message = settings.delete_ollama_model(model)
+
+        self.assertTrue(ok, message)
+        self.assertIn(model, settings.ollama_model_hidden_defaults)
+        self.assertNotIn(model, settings.ollama_models)
+        saved = settings.to_dict()
+        self.assertIn(model, saved["ollama_model_hidden_defaults"])
+        self.assertNotIn(model, saved["ollama_models"])
+
+        self.assertTrue(settings.set_ollama_model(model))
+        self.assertNotIn(model, settings.ollama_model_hidden_defaults)
+        self.assertIn(model, settings.ollama_models)
+
+    def test_current_ollama_model_option_cannot_be_deleted(self):
+        settings = SettingsManager("settings.json")
+
+        ok, message = settings.delete_ollama_model(DEFAULT_OLLAMA_MODEL)
+
+        self.assertFalse(ok)
+        self.assertIn("Cannot delete the current", message)
         self.assertIn(DEFAULT_OLLAMA_MODEL, settings.ollama_models)
 
     def test_persona_prompts_are_normalized_and_saved_for_later(self):

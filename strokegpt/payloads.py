@@ -27,6 +27,20 @@ def format_bytes(value):
     return f"{size:.1f} {unit}"
 
 
+KNOWN_OLLAMA_MODEL_DETAILS = {
+    "huihui_ai/granite4.1-abliterated:3b": {
+        "size": int(2.1 * 1024 * 1024 * 1024),
+        "size_label": "2.1 GB",
+        "source": "catalog",
+    },
+    "huihui_ai/granite4.1-abliterated:8b": {
+        "size": int(5.3 * 1024 * 1024 * 1024),
+        "size_label": "5.3 GB",
+        "source": "catalog",
+    },
+}
+
+
 def diagnostics_level_options():
     labels = {
         "compact": "Compact",
@@ -57,6 +71,53 @@ def _ollama_model_names_match(left, right):
     if left == right:
         return True
     return f"{left}:latest" == right or left == f"{right}:latest"
+
+
+def _matching_model_detail(model, items):
+    for item in list(items or []):
+        if _ollama_model_names_match(item.get("name"), model):
+            return item
+    return {}
+
+
+def ollama_model_details_payload(models, installed_models, running_models, current_model, gpu_status):
+    details = {}
+    current_model = normalize_ollama_model(current_model)
+    for model in list(models or []):
+        normalized = normalize_ollama_model(model)
+        if not normalized:
+            continue
+        installed = _matching_model_detail(normalized, installed_models)
+        running = _matching_model_detail(normalized, running_models)
+        known = KNOWN_OLLAMA_MODEL_DETAILS.get(normalized, {})
+        size = int((installed or running or known).get("size") or 0)
+        size_label = (
+            installed.get("size_label")
+            or running.get("size_label")
+            or known.get("size_label")
+            or format_bytes(size)
+        )
+        source = (
+            "installed" if installed
+            else "running" if running
+            else known.get("source", "")
+        )
+        detail = {
+            "name": normalized,
+            "size": size,
+            "size_label": size_label,
+            "size_source": source,
+            "installed": bool(installed),
+            "running": bool(running),
+            "warning": "",
+        }
+        if running.get("size_vram_reported"):
+            detail["size_vram"] = int(running.get("size_vram") or 0)
+            detail["size_vram_label"] = running.get("size_vram_label") or format_bytes(running.get("size_vram"))
+        if _ollama_model_names_match(normalized, current_model) and gpu_status.get("warning"):
+            detail["warning"] = gpu_status["warning"]
+        details[normalized] = detail
+    return details
 
 
 def ollama_gpu_status_payload(current_model, running_models, error=""):
@@ -122,8 +183,9 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
     if size_vram <= 0:
         warning = (
             "Ollama reports the selected model is running in system memory only. "
-            "Chat may be slow; if this machine has a supported GPU, check the "
-            "README Ollama GPU notes."
+            "Chat may be slow; if this machine has a supported GPU or the model "
+            "is too large for the current GPU runtime, check the README Ollama "
+            "GPU notes."
         )
         payload.update({
             "state": "cpu",
@@ -134,6 +196,12 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
         })
         return payload
     if size > 0 and size_vram < size:
+        warning = (
+            "The selected model is larger than the GPU memory Ollama is using "
+            f"on this hardware ({format_bytes(size_vram)} VRAM of "
+            f"{format_bytes(size)} total). It will partially run in system "
+            "memory and may be slow."
+        )
         payload.update({
             "state": "partial_gpu",
             "accelerated": True,
@@ -141,6 +209,8 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
                 "Ollama reports partial GPU use for the selected model "
                 f"({format_bytes(size_vram)} VRAM of {format_bytes(size)} total)."
             ),
+            "warning": warning,
+            "setup_warning": warning,
         })
         return payload
 
@@ -158,6 +228,8 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
 def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_models, running_models=None):
     current_model = normalize_ollama_model(llm.model)
     diagnostics_level = settings.ollama_diagnostics_level
+    model_options = ollama_models_for_ui(settings, llm)
+    gpu_status = ollama_gpu_status_payload(current_model, [])
     payload = {
         "available": False,
         "base_url": base_url,
@@ -168,7 +240,8 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
         "download": pull_snapshot(),
         "diagnostics_level": diagnostics_level,
         "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),
-        "gpu_status": ollama_gpu_status_payload(current_model, []),
+        "gpu_status": gpu_status,
+        "model_details": ollama_model_details_payload(model_options, [], [], current_model, gpu_status),
         "message": "Ollama is not reachable. Start Ollama before downloading or using local models.",
     }
     try:
@@ -185,12 +258,14 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
             running_error = str(exc)
 
     names = [item["name"] for item in installed]
+    gpu_status = ollama_gpu_status_payload(current_model, running, running_error)
     payload.update({
         "available": True,
         "installed_models": installed,
         "installed_model_names": names,
         "current_model_installed": current_model in names,
-        "gpu_status": ollama_gpu_status_payload(current_model, running, running_error),
+        "gpu_status": gpu_status,
+        "model_details": ollama_model_details_payload(model_options, installed, running, current_model, gpu_status),
         "message": (
             f"Current model is installed: {current_model}"
             if current_model in names
@@ -301,19 +376,19 @@ def setup_check_payload(
             "info",
             "Start Ollama before checking whether the loaded model uses GPU memory.",
         )
+    elif gpu_status.get("warning"):
+        gpu_item = _setup_check_item(
+            "ollama-gpu",
+            "Ollama GPU acceleration",
+            "warning",
+            gpu_status.get("warning") or gpu_status.get("message") or "Ollama reports CPU-only inference.",
+        )
     elif gpu_status.get("accelerated") is True:
         gpu_item = _setup_check_item(
             "ollama-gpu",
             "Ollama GPU acceleration",
             "ok",
             gpu_status.get("message") or "Ollama reports GPU use for the selected model.",
-        )
-    elif gpu_status.get("accelerated") is False:
-        gpu_item = _setup_check_item(
-            "ollama-gpu",
-            "Ollama GPU acceleration",
-            "warning",
-            gpu_status.get("warning") or gpu_status.get("message") or "Ollama reports CPU-only inference.",
         )
     elif gpu_status.get("state") == "not_loaded":
         gpu_item = _setup_check_item(

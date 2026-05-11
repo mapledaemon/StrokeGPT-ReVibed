@@ -8,6 +8,33 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-11 - PR #152 - Editable Ollama Model Options
+-----------------------------------------------------
+
+Branch: codex/editable-ollama-model-options
+
+- Added `huihui_ai/granite4.1-abliterated:3b` and
+  `huihui_ai/granite4.1-abliterated:8b` to the default Ollama model option
+  list after confirming the public Ollama tags.
+- Added an editable Settings > Model option list:
+    - Each saved model option renders as a row with a trash-can delete button.
+    - Known or installed model sizes are shown in the dropdown and list rows.
+    - Missing models show a compact per-row download button next to delete.
+    - The list uses fixed action columns and right-aligned metadata so long
+      model names do not collide with row controls.
+    - Row cells are pinned to explicit grid positions so warnings cannot push
+      action buttons out of alignment.
+    - Row icon buttons reset inherited form-button sizing and hover behavior
+      so Firefox keeps the download/delete controls aligned.
+    - The current model cannot be deleted until another model is selected.
+    - Deleted built-in defaults are remembered so they do not reappear after
+      the next settings save.
+- Added a partial-GPU warning when Ollama reports that the selected model only
+  partly fits in VRAM on the current hardware.
+- Added `/delete_ollama_model` and model-list persistence coverage for custom
+  saved options, built-in default hiding, and current-model rejection.
+
+
 2026-05-11 - PR #151 - Typed Chat Mode Action Toggle
 -----------------------------------------------------
 
