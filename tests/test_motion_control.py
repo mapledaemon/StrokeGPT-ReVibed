@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 
 from strokegpt.motion import (
+    CONTINUOUS_MAX_MORPH_SECONDS,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
@@ -450,6 +451,58 @@ class MotionControllerTests(unittest.TestCase):
         controller.stop()
         self.assertTrue(handy.stopped)
         self.assertFalse(controller.observability_snapshot()["playback_active"])
+
+    def test_continuous_backend_preserves_same_pattern_phase_on_update(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        intent = IntentMatcher().parse("milk me", controller.current_target())
+
+        try:
+            controller.apply_generated_target(intent.target, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.position_moves) >= 2), handy.position_moves)
+
+            updated_target = MotionTarget(
+                intent.target.speed + 6,
+                intent.target.depth,
+                intent.target.stroke_range,
+                intent.target.label,
+                motion_program=intent.target.motion_program,
+            )
+            controller.apply_generated_target(updated_target, source="second")
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous")
+                        and point.get("source") == "second"
+                        and point.get("sample_index") == 0
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                )
+            )
+
+            second_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous") and point.get("source") == "second"
+            ]
+            self.assertTrue(second_points)
+            self.assertGreater(second_points[0]["phase_offset_ms"], 0)
+            self.assertLess(second_points[0]["phase_offset_ms"], second_points[0]["cycle_ms"])
+        finally:
+            controller.stop()
+
+    def test_continuous_morph_duration_scales_with_target_gap(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        start = MotionTarget(40, 50, 50)
+
+        small = controller._continuous_morph_seconds(start, MotionTarget(42, 54, 52))
+        large = controller._continuous_morph_seconds(start, MotionTarget(85, 96, 95))
+
+        self.assertLess(small, large)
+        self.assertGreaterEqual(small, 0.32)
+        self.assertLessEqual(large, CONTINUOUS_MAX_MORPH_SECONDS)
+        self.assertGreater(large, 0.65)
 
     def test_continuous_backend_routes_plain_chat_targets_through_position_smoothing(self):
         handy = FakeHandy()
