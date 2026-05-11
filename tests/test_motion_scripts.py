@@ -60,7 +60,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         steps.extend(planner.next_step(current) for _ in range(5))
 
         self.assertEqual(step.mood, "Dominant")
-        self.assertIn("Edge count: 2", step.message)
+        self.assertEqual(step.message, "Backing off for a moment.")
         self.assertLessEqual(step.target.speed, 10)
         self.assertIn("Edge Pull Back", step.target.label)
         pullback_steps = [item for item in steps if item.target.label.startswith("Edge Pull Back")]
