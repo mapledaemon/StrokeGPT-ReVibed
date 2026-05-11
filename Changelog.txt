@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-10 - Unreleased - Continuous Program Range Cache
----------------------------------------------------------
+2026-05-10 - PR #148 - Continuous Program Range Cache
+------------------------------------------------------
 
 Branch: codex/continuous-program-range-cache
 
