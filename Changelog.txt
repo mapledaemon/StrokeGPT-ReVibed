@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+Unreleased - Motion Style Preference
+------------------------------------
+
+Branch: codex/motion-style-preference
+
+- Added a Motion Style selector in Settings > Motion with balanced, smooth,
+  steady, teasing, pulsing, ramping, high-variation, full-range, and
+  freestyle options.
+- Persisted `motion_style` separately from persona prompts and surfaced it in
+  the settings payload so reset/load/save all use the central settings schema.
+- Added the saved motion style to LLM chat and mode-decision context as a
+  bounded movement bias, without changing the deterministic speed/depth
+  clamps or hardware safety path.
+
+
 2026-05-11 - PR #155 - Natural Mode Narration
 ----------------------------------------------
 

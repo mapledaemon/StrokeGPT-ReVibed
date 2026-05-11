@@ -1027,6 +1027,7 @@ def get_current_context():
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
         'motion_preferences': _motion_preference_payload()["prompt"],
+        'motion_style': settings.motion_style,
         'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,
         'last_depth_pos': handy.last_depth_pos, 'last_stroke_range': handy.last_stroke_range,
         'min_speed': settings.min_speed, 'max_speed': settings.max_speed,

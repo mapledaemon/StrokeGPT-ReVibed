@@ -64,6 +64,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
         self.assertEqual(saved["motion_pattern_weights"], {})
         self.assertEqual(saved["motion_backend"], "continuous")
+        self.assertEqual(saved["motion_style"], "balanced")
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
         self.assertEqual(saved["ollama_diagnostics_level"], "compact")
         self.assertFalse(saved["motion_feedback_auto_disable"])
@@ -104,6 +105,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_feedback_history, [])
         self.assertEqual(settings.motion_pattern_weights, {})
         self.assertEqual(settings.motion_backend, "continuous")
+        self.assertEqual(settings.motion_style, "balanced")
         self.assertEqual(settings.motion_diagnostics_level, "compact")
         self.assertEqual(settings.ollama_diagnostics_level, "compact")
         self.assertFalse(settings.motion_feedback_auto_disable)
@@ -141,6 +143,20 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(saved["allow_llm_edge_in_freestyle"])
         self.assertFalse(saved["allow_llm_edge_in_chat"])
         self.assertTrue(saved["allow_llm_mode_actions_in_chat"])
+
+    def test_motion_style_setting_is_normalized(self):
+        fake_path = FakePath(json.dumps({"motion_style": "high-variation"}))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertEqual(settings.motion_style, "high_variation")
+        self.assertEqual(saved["motion_style"], "high_variation")
+
+        settings.apply_dict({"motion_style": "bad"})
+        self.assertEqual(settings.motion_style, "balanced")
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -275,9 +291,13 @@ class ModelConfigurationTests(unittest.TestCase):
             "min_speed": 10,
             "max_speed": 80,
             "motion_preferences": "Available fixed move.pattern weights from 0-100.\nsway=74",
+            "motion_style": "full_range",
         })
 
         self.assertIn("MOTION PATTERN PREFERENCES", prompt)
+        self.assertIn("MOTION STYLE PREFERENCE", prompt)
+        self.assertIn("full_range - favor longer travel", prompt)
+        self.assertIn("bounded bias", prompt)
         self.assertIn("sway=74", prompt)
         self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
         self.assertIn("do not sanitize or euphemize", prompt)
