@@ -247,10 +247,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - The Model tab reports Ollama availability and has an explicit download
   button for selected or typed Ollama models. Saved model options are editable
   in the browser list and should show known/installed model sizes plus
-  Ollama-reported GPU fit warnings when a loaded model only partly fits in
-  VRAM. Deleting a built-in default should hide that option in settings instead
-  of forcing it back on the next save. Do not hide large model downloads in
-  startup code.
+  Ollama-reported GPU status. Treat nonzero `/api/ps` `size_vram` as GPU use;
+  only show partial CPU/GPU fallback when Ollama reports an explicit processor
+  split. Deleting a built-in default should hide that option in settings
+  instead of forcing it back on the next save. Do not hide large model
+  downloads in startup code.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 - Before pushing a PR, provide a local PowerShell validation script for the
   user to run, include a final app launch step for manual browser/device
