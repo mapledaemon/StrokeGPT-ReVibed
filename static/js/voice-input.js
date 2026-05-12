@@ -165,7 +165,9 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         state.voiceInputEchoCancellation ? 'echo cancel' : 'raw echo',
         state.voiceInputAutoGainControl ? 'auto gain' : 'fixed gain',
         state.voiceInputAudioPreprocessing ? 'high-pass/compress' : 'raw capture',
-        state.voiceInputSilenceTrim ? 'trim silence' : 'full clip',
+        state.voiceInputSilenceTrim
+            ? (voiceInputSilenceTrimEnabled() ? 'trim silence' : 'server normalized')
+            : 'full clip',
     ].join(', ');
     el.voiceInputDiagnostics.textContent = [
         `State: ${status.status_code || '-'} | Dependency: ${dependency} | Model: ${loaded}, ${cached} (${model}) | Cache: ${compactCachePath(status.model_cache_dir)}`,
@@ -175,6 +177,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
         `Recognition: fallback beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
         `Model load: ${formatMs(timings.model_load_ms)} | Preload: ${preload} ${formatElapsedSeconds(preloadElapsed)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+        `Backend: save ${formatMs(timings.upload_save_ms)} | normalize ${formatMs(timings.normalization_ms)} | worker ${formatMs(timings.worker_request_ms)} | total ${formatMs(timings.route_total_ms ?? timings.total_ms)}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
     ].join('\n');
@@ -743,8 +746,12 @@ function voiceInputPreprocessingEnabled() {
     return Boolean(state.voiceInputAudioPreprocessing);
 }
 
+function voiceInputUsesServerAudioNormalization() {
+    return state.voiceInputProvider === NVIDIA_PARAKEET_PROVIDER;
+}
+
 function voiceInputSilenceTrimEnabled() {
-    return Boolean(state.voiceInputSilenceTrim);
+    return Boolean(state.voiceInputSilenceTrim) && !voiceInputUsesServerAudioNormalization();
 }
 
 async function createVoiceInputRecordingPipeline(stream) {

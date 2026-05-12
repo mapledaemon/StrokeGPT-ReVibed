@@ -293,9 +293,12 @@ def _save_uploaded_clip(web):
 @voice_input_blueprint.route('/transcribe_voice', methods=['POST'])
 def transcribe_voice_route():
     web = _web()
+    route_started = time.perf_counter()
+    save_started = time.perf_counter()
     target, error = _save_uploaded_clip(web)
     if error:
         return error
+    upload_save_ms = int((time.perf_counter() - save_started) * 1000)
     try:
         result = web.voice_input.transcribe_file(target)
     except VoiceInputUnavailable as exc:
@@ -322,5 +325,8 @@ def transcribe_voice_route():
             result.setdefault("message", "I didn't catch that.")
     else:
         result["message"] = "Transcript ready."
+    timings = result.setdefault("timings", {})
+    timings.setdefault("upload_save_ms", upload_save_ms)
+    timings["route_total_ms"] = int((time.perf_counter() - route_started) * 1000)
     result["voice_input_status"] = _voice_input_payload(web)
     return jsonify(result)
