@@ -54,6 +54,7 @@ class WebLocalTtsRouteTests(WebTestCase):
             self.assertEqual(data["status"], "started")
             self.assertIn("local_tts_status", data)
             self.assertIn("preload_elapsed_seconds", data["local_tts_status"])
+            self.assertIn("preload_progress_percent", data["local_tts_status"])
             self.assertIn("generation_status", data["local_tts_status"])
             self.assertEqual(calls, [((), {"force": True})])
         finally:

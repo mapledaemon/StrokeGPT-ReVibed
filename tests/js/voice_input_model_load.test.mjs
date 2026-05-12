@@ -118,7 +118,7 @@ describe('voice input model load feedback', () => {
         globalThis.window.confirm = originalConfirm;
     });
 
-    it('shows live elapsed progress and then the provider load error', async () => {
+    it('shows live percentage progress and then the provider load error', async () => {
         const calls = [];
         let finishPreload;
         const loadError = 'NVIDIA Parakeet worker stopped: operator torchvision::nms does not exist';
@@ -155,8 +155,8 @@ describe('voice input model load feedback', () => {
         await flushAsyncHandlers();
 
         assert.deepEqual(calls, ['/set_voice_input', '/preload_voice_input_model']);
-        assert.match(getStubElement('status-text').textContent, /Downloading voice input model\.\.\. Elapsed: 0s\./);
-        assert.match(getStubElement('download-voice-input-model-btn').textContent, /Downloading \/ Loading 0s\.\.\./);
+        assert.match(getStubElement('status-text').textContent, /Downloading voice input model\.\.\. Progress: \d+%\. Elapsed: 0s\./);
+        assert.match(getStubElement('download-voice-input-model-btn').textContent, /Downloading \/ Loading \d+%\.\.\./);
 
         finishPreload();
         await flushAsyncHandlers();

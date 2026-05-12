@@ -488,3 +488,11 @@ export function formatElapsed(seconds) {
     if (total >= 60) return `${Math.floor(total / 60)}m ${total % 60}s`;
     return `${total}s`;
 }
+
+export function formatPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    const clamped = clampNumber(number, 0, 100, 0);
+    const rounded = Math.round(clamped * 10) / 10;
+    return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}

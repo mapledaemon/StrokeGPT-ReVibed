@@ -71,7 +71,23 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(status["status_code"], "model_not_loaded")
         self.assertFalse(status["model_cached"])
         self.assertTrue(status["load_requires_download"])
+        self.assertIn("preload_progress_percent", status)
+        self.assertIsNone(status["preload_progress_percent"])
         self.assertIn("Download / Load Voice Input Model", status["message"])
+
+        service._set_preload_status("loading", "Loading voice input model.")
+        service._preload_started_at = 1.0
+        with (
+            mock.patch.object(service, "dependency_available", return_value=True),
+            mock.patch.object(service, "is_model_cached", return_value=False),
+            mock.patch("strokegpt.asr.time.monotonic", return_value=31.0),
+        ):
+            status = service.status()
+        self.assertEqual(status["status_code"], "model_loading")
+        self.assertIsInstance(status["preload_progress_percent"], int)
+        self.assertGreater(status["preload_progress_percent"], 1)
+        self.assertLess(status["preload_progress_percent"], 100)
+        service._clear_preload_status()
 
         service._model = object()
         with mock.patch.object(service, "dependency_available", return_value=True):

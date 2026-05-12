@@ -1,4 +1,4 @@
-import { D, apiCall, el, reportSaveFailure, setStatusMessage, state } from './context.js';
+import { D, apiCall, el, formatPercent, reportSaveFailure, setStatusMessage, state } from './context.js';
 import { updateAudioProviderUi } from './audio.js';
 
 export function setSettingsTab(tabName) {
@@ -269,6 +269,7 @@ export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
     const gpuStatus = status.gpu_status || {};
+    const downloadPercent = formatPercent(download.percent);
     state.ollamaStatus = status;
     state.ollamaDownloadPolling = download.state === 'downloading';
     state.ollamaModelDetails = modelDetailsFromStatus(status);
@@ -287,7 +288,8 @@ export function updateOllamaStatus(status) {
         message += ` ${gpuStatus.message}`;
     }
     if (download.state === 'downloading') {
-        message = `Download in progress for ${download.model}: ${download.message || 'working...'}`;
+        const progress = downloadPercent ? ` Progress: ${downloadPercent}.` : '';
+        message = `Download in progress for ${download.model}:${progress} ${download.message || 'working...'}`;
     } else if (download.state === 'error') {
         message += ` Last download error: ${download.message}`;
     } else if (download.state === 'ready' && download.model) {
@@ -301,7 +303,9 @@ export function updateOllamaStatus(status) {
             : 'var(--yellow)';
     if (el.downloadOllamaModelBtn) {
         el.downloadOllamaModelBtn.disabled = state.ollamaDownloadPolling;
-        el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling ? 'Downloading...' : 'Download Model';
+        el.downloadOllamaModelBtn.textContent = state.ollamaDownloadPolling
+            ? `Downloading${downloadPercent ? ` ${downloadPercent}` : ''}...`
+            : 'Download Model';
     }
     updateChatModelAvailability(status);
     updateOllamaDiagnostics(status);
@@ -313,7 +317,8 @@ function chatModelBlockedMessage(status = {}) {
         return '';
     }
     if (download.state === 'downloading') {
-        return `Ollama is downloading ${download.model || 'the selected model'} - chat is paused until it finishes.`;
+        const progress = formatPercent(download.percent);
+        return `Ollama is downloading ${download.model || 'the selected model'}${progress ? ` (${progress})` : ''} - chat is paused until it finishes.`;
     }
     if (!status.available) {
         return 'Ollama offline - start Ollama before chatting.';
@@ -490,7 +495,7 @@ async function downloadOllamaModel(modelOverride = '') {
     }
     const ok = window.confirm(`Download ${model} with Ollama now? This may download several GB.`);
     if (!ok) return;
-    el.ollamaModelStatus.textContent = `Starting download for ${model}...`;
+    el.ollamaModelStatus.textContent = `Starting download for ${model}... Progress: 0%.`;
     el.ollamaModelStatus.style.color = 'var(--comment)';
     const data = await apiCall('/pull_ollama_model', {
         method: 'POST',

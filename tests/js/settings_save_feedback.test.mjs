@@ -400,6 +400,35 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.match(diagnostics.textContent, /GPU warning: Ollama reports the selected model is running in system memory only/);
     });
 
+    it('updateOllamaStatus shows model download percentage while pulling', () => {
+        const modelStatus = resetStubElement('ollama-model-status');
+        const downloadButton = resetStubElement('download-ollama-model-btn');
+
+        updateOllamaStatus({
+            available: true,
+            current_model: 'local/test-model:latest',
+            current_model_installed: false,
+            installed_model_names: [],
+            download: {
+                state: 'downloading',
+                model: 'local/test-model:latest',
+                message: 'pulling layer (1.0 GB / 2.0 GB, 50%)',
+                percent: 50,
+            },
+            diagnostics_level: 'compact',
+            llm_diagnostics: {},
+            model_details: {},
+            message: 'Current model is not installed.',
+            gpu_status: {},
+        });
+
+        assert.match(modelStatus.textContent, /Progress: 50%\./);
+        assert.match(modelStatus.textContent, /pulling layer/);
+        assert.strictEqual(downloadButton.textContent, 'Downloading 50%...');
+        assert.strictEqual(downloadButton.disabled, true);
+        assert.match(state.chatModelBlockedMessage, /50%/);
+    });
+
     it('updateOllamaStatus treats startup unchecked status as non-blocking', () => {
         const modelStatus = resetStubElement('ollama-model-status');
         const input = resetStubElement('user-chat-input');

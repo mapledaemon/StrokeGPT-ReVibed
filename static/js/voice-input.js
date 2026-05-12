@@ -1,4 +1,4 @@
-import { D, clampNumber, el, fetchWithConnectionState, state } from './context.js';
+import { D, clampNumber, el, fetchWithConnectionState, formatPercent, state } from './context.js';
 
 const DEFAULT_HANDS_FREE_SENSITIVITY = 75;
 const DEFAULT_HANDS_FREE_SILENCE_MS = 900;
@@ -65,6 +65,16 @@ function formatElapsedSeconds(value) {
     const seconds = total % 60;
     if (!minutes) return `${seconds}s`;
     return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+}
+
+function estimatedModelLoadPercent(startedAt, requiresDownload) {
+    const elapsedSeconds = Math.max(0, (performance.now() - startedAt) / 1000);
+    const ceiling = requiresDownload ? 95 : 99;
+    const base = requiresDownload ? 1 : 35;
+    const span = ceiling - base;
+    const curveSeconds = requiresDownload ? 60 : 20;
+    const percent = base + (elapsedSeconds / (elapsedSeconds + curveSeconds)) * span;
+    return Math.min(ceiling, Math.max(base, Math.round(percent)));
 }
 
 function handsFreeSensitivity() {
@@ -158,6 +168,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const cached = status.model_cached ? 'cached' : 'not cached';
     const preload = status.preload_status || '-';
     const preloadElapsed = Number(status.preload_elapsed_seconds || 0);
+    const preloadProgress = formatPercent(status.preload_progress_percent);
     const model = status.model || 'unknown';
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
     const issue = state.voiceInputLastIssue || status.last_error || '-';
@@ -178,7 +189,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `Hands-free flow: ${state.voiceInputHandsFreeModeActions ? 'model mode actions on' : 'transcript only'}`,
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
         `Recognition: fallback beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
-        `Model load: ${formatMs(timings.model_load_ms)} | Preload: ${preload} ${formatElapsedSeconds(preloadElapsed)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+        `Model load: ${formatMs(timings.model_load_ms)} | Preload: ${preload}${preloadProgress ? ` ${preloadProgress}` : ''} ${formatElapsedSeconds(preloadElapsed)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Backend: save ${formatMs(timings.upload_save_ms)} | normalize ${formatMs(timings.normalization_ms)} | worker ${formatMs(timings.worker_request_ms)} | total ${formatMs(timings.route_total_ms ?? timings.total_ms)}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
@@ -187,7 +198,12 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
 
 function voiceInputModelLoadLabel(status = state.voiceInputStatusSnapshot || {}) {
     if (status.model_loaded) return 'Voice Input Model Loaded';
-    if (status.preload_status === 'loading') return status.model_cached ? 'Loading...' : 'Downloading / Loading...';
+    if (status.preload_status === 'loading') {
+        const progress = formatPercent(status.preload_progress_percent);
+        return status.model_cached
+            ? `Loading${progress ? ` ${progress}` : ''}...`
+            : `Downloading / Loading${progress ? ` ${progress}` : ''}...`;
+    }
     return status.model_cached ? 'Load Voice Input Model' : 'Download / Load Voice Input Model';
 }
 
@@ -578,7 +594,8 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     if (el.voiceInputModelInput) el.voiceInputModelInput.value = model;
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
-        el.voiceInputStatus.textContent = status.message || 'Voice input status unavailable.';
+        const preloadProgress = formatPercent(status.preload_progress_percent);
+        el.voiceInputStatus.textContent = `${status.message || 'Voice input status unavailable.'}${status.preload_status === 'loading' && preloadProgress ? ` Progress: ${preloadProgress}.` : ''}`;
         const issueStatus = status.status_code === 'error' || status.status_code === 'dependency_missing';
         el.voiceInputStatus.style.color = status.can_transcribe ? 'var(--cyan)' : (issueStatus ? 'var(--yellow)' : 'var(--comment)');
     }
@@ -665,11 +682,12 @@ async function preloadVoiceInputModel({status = state.voiceInputStatusSnapshot |
         const progressVerb = requiresDownload ? 'Downloading / Loading' : 'Loading';
         const updateProgress = () => {
             const elapsed = formatElapsedSeconds((performance.now() - startedAt) / 1000);
+            const progress = formatPercent(estimatedModelLoadPercent(startedAt, requiresDownload));
             if (el.downloadVoiceInputModelBtn) {
                 el.downloadVoiceInputModelBtn.disabled = true;
-                el.downloadVoiceInputModelBtn.textContent = `${progressVerb} ${elapsed}...`;
+                el.downloadVoiceInputModelBtn.textContent = `${progressVerb} ${progress}...`;
             }
-            voiceStatusMessage(`${loadingMessage} Elapsed: ${elapsed}.`);
+            voiceStatusMessage(`${loadingMessage} Progress: ${progress}. Elapsed: ${elapsed}.`);
         };
         let progressTimer = null;
         try {

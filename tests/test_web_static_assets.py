@@ -547,6 +547,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("localTtsStatusPolling: false", script)
         self.assertIn("async function refreshLocalTtsStatus", script)
         self.assertIn("preload_elapsed_seconds", script)
+        self.assertIn("preload_progress_percent", script)
         self.assertIn("generation_elapsed_seconds", script)
         self.assertIn("audio.onended", script)
         self.assertIn("new Promise", script)

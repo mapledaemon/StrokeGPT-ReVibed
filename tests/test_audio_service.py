@@ -7,6 +7,7 @@ import types
 import unittest
 import warnings
 import wave
+from unittest import mock
 
 
 elevenlabs_module = types.ModuleType("elevenlabs")
@@ -88,6 +89,35 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_preload_status, "ready")
         self.assertEqual(service._local_preload_phase, "ready")
         self.assertEqual(service._local_preload_error, "")
+
+    def test_local_status_reports_preload_progress_percent(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": True,
+            "cuda_version": "test",
+            "device_count": 1,
+            "device_name": "test gpu",
+            "device": "cuda",
+            "device_override": "auto",
+        }
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+        service._local_preload_status = "loading"
+        service._local_preload_phase = "loading_model"
+        service._local_preload_started_at = 1.0
+
+        with mock.patch("strokegpt.audio.time.perf_counter", return_value=31.0):
+            status = service.local_status()
+
+        self.assertEqual(status["preload_status"], "loading")
+        self.assertIsInstance(status["preload_progress_percent"], int)
+        self.assertGreater(status["preload_progress_percent"], 1)
+        self.assertLess(status["preload_progress_percent"], 100)
 
     def test_elevenlabs_generation_errors_are_reported(self):
         class FailingTextToSpeech:
