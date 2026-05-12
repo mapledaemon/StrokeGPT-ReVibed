@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #159 - Refresh Agent Handoff After Travel Sync
+---------------------------------------------------------------
+
+Branch: codex/post-travel-handoff-refresh
+
+- Brought the shared handoff documentation forward from the PR #68-era
+  frontend split context to the current PR #158 state.
+- Refreshed `AGENTS.md` `Current Progress Snapshot` from the old PR #43-#54
+  reorganization-only list into grouped current-state milestones covering the
+  completed module splits, continuous backend, browser shell, voice input,
+  mode-action controls, model settings, motion style, and speedup work.
+- Updated the `AGENTS.md` Suggested Next Tasks entry for Motion Style
+  Preferences so it points at validating/refining the existing selector and
+  planner/reset follow-ups instead of saying the visible control still needs
+  to be added.
+
+
 2026-05-11 - PR #158 - Hot Path Speedups
 ----------------------------------------
 
