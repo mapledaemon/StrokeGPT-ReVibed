@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #168 - Fix Ollama GPU Warning Heuristic
+----------------------------------------------------------
+
+Branch: codex/ollama-gpu-warning-fix
+
+- Stopped treating `size_vram < size` from Ollama's running-model API as proof
+  that the selected model is partially running in system memory.
+- Kept CPU-only warnings when Ollama reports zero VRAM use, and limited
+  partial-GPU warnings to explicit processor split data such as
+  `48%/52% CPU/GPU`.
+- Updated README and agent guidance so future Ollama GPU status work does not
+  recreate the false warning.
+
+
 2026-05-12 - PR #167 - Add Larger Parakeet Voice Input Preset
 ----------------------------------------------------------------
 

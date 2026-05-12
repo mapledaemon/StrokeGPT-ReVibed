@@ -351,6 +351,7 @@ def _ollama_running_models():
             "size_vram": size_vram,
             "size_vram_label": _format_bytes(size_vram),
             "size_vram_reported": size_vram_reported,
+            "processor": str(item.get("processor") or item.get("processor_label") or "").strip(),
         })
     models.sort(key=lambda item: item["name"].lower())
     return models

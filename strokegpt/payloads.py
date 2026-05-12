@@ -213,6 +213,8 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
     size_vram_reported = current.get("size_vram_reported")
     if size_vram_reported is None:
         size_vram_reported = "size_vram" in current
+    processor = str(current.get("processor") or current.get("processor_label") or "").strip()
+    processor_upper = processor.upper()
     payload.update({
         "current_model_running": True,
         "current_model_size": size,
@@ -241,31 +243,30 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
             "setup_warning": warning,
         })
         return payload
-    if size > 0 and size_vram < size:
+    if "CPU" in processor_upper and "GPU" in processor_upper and "100% GPU" not in processor_upper:
         warning = (
-            "The selected model is larger than the GPU memory Ollama is using "
-            f"on this hardware ({format_bytes(size_vram)} VRAM of "
-            f"{format_bytes(size)} total). It will partially run in system "
-            "memory and may be slow."
+            "Ollama reports the selected model is split between GPU and "
+            f"system memory ({processor}). It may be slow."
         )
         payload.update({
             "state": "partial_gpu",
             "accelerated": True,
             "message": (
                 "Ollama reports partial GPU use for the selected model "
-                f"({format_bytes(size_vram)} VRAM of {format_bytes(size)} total)."
+                f"({processor})."
             ),
             "warning": warning,
             "setup_warning": warning,
         })
         return payload
 
+    total_text = f"; {format_bytes(size)} total loaded" if size > 0 else ""
     payload.update({
         "state": "gpu",
         "accelerated": True,
         "message": (
             "Ollama reports GPU use for the selected model"
-            f" ({format_bytes(size_vram)} VRAM)."
+            f" ({format_bytes(size_vram)} VRAM{total_text})."
         ),
     })
     return payload

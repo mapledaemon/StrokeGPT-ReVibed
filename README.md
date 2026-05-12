@@ -61,7 +61,7 @@ This creates `.venv` and installs `requirements.txt`. Model downloads start from
 
 ### Ollama GPU acceleration
 
-The app checks Ollama's running-model status and warns during setup when the selected model is loaded but reports no VRAM use. The check is only definitive after Ollama has loaded the selected model at least once; send one chat message or run `ollama ps` after loading a model if the status is still unknown.
+The app checks Ollama's running-model status and warns during setup when the selected model is loaded but reports no VRAM use. A nonzero `/api/ps` `size_vram` value is treated as GPU use, even when it is lower than total loaded model memory. The check is only definitive after Ollama has loaded the selected model at least once; send one chat message or run `ollama ps` after loading a model if the status is still unknown. For exact CPU/GPU split details, use the `ollama ps` Processor column.
 
 Ollama GPU setup depends on the hardware path. NVIDIA and Apple systems use their usual Ollama GPU backends when supported. AMD/Radeon support may use ROCm for listed cards, while additional Windows/Linux GPU support is available through Ollama's experimental Vulkan runner. If this app reports CPU-only Ollama use on AMD/Radeon or Intel-class hardware that should have GPU acceleration, update the vendor GPU driver, set `OLLAMA_VULKAN=1` for the Ollama server, restart Ollama, and see the official [Ollama hardware support](https://docs.ollama.com/gpu) notes. `GGML_VK_VISIBLE_DEVICES` can select or disable Vulkan GPUs when multiple devices are present.
 
@@ -104,7 +104,7 @@ Start conservatively. The Handy can be intense even at low speed values.
 Everything is in **Profile menu > Settings**. Tabs:
 
 - **Persona** — change the AI persona prompt and display name.
-- **Model** — pick, download, add, or delete saved Ollama model options; switch the active model; see install state, model sizes, and GPU/VRAM fit warnings. The default options include the current Gemma preset plus `huihui_ai/granite4.1-abliterated:3b` (2.1 GB) and `huihui_ai/granite4.1-abliterated:8b` (5.3 GB).
+- **Model** — pick, download, add, or delete saved Ollama model options; switch the active model; see install state, model sizes, and GPU/VRAM status. The default options include the current Gemma preset plus `huihui_ai/granite4.1-abliterated:3b` (2.1 GB) and `huihui_ai/granite4.1-abliterated:8b` (5.3 GB).
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
 - **Device** — Handy key, stroke range, range test.
 - **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.

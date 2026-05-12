@@ -169,7 +169,7 @@ class WebOllamaRouteTests(WebTestCase):
         finally:
             llm.model = original_model
 
-    def test_ollama_status_warns_when_loaded_model_only_partially_fits_gpu(self):
+    def test_ollama_status_treats_nonzero_vram_as_gpu_use_without_processor_split(self):
         from strokegpt.web import llm, settings
 
         original_model = settings.ollama_model
@@ -198,12 +198,55 @@ class WebOllamaRouteTests(WebTestCase):
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
+            self.assertEqual(data["gpu_status"]["state"], "gpu")
+            self.assertTrue(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["warning"], "")
+            self.assertEqual(data["gpu_status"]["setup_warning"], "")
+            self.assertIn("5.0 GB VRAM", data["gpu_status"]["message"])
+            self.assertEqual(data["model_details"][model]["size_label"], "8.0 GB")
+            self.assertEqual(data["model_details"][model]["warning"], "")
+        finally:
+            settings.ollama_model = original_model
+            settings.ollama_models = original_models
+            llm.model = original_llm_model
+            settings.save()
+
+    def test_ollama_status_warns_when_processor_reports_cpu_gpu_split(self):
+        from strokegpt.web import llm, settings
+
+        original_model = settings.ollama_model
+        original_models = list(settings.ollama_models)
+        original_llm_model = llm.model
+        model = "local/large-model:latest"
+        total_size = 8 * 1024 * 1024 * 1024
+        vram_size = 5 * 1024 * 1024 * 1024
+        try:
+            settings.ollama_model = model
+            settings.ollama_models = settings._normalize_model_list([model], include_current=True)
+            llm.model = model
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": model, "size": total_size, "size_label": "8.0 GB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[
+                {
+                    "name": model,
+                    "size": total_size,
+                    "size_label": "8.0 GB",
+                    "size_vram": vram_size,
+                    "size_vram_label": "5.0 GB",
+                    "size_vram_reported": True,
+                    "processor": "48%/52% CPU/GPU",
+                },
+            ]):
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
             self.assertEqual(data["gpu_status"]["state"], "partial_gpu")
             self.assertTrue(data["gpu_status"]["accelerated"])
-            self.assertIn("larger than the GPU memory", data["gpu_status"]["warning"])
+            self.assertIn("split between GPU and system memory", data["gpu_status"]["warning"])
+            self.assertIn("48%/52% CPU/GPU", data["gpu_status"]["warning"])
             self.assertEqual(data["gpu_status"]["setup_warning"], data["gpu_status"]["warning"])
-            self.assertEqual(data["model_details"][model]["size_label"], "8.0 GB")
-            self.assertIn("larger than the GPU memory", data["model_details"][model]["warning"])
+            self.assertIn("split between GPU and system memory", data["model_details"][model]["warning"])
         finally:
             settings.ollama_model = original_model
             settings.ollama_models = original_models
