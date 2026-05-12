@@ -132,7 +132,7 @@ Install Parakeet in a separate runtime so NVIDIA NeMo dependencies do not confli
 $env:STROKEGPT_PARAKEET_PYTHON = ".\.venv-parakeet\Scripts\python.exe"
 ```
 
-After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.
+The app auto-detects the repo-local `.venv-parakeet` runtime; set `STROKEGPT_PARAKEET_PYTHON` only when using a custom runtime. After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.
 
 The Voice tab's **Advanced Flow** section has an off-by-default hands-free
 mode-action toggle. When Voice mode is Hands-free and transcripts are sent

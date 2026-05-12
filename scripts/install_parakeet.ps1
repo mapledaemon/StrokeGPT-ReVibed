@@ -54,6 +54,8 @@ Write-Host "Installing CUDA PyTorch and Parakeet dependencies..."
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
 & $VenvPython -m pip install -r requirements-parakeet.txt
+Write-Host "Repairing CUDA PyTorch stack after NeMo dependency resolution..."
+& $VenvPython -m pip install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
 
 if ($PersistEnv) {
     [Environment]::SetEnvironmentVariable("STROKEGPT_PARAKEET_PYTHON", $VenvPython, "User")
@@ -68,7 +70,7 @@ Write-Host "Checking the Parakeet runtime..."
 Write-Host ""
 Write-Host "Parakeet runtime path:"
 Write-Host "  $VenvPython"
-Write-Host "For this terminal session:"
+Write-Host "The app auto-detects this repo-local runtime. For a custom runtime, set:"
 Write-Host "  `$env:STROKEGPT_PARAKEET_PYTHON = `"$VenvPython`""
 Write-Host "Then start the normal app from .venv with:"
 Write-Host "  .\.venv\Scripts\python.exe app.py"

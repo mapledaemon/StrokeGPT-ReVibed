@@ -539,7 +539,7 @@ def setup_check_payload(
                 if nemo_available
                 else parakeet_external_error
                 if parakeet_external_runtime and parakeet_external_error
-                else "Use scripts/install_parakeet.ps1 and set STROKEGPT_PARAKEET_PYTHON before using NVIDIA Parakeet voice input."
+                else "Use scripts/install_parakeet.ps1, or set STROKEGPT_PARAKEET_PYTHON to a compatible custom runtime, before using NVIDIA Parakeet voice input."
             ),
         ),
         _setup_check_item(

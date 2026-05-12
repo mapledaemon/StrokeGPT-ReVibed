@@ -10,6 +10,13 @@ from tests._web_support import WebTestCase
 
 class WebVoiceInputRouteTests(WebTestCase):
     def test_check_settings_includes_voice_input_status(self):
+        from strokegpt.web import apply_settings_to_services, settings
+
+        original = settings.to_dict()
+        settings.voice_input_provider = "local_faster_whisper"
+        settings.voice_input_model = "tiny.en"
+        settings.voice_input_enabled = False
+        apply_settings_to_services()
         response = self.client.get("/check_settings")
         try:
             self.assertEqual(response.status_code, 200)
@@ -49,6 +56,8 @@ class WebVoiceInputRouteTests(WebTestCase):
                 self.assertIn("voice_input_hf_cache", model_cache_dir)
         finally:
             response.close()
+            settings.apply_dict(original)
+            apply_settings_to_services()
 
     def test_set_voice_input_saves_hands_free_auto_submit_settings(self):
         from strokegpt.web import apply_settings_to_services, settings, voice_input
