@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 RESULT_PREFIX = "STROKEGPT_PARAKEET_RESULT "
+CUDA_KERNEL_IMAGE_ERROR = "no kernel image is available for execution on the device"
 
 
 def _configure_cache(cache_dir):
@@ -37,6 +38,9 @@ def _torch_status(device_override):
         "cuda_version": "",
         "device_count": 0,
         "device_name": "",
+        "cuda_device_capability": "",
+        "cuda_runtime_usable": False,
+        "cuda_runtime_error": "",
         "device": "cpu",
     }
     try:
@@ -47,13 +51,59 @@ def _torch_status(device_override):
 
     status["torch_available"] = True
     status["torch_version"] = getattr(torch, "__version__", "")
-    status["cuda_available"] = bool(torch.cuda.is_available())
-    status["cuda_version"] = getattr(torch.version, "cuda", "") or ""
-    status["device_count"] = int(torch.cuda.device_count()) if status["cuda_available"] else 0
-    status["device_name"] = torch.cuda.get_device_name(0) if status["cuda_available"] else ""
+    try:
+        status["cuda_available"] = bool(torch.cuda.is_available())
+        status["cuda_version"] = getattr(torch.version, "cuda", "") or ""
+        status["device_count"] = int(torch.cuda.device_count()) if status["cuda_available"] else 0
+        status["device_name"] = torch.cuda.get_device_name(0) if status["cuda_available"] else ""
+        if status["cuda_available"] and hasattr(torch.cuda, "get_device_capability"):
+            capability = torch.cuda.get_device_capability(0)
+            status["cuda_device_capability"] = ".".join(str(part) for part in capability)
+    except Exception as exc:
+        status["error"] = str(exc)
+        return status
     explicit = (device_override or "").strip().lower()
     status["device"] = explicit if explicit and explicit != "auto" else ("cuda" if status["cuda_available"] else "cpu")
+    if status["device"].startswith("cuda"):
+        try:
+            _check_cuda_runtime(torch, status["device"])
+            status["cuda_runtime_usable"] = True
+        except Exception as exc:
+            status["cuda_runtime_error"] = _parakeet_cuda_error_message(str(exc), status)
+            status["error"] = status["cuda_runtime_error"]
     return status
+
+
+def _check_cuda_runtime(torch, device):
+    sample = torch.ones((1,), device=device)
+    sample = sample + 1
+    if hasattr(torch.cuda, "synchronize"):
+        torch.cuda.synchronize()
+    return sample
+
+
+def _parakeet_cuda_error_message(error, status):
+    device_name = status.get("device_name") or "the selected NVIDIA GPU"
+    capability = status.get("cuda_device_capability") or "unknown"
+    base = (
+        f"PyTorch sees CUDA device {device_name} (compute capability {capability}), "
+        f"but a CUDA test kernel failed: {error}"
+    )
+    if CUDA_KERNEL_IMAGE_ERROR in error.lower():
+        return (
+            f"{base}. The installed PyTorch/CUDA wheel likely does not support this GPU. "
+            "Switch Voice Input provider to Local faster-whisper, or install a Parakeet "
+            "runtime built for this GPU/CUDA stack."
+        )
+    return (
+        f"{base}. Switch Voice Input provider to Local faster-whisper, or repair the "
+        "isolated Parakeet CUDA runtime."
+    )
+
+
+def _raise_for_unusable_selected_device(torch_status):
+    if str(torch_status.get("device") or "").startswith("cuda") and torch_status.get("cuda_runtime_error"):
+        raise RuntimeError(torch_status["cuda_runtime_error"])
 
 
 def _transcript_from_nemo_output(output):
@@ -84,13 +134,16 @@ def _load_model(model_name, device):
 
 def _check(args):
     torch = _torch_status(args.device)
-    try:
-        _import_nemo()
-        nemo_available = True
-        error = ""
-    except Exception as exc:
+    error = str(torch.get("cuda_runtime_error") or "")
+    if error:
         nemo_available = False
-        error = str(exc)
+    else:
+        try:
+            _import_nemo()
+            nemo_available = True
+        except Exception as exc:
+            nemo_available = False
+            error = str(exc)
     return {
         "ok": nemo_available,
         "nemo_available": nemo_available,
@@ -103,6 +156,7 @@ def _check(args):
 def _preload(args):
     _configure_cache(args.cache_dir)
     torch = _torch_status(args.device)
+    _raise_for_unusable_selected_device(torch)
     started = time.perf_counter()
     _load_model(args.model, torch["device"])
     return {
@@ -138,6 +192,7 @@ def _transcribe_loaded_model(model, *, audio, language, model_name, device):
 def _transcribe(args):
     _configure_cache(args.cache_dir)
     torch = _torch_status(args.device)
+    _raise_for_unusable_selected_device(torch)
     model = _load_model(args.model, torch["device"])
     return _transcribe_loaded_model(
         model,
@@ -151,6 +206,7 @@ def _transcribe(args):
 def _serve(args):
     _configure_cache(args.cache_dir)
     torch = _torch_status(args.device)
+    _raise_for_unusable_selected_device(torch)
     started = time.perf_counter()
     model = _load_model(args.model, torch["device"])
     _emit({

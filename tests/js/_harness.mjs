@@ -55,6 +55,7 @@ function makeStubElement(tag = 'div') {
         files: null,
         parentNode: null,
         children,
+        get options() { return children; },
         get className() { return [...classes].join(' '); },
         set className(value) {
             classes.clear();

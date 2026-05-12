@@ -114,6 +114,64 @@ class SetupCheckRouteTests(WebTestCase):
         finally:
             settings.audio_provider, settings.audio_enabled = original
 
+    def test_setup_check_reports_parakeet_cuda_kernel_incompatibility(self):
+        from strokegpt.payloads import setup_check_payload
+
+        cuda_error = (
+            "PyTorch sees CUDA device GTX Test (compute capability 5.0), "
+            "but a CUDA test kernel failed: CUDA error: no kernel image is available for execution on the device. "
+            "Switch Voice Input provider to Local faster-whisper."
+        )
+        payload = setup_check_payload(
+            configured=True,
+            handy_key="saved-key",
+            ollama_status={
+                "available": True,
+                "current_model": "local/test-model:latest",
+                "current_model_installed": True,
+                "message": "Current model is installed.",
+                "gpu_status": {"state": "not_loaded"},
+            },
+            voice_input_setup={
+                "selected": {
+                    "provider": "local_nvidia_parakeet",
+                    "status_code": "dependency_missing",
+                    "message": f"Voice input needs NVIDIA Parakeet runtime. Runtime check failed: {cuda_error}",
+                },
+                "faster_whisper_available": True,
+                "ctranslate2_available": True,
+                "ctranslate2_cuda_devices": 0,
+                "nemo_available": False,
+                "parakeet_external_runtime": True,
+                "parakeet_external_python": r"C:\repo\.venv-parakeet\Scripts\python.exe",
+                "parakeet_external_error": cuda_error,
+                "torch": {
+                    "cuda_available": True,
+                    "device_name": "GTX Test",
+                    "cuda_runtime_error": cuda_error,
+                },
+            },
+            local_tts_status={
+                "engine": "chatterbox_turbo",
+                "engine_label": "Chatterbox Turbo",
+                "message": "Chatterbox Turbo is disabled.",
+                "engines": [{"id": "chatterbox_turbo", "label": "Chatterbox Turbo", "available": True}],
+                "cuda_available": False,
+                "torch": {"device": "cpu", "device_name": ""},
+            },
+            audio_provider="elevenlabs",
+            audio_enabled=False,
+            elevenlabs_key="",
+        )
+
+        sections = {section["id"]: section for section in payload["sections"]}
+        input_items = {item["id"]: item for item in sections["voice-input"]["items"]}
+
+        self.assertEqual(payload["summary"]["status"], "error")
+        self.assertEqual(input_items["voice-input-parakeet-cuda"]["status"], "error")
+        self.assertIn("no kernel image is available", input_items["voice-input-parakeet-cuda"]["detail"])
+        self.assertIn("Local faster-whisper", input_items["voice-input-parakeet-cuda"]["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

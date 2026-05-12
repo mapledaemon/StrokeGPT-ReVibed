@@ -132,7 +132,7 @@ Install Parakeet in a separate runtime so NVIDIA NeMo dependencies do not confli
 $env:STROKEGPT_PARAKEET_PYTHON = ".\.venv-parakeet\Scripts\python.exe"
 ```
 
-The app auto-detects the repo-local `.venv-parakeet` runtime; set `STROKEGPT_PARAKEET_PYTHON` only when using a custom runtime. After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.
+The installer uses the PyTorch CUDA 12.8 wheel index by default because RTX 50-series / Blackwell cards such as the 5070 Ti need a newer CUDA wheel than the old CUDA 12.1 stack. It also reapplies NeMo's sensitive package pins and runs `pip check` before declaring the runtime ready. Override with `.\scripts\install_parakeet.ps1 -TorchIndexUrl "https://download.pytorch.org/whl/cu130"` only if the official PyTorch selector recommends it for your driver. The app auto-detects the repo-local `.venv-parakeet` runtime; set `STROKEGPT_PARAKEET_PYTHON` only when using a custom runtime. After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.
 
 The Voice tab's **Advanced Flow** section has an off-by-default hands-free
 mode-action toggle. When Voice mode is Hands-free and transcripts are sent
@@ -158,6 +158,7 @@ If the separate Parakeet runtime is not configured or NVIDIA tooling is not dete
   ```
 
 - **Local voice is slow / "CPU-only Torch" warning** — install CUDA PyTorch (see [docs/local_voice_setup.md](docs/local_voice_setup.md)), use **Chatterbox Turbo**, or switch to ElevenLabs.
+- **Parakeet reports "CUDA error: no kernel image is available"** — the isolated Parakeet runtime can see the GPU, but its installed PyTorch/CUDA kernels cannot run on that GPU. RTX 50-series cards need the newer installer path; rerun `.\scripts\install_parakeet.ps1` so `.venv-parakeet` gets the CUDA 12.8 PyTorch wheel. If that still fails, switch **Settings > Voice > Voice input provider** to **Local faster-whisper** for the full fallback path, or install a custom Parakeet runtime built for that GPU/CUDA stack.
 - **Chatterbox install fails on Python 3.12+** — recreate `.venv` with Python 3.11.
 - **Windows blocks the install script** — the `Set-ExecutionPolicy` command above only relaxes the script policy for that PowerShell process; close and reopen if you need it back to default.
 - **Settings appear blocked or show connection errors** — confirm `python app.py` is still running. When the backend is unreachable, the browser shows a connection-lost banner and locks backend-required controls until a request succeeds again.

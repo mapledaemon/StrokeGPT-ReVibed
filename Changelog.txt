@@ -8,6 +8,33 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #163 - Improve Voice Input Model Load Feedback
+-----------------------------------------------------------------
+
+Branch: codex/voice-input-load-progress-fix
+
+- Persisted voice-input model preload state and provider load errors in the
+  normal voice-input status payload so a failed Parakeet/faster-whisper load
+  does not collapse back to the generic cached-but-not-loaded message.
+- Added live elapsed-time feedback while the browser waits for the blocking
+  voice-input download/load route, including a Downloading / Loading button
+  label for first-load model pulls.
+- Added backend, route, and frontend behavioral regression coverage for
+  surfacing provider load failures instead of failing silently.
+- Added an isolated Parakeet CUDA smoke check so incompatible CUDA kernels,
+  including "no kernel image is available for execution on the device", are
+  reported before model load with an explicit Local faster-whisper fallback
+  recommendation.
+- Updated the Parakeet installer to reinstall the isolated runtime's
+  torch/torchvision/torchaudio stack from the CUDA 12.8 PyTorch wheel index by
+  default, with an override for future PyTorch wheel indexes, so RTX 50-series
+  cards are not left on the old CUDA 12.1 wheel path.
+- Pinned the isolated Parakeet runtime's NeMo-sensitive dependencies
+  (`fsspec==2024.12.0`, `setuptools>=79.0.0`) and added a final `pip check`
+  so pip resolver drift is caught during installation instead of surfacing as
+  runtime warnings.
+
+
 2026-05-12 - PR #162 - Fix Chat Composer Scaling
 ---------------------------------------------------
 

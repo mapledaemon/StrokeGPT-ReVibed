@@ -55,6 +55,16 @@ function formatMs(value) {
     return `${Math.max(0, Math.round(number))} ms`;
 }
 
+function formatElapsedSeconds(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '0s';
+    const total = Math.max(0, Math.floor(number));
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    if (!minutes) return `${seconds}s`;
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+}
+
 function handsFreeSensitivity() {
     return Math.round(clampNumber(state.voiceInputHandsFreeSensitivity, 1, 100, DEFAULT_HANDS_FREE_SENSITIVITY));
 }
@@ -144,6 +154,8 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
     const dependency = status.dependency_available ? 'available' : 'missing';
     const loaded = status.model_loaded ? 'loaded' : 'not loaded';
     const cached = status.model_cached ? 'cached' : 'not cached';
+    const preload = status.preload_status || '-';
+    const preloadElapsed = Number(status.preload_elapsed_seconds || 0);
     const model = status.model || 'unknown';
     const transcript = status.last_transcript ? `${status.last_transcript.length} chars` : '-';
     const issue = state.voiceInputLastIssue || status.last_error || '-';
@@ -162,7 +174,7 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
         `Hands-free flow: ${state.voiceInputHandsFreeModeActions ? 'model mode actions on' : 'transcript only'}`,
         `Microphone: ${processing} | Noise floor: ${formatRms(voiceInputNoiseFloorRms())} | Trigger: ${formatRms(handsFreeRmsThreshold())}`,
         `Recognition: fallback beam ${voiceInputBeamSize()} | VAD ${voiceInputVadThreshold()} | Silence ${formatMs(voiceInputVadMinSilenceMs())} | Padding ${formatMs(voiceInputVadSpeechPadMs())} | Previous text ${state.voiceInputConditionOnPreviousText ? 'on' : 'off'}`,
-        `Model load: ${formatMs(timings.model_load_ms)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
+        `Model load: ${formatMs(timings.model_load_ms)} | Preload: ${preload} ${formatElapsedSeconds(preloadElapsed)} | ASR: ${formatMs(timings.transcribe_ms)} | Transcript: ${transcript}`,
         `Voice chat: ${formatMs(state.voiceInputLastChatMs)} | LLM: ${formatMs(chatTimings.llm_ms)} | Motion: ${formatMs(chatTimings.motion_apply_ms)}`,
         `Issue: ${issue}`,
     ].join('\n');
@@ -170,12 +182,13 @@ function updateVoiceInputDiagnostics(status = state.voiceInputStatusSnapshot || 
 
 function voiceInputModelLoadLabel(status = state.voiceInputStatusSnapshot || {}) {
     if (status.model_loaded) return 'Voice Input Model Loaded';
+    if (status.preload_status === 'loading') return status.model_cached ? 'Loading...' : 'Downloading / Loading...';
     return status.model_cached ? 'Load Voice Input Model' : 'Download / Load Voice Input Model';
 }
 
 function canLoadCachedVoiceInputModel(status = state.voiceInputStatusSnapshot || {}) {
     const requiresDownload = Boolean(status.load_requires_download ?? !status.model_cached);
-    return Boolean(status.can_load_model && status.model_cached && !status.model_loaded && !requiresDownload);
+    return Boolean(status.can_load_model && status.model_cached && !status.model_loaded && !requiresDownload && status.preload_status !== 'loading');
 }
 
 function shouldAutoLoadHandsFreeModel(status = state.voiceInputStatusSnapshot || {}) {
@@ -217,17 +230,20 @@ function microphoneErrorMessage(error) {
 
 function voicePayloadFailureMessage(payload, fallback) {
     const status = payload?.voice_input_status || {};
+    if ((payload?.status === 'error' || payload?.status === 'unavailable') && payload?.message) {
+        return payload.message;
+    }
     if (status.status_code === 'dependency_missing') {
         return payload?.message || status.message || 'Voice input dependency is missing. Install the selected provider dependencies, then restart the app.';
+    }
+    if (status.status_code === 'error') {
+        return payload?.message || status.last_error || status.message || fallback;
     }
     if (status.status_code === 'model_not_loaded') {
         if (status.model_cached) {
             return 'Voice input model is cached but not loaded. Use Load Voice Input Model before recording.';
         }
         return 'Voice input model is not downloaded. Use Download / Load Voice Input Model before recording.';
-    }
-    if (status.status_code === 'error' && status.last_error) {
-        return `Voice input model error: ${status.last_error}`;
     }
     return payload?.message || fallback;
 }
@@ -558,11 +574,12 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     if (el.voiceInputLanguageInput) el.voiceInputLanguageInput.value = status.language || data.voice_input_language || 'auto';
     if (el.voiceInputStatus) {
         el.voiceInputStatus.textContent = status.message || 'Voice input status unavailable.';
-        el.voiceInputStatus.style.color = status.can_transcribe ? 'var(--cyan)' : 'var(--comment)';
+        const issueStatus = status.status_code === 'error' || status.status_code === 'dependency_missing';
+        el.voiceInputStatus.style.color = status.can_transcribe ? 'var(--cyan)' : (issueStatus ? 'var(--yellow)' : 'var(--comment)');
     }
     if (!status.last_error && status.status_code === 'ready') state.voiceInputLastIssue = '';
     if (el.downloadVoiceInputModelBtn) {
-        el.downloadVoiceInputModelBtn.disabled = !status.can_load_model || status.model_loaded;
+        el.downloadVoiceInputModelBtn.disabled = !status.can_load_model || status.model_loaded || status.preload_status === 'loading';
         el.downloadVoiceInputModelBtn.textContent = voiceInputModelLoadLabel(status);
     }
     updateVoiceInputDiagnostics(status);
@@ -629,6 +646,7 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
 
 async function preloadVoiceInputModel({status = state.voiceInputStatusSnapshot || {}, allowDownload = false, reason = 'manual'} = {}) {
     if (!status.can_load_model) return null;
+    if (status.preload_status === 'loading') return null;
     const requiresDownload = Boolean(status.load_requires_download ?? !status.model_cached);
     if (requiresDownload && !allowDownload) return null;
     if (voiceInputModelLoadPromise) return voiceInputModelLoadPromise;
@@ -638,12 +656,25 @@ async function preloadVoiceInputModel({status = state.voiceInputStatusSnapshot |
             ? 'Loading cached voice input model for hands-free...'
             : 'Loading cached voice input model...');
     voiceInputModelLoadPromise = (async () => {
+        const startedAt = performance.now();
+        const progressVerb = requiresDownload ? 'Downloading / Loading' : 'Loading';
+        const updateProgress = () => {
+            const elapsed = formatElapsedSeconds((performance.now() - startedAt) / 1000);
+            if (el.downloadVoiceInputModelBtn) {
+                el.downloadVoiceInputModelBtn.disabled = true;
+                el.downloadVoiceInputModelBtn.textContent = `${progressVerb} ${elapsed}...`;
+            }
+            voiceStatusMessage(`${loadingMessage} Elapsed: ${elapsed}.`);
+        };
+        let progressTimer = null;
         try {
+            updateProgress();
+            progressTimer = window.setInterval(updateProgress, 1000);
             const response = await fetchWithConnectionState('/preload_voice_input_model', {method: 'POST'});
             const payload = await response.json().catch(() => null);
             if (!response.ok) {
-                voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice input model load failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
                 if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
+                voiceStatusMessage(voicePayloadFailureMessage(payload, `Voice input model load failed: HTTP ${response.status}`), 'var(--yellow)', {issue: true});
                 return null;
             }
             populateVoiceInputSettings(payload);
@@ -657,16 +688,12 @@ async function preloadVoiceInputModel({status = state.voiceInputStatusSnapshot |
             }
             return null;
         } finally {
+            if (progressTimer) window.clearInterval(progressTimer);
             voiceInputModelLoadPromise = null;
             setVoiceButtonState();
         }
     })();
     setVoiceButtonState();
-    if (el.downloadVoiceInputModelBtn) {
-        el.downloadVoiceInputModelBtn.disabled = true;
-        el.downloadVoiceInputModelBtn.textContent = 'Loading...';
-    }
-    voiceStatusMessage(loadingMessage);
     return voiceInputModelLoadPromise;
 }
 

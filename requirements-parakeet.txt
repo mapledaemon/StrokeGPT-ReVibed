@@ -2,3 +2,8 @@
 # Prefer scripts/install_parakeet.ps1 so NeMo dependencies stay out of .venv.
 # Install CUDA-enabled PyTorch separately for practical latency on NVIDIA GPUs.
 nemo_toolkit[asr]
+# NeMo 2.7.x pins fsspec exactly, while its Lightning integration needs a
+# newer setuptools than some resolver paths leave behind. Keep these explicit
+# so the isolated runtime does not finish with pip dependency conflicts.
+fsspec==2024.12.0
+setuptools>=79.0.0
