@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 from tests._web_support import WebTestCase
+from strokegpt.settings import DEFAULT_OLLAMA_MODELS
 
 
 class WebOllamaRouteTests(WebTestCase):
@@ -56,7 +57,11 @@ class WebOllamaRouteTests(WebTestCase):
         original_models = list(settings.ollama_models)
         original_hidden = list(settings.ollama_model_hidden_defaults)
         original_llm_model = llm.model
-        model = "huihui_ai/granite4.1-abliterated:8b"
+        model = next(
+            candidate
+            for candidate in DEFAULT_OLLAMA_MODELS
+            if candidate != settings.ollama_model
+        )
         try:
             response = self.client.post("/delete_ollama_model", json={"model": model})
 

@@ -356,6 +356,50 @@ class VoiceInputServiceTests(unittest.TestCase):
                 os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_nvidia_parakeet_external_runtime_uses_repo_local_venv_without_env(self):
+        temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
+        fake_python = Path(temp_dir) / "python.exe"
+        fake_python.write_text("", encoding="utf-8")
+        original_python = os.environ.get("STROKEGPT_PARAKEET_PYTHON")
+        try:
+            os.environ.pop("STROKEGPT_PARAKEET_PYTHON", None)
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+            payload = {
+                "ok": True,
+                "nemo_available": True,
+                "python": str(fake_python),
+                "torch": {"cuda_available": True, "device": "cuda"},
+            }
+            completed = types.SimpleNamespace(
+                returncode=0,
+                stdout=f"STROKEGPT_PARAKEET_RESULT {json.dumps(payload)}\n",
+                stderr="",
+            )
+
+            with (
+                mock.patch("strokegpt.asr._default_parakeet_python_path", return_value=str(fake_python)),
+                mock.patch("strokegpt.asr.subprocess.run", return_value=completed) as run,
+            ):
+                self.assertTrue(service.dependency_available())
+                setup = service.setup_status()
+
+            self.assertEqual(run.call_args.args[0][0], str(fake_python))
+            self.assertTrue(setup["parakeet_external_runtime"])
+            self.assertEqual(setup["parakeet_external_python"], str(fake_python))
+            self.assertTrue(setup["nemo_available"])
+        finally:
+            if original_python is None:
+                os.environ.pop("STROKEGPT_PARAKEET_PYTHON", None)
+            else:
+                os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_nvidia_parakeet_external_runtime_preloads_and_transcribes(self):
         temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
         fake_python = Path(temp_dir) / "python.exe"
@@ -476,6 +520,7 @@ class VoiceInputServiceTests(unittest.TestCase):
 
             with (
                 mock.patch.object(VoiceInputService, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr._default_parakeet_python_path", return_value=""),
                 mock.patch("strokegpt.asr._detect_torch_device", return_value="cuda"),
             ):
                 ok, _ = service.preload_model()
@@ -498,6 +543,27 @@ class VoiceInputServiceTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_nvidia_parakeet_status_reports_external_runtime_error(self):
+        service = VoiceInputService()
+        service.configure(
+            provider="local_nvidia_parakeet",
+            enabled=True,
+            model="nvidia/parakeet-tdt-0.6b-v3",
+            language="auto",
+        )
+        service._parakeet_runtime_status = {
+            "external_runtime": True,
+            "nemo_available": False,
+            "error": "operator torchvision::nms does not exist",
+        }
+
+        with mock.patch.object(service, "dependency_available", return_value=False):
+            status = service.status()
+
+        self.assertEqual(status["status_code"], "dependency_missing")
+        self.assertIn("Runtime check failed", status["message"])
+        self.assertIn("operator torchvision::nms does not exist", status["message"])
 
     def test_nvidia_parakeet_transcribe_normalizes_nemo_output(self):
         class FakeParakeetModel:

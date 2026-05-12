@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #161 - Repair Parakeet Runtime Detection
+-----------------------------------------------------------
+
+Branch: codex/parakeet-runtime-detection-fix
+
+- Auto-detected the repo-local `.venv-parakeet` runtime from the ASR service
+  so Parakeet status and model loading do not require a persisted environment
+  variable after running the installer.
+- Surfaced external Parakeet runtime check errors in the Voice status and made
+  the installer reinstall the CUDA PyTorch stack after NeMo dependency
+  resolution to repair Torch/TorchVision mismatches.
+- Stabilized voice-input and Ollama route tests so local saved settings do not
+  change their expected provider/model surfaces.
+
+
 2026-05-12 - PR #160 - Isolate Parakeet Runtime
 ------------------------------------------------
 

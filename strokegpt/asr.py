@@ -27,6 +27,7 @@ from .settings import (
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
     VOICE_INPUT_SUBMIT_PREVIEW,
+    _default_parakeet_python_path,
 )
 
 
@@ -476,13 +477,7 @@ class VoiceInputService:
         return str(os.getenv("STROKEGPT_ASR_CACHE_DIR", self.model_cache_dir) or "").strip()
 
     def _parakeet_python(self):
-        configured = str(os.getenv("STROKEGPT_PARAKEET_PYTHON", "") or "").strip()
-        if not configured:
-            return ""
-        path = Path(configured)
-        if not path.is_absolute():
-            path = Path(__file__).resolve().parents[1] / path
-        return str(path)
+        return _default_parakeet_python_path()
 
     def _parakeet_worker_env(self):
         env = os.environ.copy()
@@ -711,7 +706,16 @@ class VoiceInputService:
             message = f"Unsupported voice input provider: {self.provider}"
         elif not dependency_available:
             status_code = "dependency_missing"
-            message = f"Voice input needs {self._provider_dependency_name()}. Install dependencies, then restart the app."
+            parakeet_error = ""
+            if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+                parakeet_error = str((self._parakeet_runtime_status or {}).get("error") or "").strip()
+            if parakeet_error:
+                message = (
+                    f"Voice input needs {self._provider_dependency_name()}. "
+                    f"Runtime check failed: {parakeet_error}"
+                )
+            else:
+                message = f"Voice input needs {self._provider_dependency_name()}. Install dependencies, then restart the app."
         elif self._model is None:
             status_code = "model_not_loaded"
             if model_cached:
