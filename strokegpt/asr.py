@@ -1,7 +1,11 @@
 import importlib.util
+import json
 import os
 import re
+import subprocess
+import threading
 import time
+from pathlib import Path
 
 from .settings import (
     DEFAULT_VOICE_INPUT_BEAM_SIZE,
@@ -48,6 +52,71 @@ VOICE_INPUT_INITIAL_PROMPT = (
     "speed depth tip base shaft slow fast harder gentle stop pause resume edge milk"
 )
 VOICE_INPUT_FASTER_WHISPER_MODEL_IDS = {"tiny.en", "base.en", "small.en", "distil-large-v3"}
+PARAKEET_WORKER_RESULT_PREFIX = "STROKEGPT_PARAKEET_RESULT "
+PARAKEET_RUNTIME_STATUS_TTL_SECONDS = 10.0
+
+
+class _ExternalParakeetRuntimeModel:
+    def __init__(self, *, python, model, device, process):
+        self.python = python
+        self.model = model
+        self.device = device
+        self.process = process
+        self._lock = threading.Lock()
+        self._request_id = 0
+
+    def _read_payload(self):
+        while True:
+            line = self.process.stdout.readline() if self.process.stdout else ""
+            if line == "":
+                stderr = ""
+                try:
+                    stderr = (self.process.stderr.read() if self.process.stderr else "") or ""
+                except Exception:
+                    stderr = ""
+                detail = stderr.strip() or f"exit code {self.process.poll()}"
+                raise VoiceInputUnavailable(f"NVIDIA Parakeet worker stopped before returning a payload: {detail}")
+            if line.startswith(PARAKEET_WORKER_RESULT_PREFIX):
+                return json.loads(line[len(PARAKEET_WORKER_RESULT_PREFIX):])
+
+    def request(self, payload):
+        with self._lock:
+            if self.process.poll() is not None:
+                raise VoiceInputUnavailable(f"NVIDIA Parakeet worker is not running (exit code {self.process.returncode}).")
+            self._request_id += 1
+            request_id = self._request_id
+            message = dict(payload)
+            message["request_id"] = request_id
+            try:
+                self.process.stdin.write(json.dumps(message) + "\n")
+                self.process.stdin.flush()
+            except Exception as exc:
+                raise VoiceInputUnavailable(f"NVIDIA Parakeet worker input failed: {exc}") from exc
+            response = self._read_payload()
+            if response.get("request_id") not in {None, request_id}:
+                raise VoiceInputUnavailable("NVIDIA Parakeet worker returned a mismatched response.")
+            if not response.get("ok"):
+                raise VoiceInputUnavailable(response.get("error") or "NVIDIA Parakeet worker failed.")
+            return response
+
+    def close(self):
+        process = self.process
+        if process.poll() is not None:
+            return
+        try:
+            if process.stdin:
+                process.stdin.write(json.dumps({"action": "stop"}) + "\n")
+                process.stdin.flush()
+        except Exception:
+            pass
+        try:
+            process.wait(timeout=3)
+        except Exception:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except Exception:
+                process.kill()
 
 
 def _env_flag_enabled(name):
@@ -213,14 +282,14 @@ class VoiceInputService:
             "description": "Voice input is off.",
         },
         {
-            "id": VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
-            "label": "Local faster-whisper",
-            "description": "Transcribe browser microphone clips locally.",
+            "id": VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+            "label": "NVIDIA Parakeet (preferred on NVIDIA)",
+            "description": "Preferred low-latency ASR for compatible NVIDIA CUDA runtimes.",
         },
         {
-            "id": VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
-            "label": "NVIDIA Parakeet (NeMo)",
-            "description": "Optional GPU-focused local ASR using NVIDIA Parakeet TDT.",
+            "id": VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+            "label": "Local faster-whisper",
+            "description": "Portable local ASR fallback for CPU and non-NVIDIA systems.",
         },
     ]
     MODE_OPTIONS = [
@@ -310,6 +379,8 @@ class VoiceInputService:
         self._model_cached_key = None
         self._model_cached_value = False
         self._model_cached_checked_at = 0.0
+        self._parakeet_runtime_status = None
+        self._parakeet_runtime_checked_at = 0.0
         self.last_error = ""
         self.last_transcript = ""
         self.last_timings = {}
@@ -350,9 +421,8 @@ class VoiceInputService:
         mode = str(mode or VOICE_INPUT_MODE_PUSH_TO_TALK).strip() or VOICE_INPUT_MODE_PUSH_TO_TALK
         submit_mode = str(submit_mode or VOICE_INPUT_SUBMIT_PREVIEW).strip() or VOICE_INPUT_SUBMIT_PREVIEW
 
-        if provider != self.provider or model != self.model_name:
-            self._model = None
-            self._model_key = None
+        if provider != self.provider or model != self.model_name or not enabled:
+            self._clear_loaded_model()
             self._clear_model_cached_status()
         self.provider = provider
         self.enabled = enabled
@@ -376,14 +446,25 @@ class VoiceInputService:
         self.vad_min_silence_ms = int(vad_min_silence_ms)
         self.vad_speech_pad_ms = int(vad_speech_pad_ms)
 
+    def close(self):
+        self._clear_loaded_model()
+
+    def _clear_loaded_model(self):
+        if isinstance(self._model, _ExternalParakeetRuntimeModel):
+            self._model.close()
+        self._model = None
+        self._model_key = None
+
     def dependency_available(self):
         if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            if self._parakeet_python():
+                return bool(self._get_parakeet_runtime_status().get("nemo_available"))
             return _module_available("nemo.collections.asr")
         return _module_available("faster_whisper")
 
     def _provider_dependency_name(self):
         if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
-            return "NVIDIA NeMo ASR"
+            return "NVIDIA Parakeet runtime"
         return "faster-whisper"
 
     def _provider_model_options(self):
@@ -393,6 +474,157 @@ class VoiceInputService:
 
     def effective_model_cache_dir(self):
         return str(os.getenv("STROKEGPT_ASR_CACHE_DIR", self.model_cache_dir) or "").strip()
+
+    def _parakeet_python(self):
+        configured = str(os.getenv("STROKEGPT_PARAKEET_PYTHON", "") or "").strip()
+        if not configured:
+            return ""
+        path = Path(configured)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        return str(path)
+
+    def _parakeet_worker_env(self):
+        env = os.environ.copy()
+        project_root = str(Path(__file__).resolve().parents[1])
+        pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = project_root if not pythonpath else os.pathsep.join([project_root, pythonpath])
+        return env
+
+    def _run_parakeet_worker(self, action, *, audio_path=None, timeout=900):
+        python = self._parakeet_python()
+        if not python:
+            raise VoiceInputUnavailable("STROKEGPT_PARAKEET_PYTHON is not configured.")
+        if not os.path.exists(python):
+            raise VoiceInputUnavailable(f"Configured Parakeet Python does not exist: {python}")
+
+        command = [
+            python,
+            "-m",
+            "strokegpt.parakeet_worker",
+            action,
+            "--model",
+            self.model_name,
+            "--cache-dir",
+            self.effective_model_cache_dir(),
+            "--device",
+            os.getenv("STROKEGPT_PARAKEET_DEVICE", ""),
+            "--language",
+            self.language,
+        ]
+        if audio_path is not None:
+            command.extend(["--audio", str(audio_path)])
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(Path(__file__).resolve().parents[1]),
+                env=self._parakeet_worker_env(),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VoiceInputUnavailable("NVIDIA Parakeet worker timed out.") from exc
+        except OSError as exc:
+            raise VoiceInputUnavailable(f"NVIDIA Parakeet worker failed to start: {exc}") from exc
+
+        payload = None
+        for line in reversed((completed.stdout or "").splitlines()):
+            if line.startswith(PARAKEET_WORKER_RESULT_PREFIX):
+                payload = json.loads(line[len(PARAKEET_WORKER_RESULT_PREFIX):])
+                break
+        if payload is None:
+            stderr = (completed.stderr or "").strip()
+            raise VoiceInputUnavailable(stderr or "NVIDIA Parakeet worker did not return a status payload.")
+        if completed.returncode != 0 or not payload.get("ok"):
+            raise VoiceInputUnavailable(payload.get("error") or "NVIDIA Parakeet worker failed.")
+        return payload
+
+    def _start_parakeet_worker(self):
+        python = self._parakeet_python()
+        if not python:
+            raise VoiceInputUnavailable("STROKEGPT_PARAKEET_PYTHON is not configured.")
+        if not os.path.exists(python):
+            raise VoiceInputUnavailable(f"Configured Parakeet Python does not exist: {python}")
+        command = [
+            python,
+            "-m",
+            "strokegpt.parakeet_worker",
+            "serve",
+            "--model",
+            self.model_name,
+            "--cache-dir",
+            self.effective_model_cache_dir(),
+            "--device",
+            os.getenv("STROKEGPT_PARAKEET_DEVICE", ""),
+            "--language",
+            self.language,
+        ]
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=str(Path(__file__).resolve().parents[1]),
+                env=self._parakeet_worker_env(),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+        except OSError as exc:
+            raise VoiceInputUnavailable(f"NVIDIA Parakeet worker failed to start: {exc}") from exc
+        runtime = _ExternalParakeetRuntimeModel(
+            python=python,
+            model=self.model_name,
+            device="",
+            process=process,
+        )
+        try:
+            payload = runtime._read_payload()
+        except Exception:
+            runtime.close()
+            raise
+        if not payload.get("ok"):
+            runtime.close()
+            raise VoiceInputUnavailable(payload.get("error") or "NVIDIA Parakeet worker failed to preload.")
+        runtime.device = payload.get("device") or ""
+        return runtime, payload
+
+    def _get_parakeet_runtime_status(self, *, refresh=False):
+        python = self._parakeet_python()
+        if not python:
+            return {
+                "ok": False,
+                "external_runtime": False,
+                "python": "",
+                "nemo_available": _module_available("nemo.collections.asr"),
+                "torch": None,
+                "error": "",
+            }
+        cache_age = time.monotonic() - self._parakeet_runtime_checked_at
+        if (
+            not refresh
+            and self._parakeet_runtime_status is not None
+            and cache_age < PARAKEET_RUNTIME_STATUS_TTL_SECONDS
+        ):
+            return dict(self._parakeet_runtime_status)
+        try:
+            status = self._run_parakeet_worker("check", timeout=60)
+        except VoiceInputUnavailable as exc:
+            status = {
+                "ok": False,
+                "external_runtime": True,
+                "python": python,
+                "nemo_available": False,
+                "torch": None,
+                "error": str(exc),
+            }
+        status["external_runtime"] = True
+        status.setdefault("python", python)
+        self._parakeet_runtime_status = dict(status)
+        self._parakeet_runtime_checked_at = time.monotonic()
+        return status
 
     def _model_cache_tokens(self):
         tokens = {_cache_search_text(self.model_name)}
@@ -455,13 +687,18 @@ class VoiceInputService:
         return cached
 
     def status(self):
-        dependency_available = self.dependency_available()
+        supported_provider = self.provider in {
+            VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+            VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+        }
+        dependency_available = (
+            self.dependency_available()
+            if self.enabled and supported_provider
+            else False
+        )
         can_load_model = (
             self.enabled
-            and self.provider in {
-                VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
-                VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
-            }
+            and supported_provider
             and dependency_available
         )
         model_cached = can_load_model and self.is_model_cached()
@@ -469,10 +706,7 @@ class VoiceInputService:
         if self.provider == VOICE_INPUT_PROVIDER_DISABLED or not self.enabled:
             status_code = "disabled"
             message = "Voice input is disabled."
-        elif self.provider not in {
-            VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
-            VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
-        }:
+        elif not supported_provider:
             status_code = "unsupported_provider"
             message = f"Unsupported voice input provider: {self.provider}"
         elif not dependency_available:
@@ -554,13 +788,23 @@ class VoiceInputService:
                 torch_runtime["device"] = _detect_torch_device(os.getenv("STROKEGPT_PARAKEET_DEVICE"))
             except Exception as exc:
                 torch_runtime["error"] = str(exc)
+        parakeet_runtime = self._get_parakeet_runtime_status()
+        parakeet_torch = parakeet_runtime.get("torch") if parakeet_runtime.get("external_runtime") else torch_runtime
+        nemo_available = (
+            bool(parakeet_runtime.get("nemo_available"))
+            if parakeet_runtime.get("external_runtime")
+            else _module_available("nemo.collections.asr")
+        )
         return {
             "selected": self.status(),
             "faster_whisper_available": _module_available("faster_whisper"),
             "ctranslate2_available": _module_available("ctranslate2"),
             "ctranslate2_cuda_devices": _count_cuda_devices(),
-            "nemo_available": _module_available("nemo.collections.asr"),
-            "torch": torch_runtime,
+            "nemo_available": nemo_available,
+            "torch": parakeet_torch or torch_runtime,
+            "parakeet_external_runtime": parakeet_runtime.get("external_runtime", False),
+            "parakeet_external_python": parakeet_runtime.get("python", ""),
+            "parakeet_external_error": parakeet_runtime.get("error", ""),
         }
 
     def _require_ready(self):
@@ -613,6 +857,7 @@ class VoiceInputService:
         key = (self.provider, self.model_name)
         if self._model is not None and self._model_key == key:
             return 0
+        self._clear_loaded_model()
         started = time.perf_counter()
         if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
             self._load_nvidia_parakeet_model()
@@ -647,6 +892,9 @@ class VoiceInputService:
         )
 
     def _load_nvidia_parakeet_model(self):
+        if self._parakeet_python():
+            self._model, _ = self._start_parakeet_worker()
+            return
         self._prepare_model_cache(configure_hf_home=True)
         import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
 
@@ -786,6 +1034,34 @@ class VoiceInputService:
     def _transcribe_nvidia_parakeet_file(self, audio_path):
         timings = {}
         try:
+            if isinstance(self._model, _ExternalParakeetRuntimeModel):
+                payload = self._model.request({
+                    "action": "transcribe",
+                    "audio": str(audio_path),
+                    "language": self.language,
+                })
+                transcript = str(payload.get("transcript") or "").strip()
+                timings.update(payload.get("timings") or {})
+                timings.setdefault("asr_attempts", 1)
+                self.last_error = ""
+                self.last_transcript = transcript
+                self.last_timings = timings
+                return {
+                    "status": payload.get("status") or ("success" if transcript else "no_speech"),
+                    "transcript": transcript,
+                    "language": payload.get("language") or self._effective_language(),
+                    "language_probability": None,
+                    "duration": None,
+                    "confidence": {},
+                    "recognition": {
+                        "provider": VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+                        "runtime": "external",
+                        "attempts": 1,
+                    },
+                    "timings": timings,
+                    "provider": self.provider,
+                    "model": self.model_name,
+                }
             started = time.perf_counter()
             outputs = self._model.transcribe([str(audio_path)])
             output = outputs[0] if outputs else None

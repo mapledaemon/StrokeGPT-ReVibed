@@ -1,3 +1,4 @@
-# Optional local ASR provider for Settings > Voice > NVIDIA Parakeet (NeMo).
+# Optional isolated ASR runtime for Settings > Voice > NVIDIA Parakeet.
+# Prefer scripts/install_parakeet.ps1 so NeMo dependencies stay out of .venv.
 # Install CUDA-enabled PyTorch separately for practical latency on NVIDIA GPUs.
 nemo_toolkit[asr]

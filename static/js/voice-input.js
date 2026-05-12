@@ -506,8 +506,8 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputStatusSnapshot = status;
     populateSelect(el.voiceInputProviderSelect, status.provider_options, [
         {id: 'disabled', label: 'Disabled'},
+        {id: NVIDIA_PARAKEET_PROVIDER, label: 'NVIDIA Parakeet (preferred on NVIDIA)'},
         {id: 'local_faster_whisper', label: 'Local faster-whisper'},
-        {id: NVIDIA_PARAKEET_PROVIDER, label: 'NVIDIA Parakeet (NeMo)'},
     ]);
     populateChoiceLabels(el.voiceInputModeInputs, status.mode_options, [
         {id: 'push_to_talk', label: 'Push to talk'},

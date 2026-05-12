@@ -490,6 +490,9 @@ def setup_check_payload(
     ctranslate2_available = bool(voice_input_setup.get("ctranslate2_available"))
     ctranslate2_cuda_devices = int(voice_input_setup.get("ctranslate2_cuda_devices") or 0)
     nemo_available = bool(voice_input_setup.get("nemo_available"))
+    parakeet_external_runtime = bool(voice_input_setup.get("parakeet_external_runtime"))
+    parakeet_external_python = str(voice_input_setup.get("parakeet_external_python") or "").strip()
+    parakeet_external_error = str(voice_input_setup.get("parakeet_external_error") or "").strip()
     torch = voice_input_setup.get("torch") or {}
     torch_cuda = bool(torch.get("cuda_available"))
     voice_input_items = [
@@ -530,9 +533,13 @@ def setup_check_payload(
             "NVIDIA Parakeet dependency",
             _optional_dependency_status(nemo_available, parakeet_selected),
             (
-                "NVIDIA NeMo ASR is importable."
+                f"External Parakeet runtime is available: {parakeet_external_python}."
+                if nemo_available and parakeet_external_runtime and parakeet_external_python
+                else "NVIDIA NeMo ASR is importable in the app runtime."
                 if nemo_available
-                else "Install requirements-parakeet.txt before using NVIDIA Parakeet voice input."
+                else parakeet_external_error
+                if parakeet_external_runtime and parakeet_external_error
+                else "Use scripts/install_parakeet.ps1 and set STROKEGPT_PARAKEET_PYTHON before using NVIDIA Parakeet voice input."
             ),
         ),
         _setup_check_item(

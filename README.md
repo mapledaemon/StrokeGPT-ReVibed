@@ -123,13 +123,16 @@ For low-latency local voice on an NVIDIA GPU, install a CUDA-enabled PyTorch whe
 
 In the app, click **Profile menu > Settings > Voice > Download / Load Local Voice Model** before testing. First use can download several GB. Use the **Chatterbox Turbo** preset for the lowest latency. The Voice tab reports download/load phase, generation status, missing sample files, and the last error.
 
-Voice input defaults to local faster-whisper because it is the portable CPU/GPU path. For NVIDIA GPU testing, **Profile menu > Settings > Voice > Provider > NVIDIA Parakeet (NeMo)** uses `nvidia/parakeet-tdt-0.6b-v3` through NVIDIA NeMo when the optional stack is installed:
+Voice input supports two local stacks. **NVIDIA Parakeet** is the preferred low-latency path on compatible NVIDIA CUDA systems. **Local faster-whisper** remains the portable path for CPU, AMD, Apple Silicon, and non-NVIDIA systems; push-to-talk and hands-free voice input work with either provider.
 
-```bash
-python -m pip install -r requirements-parakeet.txt
+Install Parakeet in a separate runtime so NVIDIA NeMo dependencies do not conflict with the main app environment:
+
+```powershell
+.\scripts\install_parakeet.ps1
+$env:STROKEGPT_PARAKEET_PYTHON = ".\.venv-parakeet\Scripts\python.exe"
 ```
 
-Use the existing **Download / Load Voice Input Model** button after selecting Parakeet. The first load can download multi-GB model files; the app does not fetch them at startup.
+After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.
 
 The Voice tab's **Advanced Flow** section has an off-by-default hands-free
 mode-action toggle. When Voice mode is Hands-free and transcripts are sent
@@ -143,7 +146,7 @@ The Motion tab has a separate off-by-default **Allow typed chat to request
 mode actions** toggle. It gives typed chat the same guarded mode-action path
 without changing reviewed voice transcript sends.
 
-NVIDIA publishes the Parakeet NeMo integration for Linux GPU environments; on Windows, use a compatible CUDA/PyTorch/NeMo environment such as WSL before selecting this provider.
+If the separate Parakeet runtime is not configured or NVIDIA tooling is not detected, fresh or reset settings select **Local faster-whisper**. Non-NVIDIA users retain all voice-input functionality through faster-whisper.
 
 ## Troubleshooting
 

@@ -1,6 +1,8 @@
 import copy
 import json
+import os
 import re
+import shutil
 import threading
 from pathlib import Path
 
@@ -67,6 +69,41 @@ DEFAULT_VOICE_INPUT_VAD_MIN_SILENCE_MS = 500
 DEFAULT_VOICE_INPUT_VAD_SPEECH_PAD_MS = 400
 
 
+def _default_parakeet_python_path():
+    configured = str(os.getenv("STROKEGPT_PARAKEET_PYTHON", "") or "").strip()
+    if configured:
+        path = Path(configured)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        return str(path) if path.exists() else ""
+    bundled = Path(__file__).resolve().parents[1] / ".venv-parakeet" / "Scripts" / "python.exe"
+    return str(bundled) if bundled.exists() else ""
+
+
+def _default_parakeet_runtime_preferred():
+    if not _default_parakeet_python_path():
+        return False
+    explicit_device = str(os.getenv("STROKEGPT_PARAKEET_DEVICE", "") or "").strip().lower()
+    if explicit_device.startswith("cuda"):
+        return True
+    if explicit_device == "cpu":
+        return False
+    return bool(shutil.which("nvidia-smi"))
+
+
+def default_voice_input_provider():
+    if _default_parakeet_runtime_preferred():
+        return VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET
+    return VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER
+
+
+def default_voice_input_model(provider=None):
+    selected_provider = provider or default_voice_input_provider()
+    if selected_provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+        return DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL
+    return DEFAULT_VOICE_INPUT_MODEL
+
+
 def normalize_ollama_model(model):
     cleaned = " ".join(str(model or "").split())
     cleaned = re.sub(r"\s*/\s*", "/", cleaned)
@@ -79,6 +116,8 @@ def default_user_profile():
 
 
 def default_settings_dict():
+    voice_input_provider = default_voice_input_provider()
+    voice_input_model = default_voice_input_model(voice_input_provider)
     return {
         "handy_key": "",
         "ai_name": "BOT",
@@ -101,9 +140,9 @@ def default_settings_dict():
         "local_tts_top_p": 1.0,
         "local_tts_min_p": 0.05,
         "local_tts_repetition_penalty": 1.2,
-        "voice_input_provider": VOICE_INPUT_PROVIDER_DISABLED,
+        "voice_input_provider": voice_input_provider,
         "voice_input_enabled": False,
-        "voice_input_model": DEFAULT_VOICE_INPUT_MODEL,
+        "voice_input_model": voice_input_model,
         "voice_input_language": "auto",
         "voice_input_mode": VOICE_INPUT_MODE_PUSH_TO_TALK,
         "voice_input_submit_mode": VOICE_INPUT_SUBMIT_PREVIEW,
