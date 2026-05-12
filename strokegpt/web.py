@@ -1844,6 +1844,10 @@ register_blueprints(app)
 def on_exit():
     print("[INFO] Saving settings on exit...")
     settings.save(llm, app_state.chat_history)
+    try:
+        voice_input.close()
+    except Exception as exc:
+        print(f"[WARN] Voice input shutdown failed: {exc}")
     print("[OK] Settings saved.")
 
 def main():

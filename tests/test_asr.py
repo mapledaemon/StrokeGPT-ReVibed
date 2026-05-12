@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import sys
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strokegpt.asr import VoiceInputService
+from strokegpt.asr import VoiceInputService, _ExternalParakeetRuntimeModel
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -270,7 +271,10 @@ class VoiceInputServiceTests(unittest.TestCase):
                 language="en",
             )
 
-            with mock.patch.object(VoiceInputService, "dependency_available", return_value=True):
+            with (
+                mock.patch.object(VoiceInputService, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr._count_cuda_devices", return_value=0),
+            ):
                 ok, _ = service.preload_model()
 
             self.assertTrue(ok)
@@ -309,8 +313,119 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(service.model_name, "nvidia/parakeet-tdt-0.6b-v3")
         self.assertEqual(status["provider"], "local_nvidia_parakeet")
         self.assertEqual(status["status_code"], "dependency_missing")
-        self.assertIn("NVIDIA NeMo ASR", status["message"])
+        self.assertIn("NVIDIA Parakeet runtime", status["message"])
         self.assertIn("nvidia/parakeet-tdt-0.6b-v3", [option["id"] for option in status["model_options"]])
+
+    def test_nvidia_parakeet_external_runtime_reports_dependency(self):
+        temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
+        fake_python = Path(temp_dir) / "python.exe"
+        fake_python.write_text("", encoding="utf-8")
+        original_python = os.environ.get("STROKEGPT_PARAKEET_PYTHON")
+        try:
+            os.environ["STROKEGPT_PARAKEET_PYTHON"] = str(fake_python)
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+            payload = {
+                "ok": True,
+                "nemo_available": True,
+                "python": str(fake_python),
+                "torch": {"cuda_available": True, "device_name": "RTX Test", "device": "cuda"},
+            }
+            completed = types.SimpleNamespace(
+                returncode=0,
+                stdout=f"log line\nSTROKEGPT_PARAKEET_RESULT {json.dumps(payload)}\n",
+                stderr="",
+            )
+
+            with mock.patch("strokegpt.asr.subprocess.run", return_value=completed):
+                self.assertTrue(service.dependency_available())
+                setup = service.setup_status()
+
+            self.assertTrue(setup["parakeet_external_runtime"])
+            self.assertTrue(setup["nemo_available"])
+            self.assertEqual(setup["torch"]["device"], "cuda")
+        finally:
+            if original_python is None:
+                os.environ.pop("STROKEGPT_PARAKEET_PYTHON", None)
+            else:
+                os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_nvidia_parakeet_external_runtime_preloads_and_transcribes(self):
+        temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
+        fake_python = Path(temp_dir) / "python.exe"
+        fake_python.write_text("", encoding="utf-8")
+        original_python = os.environ.get("STROKEGPT_PARAKEET_PYTHON")
+
+        class FakeParakeetRuntime(_ExternalParakeetRuntimeModel):
+            def __init__(self):
+                self.python = str(fake_python)
+                self.model = "nvidia/parakeet-tdt-0.6b-v3"
+                self.device = "cuda"
+                self.requests = []
+                self.closed = False
+
+            def request(self, payload):
+                self.requests.append(dict(payload))
+                return {
+                    "ok": True,
+                    "status": "success",
+                    "transcript": f"stop now {len(self.requests)}",
+                    "language": "en",
+                    "timings": {"transcribe_ms": 42, "asr_attempts": 1},
+                }
+
+            def close(self):
+                self.closed = True
+
+        runtime = FakeParakeetRuntime()
+
+        try:
+            os.environ["STROKEGPT_PARAKEET_PYTHON"] = str(fake_python)
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch.object(
+                    service,
+                    "_start_parakeet_worker",
+                    return_value=(runtime, {"ok": True, "device": "cuda", "model_load_ms": 7}),
+                ) as start_worker,
+            ):
+                ok, _ = service.preload_model()
+                result = service.transcribe_file(Path("speech.wav"))
+                second = service.transcribe_file(Path("speech-again.wav"))
+
+            self.assertTrue(ok)
+            self.assertEqual(start_worker.call_count, 1)
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(result["transcript"], "stop now 1")
+            self.assertEqual(second["transcript"], "stop now 2")
+            self.assertEqual(runtime.requests, [
+                {"action": "transcribe", "audio": "speech.wav", "language": "auto"},
+                {"action": "transcribe", "audio": "speech-again.wav", "language": "auto"},
+            ])
+            self.assertEqual(result["recognition"]["runtime"], "external")
+            self.assertEqual(result["timings"]["transcribe_ms"], 42)
+            service.close()
+            self.assertTrue(runtime.closed)
+        finally:
+            if original_python is None:
+                os.environ.pop("STROKEGPT_PARAKEET_PYTHON", None)
+            else:
+                os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def test_nvidia_parakeet_model_load_uses_optional_nemo(self):
         calls = {}

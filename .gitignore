@@ -3,5 +3,7 @@ __pycache__/
 tmp*/
 my_settings.json
 .venv/
+.venv-parakeet/
+.venv-parakeet*/
 voice_samples/
 user_data/

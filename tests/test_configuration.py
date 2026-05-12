@@ -3,6 +3,7 @@ import importlib.machinery
 import sys
 import types
 import unittest
+from unittest import mock
 
 requests_module = types.ModuleType("requests")
 requests_module.__spec__ = importlib.machinery.ModuleSpec("requests", loader=None)
@@ -13,8 +14,12 @@ from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_PERSONA_PROMPTS,
+    DEFAULT_VOICE_INPUT_MODEL,
+    DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL,
     LEGACY_OLLAMA_MODEL,
     SettingsManager,
+    VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
+    VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
     default_settings_dict,
     normalize_ollama_model,
 )
@@ -83,6 +88,36 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["voice_input_vad_threshold"], 0.5)
         self.assertEqual(saved["voice_input_vad_min_silence_ms"], 500)
         self.assertEqual(saved["voice_input_vad_speech_pad_ms"], 400)
+
+    def test_voice_input_default_selects_faster_whisper_without_parakeet_runtime(self):
+        with mock.patch("strokegpt.settings._default_parakeet_python_path", return_value=""):
+            defaults = default_settings_dict()
+
+        self.assertEqual(defaults["voice_input_provider"], VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER)
+        self.assertEqual(defaults["voice_input_model"], DEFAULT_VOICE_INPUT_MODEL)
+        self.assertFalse(defaults["voice_input_enabled"])
+
+    def test_voice_input_default_selects_faster_whisper_without_nvidia_runtime(self):
+        with (
+            mock.patch("strokegpt.settings._default_parakeet_python_path", return_value="C:\\fake\\python.exe"),
+            mock.patch("strokegpt.settings.shutil.which", return_value=None),
+        ):
+            defaults = default_settings_dict()
+
+        self.assertEqual(defaults["voice_input_provider"], VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER)
+        self.assertEqual(defaults["voice_input_model"], DEFAULT_VOICE_INPUT_MODEL)
+        self.assertFalse(defaults["voice_input_enabled"])
+
+    def test_voice_input_default_selects_parakeet_when_nvidia_runtime_exists(self):
+        with (
+            mock.patch("strokegpt.settings._default_parakeet_python_path", return_value="C:\\fake\\python.exe"),
+            mock.patch("strokegpt.settings.shutil.which", return_value="nvidia-smi"),
+        ):
+            defaults = default_settings_dict()
+
+        self.assertEqual(defaults["voice_input_provider"], VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET)
+        self.assertEqual(defaults["voice_input_model"], DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL)
+        self.assertFalse(defaults["voice_input_enabled"])
 
     def test_old_settings_load_default_model(self):
         fake_path = FakePath(json.dumps({"handy_key": "abc"}))

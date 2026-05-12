@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #160 - Isolate Parakeet Runtime
+------------------------------------------------
+
+Branch: codex/parakeet-production-ready
+
+- Made NVIDIA Parakeet the preferred voice-input stack for compatible NVIDIA
+  systems while keeping local faster-whisper as the fresh/reset default when
+  the isolated Parakeet runtime is not configured or NVIDIA is not detected.
+- Added an optional external Parakeet worker path selected by
+  `STROKEGPT_PARAKEET_PYTHON`, so NeMo/CUDA dependencies can live in a
+  separate `.venv-parakeet` runtime instead of conflicting with the main app
+  voice-output stack.
+- Kept the external Parakeet worker alive after model load so repeated
+  transcriptions do not reload the NeMo model for every clip.
+- Added a Windows Parakeet installer script and setup diagnostics for the
+  isolated runtime.
+
+
 2026-05-12 - PR #159 - Refresh Agent Handoff After Travel Sync
 ---------------------------------------------------------------
 
