@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #166 - Fix Chat Shell Scaling
+------------------------------------------------
+
+Branch: codex/chat-layout-overflow-scaling
+
+- Kept the bordered chat log attached to overflowing message history in
+  Firefox by preventing the chat log panel from shrinking below its contents.
+- Widened the shared chat, motion status, composer, and transcript shell on
+  large desktop screens while preserving readable message line lengths.
+- Added explicit chat-bubble width guards so long text and generated content
+  cannot push outside the chat panel.
+
+
 2026-05-12 - PR #164 - Normalize Browser Audio For Parakeet
 --------------------------------------------------------------
 
