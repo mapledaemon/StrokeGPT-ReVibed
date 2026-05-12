@@ -258,6 +258,8 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(data["message"], "Transcript ready.")
             self.assertIn("voice_input_status", data)
             self.assertIn("status_code", data["voice_input_status"])
+            self.assertIn("upload_save_ms", data["timings"])
+            self.assertIn("route_total_ms", data["timings"])
             transcribe.assert_called_once()
             self.assertEqual(list(app_state.messages_for_ui), [])
             self.assertEqual(list(app_state.chat_history), [])

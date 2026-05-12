@@ -25,8 +25,13 @@ Branch: codex/parakeet-webm-audio-normalization
   single-clip mono-channel dataloader options so locked `manifest.json`
   cleanup or stereo audio does not turn a completed Parakeet transcription
   into a failed request.
+- Avoided rerunning the isolated Parakeet runtime check while a warm worker is
+  already loaded, skipped browser-side silence-trim conversion for Parakeet,
+  and exposed upload, normalization, worker, and route timing breakdowns in
+  the voice diagnostics panel.
 - Added regression coverage for Parakeet WEBM/WAV normalization, stereo frame
-  collapse, and the NeMo transcribe options/cleanup guard.
+  collapse, warm-worker runtime-check bypass, route timing fields, and the
+  NeMo transcribe options/cleanup guard.
 
 
 2026-05-12 - PR #163 - Improve Voice Input Model Load Feedback

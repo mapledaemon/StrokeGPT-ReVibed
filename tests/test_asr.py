@@ -514,6 +514,9 @@ class VoiceInputServiceTests(unittest.TestCase):
             ])
             self.assertEqual(result["recognition"]["runtime"], "external")
             self.assertEqual(result["timings"]["transcribe_ms"], 42)
+            self.assertIn("normalization_ms", result["timings"])
+            self.assertIn("worker_request_ms", result["timings"])
+            self.assertIn("total_ms", result["timings"])
             service.close()
             self.assertTrue(runtime.closed)
         finally:
@@ -522,6 +525,53 @@ class VoiceInputServiceTests(unittest.TestCase):
             else:
                 os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_loaded_parakeet_worker_skips_runtime_check_on_status_and_transcribe(self):
+        requests = []
+
+        class FakeRuntime(_ExternalParakeetRuntimeModel):
+            def __init__(self):
+                self.process = types.SimpleNamespace(poll=lambda: None)
+
+            def request(self, payload):
+                requests.append(dict(payload))
+                return {
+                    "status": "success",
+                    "transcript": "stop",
+                    "language": "en",
+                    "timings": {"transcribe_ms": 8},
+                }
+
+        service = VoiceInputService()
+        service.configure(
+            provider="local_nvidia_parakeet",
+            enabled=True,
+            model="nvidia/parakeet-tdt-0.6b-v3",
+            language="auto",
+        )
+        service._model = FakeRuntime()
+        service._model_key = ("local_nvidia_parakeet", "nvidia/parakeet-tdt-0.6b-v3")
+        service._parakeet_runtime_checked_at = 0.0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "speech.webm"
+            source.write_bytes(b"fake webm")
+
+            def fake_convert(_src, dst):
+                Path(dst).write_bytes(b"fake wav")
+                return Path(dst)
+
+            with (
+                mock.patch.object(service, "_run_parakeet_worker", side_effect=AssertionError("runtime check should not run")),
+                mock.patch("strokegpt.asr._convert_audio_to_mono_wav", side_effect=fake_convert),
+            ):
+                status = service.status()
+                result = service.transcribe_file(source)
+
+        self.assertTrue(status["dependency_available"])
+        self.assertTrue(status["can_transcribe"])
+        self.assertEqual(result["transcript"], "stop")
+        self.assertEqual(len(requests), 1)
 
     def test_nvidia_parakeet_model_load_uses_optional_nemo(self):
         calls = {}

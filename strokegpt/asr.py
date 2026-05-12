@@ -102,6 +102,9 @@ class _ExternalParakeetRuntimeModel:
                 raise VoiceInputUnavailable(response.get("error") or "NVIDIA Parakeet worker failed.")
             return response
 
+    def is_running(self):
+        return self.process.poll() is None
+
     def close(self):
         process = self.process
         if process.poll() is not None:
@@ -595,6 +598,12 @@ class VoiceInputService:
 
     def dependency_available(self):
         if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+            if isinstance(self._model, _ExternalParakeetRuntimeModel):
+                if self._model.is_running():
+                    return True
+                self._clear_loaded_model()
+            if self._model is not None:
+                return True
             if self._parakeet_python():
                 return bool(self._get_parakeet_runtime_status().get("nemo_available"))
             return _module_available("nemo.collections.asr")
@@ -1073,7 +1082,14 @@ class VoiceInputService:
 
     def _load_nvidia_parakeet_model(self):
         if self._parakeet_python():
-            self._model, _ = self._start_parakeet_worker()
+            self._model, payload = self._start_parakeet_worker()
+            status = dict(payload)
+            status.setdefault("ok", True)
+            status.setdefault("nemo_available", True)
+            status.setdefault("python", self._parakeet_python())
+            status["external_runtime"] = True
+            self._parakeet_runtime_status = status
+            self._parakeet_runtime_checked_at = time.monotonic()
             return
         self._prepare_model_cache(configure_hf_home=True)
         import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
@@ -1222,9 +1238,13 @@ class VoiceInputService:
         timings = {}
         parakeet_audio_path = None
         transient_audio_path = None
+        total_started = time.perf_counter()
         try:
+            normalization_started = time.perf_counter()
             parakeet_audio_path, transient_audio_path = _parakeet_transcription_audio_path(audio_path)
+            timings["normalization_ms"] = int((time.perf_counter() - normalization_started) * 1000)
             if isinstance(self._model, _ExternalParakeetRuntimeModel):
+                worker_started = time.perf_counter()
                 payload = self._model.request({
                     "action": "transcribe",
                     "audio": str(parakeet_audio_path),
@@ -1232,7 +1252,10 @@ class VoiceInputService:
                 })
                 transcript = str(payload.get("transcript") or "").strip()
                 timings.update(payload.get("timings") or {})
+                timings.setdefault("normalization_ms", int((time.perf_counter() - normalization_started) * 1000))
                 timings.setdefault("asr_attempts", 1)
+                timings["worker_request_ms"] = int((time.perf_counter() - worker_started) * 1000)
+                timings["total_ms"] = int((time.perf_counter() - total_started) * 1000)
                 self.last_error = ""
                 self.last_transcript = transcript
                 self.last_timings = timings
@@ -1258,6 +1281,7 @@ class VoiceInputService:
             transcript = _transcript_from_nemo_output(output)
             timings["transcribe_ms"] = int((time.perf_counter() - started) * 1000)
             timings["asr_attempts"] = 1
+            timings["total_ms"] = int((time.perf_counter() - total_started) * 1000)
             self.last_error = ""
             self.last_transcript = transcript
             self.last_timings = timings
