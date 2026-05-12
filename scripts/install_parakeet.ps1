@@ -1,5 +1,6 @@
 param(
-    [switch]$PersistEnv
+    [switch]$PersistEnv,
+    [string]$TorchIndexUrl = "https://download.pytorch.org/whl/cu128"
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,11 +52,16 @@ if (-not (Test-Path $VenvPython)) {
 }
 
 Write-Host "Installing CUDA PyTorch and Parakeet dependencies..."
+Write-Host "Using PyTorch wheel index: $TorchIndexUrl"
 & $VenvPython -m pip install --upgrade pip
-& $VenvPython -m pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+& $VenvPython -m pip install --upgrade --force-reinstall --index-url $TorchIndexUrl torch torchvision torchaudio
 & $VenvPython -m pip install -r requirements-parakeet.txt
 Write-Host "Repairing CUDA PyTorch stack after NeMo dependency resolution..."
-& $VenvPython -m pip install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+& $VenvPython -m pip install --upgrade --force-reinstall --no-deps --index-url $TorchIndexUrl torch torchvision torchaudio
+Write-Host "Reapplying NeMo dependency pins..."
+& $VenvPython -m pip install "fsspec==2024.12.0" "setuptools>=79.0.0"
+Write-Host "Checking Python package dependency consistency..."
+& $VenvPython -m pip check
 
 if ($PersistEnv) {
     [Environment]::SetEnvironmentVariable("STROKEGPT_PARAKEET_PYTHON", $VenvPython, "User")

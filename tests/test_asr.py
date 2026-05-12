@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strokegpt.asr import VoiceInputService, _ExternalParakeetRuntimeModel
+from strokegpt.asr import VoiceInputService, VoiceInputUnavailable, _ExternalParakeetRuntimeModel
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -356,6 +356,54 @@ class VoiceInputServiceTests(unittest.TestCase):
                 os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_nvidia_parakeet_external_runtime_preserves_failed_check_payload(self):
+        temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
+        fake_python = Path(temp_dir) / "python.exe"
+        fake_python.write_text("", encoding="utf-8")
+        original_python = os.environ.get("STROKEGPT_PARAKEET_PYTHON")
+        try:
+            os.environ["STROKEGPT_PARAKEET_PYTHON"] = str(fake_python)
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+            error = "PyTorch sees CUDA but a CUDA test kernel failed."
+            payload = {
+                "ok": False,
+                "nemo_available": False,
+                "python": str(fake_python),
+                "torch": {
+                    "cuda_available": True,
+                    "device": "cuda",
+                    "cuda_runtime_error": error,
+                },
+                "error": error,
+            }
+            completed = types.SimpleNamespace(
+                returncode=1,
+                stdout=f"STROKEGPT_PARAKEET_RESULT {json.dumps(payload)}\n",
+                stderr="",
+            )
+
+            with mock.patch("strokegpt.asr.subprocess.run", return_value=completed):
+                self.assertFalse(service.dependency_available())
+                setup = service.setup_status()
+                with self.assertRaisesRegex(VoiceInputUnavailable, "CUDA test kernel failed"):
+                    service.preload_model()
+
+            self.assertTrue(setup["parakeet_external_runtime"])
+            self.assertEqual(setup["parakeet_external_error"], error)
+            self.assertEqual(setup["torch"]["cuda_runtime_error"], error)
+        finally:
+            if original_python is None:
+                os.environ.pop("STROKEGPT_PARAKEET_PYTHON", None)
+            else:
+                os.environ["STROKEGPT_PARAKEET_PYTHON"] = original_python
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_nvidia_parakeet_external_runtime_uses_repo_local_venv_without_env(self):
         temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")
         fake_python = Path(temp_dir) / "python.exe"
@@ -565,6 +613,32 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertIn("Runtime check failed", status["message"])
         self.assertIn("operator torchvision::nms does not exist", status["message"])
 
+    def test_preload_model_preserves_provider_error_in_status(self):
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="tiny.en",
+            language="en",
+        )
+
+        with (
+            mock.patch.object(service, "dependency_available", return_value=True),
+            mock.patch.object(
+                service,
+                "_load_model",
+                side_effect=VoiceInputUnavailable("worker stopped: operator torchvision::nms does not exist"),
+            ),
+        ):
+            with self.assertRaisesRegex(VoiceInputUnavailable, "operator torchvision::nms"):
+                service.preload_model()
+            status = service.status()
+
+        self.assertEqual(status["status_code"], "error")
+        self.assertEqual(status["preload_status"], "error")
+        self.assertIn("operator torchvision::nms does not exist", status["last_error"])
+        self.assertIn("operator torchvision::nms does not exist", status["message"])
+
     def test_nvidia_parakeet_transcribe_normalizes_nemo_output(self):
         class FakeParakeetModel:
             def transcribe(self, audio_paths):
@@ -760,6 +834,76 @@ class CountCudaDevicesTests(unittest.TestCase):
             self.skipTest("ctranslate2 not installed; integration check skipped")
         with mock.patch.object(ctranslate2, "get_cuda_device_count", return_value=2):
             self.assertEqual(asr._count_cuda_devices(), 2)
+
+
+class ParakeetWorkerRuntimeTests(unittest.TestCase):
+    def test_torch_status_reports_unusable_cuda_kernel(self):
+        from strokegpt import parakeet_worker
+
+        class FakeCuda:
+            @staticmethod
+            def is_available():
+                return True
+
+            @staticmethod
+            def device_count():
+                return 1
+
+            @staticmethod
+            def get_device_name(index):
+                return "GTX Test"
+
+            @staticmethod
+            def get_device_capability(index):
+                return (5, 0)
+
+            @staticmethod
+            def synchronize():
+                return None
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.__version__ = "2.4.0+cu121"
+        fake_torch.version = types.SimpleNamespace(cuda="12.1")
+        fake_torch.cuda = FakeCuda()
+
+        def fake_ones(*_args, **_kwargs):
+            raise RuntimeError("CUDA error: no kernel image is available for execution on the device")
+
+        fake_torch.ones = fake_ones
+        original_torch = sys.modules.get("torch")
+        try:
+            sys.modules["torch"] = fake_torch
+            status = parakeet_worker._torch_status("")
+        finally:
+            if original_torch is None:
+                sys.modules.pop("torch", None)
+            else:
+                sys.modules["torch"] = original_torch
+
+        self.assertTrue(status["cuda_available"])
+        self.assertFalse(status["cuda_runtime_usable"])
+        self.assertIn("no kernel image is available", status["cuda_runtime_error"])
+        self.assertIn("Local faster-whisper", status["cuda_runtime_error"])
+
+    def test_check_rejects_unusable_cuda_before_nemo_import(self):
+        from strokegpt import parakeet_worker
+
+        torch_status = {
+            "torch_available": True,
+            "cuda_available": True,
+            "cuda_runtime_error": "PyTorch sees CUDA but a CUDA test kernel failed.",
+            "device": "cuda",
+        }
+        with (
+            mock.patch.object(parakeet_worker, "_torch_status", return_value=torch_status),
+            mock.patch.object(parakeet_worker, "_import_nemo") as import_nemo,
+        ):
+            payload = parakeet_worker._check(types.SimpleNamespace(device=""))
+
+        import_nemo.assert_not_called()
+        self.assertFalse(payload["ok"])
+        self.assertFalse(payload["nemo_available"])
+        self.assertIn("CUDA test kernel failed", payload["error"])
 
 
 if __name__ == "__main__":

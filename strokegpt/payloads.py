@@ -494,7 +494,8 @@ def setup_check_payload(
     parakeet_external_python = str(voice_input_setup.get("parakeet_external_python") or "").strip()
     parakeet_external_error = str(voice_input_setup.get("parakeet_external_error") or "").strip()
     torch = voice_input_setup.get("torch") or {}
-    torch_cuda = bool(torch.get("cuda_available"))
+    torch_cuda_error = str(torch.get("cuda_runtime_error") or torch.get("error") or "").strip()
+    torch_cuda_usable = bool(torch.get("cuda_available")) and not torch_cuda_error
     voice_input_items = [
         _setup_check_item(
             "voice-input-provider",
@@ -545,10 +546,12 @@ def setup_check_payload(
         _setup_check_item(
             "voice-input-parakeet-cuda",
             "NVIDIA Parakeet CUDA",
-            "ok" if torch_cuda else "warning" if parakeet_selected else "info",
+            "ok" if torch_cuda_usable else "error" if parakeet_selected and torch_cuda_error else "warning" if parakeet_selected else "info",
             (
-                f"PyTorch sees CUDA ({torch.get('device_name') or 'GPU'})."
-                if torch_cuda
+                torch_cuda_error
+                if torch_cuda_error
+                else f"PyTorch sees CUDA ({torch.get('device_name') or 'GPU'})."
+                if torch_cuda_usable
                 else "PyTorch does not see CUDA; Parakeet is intended for a CUDA-capable environment."
             ),
         ),

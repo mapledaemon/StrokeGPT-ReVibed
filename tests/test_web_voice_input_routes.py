@@ -197,6 +197,39 @@ class WebVoiceInputRouteTests(WebTestCase):
         finally:
             response.close()
 
+    def test_preload_voice_input_model_returns_load_error_status(self):
+        from strokegpt.asr import VoiceInputUnavailable
+        from strokegpt.web import apply_settings_to_services, settings, voice_input
+
+        original = settings.to_dict()
+        settings.voice_input_provider = "local_faster_whisper"
+        settings.voice_input_model = "tiny.en"
+        settings.voice_input_enabled = True
+        apply_settings_to_services()
+        try:
+            with (
+                mock.patch.object(voice_input, "dependency_available", return_value=True),
+                mock.patch.object(
+                    voice_input,
+                    "_load_model",
+                    side_effect=VoiceInputUnavailable("worker stopped: operator torchvision::nms does not exist"),
+                ),
+            ):
+                response = self.client.post("/preload_voice_input_model")
+            try:
+                self.assertEqual(response.status_code, 409)
+                data = response.get_json()
+                self.assertEqual(data["status"], "unavailable")
+                self.assertIn("operator torchvision::nms does not exist", data["message"])
+                self.assertEqual(data["voice_input_status"]["status_code"], "error")
+                self.assertEqual(data["voice_input_status"]["preload_status"], "error")
+                self.assertIn("operator torchvision::nms does not exist", data["voice_input_status"]["last_error"])
+            finally:
+                response.close()
+        finally:
+            settings.apply_dict(original)
+            apply_settings_to_services()
+
     def test_transcribe_voice_returns_transcript_without_chat_side_effects(self):
         from strokegpt.web import app_state, voice_input
 

@@ -382,6 +382,9 @@ class VoiceInputService:
         self._model_cached_checked_at = 0.0
         self._parakeet_runtime_status = None
         self._parakeet_runtime_checked_at = 0.0
+        self._preload_status = "idle"
+        self._preload_message = ""
+        self._preload_started_at = 0.0
         self.last_error = ""
         self.last_transcript = ""
         self.last_timings = {}
@@ -425,6 +428,8 @@ class VoiceInputService:
         if provider != self.provider or model != self.model_name or not enabled:
             self._clear_loaded_model()
             self._clear_model_cached_status()
+            self._clear_preload_status()
+            self.last_error = ""
         self.provider = provider
         self.enabled = enabled
         self.model_name = model
@@ -533,7 +538,9 @@ class VoiceInputService:
             stderr = (completed.stderr or "").strip()
             raise VoiceInputUnavailable(stderr or "NVIDIA Parakeet worker did not return a status payload.")
         if completed.returncode != 0 or not payload.get("ok"):
-            raise VoiceInputUnavailable(payload.get("error") or "NVIDIA Parakeet worker failed.")
+            exc = VoiceInputUnavailable(payload.get("error") or "NVIDIA Parakeet worker failed.")
+            exc.payload = payload
+            raise exc
         return payload
 
     def _start_parakeet_worker(self):
@@ -607,14 +614,22 @@ class VoiceInputService:
         try:
             status = self._run_parakeet_worker("check", timeout=60)
         except VoiceInputUnavailable as exc:
-            status = {
-                "ok": False,
-                "external_runtime": True,
-                "python": python,
-                "nemo_available": False,
-                "torch": None,
-                "error": str(exc),
-            }
+            payload = getattr(exc, "payload", None)
+            if isinstance(payload, dict):
+                status = dict(payload)
+                status["ok"] = False
+                status.setdefault("python", python)
+                status.setdefault("nemo_available", False)
+                status.setdefault("error", str(exc))
+            else:
+                status = {
+                    "ok": False,
+                    "external_runtime": True,
+                    "python": python,
+                    "nemo_available": False,
+                    "torch": None,
+                    "error": str(exc),
+                }
         status["external_runtime"] = True
         status.setdefault("python", python)
         self._parakeet_runtime_status = dict(status)
@@ -643,6 +658,24 @@ class VoiceInputService:
         self._model_cached_key = self._model_cached_status_key()
         self._model_cached_value = bool(value)
         self._model_cached_checked_at = time.monotonic()
+
+    def _clear_preload_status(self):
+        self._preload_status = "idle"
+        self._preload_message = ""
+        self._preload_started_at = 0.0
+
+    def _set_preload_status(self, status, message=""):
+        self._preload_status = status
+        self._preload_message = str(message or "")
+        if status == "loading":
+            self._preload_started_at = time.monotonic()
+        elif not self._preload_started_at:
+            self._preload_started_at = 0.0
+
+    def _preload_elapsed_seconds(self):
+        if self._preload_status != "loading" or not self._preload_started_at:
+            return 0.0
+        return max(0.0, time.monotonic() - self._preload_started_at)
 
     def _scan_model_cache(self):
         cache_dir = self.effective_model_cache_dir()
@@ -698,6 +731,7 @@ class VoiceInputService:
         )
         model_cached = can_load_model and self.is_model_cached()
         can_transcribe = can_load_model and self._model is not None
+        preload_status = self._preload_status
         if self.provider == VOICE_INPUT_PROVIDER_DISABLED or not self.enabled:
             status_code = "disabled"
             message = "Voice input is disabled."
@@ -716,6 +750,9 @@ class VoiceInputService:
                 )
             else:
                 message = f"Voice input needs {self._provider_dependency_name()}. Install dependencies, then restart the app."
+        elif preload_status == "loading":
+            status_code = "model_loading"
+            message = self._preload_message or f"Loading voice input model: {self.model_name}."
         elif self._model is None:
             status_code = "model_not_loaded"
             if model_cached:
@@ -759,6 +796,9 @@ class VoiceInputService:
             "can_load_model": can_load_model,
             "load_requires_download": can_load_model and not model_cached,
             "can_transcribe": can_transcribe,
+            "preload_status": preload_status,
+            "preload_message": self._preload_message,
+            "preload_elapsed_seconds": round(self._preload_elapsed_seconds(), 1),
             "message": message,
             "last_error": self.last_error,
             "last_transcript": self.last_transcript,
@@ -820,6 +860,10 @@ class VoiceInputService:
         }:
             raise VoiceInputUnavailable(f"Unsupported voice input provider: {self.provider}")
         if not self.dependency_available():
+            if self.provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET:
+                runtime_error = str((self._parakeet_runtime_status or {}).get("error") or "").strip()
+                if runtime_error:
+                    raise VoiceInputUnavailable(f"NVIDIA Parakeet runtime check failed: {runtime_error}")
             raise VoiceInputUnavailable(
                 f"Install {self._provider_dependency_name()} before using this voice input provider."
             )
@@ -944,18 +988,25 @@ class VoiceInputService:
         }
 
     def preload_model(self):
+        self.last_error = ""
+        self._set_preload_status("loading", f"Loading voice input model: {self.model_name}.")
         try:
             load_ms = self._load_model()
             self._set_model_cached_status(True)
-            self.last_error = ""
             if load_ms:
                 self.last_timings = {"model_load_ms": load_ms}
-            return True, f"Voice input model loaded: {self.model_name}."
-        except VoiceInputError:
+            message = f"Voice input model loaded: {self.model_name}."
+            self._set_preload_status("loaded", message)
+            return True, message
+        except VoiceInputError as exc:
+            self.last_error = str(exc)
+            self._set_preload_status("error", str(exc))
             raise
         except Exception as exc:
-            self.last_error = str(exc)
-            raise VoiceInputError(f"Voice input model load failed: {exc}") from exc
+            message = f"Voice input model load failed: {exc}"
+            self.last_error = message
+            self._set_preload_status("error", message)
+            raise VoiceInputError(message) from exc
 
     def transcribe_file(self, audio_path):
         self._require_ready()
