@@ -74,31 +74,36 @@ behavior, and route motion changes through the shared controller path.
 
 ## Current Progress Snapshot
 
-- PR #43 added broader Freestyle/mode diagnostics, active-mode elapsed timing,
-  terminal-style motion sequence logging, prompt tightening, Edge/Milk start
-  guards, and motion hot-path caching.
-- PR #44 reorganized `ROADMAP.md` into priority tiers and merged the latest
-  planning notes into roadmap and known-problems tracking.
-- PR #45 added the chat interface refactor plan, explicit Pause/Resume
-  planning, profile-driven splash/profile-image planning, and the known
-  problem for motion status log timecodes resetting on stop.
-- PR #48 split Freestyle planning and mode-decision helpers out of
-  `background_modes.py` while preserving compatibility re-exports.
-- PR #49 split web routes into domain blueprints and extracted payload
-  builders while preserving old `strokegpt.web` route and payload names.
-- PR #50 moved mutable web runtime state into `AppState` and preserved legacy
-  `strokegpt.web` attribute access through a module bridge.
-- PR #51 added typed contracts for long-running mode services and callbacks.
-- PR #52 completed the adapter/shim audit, documented which conversion layers
-  are real boundaries, and queued the compatibility-shim paydown sequence.
-- PR #53 marked the PR #48-#50 compatibility shim surfaces and moved the
-  direct Freestyle/mode-decision helper tests to canonical split modules.
-- PR #54 shrank the `background_modes.py` compatibility surface by removing
-  private split-helper re-exports while keeping the public type/constant
-  compatibility exports.
-- Agent guidance now lives in `AGENTS.md`, with `Codex.md` and `CLAUDE.md`
-  kept as short compatibility pointers. If the current docs branch has an open
-  PR, its changelog entry should use the PR number before merge.
+- The April reorganization sequence split the biggest legacy modules:
+  Freestyle and mode-decision helpers left `background_modes.py`, Flask routes
+  moved into blueprints, browser payload builders moved into `payloads.py`,
+  mutable web runtime state moved into `AppState`, and typed mode contracts
+  plus bridge/payload guard tests now pin the remaining compatibility seams.
+- The frontend motion-control split is complete through
+  `static/js/motion/{sequence-log,pause-controls,pattern-list,
+  feedback-controls,training-editor}.js`; `static/js/motion-control.js`
+  should stay as wiring and compatibility exports instead of regrowing domain
+  behavior.
+- Built-in fixed motion patterns now live in `strokegpt/builtin_patterns.json`,
+  with `motion_patterns.py` responsible for loading, normalizing, expanding,
+  and sampling them. Continuous position is the recommended default backend,
+  while HAMP remains a selectable legacy fallback pending real-device checks.
+- The browser shell has gained responsive chat/layout foundations, profile
+  menu/About surfaces, backend-required control locking, single-tab warning,
+  top-bar voice controls, streamed chat rendering, fenced-code rendering, and
+  Node-based frontend behavioral tests.
+- Voice input now has a flexible ASR foundation, faster-whisper and optional
+  NVIDIA Parakeet provider paths, push-to-talk / hands-free UI plumbing,
+  microphone calibration, confidence gates, diagnostics, and a simplified
+  routine Voice settings surface with advanced capture controls collapsed.
+- Recent mode and motion work added guarded hands-free and typed-chat
+  `mode_action` permissions, editable Ollama model options and GPU-fit
+  warnings, natural preset-mode narration, a visible Motion Style selector,
+  startup speedups, and hot-path speedups for streamed chat, polling, voice
+  model cache checks, and continuous motion traces.
+- `Changelog.txt` is the detailed PR history source of truth. Keep this
+  snapshot high-level and update it only when a new workstream changes the
+  current architecture or next-agent assumptions.
 
 ## Runtime Requirements
 
@@ -371,8 +376,10 @@ Current Up Next targets are:
 3. Motion Vocabulary And Preset Semantics: tighten deterministic versus
    freeform semantics, keep Milk/Freestyle behavior inspectable, and let visible
    mode controls and LLM requests share guard rails.
-4. Motion Style Preferences: add visible style controls and resettable learned
-   preferences without burying motion behavior inside natural-language memory.
+4. Motion Style Preferences: validate and refine the visible Motion Style
+   selector, decide whether planners should consume it deterministically, and
+   add resettable learned preferences without burying motion behavior inside
+   natural-language memory.
 5. Chat Interface Refactor: modernize the chat shell, indicator strip, message
    rendering, voice toggle, TTS/chat synchronization, and control layout while
    preserving chat-driven motion behavior.
