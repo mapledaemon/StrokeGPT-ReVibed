@@ -314,7 +314,21 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(status["provider"], "local_nvidia_parakeet")
         self.assertEqual(status["status_code"], "dependency_missing")
         self.assertIn("NVIDIA Parakeet runtime", status["message"])
-        self.assertIn("nvidia/parakeet-tdt-0.6b-v3", [option["id"] for option in status["model_options"]])
+        model_option_ids = [option["id"] for option in status["model_options"]]
+        self.assertIn("nvidia/parakeet-tdt-0.6b-v3", model_option_ids)
+        self.assertIn("nvidia/parakeet-tdt-1.1b", model_option_ids)
+
+    def test_faster_whisper_provider_resets_parakeet_preset_models(self):
+        service = VoiceInputService()
+        service.configure(
+            provider="local_faster_whisper",
+            enabled=True,
+            model="nvidia/parakeet-tdt-1.1b",
+            language="auto",
+        )
+
+        self.assertEqual(service.provider, "local_faster_whisper")
+        self.assertEqual(service.model_name, "tiny.en")
 
     def test_nvidia_parakeet_external_runtime_reports_dependency(self):
         temp_dir = tempfile.mkdtemp(prefix="parakeet_python_")

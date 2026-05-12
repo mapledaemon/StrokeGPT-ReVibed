@@ -24,6 +24,7 @@ const VOICE_INPUT_PREPROCESS_HIGHPASS_HZ = 100;
 const CUSTOM_VOICE_INPUT_MODEL = '__custom__';
 const NVIDIA_PARAKEET_PROVIDER = 'local_nvidia_parakeet';
 const DEFAULT_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
+const LARGE_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-1.1b';
 const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
     {id: 'tiny.en', label: 'Fast - tiny.en'},
     {id: 'base.en', label: 'Balanced - base.en'},
@@ -32,6 +33,7 @@ const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
 ];
 const FALLBACK_NVIDIA_PARAKEET_MODEL_OPTIONS = [
     {id: DEFAULT_NVIDIA_PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 0.6B v3'},
+    {id: LARGE_NVIDIA_PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 1.1B'},
 ];
 
 let submitVoiceTranscript = async () => {};

@@ -27,6 +27,8 @@ from .settings import (
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+    VOICE_INPUT_NVIDIA_PARAKEET_LARGE_MODEL,
+    VOICE_INPUT_NVIDIA_PARAKEET_MODELS,
     VOICE_INPUT_SUBMIT_PREVIEW,
     _default_parakeet_python_path,
 )
@@ -38,6 +40,7 @@ _MODEL_CACHE_MARKER_FILES = {
     "model.bin",
     "model.safetensors",
     "parakeet-tdt-0.6b-v3.nemo",
+    "parakeet-tdt-1.1b.nemo",
     "tokenizer.json",
     "vocabulary.json",
     "vocabulary.txt",
@@ -485,6 +488,12 @@ class VoiceInputService:
             "description": "Optional NeMo ASR model for NVIDIA GPU-focused recognition.",
             "tier": "nvidia",
         },
+        {
+            "id": VOICE_INPUT_NVIDIA_PARAKEET_LARGE_MODEL,
+            "label": "NVIDIA Parakeet TDT 1.1B",
+            "description": "Larger NeMo ASR model with higher accuracy target and higher VRAM/load cost.",
+            "tier": "nvidia-large",
+        },
     ]
 
     def __init__(self, model_cache_dir=None):
@@ -554,7 +563,7 @@ class VoiceInputService:
         model = str(model or DEFAULT_VOICE_INPUT_MODEL).strip() or DEFAULT_VOICE_INPUT_MODEL
         if provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET and model in VOICE_INPUT_FASTER_WHISPER_MODEL_IDS:
             model = DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL
-        elif provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER and model == DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL:
+        elif provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER and model in VOICE_INPUT_NVIDIA_PARAKEET_MODELS:
             model = DEFAULT_VOICE_INPUT_MODEL
         language = str(language or "auto").strip() or "auto"
         mode = str(mode or VOICE_INPUT_MODE_PUSH_TO_TALK).strip() or VOICE_INPUT_MODE_PUSH_TO_TALK

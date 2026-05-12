@@ -170,6 +170,32 @@ class WebVoiceInputRouteTests(WebTestCase):
             self.assertEqual(voice_input.model_name, "nvidia/parakeet-tdt-0.6b-v3")
             self.assertEqual(data["provider"], "local_nvidia_parakeet")
             self.assertIn("nvidia/parakeet-tdt-0.6b-v3", [option["id"] for option in data["model_options"]])
+            self.assertIn("nvidia/parakeet-tdt-1.1b", [option["id"] for option in data["model_options"]])
+        finally:
+            settings.apply_dict(original)
+            settings.save()
+            apply_settings_to_services()
+
+    def test_set_voice_input_saves_large_nvidia_parakeet_model(self):
+        from strokegpt.web import apply_settings_to_services, settings, voice_input
+
+        original = settings.to_dict()
+        try:
+            response = self.client.post("/set_voice_input", json={
+                "provider": "local_nvidia_parakeet",
+                "enabled": True,
+                "model": "nvidia/parakeet-tdt-1.1b",
+                "language": "auto",
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(settings.voice_input_provider, "local_nvidia_parakeet")
+            self.assertEqual(settings.voice_input_model, "nvidia/parakeet-tdt-1.1b")
+            self.assertEqual(voice_input.provider, "local_nvidia_parakeet")
+            self.assertEqual(voice_input.model_name, "nvidia/parakeet-tdt-1.1b")
+            self.assertEqual(data["model"], "nvidia/parakeet-tdt-1.1b")
         finally:
             settings.apply_dict(original)
             settings.save()

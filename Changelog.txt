@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #167 - Add Larger Parakeet Voice Input Preset
+----------------------------------------------------------------
+
+Branch: codex/parakeet-large-model-option
+
+- Added `nvidia/parakeet-tdt-1.1b` as an explicit NVIDIA Parakeet voice-input
+  model preset while keeping `nvidia/parakeet-tdt-0.6b-v3` as the default.
+- Kept provider switching guarded so Parakeet preset IDs fall back to
+  faster-whisper's default model when the provider is changed away from
+  NVIDIA Parakeet.
+- Documented the larger preset and locked the UI/status payload with
+  regression coverage.
+
+
 2026-05-12 - PR #166 - Fix Chat Shell Scaling
 ------------------------------------------------
 

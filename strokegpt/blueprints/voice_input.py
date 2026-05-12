@@ -8,6 +8,7 @@ from ..asr import VoiceInputError, VoiceInputUnavailable
 from ..settings import (
     DEFAULT_VOICE_INPUT_MODEL,
     DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL,
+    VOICE_INPUT_NVIDIA_PARAKEET_MODELS,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
 )
@@ -88,7 +89,7 @@ def set_voice_input_route():
     model = str(data.get("model", web.settings.voice_input_model) or "").strip() or web.settings.voice_input_model
     if provider == VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET and model in {"tiny.en", "base.en", "small.en", "distil-large-v3"}:
         model = DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL
-    elif provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER and model == DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL:
+    elif provider == VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER and model in VOICE_INPUT_NVIDIA_PARAKEET_MODELS:
         model = DEFAULT_VOICE_INPUT_MODEL
     language = str(data.get("language", web.settings.voice_input_language) or "auto").strip() or "auto"
     hands_free_sensitivity = web.settings._normalize_voice_input_hands_free_sensitivity(

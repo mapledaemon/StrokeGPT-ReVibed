@@ -7,6 +7,7 @@ import { initVoiceInputControls } from '../../static/js/voice-input.js';
 
 
 const PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
+const LARGE_PARAKEET_MODEL = 'nvidia/parakeet-tdt-1.1b';
 
 function jsonResponse(httpStatus, body) {
     const factory = () => ({
@@ -46,7 +47,10 @@ function voiceStatus(overrides = {}) {
         last_error: '',
         last_transcript: '',
         last_timings: {},
-        model_options: [{id: PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 0.6B v3'}],
+        model_options: [
+            {id: PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 0.6B v3'},
+            {id: LARGE_PARAKEET_MODEL, label: 'NVIDIA Parakeet TDT 1.1B'},
+        ],
         ...overrides,
     };
 }
