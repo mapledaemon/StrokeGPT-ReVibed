@@ -768,17 +768,38 @@ class VoiceInputServiceTests(unittest.TestCase):
             self.assertEqual(result["transcript"], "resume")
 
     def test_parakeet_mono_pcm_helper_collapses_stereo_channel_last(self):
-        import numpy as np
+        import struct
         from strokegpt import asr
+
+        test_case = self
+
+        class FakeMonoArray:
+            def __init__(self, values):
+                self.values = values
+
+            def astype(self, dtype, copy=False):
+                test_case.assertEqual(dtype, "int16")
+                test_case.assertFalse(copy)
+                return self
+
+            def tobytes(self):
+                return struct.pack("<" + "h" * len(self.values), *self.values)
 
         class FakeFrame:
             def to_ndarray(self):
-                return np.array([[100, 300], [200, 400]], dtype=np.int16)
+                class FakeStereoArray:
+                    ndim = 2
+                    shape = (2, 2)
+
+                    def mean(self, axis):
+                        test_case.assertEqual(axis, -1)
+                        return FakeMonoArray([200, 300])
+
+                return FakeStereoArray()
 
         pcm = asr._audio_frame_to_mono_pcm(FakeFrame())
-        mono = np.frombuffer(pcm, dtype=np.int16)
 
-        self.assertEqual(mono.tolist(), [200, 300])
+        self.assertEqual(struct.unpack("<hh", pcm), (200, 300))
 
     def test_status_distinguishes_cached_model_files_from_uncached_download(self):
         cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"
