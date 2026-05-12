@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #164 - Normalize Browser Audio For Parakeet
+--------------------------------------------------------------
+
+Branch: codex/parakeet-webm-audio-normalization
+
+- Converted browser voice recordings to temporary mono WAV files before
+  sending them to NVIDIA Parakeet so NeMo/Lhotse does not take the removed
+  `torchaudio.io` WEBM/FFmpeg path in newer torchaudio CUDA wheels.
+- Normalized every Parakeet transcription clip, including uploaded WAV/FLAC
+  files, and explicitly collapsed decoded stereo frames to mono so NeMo does
+  not reject `(batch, time, channels)` audio tensors.
+- Added retrying cleanup for uploaded voice clips on Windows so transient
+  decoder locks do not surface as noisy file-removal failures.
+- Wrapped NeMo transcription in Windows-safe temporary-directory cleanup and
+  single-clip mono-channel dataloader options so locked `manifest.json`
+  cleanup or stereo audio does not turn a completed Parakeet transcription
+  into a failed request.
+- Added regression coverage for Parakeet WEBM/WAV normalization, stereo frame
+  collapse, and the NeMo transcribe options/cleanup guard.
+
+
 2026-05-12 - PR #163 - Improve Voice Input Model Load Feedback
 -----------------------------------------------------------------
 

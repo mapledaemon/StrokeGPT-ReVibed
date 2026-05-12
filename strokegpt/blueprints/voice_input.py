@@ -26,6 +26,27 @@ def _voice_input_payload(web, status="success"):
     return web.voice_input_status_payload(status=status)
 
 
+def _unlink_uploaded_clip(path):
+    for attempt in range(5):
+        try:
+            Path(path).unlink()
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if attempt < 4:
+                time.sleep(0.05)
+                continue
+            print(f"[WARN] Voice input upload still locked; leaving file for cleanup: {path}")
+            return
+        except OSError as exc:
+            if attempt < 4:
+                time.sleep(0.05)
+                continue
+            print(f"[WARN] Could not remove voice input upload {path}: {exc}")
+            return
+
+
 def _browse_directory(title):
     import tkinter as tk
     from tkinter import filedialog
@@ -290,10 +311,7 @@ def transcribe_voice_route():
             "voice_input_status": _voice_input_payload(web),
         }), 500
     finally:
-        try:
-            target.unlink()
-        except OSError:
-            pass
+        _unlink_uploaded_clip(target)
 
     transcript = result.get("transcript", "").strip()
     if not transcript:

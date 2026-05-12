@@ -6,9 +6,11 @@ app environment to the Parakeet dependency stack.
 """
 
 import argparse
+import contextlib
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -116,6 +118,33 @@ def _transcript_from_nemo_output(output):
     return str(output or "").strip()
 
 
+@contextlib.contextmanager
+def _ignore_temporary_directory_cleanup_errors():
+    original_temporary_directory = tempfile.TemporaryDirectory
+
+    def temporary_directory(*args, **kwargs):
+        kwargs.setdefault("ignore_cleanup_errors", True)
+        return original_temporary_directory(*args, **kwargs)
+
+    tempfile.TemporaryDirectory = temporary_directory
+    try:
+        yield
+    finally:
+        tempfile.TemporaryDirectory = original_temporary_directory
+
+
+def _transcribe_with_nemo(model, audio):
+    with _ignore_temporary_directory_cleanup_errors():
+        return model.transcribe(
+            [str(Path(audio))],
+            batch_size=1,
+            channel_selector="average",
+            num_workers=0,
+            use_lhotse=False,
+            verbose=False,
+        )
+
+
 def _import_nemo():
     import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
 
@@ -172,7 +201,7 @@ def _transcribe_loaded_model(model, *, audio, language, model_name, device):
     if not audio:
         raise ValueError("audio is required for transcribe")
     started = time.perf_counter()
-    outputs = model.transcribe([str(Path(audio))])
+    outputs = _transcribe_with_nemo(model, audio)
     output = outputs[0] if outputs else None
     transcript = _transcript_from_nemo_output(output)
     return {
