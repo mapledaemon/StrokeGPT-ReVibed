@@ -5,6 +5,7 @@ import re
 import subprocess
 import threading
 import time
+import wave
 from pathlib import Path
 
 from .settings import (
@@ -55,6 +56,7 @@ VOICE_INPUT_INITIAL_PROMPT = (
 VOICE_INPUT_FASTER_WHISPER_MODEL_IDS = {"tiny.en", "base.en", "small.en", "distil-large-v3"}
 PARAKEET_WORKER_RESULT_PREFIX = "STROKEGPT_PARAKEET_RESULT "
 PARAKEET_RUNTIME_STATUS_TTL_SECONDS = 10.0
+PARAKEET_NORMALIZED_SAMPLE_RATE = 16000
 
 
 class _ExternalParakeetRuntimeModel:
@@ -248,6 +250,136 @@ def _transcript_from_nemo_output(output):
     if isinstance(output, dict):
         return str(output.get("text") or output.get("transcript") or "").strip()
     return str(output or "").strip()
+
+
+def _iter_resampled_audio_frames(resampler, frame):
+    frames = resampler.resample(frame)
+    if frames is None:
+        return ()
+    if isinstance(frames, (list, tuple)):
+        return frames
+    return (frames,)
+
+
+def _flush_resampled_audio_frames(resampler):
+    try:
+        return _iter_resampled_audio_frames(resampler, None)
+    except (TypeError, ValueError):
+        return ()
+
+
+def _audio_frame_to_mono_pcm(frame):
+    array = frame.to_ndarray()
+    if getattr(array, "ndim", 1) == 1:
+        mono = array
+    elif array.shape[0] == 1:
+        mono = array[0]
+    elif array.shape[-1] == 1:
+        mono = array.reshape(-1)
+    elif array.shape[-1] <= 8:
+        mono = array.mean(axis=-1)
+    else:
+        mono = array.mean(axis=0)
+    return mono.astype("int16", copy=False).tobytes()
+
+
+def _convert_audio_to_mono_wav(source_path, target_path, *, sample_rate=PARAKEET_NORMALIZED_SAMPLE_RATE):
+    try:
+        import av  # type: ignore[import-not-found]
+    except Exception as exc:
+        raise VoiceInputUnavailable(
+            "Browser voice recordings need PyAV in the main app runtime before "
+            "NVIDIA Parakeet can transcribe WEBM/OGG/M4A audio. Reinstall the "
+            "main requirements, or switch Voice Input provider to Local faster-whisper."
+        ) from exc
+
+    source_path = Path(source_path)
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    samples_written = 0
+    container = None
+    try:
+        container = av.open(str(source_path))
+        audio_stream = next((stream for stream in container.streams if stream.type == "audio"), None)
+        if audio_stream is None:
+            raise VoiceInputError("Recorded audio did not contain an audio stream.")
+        resampler = av.audio.resampler.AudioResampler(
+            format="s16",
+            layout="mono",
+            rate=int(sample_rate),
+        )
+        with wave.open(str(target_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(int(sample_rate))
+            for frame in container.decode(audio_stream):
+                for resampled in _iter_resampled_audio_frames(resampler, frame):
+                    pcm = _audio_frame_to_mono_pcm(resampled)
+                    if pcm:
+                        wav_file.writeframes(pcm)
+                        samples_written += len(pcm) // 2
+            for resampled in _flush_resampled_audio_frames(resampler):
+                pcm = _audio_frame_to_mono_pcm(resampled)
+                if pcm:
+                    wav_file.writeframes(pcm)
+                    samples_written += len(pcm) // 2
+    except VoiceInputError:
+        try:
+            target_path.unlink()
+        except OSError:
+            pass
+        raise
+    except VoiceInputUnavailable:
+        try:
+            target_path.unlink()
+        except OSError:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            target_path.unlink()
+        except OSError:
+            pass
+        raise VoiceInputError(f"Voice audio conversion failed: {exc}") from exc
+    finally:
+        if container is not None:
+            try:
+                container.close()
+            except Exception:
+                pass
+
+    if samples_written <= 0:
+        try:
+            target_path.unlink()
+        except OSError:
+            pass
+        raise VoiceInputError("Recorded audio did not contain decodable audio.")
+    return target_path
+
+
+def _parakeet_transcription_audio_path(audio_path):
+    audio_path = Path(audio_path)
+    if audio_path.name.endswith(".parakeet.wav"):
+        return audio_path, None
+    normalized_path = audio_path.with_name(f"{audio_path.stem}.parakeet.wav")
+    _convert_audio_to_mono_wav(audio_path, normalized_path)
+    return normalized_path, normalized_path
+
+
+def _unlink_transient_audio(path):
+    if not path:
+        return
+    for attempt in range(5):
+        try:
+            Path(path).unlink()
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if attempt < 4:
+                time.sleep(0.05)
+                continue
+            raise
 
 
 def _needs_confidence_rerun(confidence):
@@ -1088,11 +1220,14 @@ class VoiceInputService:
 
     def _transcribe_nvidia_parakeet_file(self, audio_path):
         timings = {}
+        parakeet_audio_path = None
+        transient_audio_path = None
         try:
+            parakeet_audio_path, transient_audio_path = _parakeet_transcription_audio_path(audio_path)
             if isinstance(self._model, _ExternalParakeetRuntimeModel):
                 payload = self._model.request({
                     "action": "transcribe",
-                    "audio": str(audio_path),
+                    "audio": str(parakeet_audio_path),
                     "language": self.language,
                 })
                 transcript = str(payload.get("transcript") or "").strip()
@@ -1118,7 +1253,7 @@ class VoiceInputService:
                     "model": self.model_name,
                 }
             started = time.perf_counter()
-            outputs = self._model.transcribe([str(audio_path)])
+            outputs = self._model.transcribe([str(parakeet_audio_path)])
             output = outputs[0] if outputs else None
             transcript = _transcript_from_nemo_output(output)
             timings["transcribe_ms"] = int((time.perf_counter() - started) * 1000)
@@ -1146,3 +1281,9 @@ class VoiceInputService:
         except Exception as exc:
             self.last_error = str(exc)
             raise VoiceInputError(f"Voice transcription failed: {exc}") from exc
+        finally:
+            if transient_audio_path is not None:
+                try:
+                    _unlink_transient_audio(transient_audio_path)
+                except OSError:
+                    pass

@@ -494,6 +494,10 @@ class VoiceInputServiceTests(unittest.TestCase):
                     "_start_parakeet_worker",
                     return_value=(runtime, {"ok": True, "device": "cuda", "model_load_ms": 7}),
                 ) as start_worker,
+                mock.patch(
+                    "strokegpt.asr._convert_audio_to_mono_wav",
+                    side_effect=lambda _src, dst: Path(dst).write_bytes(b"fake wav") or Path(dst),
+                ),
             ):
                 ok, _ = service.preload_model()
                 result = service.transcribe_file(Path("speech.wav"))
@@ -505,8 +509,8 @@ class VoiceInputServiceTests(unittest.TestCase):
             self.assertEqual(result["transcript"], "stop now 1")
             self.assertEqual(second["transcript"], "stop now 2")
             self.assertEqual(runtime.requests, [
-                {"action": "transcribe", "audio": "speech.wav", "language": "auto"},
-                {"action": "transcribe", "audio": "speech-again.wav", "language": "auto"},
+                {"action": "transcribe", "audio": "speech.parakeet.wav", "language": "auto"},
+                {"action": "transcribe", "audio": "speech-again.parakeet.wav", "language": "auto"},
             ])
             self.assertEqual(result["recognition"]["runtime"], "external")
             self.assertEqual(result["timings"]["transcribe_ms"], 42)
@@ -656,14 +660,125 @@ class VoiceInputServiceTests(unittest.TestCase):
         service._model = model
         service._model_key = ("local_nvidia_parakeet", "nvidia/parakeet-tdt-0.6b-v3")
 
-        with mock.patch.object(service, "dependency_available", return_value=True):
+        with (
+            mock.patch.object(service, "dependency_available", return_value=True),
+            mock.patch(
+                "strokegpt.asr._convert_audio_to_mono_wav",
+                side_effect=lambda _src, dst: Path(dst).write_bytes(b"fake wav") or Path(dst),
+            ),
+        ):
             result = service.transcribe_file(Path("speech.wav"))
 
-        self.assertEqual(model.audio_paths, ["speech.wav"])
+        self.assertEqual(model.audio_paths, ["speech.parakeet.wav"])
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["transcript"], "stop now")
         self.assertEqual(result["provider"], "local_nvidia_parakeet")
         self.assertEqual(result["model"], "nvidia/parakeet-tdt-0.6b-v3")
+
+    def test_nvidia_parakeet_external_runtime_normalizes_browser_audio_to_wav(self):
+        requests = []
+
+        class FakeRuntime(_ExternalParakeetRuntimeModel):
+            def __init__(self):
+                pass
+
+            def request(self, payload):
+                requests.append(dict(payload))
+                return {
+                    "status": "success",
+                    "transcript": "stop now",
+                    "language": "en",
+                    "timings": {"transcribe_ms": 12},
+                }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "speech.webm"
+            source.write_bytes(b"fake webm")
+
+            def fake_convert(src, dst):
+                self.assertEqual(src, source)
+                self.assertEqual(dst, Path(temp_dir) / "speech.parakeet.wav")
+                dst.write_bytes(b"fake wav")
+                return dst
+
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+            service._model = FakeRuntime()
+
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr._convert_audio_to_mono_wav", side_effect=fake_convert) as convert,
+            ):
+                result = service.transcribe_file(source)
+
+            convert.assert_called_once()
+            self.assertEqual(requests[0]["audio"], str(Path(temp_dir) / "speech.parakeet.wav"))
+            self.assertFalse((Path(temp_dir) / "speech.parakeet.wav").exists())
+            self.assertTrue(source.exists())
+            self.assertEqual(result["transcript"], "stop now")
+
+    def test_nvidia_parakeet_external_runtime_normalizes_wav_to_mono(self):
+        requests = []
+
+        class FakeRuntime(_ExternalParakeetRuntimeModel):
+            def __init__(self):
+                pass
+
+            def request(self, payload):
+                requests.append(dict(payload))
+                return {
+                    "status": "success",
+                    "transcript": "resume",
+                    "language": "en",
+                    "timings": {"transcribe_ms": 9},
+                }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "speech.wav"
+            source.write_bytes(b"fake wav")
+            service = VoiceInputService()
+            service.configure(
+                provider="local_nvidia_parakeet",
+                enabled=True,
+                model="nvidia/parakeet-tdt-0.6b-v3",
+                language="auto",
+            )
+            service._model = FakeRuntime()
+
+            def fake_convert(src, dst):
+                self.assertEqual(src, source)
+                self.assertEqual(dst, Path(temp_dir) / "speech.parakeet.wav")
+                dst.write_bytes(b"fake mono wav")
+                return dst
+
+            with (
+                mock.patch.object(service, "dependency_available", return_value=True),
+                mock.patch("strokegpt.asr._convert_audio_to_mono_wav", side_effect=fake_convert) as convert,
+            ):
+                result = service.transcribe_file(source)
+
+            convert.assert_called_once()
+            self.assertEqual(requests[0]["audio"], str(Path(temp_dir) / "speech.parakeet.wav"))
+            self.assertFalse((Path(temp_dir) / "speech.parakeet.wav").exists())
+            self.assertEqual(result["transcript"], "resume")
+
+    def test_parakeet_mono_pcm_helper_collapses_stereo_channel_last(self):
+        import numpy as np
+        from strokegpt import asr
+
+        class FakeFrame:
+            def to_ndarray(self):
+                return np.array([[100, 300], [200, 400]], dtype=np.int16)
+
+        pcm = asr._audio_frame_to_mono_pcm(FakeFrame())
+        mono = np.frombuffer(pcm, dtype=np.int16)
+
+        self.assertEqual(mono.tolist(), [200, 300])
 
     def test_status_distinguishes_cached_model_files_from_uncached_download(self):
         cache_parent = PROJECT_ROOT / "user_data" / "test_asr_cache"
@@ -837,6 +952,54 @@ class CountCudaDevicesTests(unittest.TestCase):
 
 
 class ParakeetWorkerRuntimeTests(unittest.TestCase):
+    def test_transcribe_loaded_model_uses_windows_safe_nemo_options(self):
+        from strokegpt import parakeet_worker
+
+        calls = []
+
+        class FakeModel:
+            def transcribe(self, audio_paths, **kwargs):
+                calls.append({"audio_paths": audio_paths, "kwargs": kwargs})
+                return [types.SimpleNamespace(text=" stop now ")]
+
+        payload = parakeet_worker._transcribe_loaded_model(
+            FakeModel(),
+            audio=Path("speech.wav"),
+            language="auto",
+            model_name="nvidia/parakeet-tdt-0.6b-v3",
+            device="cuda",
+        )
+
+        self.assertEqual(payload["transcript"], "stop now")
+        self.assertEqual(calls[0]["audio_paths"], ["speech.wav"])
+        self.assertEqual(calls[0]["kwargs"]["batch_size"], 1)
+        self.assertEqual(calls[0]["kwargs"]["channel_selector"], "average")
+        self.assertEqual(calls[0]["kwargs"]["num_workers"], 0)
+        self.assertFalse(calls[0]["kwargs"]["use_lhotse"])
+        self.assertFalse(calls[0]["kwargs"]["verbose"])
+
+    def test_nemo_temp_cleanup_guard_sets_ignore_cleanup_errors(self):
+        from strokegpt import parakeet_worker
+
+        calls = []
+
+        class FakeTemporaryDirectory:
+            def __init__(self, *args, **kwargs):
+                calls.append(kwargs)
+
+            def __enter__(self):
+                return "tempdir"
+
+            def __exit__(self, *_args):
+                return False
+
+        with mock.patch.object(parakeet_worker.tempfile, "TemporaryDirectory", FakeTemporaryDirectory):
+            with parakeet_worker._ignore_temporary_directory_cleanup_errors():
+                parakeet_worker.tempfile.TemporaryDirectory()
+
+        self.assertTrue(calls)
+        self.assertTrue(calls[0]["ignore_cleanup_errors"])
+
     def test_torch_status_reports_unusable_cuda_kernel(self):
         from strokegpt import parakeet_worker
 
