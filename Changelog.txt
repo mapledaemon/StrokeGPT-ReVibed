@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #162 - Fix Chat Composer Scaling
+---------------------------------------------------
+
+Branch: codex/chat-layout-firefox-fix
+
+- Reworked the intermediate-width chat composer layout so the message input
+  keeps the full row while the voice control and status panel share a stable
+  second row when the sidebar leaves the main chat area narrow.
+- Added explicit zero-minimum sizing guards around the chat feed, bottom input
+  area, motion strip, composer, and status panel to avoid Firefox grid/flex
+  overflow at desktop display scaling.
+
+
 2026-05-12 - PR #161 - Repair Parakeet Runtime Detection
 -----------------------------------------------------------
 
