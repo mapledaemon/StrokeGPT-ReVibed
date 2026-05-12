@@ -7,7 +7,7 @@ import { describe, it, before, beforeEach, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { initAudioControls } from '../../static/js/audio.js';
+import { initAudioControls, updateLocalTtsStatus } from '../../static/js/audio.js';
 import { initMotionControls } from '../../static/js/motion-control.js';
 import {
     resetMotionPatternFeedback,
@@ -74,6 +74,7 @@ describe('motion/audio save feedback', () => {
         resetStubElement('motion-backend-status');
         resetStubElement('motion-pattern-status');
         resetStubElement('local-tts-status');
+        resetStubElement('download-local-tts-model-button');
         resetStubElement('llm-edge-permissions-status');
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
@@ -369,6 +370,24 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('local-tts-status');
         assert.strictEqual(status.textContent, 'Model preload failed.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('updateLocalTtsStatus shows live preload percentage while loading', () => {
+        updateLocalTtsStatus({
+            status: 'success',
+            available: true,
+            message: 'Local voice model download/load is running.',
+            preload_status: 'loading',
+            preload_progress_percent: 42,
+            preload_elapsed_seconds: 8,
+            generation_status: 'idle',
+        });
+
+        const status = getStubElement('local-tts-status');
+        const button = getStubElement('download-local-tts-model-button');
+        assert.match(status.textContent, /Progress: 42%\./);
+        assert.match(status.textContent, /Elapsed: 8s\./);
+        assert.strictEqual(button.textContent, 'Downloading / Loading 42%...');
     });
 
     it('setupElevenLabsKey surfaces the backend message on global status', async () => {

@@ -231,6 +231,15 @@ def _mean(values):
     return sum(values) / len(values)
 
 
+def _estimated_model_preload_percent(elapsed_seconds, *, cached):
+    elapsed = max(0.0, float(elapsed_seconds or 0.0))
+    base = 35.0 if cached else 1.0
+    ceiling = 99.0 if cached else 95.0
+    curve_seconds = 20.0 if cached else 60.0
+    percent = base + (elapsed / (elapsed + curve_seconds)) * (ceiling - base)
+    return int(max(base, min(ceiling, round(percent))))
+
+
 def _segment_confidence(segments):
     avg_logprob = _mean(_safe_float(getattr(segment, "avg_logprob", None)) for segment in segments)
     no_speech_values = [
@@ -827,6 +836,16 @@ class VoiceInputService:
             return 0.0
         return max(0.0, time.monotonic() - self._preload_started_at)
 
+    def _preload_progress_percent(self, *, model_cached):
+        if self._model is not None or self._preload_status == "loaded":
+            return 100
+        if self._preload_status != "loading":
+            return None
+        return _estimated_model_preload_percent(
+            self._preload_elapsed_seconds(),
+            cached=bool(model_cached),
+        )
+
     def _scan_model_cache(self):
         cache_dir = self.effective_model_cache_dir()
         if not cache_dir or not os.path.isdir(cache_dir):
@@ -949,6 +968,7 @@ class VoiceInputService:
             "preload_status": preload_status,
             "preload_message": self._preload_message,
             "preload_elapsed_seconds": round(self._preload_elapsed_seconds(), 1),
+            "preload_progress_percent": self._preload_progress_percent(model_cached=model_cached),
             "message": message,
             "last_error": self.last_error,
             "last_transcript": self.last_transcript,

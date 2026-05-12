@@ -1,4 +1,4 @@
-import { D, apiCall, el, fetchWithConnectionState, formatElapsed, reportSaveFailure, setSliderValue, state } from './context.js';
+import { D, apiCall, el, fetchWithConnectionState, formatElapsed, formatPercent, reportSaveFailure, setSliderValue, state } from './context.js';
 
 let lastKnownAudioEnabled = false;
 
@@ -76,8 +76,10 @@ export function updateLocalTtsStatus(status) {
     const loading = status.preload_status === 'loading';
     const generating = status.generation_status === 'generating';
     const preloadElapsed = formatElapsed(status.preload_elapsed_seconds);
+    const preloadProgress = formatPercent(status.preload_progress_percent);
     const generationElapsed = formatElapsed(status.generation_elapsed_seconds);
     let message = status.message || 'Local voice status unavailable.';
+    if (loading && preloadProgress) message += ` Progress: ${preloadProgress}.`;
     if (loading && preloadElapsed) message += ` Elapsed: ${preloadElapsed}.`;
     if (generating && generationElapsed) message += ` Generation elapsed: ${generationElapsed}.`;
     el.localTtsStatus.textContent = message;
@@ -91,7 +93,7 @@ export function updateLocalTtsStatus(status) {
     if (el.downloadLocalTtsModelBtn) {
         el.downloadLocalTtsModelBtn.disabled = loading;
         el.downloadLocalTtsModelBtn.textContent = loading
-            ? `Downloading / Loading${preloadElapsed ? ` ${preloadElapsed}` : ''}...`
+            ? `Downloading / Loading${preloadProgress ? ` ${preloadProgress}` : ''}...`
             : (status.model_loaded ? 'Local Voice Model Loaded' : 'Download / Load Local Voice Model');
     }
 }
@@ -164,10 +166,10 @@ async function downloadLocalTtsModel() {
     const ok = window.confirm('Download/load the local Chatterbox voice model now? If it is not cached, this may download several GB.');
     if (!ok) return;
     state.localTtsStatusPolling = true;
-    el.localTtsStatus.textContent = 'Starting local voice model download/load...';
+    el.localTtsStatus.textContent = 'Starting local voice model download/load... Progress: 0%.';
     el.localTtsStatus.style.color = 'var(--comment)';
     el.downloadLocalTtsModelBtn.disabled = true;
-    el.downloadLocalTtsModelBtn.textContent = 'Starting...';
+    el.downloadLocalTtsModelBtn.textContent = 'Starting 0%...';
     const data = await apiCall('/preload_local_tts_model', {method: 'POST'});
     if (data && data.status === 'error') {
         state.localTtsStatusPolling = false;

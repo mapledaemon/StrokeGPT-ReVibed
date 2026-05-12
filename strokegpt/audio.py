@@ -262,6 +262,7 @@ class AudioService:
             "preload_phase": self._local_preload_phase,
             "preload_error": self._local_preload_error,
             "preload_elapsed_seconds": self._elapsed_seconds(self._local_preload_started_at),
+            "preload_progress_percent": self._local_preload_progress_percent(),
             "generation_status": self._local_generation_status,
             "generation_error": self._local_generation_error,
             "generation_elapsed_seconds": self._elapsed_seconds(self._local_generation_started_at),
@@ -650,6 +651,18 @@ class AudioService:
         if not started_at:
             return None
         return max(0, round(time.perf_counter() - started_at, 1))
+
+    def _local_preload_progress_percent(self):
+        if self.local_model_loaded() or self._local_preload_status == "ready":
+            return 100
+        if self._local_preload_status != "loading":
+            return None
+        elapsed = float(self._elapsed_seconds(self._local_preload_started_at) or 0.0)
+        if self._local_preload_phase == "warming_up":
+            percent = 90 + (elapsed / (elapsed + 10.0)) * 9.0
+            return int(max(90, min(99, round(percent))))
+        percent = 1 + (elapsed / (elapsed + 60.0)) * 94.0
+        return int(max(1, min(95, round(percent))))
 
     def _select_tts_device(self, torch_module, requested):
         if requested == "cpu":

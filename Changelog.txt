@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #169 - Show Model Download Progress
+------------------------------------------------------
+
+Branch: codex/model-download-progress-ui
+
+- Show live percentage text while Ollama model pulls, voice-input model
+  download/load, and local TTS model download/load are running.
+- Added progress fields to voice-input and local TTS status payloads so the UI
+  is not limited to elapsed-time-only download feedback.
+- Covered the download progress text and status payload fields with backend and
+  frontend regression tests.
+
+
 2026-05-12 - PR #168 - Fix Ollama GPU Warning Heuristic
 ----------------------------------------------------------
 
