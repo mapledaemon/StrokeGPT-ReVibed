@@ -23,9 +23,9 @@ Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Sw
 
 ## Install
 
-### 1. Install Python and Ollama
+### 1. Install prerequisites
 
-- **Windows:** [Python](https://www.python.org/downloads/windows/) (enable *Add python.exe to PATH*) and [Ollama](https://docs.ollama.com/windows). Leave Ollama running in the background.
+- **Windows:** install [Python](https://www.python.org/downloads/windows/) and enable *Add python.exe to PATH*. The Windows setup script can install Ollama through `winget` when available.
 - **macOS:** [Python](https://www.python.org/downloads/macos/) and [Ollama](https://docs.ollama.com/macos). Open Ollama once after install so the `ollama` command is on PATH.
 - **Linux (Debian/Ubuntu):**
 
@@ -48,6 +48,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\install_windows.ps1
 ```
 
+The Windows installer is the normal one-script path. It creates or updates
+`.venv`, installs app dependencies, asks whether to install Ollama when it is
+missing, and asks whether to install optional NVIDIA CUDA / Parakeet voice
+components. It does not download Ollama or voice model weights; those downloads
+stay inside the app so progress is visible.
+
 **macOS / Linux:**
 
 ```bash
@@ -58,6 +64,22 @@ python -m pip install -r requirements.txt
 ```
 
 This creates `.venv` and installs `requirements.txt`. Model downloads start from inside the app so the UI can show progress.
+
+### Update an existing checkout
+
+Close the app, then run the updater from the `StrokeGPT-ReVibed` folder:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\update_windows.ps1
+```
+
+The updater fast-forwards the Git checkout, updates `.venv` dependencies, and
+keeps model downloads inside the app so progress stays visible. It refuses to
+overwrite tracked local edits; commit or stash code changes first. Untracked
+local settings such as `my_settings.json` are left alone. Use
+`.\scripts\update_windows.ps1 -UpdateParakeet` when you also want to refresh the
+isolated NVIDIA Parakeet runtime.
 
 ### Ollama GPU acceleration
 
@@ -119,17 +141,20 @@ Thumbs up raises a fixed pattern's weight, thumbs down lowers it, three thumbs d
 
 The normal app setup installs the local voice package stack from `requirements.txt`. If that resolves to CPU-only Torch, Local Chatterbox can work but generation may be slow.
 
-For low-latency local voice on an NVIDIA GPU, install a CUDA-enabled PyTorch wheel after the normal setup. See [docs/local_voice_setup.md](docs/local_voice_setup.md) for platform-specific commands and verification steps.
+On Windows, `.\scripts\install_windows.ps1` asks whether to install
+CUDA-enabled PyTorch for faster local Chatterbox voice when an NVIDIA GPU is
+detected. For manual or non-Windows setup, see [docs/local_voice_setup.md](docs/local_voice_setup.md).
 
 In the app, click **Profile menu > Settings > Voice > Download / Load Local Voice Model** before testing. First use can download several GB. Use the **Chatterbox Turbo** preset for the lowest latency. The Voice tab reports download/load phase, generation status, missing sample files, and the last error.
 
 Voice input supports two local stacks. **NVIDIA Parakeet** is the preferred low-latency path on compatible NVIDIA CUDA systems. **Local faster-whisper** remains the portable path for CPU, AMD, Apple Silicon, and non-NVIDIA systems; push-to-talk and hands-free voice input work with either provider.
 
-Install Parakeet in a separate runtime so NVIDIA NeMo dependencies do not conflict with the main app environment:
+On Windows, `.\scripts\install_windows.ps1` asks whether to install the
+isolated NVIDIA Parakeet runtime when an NVIDIA GPU is detected. To install or
+repair it manually after the normal app setup:
 
 ```powershell
 .\scripts\install_parakeet.ps1
-$env:STROKEGPT_PARAKEET_PYTHON = ".\.venv-parakeet\Scripts\python.exe"
 ```
 
 The installer uses the PyTorch CUDA 12.8 wheel index by default because RTX 50-series / Blackwell cards such as the 5070 Ti need a newer CUDA wheel than the old CUDA 12.1 stack. It also reapplies NeMo's sensitive package pins and runs `pip check` before declaring the runtime ready. Override with `.\scripts\install_parakeet.ps1 -TorchIndexUrl "https://download.pytorch.org/whl/cu130"` only if the official PyTorch selector recommends it for your driver. The app auto-detects the repo-local `.venv-parakeet` runtime; set `STROKEGPT_PARAKEET_PYTHON` only when using a custom runtime. After the installer, fresh or reset settings select **NVIDIA Parakeet (preferred on NVIDIA)** when the isolated runtime is configured and NVIDIA tooling is detected. Existing saved settings are not changed. The Voice tab offers the default `nvidia/parakeet-tdt-0.6b-v3` preset and the larger `nvidia/parakeet-tdt-1.1b` preset. Use **Profile menu > Settings > Voice > Download / Load Voice Input Model** before recording. The first load can download multi-GB model files; the app does not fetch them at startup.

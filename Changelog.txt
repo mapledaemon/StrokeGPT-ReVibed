@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-12 - PR #170 - Simplify Windows Setup Scripts
+-------------------------------------------------------
+
+Branch: codex/windows-update-script
+
+- Expanded `scripts/install_windows.ps1` into the one-script Windows setup path:
+  it creates `.venv`, installs app dependencies, prompts to install Ollama with
+  `winget` when missing, and prompts for optional CUDA PyTorch and Parakeet
+  voice runtimes.
+- Added `scripts/update_windows.ps1` so Windows users can fast-forward their
+  checkout, refresh `.venv` dependencies, optionally refresh the isolated
+  Parakeet runtime, and run validation without reinstalling from scratch.
+- Simplified README Windows install/update guidance around the scripts while
+  keeping model downloads inside the app UI so progress stays visible.
+- Added script coverage so the installer/updater keep using explicit prompts,
+  fast-forward Git updates, ignored untracked local settings, and no automatic
+  Ollama model pulls.
+
+
 2026-05-12 - PR #169 - Show Model Download Progress
 ------------------------------------------------------
 
