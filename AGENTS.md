@@ -190,14 +190,22 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Motion backend selection is persisted as `motion_backend`. `continuous` is
   the recommended app-motion default: fixed patterns and anchor programs are
   phase-sampled as live position control until the next command or stop.
+  Plain generated targets that do not resolve to a fixed pattern or anchor
+  program should stay on live stroke control so LLM/direct commands still
+  apply velocity and stroke-window changes as continuous motion, not as a
+  one-shot position move.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
 - Handy firmware selection is persisted as `handy_firmware_version`. Firmware
-  v4 plus a configured API v3 app key enables HSP timed point streaming for
-  the continuous backend. Firmware v3 / legacy mode, or v4 without an API v3
-  app key, keeps the HDSP direct-position fallback. Do not hardcode borrowed
-  third-party API keys; store local keys only in `my_settings.json` or
-  environment variables.
+  v4 plus a configured Handy connection key enables HSP timed point streaming for
+  the continuous backend, v3 HAMP commands for live stroke control, and v3
+  HDSP `xpt` duration moves for position playback. HSP playback should follow
+  the current v3 split of `hsp/add` timed points followed by `hsp/play` with
+  server time metadata; do not rely on speed-only visualizer fields as the
+  transport contract. Firmware v3 / legacy mode, or v4 without an API v3 app
+  authorized connection, keeps the legacy HDSP direct-position fallback. Do not
+  add a second user-facing Handy API key field unless the upstream API requires
+  a distinct credential again.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
   speed as timed point spacing and position deltas; HDSP fallback derives a

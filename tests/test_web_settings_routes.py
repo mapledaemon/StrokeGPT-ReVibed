@@ -81,15 +81,20 @@ class WebSettingsRouteTests(WebTestCase):
             settings.handy_key = original_key
             handy.set_api_key(original_runtime_key)
 
-    def test_set_handy_device_config_saves_firmware_and_v3_key(self):
+    def test_set_handy_device_config_saves_firmware_and_uses_connection_key(self):
         from strokegpt.web import handy, settings
 
         original = settings.to_dict()
         original_runtime = {
+            "handy_key": handy.handy_key,
             "firmware": handy.firmware_version,
             "api_v3_key": handy.api_v3_key,
         }
         try:
+            settings.handy_key = "saved-key"
+            handy.set_api_key("saved-key")
+            settings.handy_api_v3_key = "stale-app-key"
+            handy.set_handy_api_key("stale-app-key")
             with mock.patch.object(settings, "save") as save:
                 response = self.client.post("/set_handy_device_config", json={
                     "handy_firmware_version": "v4",
@@ -102,9 +107,10 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["handy_firmware_version"], "fw4")
             self.assertTrue(data["handy_api_v3_enabled"])
             self.assertEqual(settings.handy_firmware_version, "fw4")
-            self.assertEqual(settings.handy_api_v3_key, "app-key")
+            self.assertEqual(settings.handy_api_v3_key, "")
             self.assertEqual(handy.firmware_version, "fw4")
-            self.assertEqual(handy.api_v3_key, "app-key")
+            self.assertEqual(handy.api_v3_key, "")
+            self.assertTrue(handy.supports_continuous_streaming())
             save.assert_called_once()
 
             response = self.client.post("/set_handy_device_config", json={
@@ -117,6 +123,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertFalse(data["continuous_streaming_supported"])
         finally:
             settings.apply_dict(original)
+            handy.set_api_key(original_runtime["handy_key"])
             handy.set_firmware_version(original_runtime["firmware"])
             handy.set_handy_api_key(original_runtime["api_v3_key"])
 
@@ -155,9 +162,12 @@ class WebSettingsRouteTests(WebTestCase):
 
         original = settings.to_dict()
         original_send_command = handy._send_command
+        original_send_v3_command = handy._send_v3_command
         sent_commands = []
+        sent_v3_commands = []
         try:
             handy._send_command = lambda path, body=None: sent_commands.append((path, body or {})) or True
+            handy._send_v3_command = lambda path, body=None: sent_v3_commands.append((path, body or {})) or True
             settings.handy_key = "test-key"
             settings.ai_name = "Custom"
             settings.set_persona_prompt("An energetic and passionate teammate")
@@ -172,7 +182,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertEqual(data["status"], "success")
-            self.assertIn(("hamp/stop", {}), sent_commands)
+            self.assertIn(("hamp/stop", {}), sent_commands + sent_v3_commands)
             self.assertFalse(data["configured"])
             self.assertEqual(settings.handy_key, "")
             self.assertEqual(handy.handy_key, "")
@@ -187,6 +197,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertFalse(audio.is_on)
         finally:
             handy._send_command = original_send_command
+            handy._send_v3_command = original_send_v3_command
             settings.apply_dict(original)
             settings.save()
             apply_settings_to_services()

@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional
 
@@ -664,6 +664,7 @@ class MotionController:
         self._last_position_batch_ended_at = None
         self._continuous_phase_state: Optional[ContinuousPhaseState] = None
         self._move_to_depth_accepts_intent_speed: Optional[bool] = None
+        self._move_to_depth_accepts_duration_ms: Optional[bool] = None
         self._pause_event = threading.Event()
 
     def set_backend(self, backend: str) -> None:
@@ -698,7 +699,7 @@ class MotionController:
             self.stop()
             return
 
-        if smooth and self.backend in {"continuous", "position"}:
+        if smooth and self.backend == "position":
             self.apply_position_frames(self._direct_position_frames(target), source=source)
             return
 
@@ -737,7 +738,7 @@ class MotionController:
         if self.backend == "continuous":
             if self.apply_continuous_target(target, source=source):
                 return
-            self.apply_position_frames(self._direct_position_frames(target), source=source)
+            self.apply_target(target, source=source)
             return
 
         frames = self._expanded_frames(target)
@@ -828,8 +829,14 @@ class MotionController:
                 extras["handy_velocity"] = body.get("velocity")
             if "duration" in body:
                 extras["handy_duration_ms"] = body.get("duration")
+            if "t" in body:
+                extras["handy_duration_ms"] = body.get("t")
+            if "xp" in body:
+                extras["handy_xp"] = body.get("xp")
             if "stopOnTarget" in body:
                 extras["handy_stop_on_target"] = bool(body.get("stopOnTarget"))
+            if "stop_on_target" in body:
+                extras["handy_stop_on_target"] = bool(body.get("stop_on_target"))
         error = str(last_command.get("error") or "").strip()
         if error:
             extras["handy_error"] = error
@@ -1005,6 +1012,7 @@ class MotionController:
         stop_on_target: bool = True,
         velocity: int | None = None,
         intent_speed: float | None = None,
+        duration_ms: int | None = None,
         source: str = "position",
     ) -> bool:
         target = target.rounded()
@@ -1015,6 +1023,8 @@ class MotionController:
             }
             if intent_speed is not None and self._supports_move_to_depth_intent_speed():
                 kwargs["intent_speed"] = intent_speed
+            if duration_ms is not None and self._supports_move_to_depth_duration_ms():
+                kwargs["duration_ms"] = duration_ms
             result = self.handy.move_to_depth(
                 target.speed,
                 target.depth,
@@ -1042,6 +1052,58 @@ class MotionController:
             )
         self._move_to_depth_accepts_intent_speed = supported
         return supported
+
+    def _supports_move_to_depth_duration_ms(self) -> bool:
+        supported = self._move_to_depth_accepts_duration_ms
+        if supported is not None:
+            return supported
+        supported = False
+        if hasattr(self.handy, "move_to_depth"):
+            try:
+                parameters = inspect.signature(self.handy.move_to_depth).parameters
+            except (TypeError, ValueError):
+                parameters = {}
+            supported = "duration_ms" in parameters or any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+        self._move_to_depth_accepts_duration_ms = supported
+        return supported
+
+    def _effective_speed_for_timing(self, speed: float) -> float:
+        effective = None
+        if hasattr(self.handy, "effective_speed_for_relative"):
+            try:
+                effective = self.handy.effective_speed_for_relative(speed)
+            except (TypeError, ValueError):
+                effective = None
+        if effective is None:
+            effective = speed
+        try:
+            return _clamp(float(effective))
+        except (TypeError, ValueError):
+            return _clamp(speed)
+
+    def _continuous_timing_target(self, target: MotionTarget) -> MotionTarget:
+        return MotionTarget(
+            self._effective_speed_for_timing(target.speed),
+            target.depth,
+            target.stroke_range,
+            label=target.label,
+            motion_program=target.motion_program,
+        ).clamped()
+
+    def _sample_continuous_motion(
+        self,
+        plan,
+        target: MotionTarget,
+        elapsed_seconds: float,
+        sample_continuous_motion,
+    ):
+        sample = sample_continuous_motion(plan, self._continuous_timing_target(target), elapsed_seconds)
+        if sample.intent_speed != target.speed:
+            sample = replace(sample, intent_speed=target.speed)
+        return sample
 
     def apply_continuous_target(
         self,
@@ -1232,7 +1294,12 @@ class MotionController:
         plan_name: str,
         sample_continuous_motion,
     ):
-        sample = sample_continuous_motion(plan, target, phase_offset_seconds + stream_seconds)
+        sample = self._sample_continuous_motion(
+            plan,
+            target,
+            phase_offset_seconds + stream_seconds,
+            sample_continuous_motion,
+        )
         if stream_seconds < morph_seconds:
             amount = _minimum_jerk(stream_seconds / morph_seconds)
             sample = sample.with_target(
@@ -1265,7 +1332,12 @@ class MotionController:
         base_interval = self._continuous_sample_interval()
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
         start_target = self.current_target()
-        initial_sample = sample_continuous_motion(plan, target, phase_offset_seconds)
+        initial_sample = self._sample_continuous_motion(
+            plan,
+            target,
+            phase_offset_seconds,
+            sample_continuous_motion,
+        )
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
         previous_target = start_target
         stream_seconds = 0.0
@@ -1455,7 +1527,12 @@ class MotionController:
         next_tick = started_at
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
         start_target = self.current_target()
-        initial_sample = sample_continuous_motion(plan, target, phase_offset_seconds)
+        initial_sample = self._sample_continuous_motion(
+            plan,
+            target,
+            phase_offset_seconds,
+            sample_continuous_motion,
+        )
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
         previous_target = start_target
         previous_command_ended_at = None
@@ -1478,7 +1555,7 @@ class MotionController:
                 now = time.monotonic()
                 elapsed = max(0.0, now - started_at)
                 sample_elapsed = phase_offset_seconds + elapsed
-                sample = sample_continuous_motion(plan, target, sample_elapsed)
+                sample = self._sample_continuous_motion(plan, target, sample_elapsed, sample_continuous_motion)
                 if elapsed < morph_seconds:
                     amount = _minimum_jerk(elapsed / morph_seconds)
                     sample = sample.with_target(
@@ -1499,6 +1576,7 @@ class MotionController:
                     stop_on_target=False,
                     velocity=velocity,
                     intent_speed=sample.intent_speed,
+                    duration_ms=max(1, int(round(command_interval * 1000.0))),
                     source=source,
                 )
                 send_ended_at = time.monotonic()
@@ -1628,11 +1706,15 @@ class MotionController:
                 if is_pass_through_final:
                     velocity_seconds = max(velocity_seconds, POSITION_PASS_THROUGH_MIN_SECONDS)
                 velocity = self._position_velocity(previous_target, frame.target, velocity_seconds)
+                duration_ms = None
+                if frame.phase.startswith("timed") and velocity_seconds > 0:
+                    duration_ms = max(1, int(round(velocity_seconds * 1000.0)))
                 send_started_at = time.monotonic()
                 self._apply_position_step(
                     frame.target,
                     stop_on_target=is_last_frame and final_stop_on_target and not stop_after,
                     velocity=velocity,
+                    duration_ms=duration_ms,
                     source=source,
                 )
                 send_ended_at = time.monotonic()

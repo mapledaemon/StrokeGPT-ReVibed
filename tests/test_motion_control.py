@@ -12,6 +12,7 @@ from strokegpt.motion import (
     MotionController,
     MotionSanitizer,
     MotionTarget,
+    PositionFrame,
     POSITION_PASS_THROUGH_MIN_SECONDS,
 )
 
@@ -24,6 +25,7 @@ class FakeHandy:
         self.moves = []
         self.position_moves = []
         self.position_intent_speeds = []
+        self.position_durations = []
         self.velocity_intervals = []
         self.stopped = False
 
@@ -33,9 +35,10 @@ class FakeHandy:
         self.last_depth_pos = depth
         self.last_stroke_range = stroke_range
 
-    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None):
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None, duration_ms=None):
         self.position_moves.append((speed, depth, stop_on_target, velocity))
         self.position_intent_speeds.append(speed if intent_speed is None else intent_speed)
+        self.position_durations.append(duration_ms)
         self.last_relative_speed = speed if intent_speed is None else intent_speed
         self.last_depth_pos = depth
         return True
@@ -132,14 +135,25 @@ class StreamingFakeHandy(FakeHandy):
         return dict(self._last_command) if self._last_command else None
 
 
+class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
+    def __init__(self, min_speed, max_speed):
+        super().__init__()
+        self.min_speed = min_speed
+        self.max_speed = max_speed
+
+    def effective_speed_for_relative(self, speed):
+        return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
+
+
 class FailingPositionHandy(FakeHandy):
     def __init__(self):
         super().__init__()
         self._last_command = None
 
-    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None):
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None, duration_ms=None):
         self.position_moves.append((speed, depth, stop_on_target, velocity))
         self.position_intent_speeds.append(speed if intent_speed is None else intent_speed)
+        self.position_durations.append(duration_ms)
         self._last_command = {
             "path": "hdsp/xava",
             "ok": False,
@@ -606,6 +620,24 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_timing_uses_configured_speed_limits(self):
+        slow_handy = SpeedLimitStreamingFakeHandy(10, 30)
+        fast_handy = SpeedLimitStreamingFakeHandy(70, 90)
+        slow_controller = MotionController(slow_handy, step_delay=0.16)
+        fast_controller = MotionController(fast_handy, step_delay=0.16)
+
+        try:
+            slow_controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="unit test")
+            fast_controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: slow_handy.stream_starts and fast_handy.stream_starts))
+
+            slow_points = slow_handy.stream_starts[0]["points"]
+            fast_points = fast_handy.stream_starts[0]["points"]
+            self.assertGreater(slow_points[1]["t"], fast_points[1]["t"])
+        finally:
+            slow_controller.stop()
+            fast_controller.stop()
+
     def test_continuous_hsp_trace_records_append_batches(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -831,16 +863,15 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_backend_routes_plain_chat_targets_through_position_smoothing(self):
+    def test_continuous_backend_routes_plain_chat_targets_through_live_stroke_control(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
 
         controller.apply_generated_target(MotionTarget(70, 90, 80, "plain chat"), source="llm")
 
-        self.assertEqual(handy.moves, [])
-        self.assertGreater(len(handy.position_moves), 3)
-        self.assertEqual(handy.position_moves[-1][1], 90)
-        self.assertEqual(handy.position_moves[-1][2], True)
+        self.assertEqual(handy.position_moves, [])
+        self.assertGreater(len(handy.moves), 1)
+        self.assertEqual(handy.moves[-1], (70, 90, 80))
 
     def test_position_backend_routes_generated_frames_to_position_moves(self):
         handy = FakeHandy()
@@ -867,6 +898,25 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(depths[-1], 90)
         self.assertTrue(all(abs(a - b) <= 9 for a, b in zip(depths, depths[1:])), depths)
         self.assertEqual(handy.position_moves[-1][2], True)
+
+    def test_position_playback_passes_duration_for_timed_frames_only(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.25)
+        controller.set_backend("position")
+
+        controller.apply_position_frames(
+            [PositionFrame(MotionTarget(40, 35, 40, "timed"), delay_factor=2.0, phase="timed-pattern")],
+            final_stop_on_target=False,
+        )
+
+        self.assertEqual(handy.position_durations[-1], 500)
+
+        controller.apply_position_frames(
+            [PositionFrame(MotionTarget(40, 60, 40, "pattern"), delay_factor=2.0, phase="pattern")],
+            final_stop_on_target=False,
+        )
+
+        self.assertIsNone(handy.position_durations[-1])
 
     def test_stop_cancels_and_stops_handy(self):
         handy = FakeHandy()
