@@ -264,21 +264,21 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava"])
         self.assertEqual(handy.commands[0][1], {"mode": 2})
         body = handy.commands[1][1]
-        self.assertEqual(body["velocity"], 50)
+        self.assertEqual(body["velocity"], 200)
         self.assertAlmostEqual(body["position"], handy.FULL_TRAVEL_MM * 0.3)
         self.assertTrue(body["stopOnTarget"])
         self.assertEqual(handy.last_stroke_range, 50)
         self.assertEqual(handy.diagnostics()["mode"], 2)
-        self.assertEqual(handy.diagnostics()["velocity"], 50)
+        self.assertEqual(handy.diagnostics()["velocity"], 200)
 
     def test_move_to_depth_can_keep_intermediate_targets_moving(self):
         handy = RecordingHandyController()
         handy.update_settings(10, 70, 0, 100)
 
-        handy.move_to_depth(50, 75, stop_on_target=False, velocity=18)
+        handy.move_to_depth(50, 75, stop_on_target=False, velocity=48)
 
         body = handy.commands[-1][1]
-        self.assertEqual(body["velocity"], 18)
+        self.assertEqual(body["velocity"], 48)
         self.assertFalse(body["stopOnTarget"])
 
     def test_move_to_depth_keeps_intent_speed_separate_from_command_speed(self):
@@ -356,7 +356,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.v3_commands[0][1], {"mode": 2})
         body = handy.v3_commands[-1][1]
         self.assertEqual(body["xp"], 0.65)
-        self.assertEqual(body["t"], 825)
+        self.assertEqual(body["t"], 206)
         self.assertTrue(body["stop_on_target"])
         self.assertFalse(body["immediate_rsp"])
 
@@ -531,17 +531,27 @@ class HandyControllerTests(unittest.TestCase):
 
         velocity = handy.velocity_for_depth_interval(50, 0, 100, 0.1)
 
-        self.assertEqual(velocity, 40)
+        self.assertEqual(velocity, 160)
+
+    def test_absolute_velocity_uses_percent_speed_settings_for_position_transport(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 80, 0, 100)
+
+        self.assertEqual(handy.min_absolute_user_speed, 40)
+        self.assertEqual(handy.max_absolute_user_speed, 320)
+        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(0), 40)
+        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(50), 180)
+        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(100), 320)
 
     def test_position_velocity_never_exceeds_current_max_speed(self):
         handy = RecordingHandyController()
         handy.update_settings(10, 30, 0, 100)
 
-        self.assertEqual(handy.velocity_for_depth_interval(100, 0, 100, 0.1), 30)
+        self.assertEqual(handy.velocity_for_depth_interval(100, 0, 100, 0.1), 120)
         handy.move_to_depth(100, 90, velocity=1000)
 
         body = handy.commands[-1][1]
-        self.assertEqual(body["velocity"], 30)
+        self.assertEqual(body["velocity"], 120)
 
     def test_move_to_depth_stops_hamp_before_position_preview(self):
         handy = RecordingHandyController()

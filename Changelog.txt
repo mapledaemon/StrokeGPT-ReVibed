@@ -18,6 +18,10 @@ Branch: codex-continuous-absolute-transport-cap
   sampled intent speed back through the relative speed curve. Fast pattern
   segments should no longer be stretched down to an intent-relative cap that
   makes device motion feel fixed speed.
+- Corrected that physical ceiling to convert the saved 0-100 speed limit into
+  the Handy position transport's absolute mm/s budget, so HSP and timed
+  position playback are no longer capped as if an 80% user setting meant only
+  80 mm/s.
 - Added a regression test that fails if `_continuous_transport_interval()`
   consults `max_velocity_for_relative_speed(sample_target.speed)` again, while
   preserving the configured max-speed stretch guard for physically impossible

@@ -105,7 +105,10 @@ Follow-up work:
   transport boundary; that double scaling compressed patterns into a narrow
   low-speed band even when the visualizer showed changing sample speeds. HSP
   transport stretching should compare segment slopes to absolute
-  `max_user_speed`, not to `max_velocity_for_relative_speed(sample_target.speed)`.
+  `max_absolute_user_speed`, not to
+  `max_velocity_for_relative_speed(sample_target.speed)`. Saved speed settings
+  are 0-100 app percentages, so timed position transport must convert them to
+  absolute mm/s before using them as an HSP or `xpt.t` duration ceiling.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.

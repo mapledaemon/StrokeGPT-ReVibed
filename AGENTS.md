@@ -231,8 +231,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   target. HSP timed-point streams must preserve authored phase timing and
   point-to-point depth deltas, but their transport timestamps may stretch a
   segment when the requested slope would exceed the configured absolute
-  physical speed budget. Use `max_user_speed` as that HSP transport ceiling;
-  do not remap `sample_target.speed` through the relative intent-speed curve
+  physical speed budget. The saved speed-limit settings remain 0-100 app/user
+  percentages; convert them to the Handy position transport's absolute mm/s
+  budget through `max_absolute_user_speed` / `max_absolute_velocity_for_relative_speed()`.
+  Do not remap `sample_target.speed` through the relative intent-speed curve
   when stretching HSP point timing. This keeps firmware from saturating at a
   fixed device speed while still reporting both `phase_interval_ms` and
   `transport_interval_ms` in the trace. Flexible Position `xpt.t` durations

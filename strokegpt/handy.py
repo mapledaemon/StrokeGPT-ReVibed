@@ -14,6 +14,10 @@ HANDY_COMMAND_POINTS_PREVIEW = 12
 HSP_POINT_SCALE = 10
 HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
 HSP_STREAM_ID_MAX = 4294967295
+# Handy position transports use absolute velocity/duration math. The app's
+# saved speed limits remain 0-100 percent-style controls, so timed position
+# and HSP guards convert those percentages onto this mm/s device scale.
+HANDY_MAX_ABSOLUTE_VELOCITY_MM_S = 400.0
 
 class HandyController:
     def __init__(
@@ -469,6 +473,23 @@ class HandyController:
     def max_velocity_for_relative_speed(self, speed):
         return min(self.max_user_speed, self._relative_speed_to_velocity(speed))
 
+    def _speed_percent_to_absolute_velocity(self, speed_percent):
+        return (self._safe_percent(speed_percent) / 100.0) * HANDY_MAX_ABSOLUTE_VELOCITY_MM_S
+
+    @property
+    def min_absolute_user_speed(self):
+        return self._speed_percent_to_absolute_velocity(self.min_user_speed)
+
+    @property
+    def max_absolute_user_speed(self):
+        return self._speed_percent_to_absolute_velocity(self.max_user_speed)
+
+    def absolute_velocity_for_relative_speed(self, speed):
+        return int(round(self._speed_percent_to_absolute_velocity(self._relative_speed_to_velocity(speed))))
+
+    def max_absolute_velocity_for_relative_speed(self, speed):
+        return min(self.max_absolute_user_speed, self.absolute_velocity_for_relative_speed(speed))
+
     def _velocity_to_v3_ratio(self, velocity):
         try:
             velocity = float(velocity)
@@ -486,7 +507,7 @@ class HandyController:
         return self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
 
     def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
-        max_velocity = self.max_velocity_for_relative_speed(speed)
+        max_velocity = self.max_absolute_velocity_for_relative_speed(speed)
         try:
             duration_seconds = float(duration_seconds)
         except (TypeError, ValueError):
@@ -496,14 +517,14 @@ class HandyController:
 
         distance_mm = abs(self._relative_depth_to_mm(end_depth) - self._relative_depth_to_mm(start_depth))
         planned_velocity = int(round(distance_mm / duration_seconds))
-        planned_velocity = max(self.min_user_speed, planned_velocity)
+        planned_velocity = max(self.min_absolute_user_speed, planned_velocity)
         return min(max_velocity, planned_velocity)
 
     def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
         try:
             velocity = max(1.0, float(velocity))
         except (TypeError, ValueError):
-            velocity = max(1.0, float(self.min_user_speed or 1))
+            velocity = max(1.0, float(self.min_absolute_user_speed or 1))
         distance_mm = abs(self._relative_depth_to_mm(end_depth) - self._relative_depth_to_mm(start_depth))
         if distance_mm <= 0:
             return 1
@@ -593,12 +614,13 @@ class HandyController:
         intent_speed_pct = relative_speed_pct if intent_speed is None else self._safe_percent(intent_speed)
         relative_pos_pct = self._safe_percent(depth)
         if velocity is None:
-            velocity = self.max_velocity_for_relative_speed(relative_speed_pct)
+            velocity = self.max_absolute_velocity_for_relative_speed(relative_speed_pct)
         else:
             velocity = max(
-                self.min_user_speed,
-                min(self.max_velocity_for_relative_speed(relative_speed_pct), int(round(velocity))),
+                self.min_absolute_user_speed,
+                min(self.max_absolute_velocity_for_relative_speed(relative_speed_pct), int(round(velocity))),
             )
+        velocity = int(round(velocity))
 
         if self.supports_api_v3_control():
             minimum_duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)

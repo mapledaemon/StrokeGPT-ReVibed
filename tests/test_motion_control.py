@@ -146,6 +146,8 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
         self.max_speed = max_speed
         self.min_user_speed = min_speed
         self.max_user_speed = max_speed
+        self.min_absolute_user_speed = min_speed * 4
+        self.max_absolute_user_speed = max_speed * 4
 
     def effective_speed_for_relative(self, speed):
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
@@ -163,6 +165,7 @@ class VelocityCappedStreamingFakeHandy(StreamingFakeHandy):
         super().__init__()
         self.max_velocity = max_velocity
         self.max_user_speed = max_velocity
+        self.max_absolute_user_speed = max_velocity
 
     def max_velocity_for_relative_speed(self, _speed):
         return self.max_velocity
@@ -780,7 +783,7 @@ class MotionControllerTests(unittest.TestCase):
 
             slow_points = slow_handy.stream_starts[0]["points"]
             fast_points = fast_handy.stream_starts[0]["points"]
-            self.assertGreater(slow_points[2]["t"], fast_points[2]["t"])
+            self.assertGreater(slow_points[3]["t"], fast_points[3]["t"])
             self.assertLess(len(slow_points), len(fast_points))
         finally:
             slow_controller.stop()
@@ -807,6 +810,7 @@ class MotionControllerTests(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.max_user_speed = 80
+                self.max_absolute_user_speed = 320
                 self.relative_cap_calls = []
                 self.transport_velocities = []
 
@@ -829,8 +833,8 @@ class MotionControllerTests(unittest.TestCase):
         )
 
         self.assertEqual(handy.relative_cap_calls, [])
-        self.assertEqual(handy.transport_velocities, [80.0])
-        self.assertAlmostEqual(interval, 1.0)
+        self.assertEqual(handy.transport_velocities, [320.0])
+        self.assertAlmostEqual(interval, 0.25)
 
     def test_continuous_hsp_stretches_impossible_segments_to_velocity_budget(self):
         handy = VelocityCappedStreamingFakeHandy(max_velocity=45)

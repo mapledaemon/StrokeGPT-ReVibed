@@ -899,6 +899,11 @@ class MotionController:
         }
 
     def _position_velocity_cap(self, target: MotionTarget) -> int | None:
+        if hasattr(self.handy, "max_absolute_velocity_for_relative_speed"):
+            try:
+                return int(round(self.handy.max_absolute_velocity_for_relative_speed(target.speed)))
+            except (TypeError, ValueError):
+                return None
         if hasattr(self.handy, "max_velocity_for_relative_speed"):
             try:
                 return int(round(self.handy.max_velocity_for_relative_speed(target.speed)))
@@ -1250,7 +1255,11 @@ class MotionController:
             phase_interval = self._continuous_sample_interval()
 
         duration_for_depth = getattr(self.handy, "duration_ms_for_depth_interval", None)
-        max_user_speed = getattr(self.handy, "max_user_speed", None)
+        max_user_speed = getattr(
+            self.handy,
+            "max_absolute_user_speed",
+            getattr(self.handy, "max_user_speed", None),
+        )
         if max_user_speed is not None and callable(duration_for_depth):
             try:
                 velocity = max(1.0, float(max_user_speed))
