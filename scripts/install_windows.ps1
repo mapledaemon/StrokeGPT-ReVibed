@@ -101,6 +101,37 @@ function Refresh-PathFromRegistry {
     $env:Path = (@($machinePath, $userPath, $env:Path) | Where-Object { $_ }) -join ";"
 }
 
+function Invoke-WingetInstall {
+    param(
+        [string]$Description,
+        [string[]]$Arguments
+    )
+
+    $exitCode = 1
+    $logPath = Join-Path $env:TEMP ("strokegpt-winget-{0}.log" -f ([guid]::NewGuid().ToString("N")))
+
+    Write-Host "$Description..."
+    Write-Host "Winget output is hidden because its progress bar can render poorly in this PowerShell bootstrap window."
+    Write-Host "This can take a few minutes."
+
+    try {
+        & winget @Arguments *> $logPath
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            Write-Warning "winget failed with exit code $exitCode. Last output:"
+            if (Test-Path -LiteralPath $logPath) {
+                Get-Content -LiteralPath $logPath -Tail 40 | ForEach-Object { Write-Host $_ }
+                Write-Host "Full winget log: $logPath"
+            }
+        }
+        return $exitCode
+    } finally {
+        if ($exitCode -eq 0 -and (Test-Path -LiteralPath $logPath)) {
+            Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Format-Bytes {
     param([int64]$Bytes)
 
@@ -250,9 +281,13 @@ function Install-PythonIfRequested {
         throw "winget was not found. Install Python 3.11 from https://www.python.org/downloads/windows/, enable 'Add python.exe to PATH', then rerun this script."
     }
 
-    Write-Host "Installing Python 3.11 with winget..."
-    & winget install --id $PythonWingetId -e --source winget | Out-Host
-    $pythonInstallExitCode = $LASTEXITCODE
+    $pythonInstallExitCode = Invoke-WingetInstall `
+        -Description "Installing Python 3.11 with winget" `
+        -Arguments @(
+            "install", "--id", $PythonWingetId, "-e", "--source", "winget",
+            "--accept-package-agreements", "--accept-source-agreements",
+            "--disable-interactivity"
+        )
     if ($pythonInstallExitCode -ne 0) {
         throw "Python install failed."
     }
@@ -423,9 +458,13 @@ function Install-OllamaIfRequested {
         return
     }
 
-    Write-Host "Installing Ollama with winget..."
-    & winget install --id Ollama.Ollama -e --source winget | Out-Host
-    $ollamaInstallExitCode = $LASTEXITCODE
+    $ollamaInstallExitCode = Invoke-WingetInstall `
+        -Description "Installing Ollama with winget" `
+        -Arguments @(
+            "install", "--id", "Ollama.Ollama", "-e", "--source", "winget",
+            "--accept-package-agreements", "--accept-source-agreements",
+            "--disable-interactivity"
+        )
     if ($ollamaInstallExitCode -ne 0) {
         throw "Ollama install failed."
     }

@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Quiet Winget Progress
+-----------------------------------------------
+
+Branch: codex/quiet-winget-progress
+
+- Replaced the Windows installer's `Out-Host` winget progress forwarding with
+  quiet winget execution that redirects raw progress output to a temporary log,
+  because winget's spinner and block progress bar render as broken repeated
+  lines in the bootstrap PowerShell window.
+- Added source-level installer coverage for the quiet winget helper, agreement
+  flags, and noninteractive install arguments.
+
+
 2026-05-13 - PR #176 - Windows Winget Output Fix
 ------------------------------------------------
 
