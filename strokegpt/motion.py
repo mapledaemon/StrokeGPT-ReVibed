@@ -814,6 +814,14 @@ class MotionController:
             extras["handy_status"] = last_command.get("status_code")
         if "elapsed_ms" in last_command:
             extras["handy_elapsed_ms"] = last_command.get("elapsed_ms")
+        body = last_command.get("body")
+        if isinstance(body, dict):
+            if "velocity" in body:
+                extras["handy_velocity"] = body.get("velocity")
+            if "duration" in body:
+                extras["handy_duration_ms"] = body.get("duration")
+            if "stopOnTarget" in body:
+                extras["handy_stop_on_target"] = bool(body.get("stopOnTarget"))
         error = str(last_command.get("error") or "").strip()
         if error:
             extras["handy_error"] = error

@@ -224,6 +224,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(body["stopOnTarget"])
         self.assertEqual(handy.last_stroke_range, 50)
         self.assertEqual(handy.diagnostics()["mode"], 2)
+        self.assertEqual(handy.diagnostics()["velocity"], 50)
 
     def test_move_to_depth_can_keep_intermediate_targets_moving(self):
         handy = RecordingHandyController()
