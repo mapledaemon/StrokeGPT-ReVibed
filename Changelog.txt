@@ -26,6 +26,19 @@ Branch: codex-hsp-densify-sparse-patterns
   authored endpoint or an inserted intermediate sample, plus regression
   coverage that sparse `stroke` HSP streams stay below the target point
   interval and include both point types.
+- Reintroduced a bounded HSP transport clock so point timestamps stretch only
+  when the authored/densified segment would exceed the configured physical
+  velocity budget. This targets the observed "visualizer is fast but hardware
+  feels fixed" failure mode where impossible HSP slopes can make firmware
+  saturate at one device speed and erase the intended variation.
+- Made HSP replacement streams start with an exact point at `hsp/play`
+  `start_time`, then send only future points. Mid-cycle updates no longer
+  include stale pre-start points that could make firmware snap toward an old
+  endpoint before the new stream is underway.
+- Kept `/hsp/threshold` failures from killing an otherwise buffered HSP stream
+  unless they also disable API v3 auth. Threshold updates are useful
+  observability/refill hints, but a transient threshold failure should not
+  starve Milk or Freestyle motion after `/hsp/add` has already succeeded.
 
 
 2026-05-13 - PR #188 - Restore Position Speed Range

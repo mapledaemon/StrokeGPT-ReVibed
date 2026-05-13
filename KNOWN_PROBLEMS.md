@@ -66,21 +66,27 @@ Follow-up work:
   `sample_tempo_scale`, `effective_cycle_ms`, `sample_interval_ms`, HSP point
   metadata, final fallback `handy_velocity`, and HSP `hsp_transport_time_scale`;
   use those fields together when diagnosing fixed-speed feel. HSP should now
-  preserve authored sub-sample action intervals without hidden timestamp
-  stretching; `hsp_transport_time_scale` should remain `1.0`. Flexible Position
-  may stretch `xpt.t` when authored timing exceeds the configured speed cap.
+  preserve authored sub-sample phase intervals while stretching transport
+  timestamps only when a segment would exceed the configured speed cap.
+  Flexible Position may stretch `xpt.t` for the same reason.
   Continuous HDSP fallback should show varied `handy_duration_ms` values because
   its `xpt.t` is derived from the velocity budget again. If speed still feels
   compressed, compare point-preview intervals, wire HSP `x` values (`0..1000`),
   `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, and physical
-  movement before changing sampler math again. Pattern swaps now intentionally
-  issue a fresh HSP stream id, buffer points with `/hsp/add`, update the tail
-  threshold via `/hsp/threshold`, and play without `pause_on_starving`; if swaps
-  still pause, inspect the `server_time`, threshold, and starvation behavior in
-  command history before changing sampler math again. Sparse built-in patterns
-  should now include inserted HSP intermediate points between authored endpoints;
-  verify on-device that this restores smooth speed variation without disturbing
-  dense imported timing.
+  movement before changing sampler math again. HSP transport now separates
+  phase timing from physical transport timing: `phase_interval_ms` records the
+  authored/densified pattern interval, while `transport_interval_ms` records
+  any stretch needed to stay under the configured physical speed budget. If the
+  device still feels fixed, compare `hsp_segment_mm_per_second` against saved
+  speed limits to see whether firmware is still being driven into saturation.
+  Pattern swaps now intentionally issue a fresh HSP stream id, start with an
+  exact point at `hsp/play.start_time`, buffer points with `/hsp/add`, update
+  the tail threshold via `/hsp/threshold`, and play without `pause_on_starving`;
+  if swaps still pause, inspect the `server_time`, threshold, and starvation
+  behavior in command history before changing sampler math again. Sparse
+  built-in patterns should now include inserted HSP intermediate points between
+  authored endpoints; verify on-device that this restores smooth speed
+  variation without disturbing dense imported timing.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,

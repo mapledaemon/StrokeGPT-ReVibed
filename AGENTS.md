@@ -225,13 +225,13 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   into `motion.current_target()`, Freestyle scoring, or LLM context.
   Continuous morphing and step limiting smooth depth/range only; do not
   interpolate or delta-limit the command-speed budget as if it were a spatial
-  target. HSP timed-point streams must preserve authored action timing and
-  point-to-point depth deltas because their timestamps are the transport
-  timing contract; do not resample them through the fixed controller cadence.
-  Do not apply HDSP/HAMP velocity-cap retiming to HSP timestamps; that makes
-  the device play a slow script while speed diagnostics still show the original
-  sampled budget. Flexible Position `xpt.t` durations may be stretched when an
-  authored timed move exceeds the configured Handy speed cap.
+  target. HSP timed-point streams must preserve authored phase timing and
+  point-to-point depth deltas, but their transport timestamps may stretch a
+  segment when the requested slope would exceed the configured physical speed
+  budget. This keeps firmware from saturating at a fixed device speed while
+  still reporting both `phase_interval_ms` and `transport_interval_ms` in the
+  trace. Flexible Position `xpt.t` durations may similarly be stretched when
+  an authored timed move exceeds the configured Handy speed cap.
   Pattern swaps should start a fresh HSP stream id and rebuffer the replacement
   plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
   stream ids with new zero-based point times. HSP `play` should use server-time
@@ -239,7 +239,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   proves that is the desired behavior. Sparse built-in HSP streams should keep
   authored endpoints but insert Catmull-Rom intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
-  keyframes. During active continuous playback,
+  keyframes. Replacement HSP streams should include an exact point at
+  `hsp/play.start_time` and no pre-start points so mid-cycle swaps do not snap
+  toward a stale endpoint. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
   from the active plan clock; do not use the tail of the future HSP buffer as
   the current device state.
