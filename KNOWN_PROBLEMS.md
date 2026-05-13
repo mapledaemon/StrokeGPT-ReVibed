@@ -103,7 +103,9 @@ Follow-up work:
   prior regression converted relative intent speed into physical Handy velocity
   before sampling, then mapped that derived speed through limits again at the
   transport boundary; that double scaling compressed patterns into a narrow
-  low-speed band even when the visualizer showed changing sample speeds.
+  low-speed band even when the visualizer showed changing sample speeds. HSP
+  transport stretching should compare segment slopes to absolute
+  `max_user_speed`, not to `max_velocity_for_relative_speed(sample_target.speed)`.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.

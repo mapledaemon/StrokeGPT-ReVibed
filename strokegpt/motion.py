@@ -1249,11 +1249,11 @@ class MotionController:
         except (TypeError, ValueError):
             phase_interval = self._continuous_sample_interval()
 
-        max_velocity = getattr(self.handy, "max_velocity_for_relative_speed", None)
         duration_for_depth = getattr(self.handy, "duration_ms_for_depth_interval", None)
-        if callable(max_velocity) and callable(duration_for_depth):
+        max_user_speed = getattr(self.handy, "max_user_speed", None)
+        if max_user_speed is not None and callable(duration_for_depth):
             try:
-                velocity = max_velocity(sample_target.speed)
+                velocity = max(1.0, float(max_user_speed))
                 duration_ms = duration_for_depth(velocity, previous_target.depth, sample_target.depth)
                 return max(phase_interval, max(0.001, float(duration_ms) / 1000.0))
             except Exception:

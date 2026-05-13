@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Use Absolute Continuous Transport Cap
+---------------------------------------------------------------
+
+Branch: codex-continuous-absolute-transport-cap
+
+- Fixed continuous HSP transport stretching to use the saved Handy
+  `max_user_speed` as the physical safety ceiling instead of remapping each
+  sampled intent speed back through the relative speed curve. Fast pattern
+  segments should no longer be stretched down to an intent-relative cap that
+  makes device motion feel fixed speed.
+- Added a regression test that fails if `_continuous_transport_interval()`
+  consults `max_velocity_for_relative_speed(sample_target.speed)` again, while
+  preserving the configured max-speed stretch guard for physically impossible
+  HSP point slopes.
+
+
 2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling
 -------------------------------------------------------
 

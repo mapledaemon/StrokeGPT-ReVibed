@@ -230,11 +230,14 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   interpolate or delta-limit the command-speed budget as if it were a spatial
   target. HSP timed-point streams must preserve authored phase timing and
   point-to-point depth deltas, but their transport timestamps may stretch a
-  segment when the requested slope would exceed the configured physical speed
-  budget. This keeps firmware from saturating at a fixed device speed while
-  still reporting both `phase_interval_ms` and `transport_interval_ms` in the
-  trace. Flexible Position `xpt.t` durations may similarly be stretched when
-  an authored timed move exceeds the configured Handy speed cap.
+  segment when the requested slope would exceed the configured absolute
+  physical speed budget. Use `max_user_speed` as that HSP transport ceiling;
+  do not remap `sample_target.speed` through the relative intent-speed curve
+  when stretching HSP point timing. This keeps firmware from saturating at a
+  fixed device speed while still reporting both `phase_interval_ms` and
+  `transport_interval_ms` in the trace. Flexible Position `xpt.t` durations
+  may similarly be stretched when an authored timed move exceeds the configured
+  Handy speed cap.
   Pattern swaps should start a fresh HSP stream id and rebuffer the replacement
   plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
   stream ids with new zero-based point times. HSP `play` should use server-time

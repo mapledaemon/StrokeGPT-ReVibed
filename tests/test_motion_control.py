@@ -144,6 +144,8 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
         super().__init__()
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.min_user_speed = min_speed
+        self.max_user_speed = max_speed
 
     def effective_speed_for_relative(self, speed):
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
@@ -160,6 +162,7 @@ class VelocityCappedStreamingFakeHandy(StreamingFakeHandy):
     def __init__(self, max_velocity):
         super().__init__()
         self.max_velocity = max_velocity
+        self.max_user_speed = max_velocity
 
     def max_velocity_for_relative_speed(self, _speed):
         return self.max_velocity
@@ -798,6 +801,36 @@ class MotionControllerTests(unittest.TestCase):
         self.assertAlmostEqual(slow.tempo_scale, 0.7, places=3)
         self.assertAlmostEqual(fast.tempo_scale, 1.3, places=3)
         self.assertGreater(fast.tempo_scale - slow.tempo_scale, 0.5)
+
+    def test_continuous_transport_uses_absolute_cap_not_sample_relative_speed(self):
+        class RelativeCapTrapHandy(FakeHandy):
+            def __init__(self):
+                super().__init__()
+                self.max_user_speed = 80
+                self.relative_cap_calls = []
+                self.transport_velocities = []
+
+            def max_velocity_for_relative_speed(self, speed):
+                self.relative_cap_calls.append(speed)
+                return 20
+
+            def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+                self.transport_velocities.append(float(velocity))
+                distance = abs(float(end_depth) - float(start_depth))
+                return max(1, int(round((distance / max(1.0, float(velocity))) * 1000.0)))
+
+        handy = RelativeCapTrapHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        interval = controller._continuous_transport_interval(
+            MotionTarget(50, 10, 80, "stroke"),
+            MotionTarget(95, 90, 80, "stroke"),
+            0.1,
+        )
+
+        self.assertEqual(handy.relative_cap_calls, [])
+        self.assertEqual(handy.transport_velocities, [80.0])
+        self.assertAlmostEqual(interval, 1.0)
 
     def test_continuous_hsp_stretches_impossible_segments_to_velocity_budget(self):
         handy = VelocityCappedStreamingFakeHandy(max_velocity=45)
