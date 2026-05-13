@@ -277,6 +277,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .latency-test-elapsed { color: var(--cyan); font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
 .latency-metric-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .latency-metric { padding: 2px 6px; border: 1px solid #2d333d; border-radius: 999px; color: var(--comment); font-size: 0.72rem; }
+.motion-capture-output { max-height: 260px; }
+.motion-capture-path-list { margin-top: 6px; }
 .slider-container { display: grid; grid-template-columns: minmax(130px, 0.9fr) minmax(0, 2fr) minmax(54px, auto); align-items: center; gap: 12px; margin: 0; text-align: left; }
 .slider-container label { color: var(--foreground); font-size: 0.9em; }
 .slider-container input[type="range"] { width: 100%; min-width: 0; }
