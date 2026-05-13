@@ -73,10 +73,15 @@ Follow-up work:
   its `xpt.t` is derived from the velocity budget again. If speed still feels
   compressed, compare point-preview intervals, wire HSP `x` values (`0..100`
   position units relative to the active `/slider/stroke` window),
-  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, and physical
-  movement before changing sampler math again. For HSP,
+  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, HSP response
+  state, and physical movement before changing sampler math again. For HSP,
   `phase_interval_ms`, `transport_interval_ms`, and `sample_interval_ms` should
   match; if they diverge, software is flattening the timed stream again.
+  `physical_speed` and `hsp_segment_mm_per_second` in HSP trace rows are planned
+  outgoing point slopes, not measured device speed. Use
+  `hsp_state_current_time_ms`, `hsp_state_current_point`,
+  `hsp_state_play_state`, and `hsp_clock_sync` rows to confirm whether firmware
+  is actually advancing through the streamed points at the planned time.
   Pattern swaps now intentionally issue a fresh HSP stream id, start with an
   exact point at `hsp/play.start_time`, flush the replacement buffer through
   `/hsp/add`, update the tail threshold via `/hsp/threshold`, and play with

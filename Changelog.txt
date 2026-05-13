@@ -27,6 +27,13 @@ Branch: codex-continuous-absolute-transport-cap
 - Made replacement HSP starts flush the new point buffer and explicitly set
   `pause_on_starving: false`, matching the current API contract more closely
   and avoiding avoidable stalls during pattern changes.
+- Added periodic HSP `/synctime` updates while continuous streams are playing,
+  so the app corrects the firmware playback clock instead of assuming the
+  outgoing point timeline is what the device is actually executing.
+- Recorded sanitized HSP response state in Handy diagnostics and motion trace
+  extras, making it clear that HSP `physical_speed` is only the planned
+  point-slope estimate unless it lines up with device-reported
+  `current_time` / `current_point` state.
 
 
 2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling

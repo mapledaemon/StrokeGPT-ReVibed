@@ -57,6 +57,7 @@ class HandyController:
         self._command_history = deque(maxlen=HANDY_COMMAND_HISTORY_LIMIT)
         self._api_v3_auth_failed = False
         self._hsp_stream_id = 0
+        self._last_hsp_state = None
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
 
@@ -79,6 +80,7 @@ class HandyController:
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
             self._hsp_stream_id = 0
+            self._last_hsp_state = None
             self._server_time_offset_ms = None
             self._server_time_synced_at = 0.0
             self._reset_motion_cache()
@@ -94,6 +96,7 @@ class HandyController:
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
             self._hsp_stream_id = 0
+            self._last_hsp_state = None
             self._server_time_offset_ms = None
             self._server_time_synced_at = 0.0
             self._reset_motion_cache()
@@ -107,6 +110,7 @@ class HandyController:
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
             self._hsp_stream_id = 0
+            self._last_hsp_state = None
             self._server_time_offset_ms = None
             self._server_time_synced_at = 0.0
             self._reset_motion_cache()
@@ -166,6 +170,8 @@ class HandyController:
             "flush",
             "tail_point_stream_index",
             "tail_point_threshold",
+            "current_time",
+            "filter",
         ):
             if key in body:
                 result[key] = body[key]
@@ -189,7 +195,89 @@ class HandyController:
                 result["add"] = safe_add
         return result
 
-    def _record_command_result(self, path, body=None, *, ok, status_code=None, elapsed_ms=None, error=""):
+    def _payload_candidates(self, payload):
+        if not isinstance(payload, dict):
+            return []
+        candidates = []
+        for key in ("result", "data", "state", "hsp_state", "hspState"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                candidates.append(value)
+        candidates.append(payload)
+        return candidates
+
+    def _safe_hsp_value(self, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            if isinstance(value, float) and not value.is_integer():
+                return round(value, 3)
+            return int(value)
+        if isinstance(value, str):
+            return value.strip()[:80]
+        return None
+
+    def _read_hsp_state_value(self, payload, *keys):
+        if not isinstance(payload, dict):
+            return None
+        for key in keys:
+            if key in payload:
+                return self._safe_hsp_value(payload[key])
+        return None
+
+    def _extract_hsp_state(self, payload):
+        field_map = (
+            ("play_state", ("play_state", "playState")),
+            ("current_time_ms", ("current_time", "currentTime", "current_time_ms", "currentTimeMs")),
+            ("first_point_time_ms", ("first_point_time", "firstPointTime", "first_point_time_ms", "firstPointTimeMs")),
+            ("last_point_time_ms", ("last_point_time", "lastPointTime", "last_point_time_ms", "lastPointTimeMs")),
+            ("points", ("points", "point_count", "pointCount")),
+            ("max_points", ("max_points", "maxPoints")),
+            ("current_point", ("current_point", "currentPoint")),
+            ("stream_id", ("stream_id", "streamId")),
+            (
+                "tail_point_stream_index",
+                ("tail_point_stream_index", "tailPointStreamIndex"),
+            ),
+            (
+                "tail_point_stream_index_threshold",
+                (
+                    "tail_point_stream_index_threshold",
+                    "tailPointStreamIndexThreshold",
+                    "tail_point_threshold",
+                    "tailPointThreshold",
+                ),
+            ),
+            ("pause_on_starving", ("pause_on_starving", "pauseOnStarving")),
+            ("playback_rate", ("playback_rate", "playbackRate")),
+        )
+        for candidate in self._payload_candidates(payload):
+            state = {}
+            for normalized, keys in field_map:
+                value = self._read_hsp_state_value(candidate, *keys)
+                if value is not None:
+                    state[normalized] = value
+            if state:
+                return state
+        return None
+
+    def _safe_response_body(self, payload):
+        state = self._extract_hsp_state(payload)
+        if state:
+            return {"hsp_state": state}
+        return {}
+
+    def _record_command_result(
+        self,
+        path,
+        body=None,
+        *,
+        ok,
+        status_code=None,
+        elapsed_ms=None,
+        error="",
+        response_payload=None,
+    ):
         result = {
             "path": str(path or ""),
             "ok": bool(ok),
@@ -207,6 +295,12 @@ class HandyController:
         safe_body = self._safe_command_body(body)
         if safe_body:
             result["body"] = safe_body
+        safe_response = self._safe_response_body(response_payload)
+        if safe_response:
+            result["response"] = safe_response
+            hsp_state = safe_response.get("hsp_state")
+            if isinstance(hsp_state, dict):
+                self._last_hsp_state = dict(hsp_state)
         if error:
             result["error"] = str(error)[:180]
         self._last_command_result = result
@@ -251,6 +345,7 @@ class HandyController:
         self._hamp_started = False
         self._hsp_streaming = False
         self._hsp_stream_id = 0
+        self._last_hsp_state = None
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
         self._reset_motion_cache()
@@ -265,17 +360,26 @@ class HandyController:
             response = requests.put(f"{base_url}{path}", headers=headers, json=body or {}, timeout=10)
             response.raise_for_status()
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            try:
+                response_payload = response.json()
+            except (TypeError, ValueError, AttributeError):
+                response_payload = None
             self._record_command_result(
                 path,
                 body,
                 ok=True,
                 status_code=getattr(response, "status_code", None),
                 elapsed_ms=elapsed_ms,
+                response_payload=response_payload,
             )
             return True
         except requests.exceptions.RequestException as e:
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
             error_response = getattr(e, "response", None) or response
+            try:
+                response_payload = error_response.json() if error_response is not None else None
+            except (TypeError, ValueError, AttributeError):
+                response_payload = None
             self._record_command_result(
                 path,
                 body,
@@ -283,6 +387,7 @@ class HandyController:
                 status_code=getattr(error_response, "status_code", None),
                 elapsed_ms=elapsed_ms,
                 error=e,
+                response_payload=response_payload,
             )
             print(f"[HANDY ERROR] Problem: {e}", file=sys.stderr)
             return False
@@ -805,6 +910,25 @@ class HandyController:
         self._hsp_streaming = True
         return True
 
+    def sync_continuous_stream_time(self, current_time_ms, *, filter=0.5):
+        if not self.supports_continuous_streaming():
+            self._record_command_result("hsp/synctime", ok=False, error="Handy firmware v4 and connection key required")
+            return False
+        try:
+            current_time = max(0, int(round(float(current_time_ms))))
+        except (TypeError, ValueError):
+            current_time = 0
+        try:
+            sync_filter = max(0.0, min(1.0, float(filter)))
+        except (TypeError, ValueError):
+            sync_filter = 0.5
+        body = {
+            "current_time": current_time,
+            "server_time": self._estimated_server_time_ms(),
+            "filter": round(sync_filter, 3),
+        }
+        return self._send_v3_command("hsp/synctime", body)
+
     def _update_stream_state(self, point):
         if not isinstance(point, dict):
             return
@@ -917,6 +1041,7 @@ class HandyController:
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),
+            "hsp_state": dict(self._last_hsp_state) if isinstance(self._last_hsp_state, dict) else None,
             "last_command": self.last_command_result(),
             "command_history": self.command_history(),
         }

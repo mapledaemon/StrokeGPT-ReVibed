@@ -430,6 +430,55 @@ class HandyControllerTests(unittest.TestCase):
         ):
             self.assertEqual(handy._estimated_server_time_ms(), 1000650)
 
+    def test_sync_continuous_stream_time_sends_hsp_synctime(self):
+        handy = RecordingV3HandyController()
+
+        self.assertTrue(handy.sync_continuous_stream_time(875.4, filter=0.9))
+
+        self.assertEqual(handy.v3_commands[-1][0], "hsp/synctime")
+        self.assertEqual(
+            handy.v3_commands[-1][1],
+            {"current_time": 875, "server_time": 123456, "filter": 0.9},
+        )
+        self.assertEqual(handy.diagnostics()["last_command"]["body"]["current_time"], 875)
+        self.assertEqual(handy.diagnostics()["last_command"]["body"]["filter"], 0.9)
+
+    def test_v3_command_records_sanitized_hsp_response_state(self):
+        handy = HandyController(handy_key="secret")
+        payload = {
+            "result": {
+                "play_state": "playing",
+                "current_time": 880,
+                "current_point": 7,
+                "points": 24,
+                "max_points": 50,
+                "stream_id": 3,
+                "tail_point_stream_index": 24,
+                "tail_point_stream_index_threshold": 20,
+                "pause_on_starving": False,
+                "playback_rate": 1.0,
+            }
+        }
+
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=200, payload=payload),
+            create=True,
+        ):
+            self.assertTrue(handy._send_v3_command("hsp/synctime", {"current_time": 880, "filter": 0.5}))
+
+        diagnostics = handy.diagnostics()
+        hsp_state = diagnostics["hsp_state"]
+        self.assertEqual(hsp_state["play_state"], "playing")
+        self.assertEqual(hsp_state["current_time_ms"], 880)
+        self.assertEqual(hsp_state["current_point"], 7)
+        self.assertEqual(hsp_state["tail_point_stream_index_threshold"], 20)
+        self.assertEqual(
+            diagnostics["last_command"]["response"],
+            {"hsp_state": hsp_state},
+        )
+        self.assertNotIn("secret", str(diagnostics))
+
     def test_diagnostics_include_hsp_point_preview_without_secret_values(self):
         handy = RecordingV3HandyController()
 

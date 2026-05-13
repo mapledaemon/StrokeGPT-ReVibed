@@ -37,6 +37,7 @@ CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
+CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 0.8
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -876,6 +877,30 @@ class MotionController:
                 extras["handy_stop_on_target"] = bool(body.get("stopOnTarget"))
             if "stop_on_target" in body:
                 extras["handy_stop_on_target"] = bool(body.get("stop_on_target"))
+            if "current_time" in body:
+                extras["handy_hsp_synctime_ms"] = body.get("current_time")
+            if "filter" in body:
+                extras["handy_hsp_synctime_filter"] = body.get("filter")
+        response = last_command.get("response")
+        hsp_state = response.get("hsp_state") if isinstance(response, dict) else None
+        if isinstance(hsp_state, dict):
+            hsp_mapping = {
+                "play_state": "hsp_state_play_state",
+                "current_time_ms": "hsp_state_current_time_ms",
+                "first_point_time_ms": "hsp_state_first_point_time_ms",
+                "last_point_time_ms": "hsp_state_last_point_time_ms",
+                "points": "hsp_state_points",
+                "max_points": "hsp_state_max_points",
+                "current_point": "hsp_state_current_point",
+                "stream_id": "hsp_state_stream_id",
+                "tail_point_stream_index": "hsp_state_tail_point_stream_index",
+                "tail_point_stream_index_threshold": "hsp_state_tail_point_stream_index_threshold",
+                "pause_on_starving": "hsp_state_pause_on_starving",
+                "playback_rate": "hsp_state_playback_rate",
+            }
+            for source_key, trace_key in hsp_mapping.items():
+                if source_key in hsp_state:
+                    extras[trace_key] = hsp_state[source_key]
         error = str(last_command.get("error") or "").strip()
         if error:
             extras["handy_error"] = error
@@ -1434,6 +1459,7 @@ class MotionController:
 
         start_stream = getattr(self.handy, "start_continuous_stream", None)
         append_stream = getattr(self.handy, "append_continuous_stream", None)
+        sync_stream = getattr(self.handy, "sync_continuous_stream_time", None)
         if not callable(start_stream) or not callable(append_stream):
             return False
 
@@ -1464,6 +1490,8 @@ class MotionController:
         previous_phase_time_seconds = None
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
+        sync_count = 0
+        next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None
         program_range = continuous_plan_depth_range(plan, target)
         plan_name = str(getattr(plan, "name", "") or "continuous")
         plan_key = self._continuous_plan_key(plan)
@@ -1709,6 +1737,7 @@ class MotionController:
                                 physical_speed = distance_mm / dt_seconds
                                 extras["hsp_segment_mm_per_second"] = round(physical_speed, 1)
                                 extras["physical_speed"] = int(round(physical_speed))
+                                extras["physical_speed_source"] = "planned_hsp_point_slope"
                             except (TypeError, ValueError):
                                 pass
                 if program_range is not None:
@@ -1788,6 +1817,32 @@ class MotionController:
                         )
                         if appended is False:
                             return True
+
+                if (
+                    callable(sync_stream)
+                    and next_sync_elapsed is not None
+                    and elapsed >= next_sync_elapsed
+                    and hsp_elapsed <= stream_seconds
+                ):
+                    sync_filter = 0.9 if sync_count == 0 else 0.5
+                    try:
+                        synced = sync_stream(int(round(hsp_elapsed * 1000.0)), filter=sync_filter)
+                    except Exception as exc:
+                        synced = False
+                        sync_extras = {"handy_ok": False, "handy_error": str(exc)[:180]}
+                    else:
+                        sync_extras = self._handy_command_trace_extras(synced)
+                    sync_extras.update(
+                        {
+                            "hsp_clock_sync": True,
+                            "hsp_sync_count": sync_count + 1,
+                            "hsp_synctime_ms": int(round(hsp_elapsed * 1000.0)),
+                            "hsp_synctime_filter": sync_filter,
+                        }
+                    )
+                    self._augment_last_trace(sync_extras)
+                    sync_count += 1
+                    next_sync_elapsed = elapsed + (sync_count + 1 if sync_count < 3 else 10.0)
 
                 sleep_seconds = max(0.02, min(0.08, buffer_remaining - CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS))
                 if not self._sleep_with_pause(sleep_seconds, generation):

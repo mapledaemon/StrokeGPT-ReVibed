@@ -185,7 +185,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   trace rows use scheduled point times and also include
   `hsp_segment_depth_per_second` after the first point so reviewers can inspect
   the actual timed-point transport slope instead of the time a future batch was
-  buffered.
+  buffered. For HSP, `physical_speed` / `hsp_segment_mm_per_second` in trace
+  rows is a planned slope derived from outgoing timed points, not confirmed
+  device speed. Prefer HSP response-state fields such as
+  `hsp_state_current_time_ms`, `hsp_state_current_point`, and
+  `hsp_state_play_state` when checking whether firmware is actually following
+  the planned stream.
 - `strokegpt/motion_patterns.py` prepares pattern actions before expansion: sort/dedupe, minimum interval filtering, repeat expansion, eased interpolation, large-step limiting, and redundant point simplification. Keep that pipeline dependency-free unless a larger funscript importer is deliberately added.
 - `strokegpt/motion_preferences.py` turns enabled fixed patterns and thumbs
   feedback into simple LLM-facing weights. Disabled fixed patterns should stay
@@ -242,7 +247,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   stream ids with new zero-based point times. Initial/replacement HSP adds
   should flush the point buffer, and HSP `play` should use server-time metadata
   with `pause_on_starving: false` unless real-device testing proves another
-  behavior is desired. Sparse built-in HSP streams should keep
+  behavior is desired. Active HSP streams should periodically correct firmware
+  playback time through `/hsp/synctime` and preserve sanitized response state in
+  diagnostics so planned point timing can be compared with device-reported
+  playback. Sparse built-in HSP streams should keep
   authored endpoints but insert Catmull-Rom intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
   keyframes. Replacement HSP streams should include an exact point at

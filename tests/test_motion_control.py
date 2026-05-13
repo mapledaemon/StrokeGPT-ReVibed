@@ -61,6 +61,7 @@ class StreamingFakeHandy(FakeHandy):
         super().__init__()
         self.stream_starts = []
         self.stream_appends = []
+        self.stream_syncs = []
         self._last_command = None
 
     def supports_continuous_streaming(self):
@@ -102,6 +103,26 @@ class StreamingFakeHandy(FakeHandy):
             last = points[-1]
             self.last_relative_speed = last.get("intent_speed", last.get("speed", self.last_relative_speed))
             self.last_depth_pos = last.get("x", self.last_depth_pos)
+        return True
+
+    def sync_continuous_stream_time(self, current_time_ms, *, filter=0.5):
+        self.stream_syncs.append({"current_time_ms": current_time_ms, "filter": filter})
+        self._last_command = {
+            "path": "hsp/synctime",
+            "ok": True,
+            "status_code": 200,
+            "elapsed_ms": 3.0,
+            "body": {"current_time": current_time_ms, "filter": filter},
+            "response": {
+                "hsp_state": {
+                    "play_state": "playing",
+                    "current_time_ms": current_time_ms,
+                    "current_point": 2,
+                    "points": 24,
+                    "stream_id": 1,
+                },
+            },
+        }
         return True
 
     def append_continuous_stream(
@@ -861,6 +882,29 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(append_points)
             self.assertEqual(append_points[-1]["handy_path"], "hsp/add")
             self.assertGreater(append_points[-1]["hsp_stream_index"], len(handy.stream_starts[0]["points"]))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_periodically_syncs_firmware_clock(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_syncs) >= 1, timeout=1.4), handy.stream_syncs)
+
+            first_sync = handy.stream_syncs[0]
+            self.assertGreater(first_sync["current_time_ms"], 0)
+            self.assertAlmostEqual(first_sync["filter"], 0.9)
+
+            sync_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("hsp_clock_sync")
+            ]
+            self.assertTrue(sync_points)
+            self.assertEqual(sync_points[-1]["handy_path"], "hsp/synctime")
+            self.assertEqual(sync_points[-1]["hsp_state_current_time_ms"], first_sync["current_time_ms"])
         finally:
             controller.stop()
 
