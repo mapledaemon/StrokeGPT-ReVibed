@@ -241,7 +241,9 @@ def set_handy_key_route():
     if not key:
         return jsonify({"status": "error", "message": "Key is missing"}), 400
     web.handy.set_api_key(key)
+    web.handy.set_handy_api_key("")
     web.settings.handy_key = key
+    web.settings.handy_api_v3_key = ""
     web.settings.save()
     connection = web.handy.check_connection()
     return jsonify({
@@ -260,24 +262,23 @@ def set_handy_device_config_route():
     firmware_version = web.settings._normalize_handy_firmware_version(
         data.get("handy_firmware_version", web.settings.handy_firmware_version)
     )
-    api_v3_key = str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
 
     web.settings.handy_firmware_version = firmware_version
-    web.settings.handy_api_v3_key = api_v3_key
+    web.settings.handy_api_v3_key = ""
     web.handy.set_firmware_version(firmware_version)
-    web.handy.set_handy_api_key(api_v3_key)
+    web.handy.set_handy_api_key("")
     web.settings.save()
 
-    v4_ready = firmware_version == "fw4" and bool(api_v3_key)
+    v4_ready = firmware_version == "fw4" and bool(web.settings.handy_key)
     return jsonify({
         "status": "success",
         "handy_firmware_version": firmware_version,
-        "handy_api_v3_enabled": bool(api_v3_key),
+        "handy_api_v3_enabled": v4_ready,
         "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
         "message": (
-            "Handy firmware set to v4; HSP continuous streaming is available."
+            "Handy firmware set to v4; API v3 uses the saved Handy connection key."
             if v4_ready
-            else "Handy firmware set to v4; add an API v3 app key to use HSP continuous streaming."
+            else "Handy firmware set to v4; connect a Handy key to use API v3 HSP streaming."
             if firmware_version == "fw4"
             else "Handy firmware set to v3 legacy mode."
         ),

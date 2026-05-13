@@ -44,6 +44,7 @@ class HandyController:
         self._last_v3_stroke_bounds = None
         self._last_velocity = None
         self._last_command_result = None
+        self._api_v3_auth_failed = False
 
     def _normalize_base_url(self, value):
         cleaned = str(value or "").strip() or HANDY_API_V2_BASE_URL
@@ -58,17 +59,25 @@ class HandyController:
         return "fw4"
 
     def set_api_key(self, key):
-        if key != self.handy_key:
+        if key != self.handy_key or self._api_v3_auth_failed:
             self._current_mode = None
             self._hamp_started = False
             self._hsp_streaming = False
+            self._api_v3_auth_failed = False
             self._reset_motion_cache()
         self.handy_key = key
 
     def set_handy_api_key(self, key):
-        self.api_v3_key = str(key or "").strip()
-        self._hsp_streaming = False
-        self._last_v3_stroke_bounds = None
+        # Compatibility shim - do not extend. API v3 control uses the saved
+        # Handy connection key; this keeps older settings/env plumbing inert.
+        cleaned = str(key or "").strip()
+        if cleaned != self.api_v3_key or self._api_v3_auth_failed:
+            self._current_mode = None
+            self._hamp_started = False
+            self._hsp_streaming = False
+            self._api_v3_auth_failed = False
+            self._reset_motion_cache()
+        self.api_v3_key = cleaned
 
     def set_firmware_version(self, version):
         normalized = self._normalize_firmware_version(version)
@@ -76,6 +85,7 @@ class HandyController:
             self._current_mode = None
             self._hamp_started = False
             self._hsp_streaming = False
+            self._api_v3_auth_failed = False
             self._reset_motion_cache()
         self.firmware_version = normalized
 
@@ -102,6 +112,7 @@ class HandyController:
             "position",
             "velocity",
             "duration",
+            "duration_ms",
             "stopOnTarget",
             "xa",
             "va",
@@ -111,6 +122,7 @@ class HandyController:
             "stop_on_target",
             "immediate_rsp",
             "start_time",
+            "server_time",
             "playback_rate",
             "pause_on_starving",
             "loop",
@@ -171,15 +183,31 @@ class HandyController:
         if not self.handy_key:
             self._record_command_result(path, body, ok=False, error="missing Handy key")
             return False
-        if not self.api_v3_key:
-            self._record_command_result(path, body, ok=False, error="missing Handy API v3 key")
-            return False
+        api_key = self._effective_api_v3_key()
         headers = {
             "Content-Type": "application/json",
             "X-Connection-Key": self.handy_key,
-            "X-Api-Key": self.api_v3_key,
+            "X-Api-Key": api_key,
         }
-        return self._send_put(self.api_v3_base_url, path, body, headers=headers)
+        ok = self._send_put(self.api_v3_base_url, path, body, headers=headers)
+        if not ok:
+            last_command = self.last_command_result() or {}
+            if last_command.get("status_code") == 401:
+                self._disable_api_v3_control()
+        return ok
+
+    def _effective_api_v3_key(self):
+        return str(self.handy_key or "").strip()
+
+    def _disable_api_v3_control(self):
+        self._api_v3_auth_failed = True
+        self._current_mode = None
+        self._hamp_started = False
+        self._hsp_streaming = False
+        self._reset_motion_cache()
+
+    def supports_api_v3_control(self):
+        return bool(self.firmware_version == "fw4" and self.handy_key and not self._api_v3_auth_failed)
 
     def _send_put(self, base_url, path, body=None, *, headers):
         started_at = time.monotonic()
@@ -271,13 +299,13 @@ class HandyController:
             self._send_v3_command("hsp/stop")
             self._hsp_streaming = False
         if self._current_mode != MODE_HAMP:
-            if not self._send_command("mode", {"mode": MODE_HAMP}):
+            if not self._send_mode_command(MODE_HAMP):
                 return False
             self._current_mode = MODE_HAMP
             self._hamp_started = False
             self._reset_motion_cache()
         if not self._hamp_started:
-            if not self._send_command("hamp/start"):
+            if not self._send_hamp_start():
                 return False
             self._hamp_started = True
         return True
@@ -287,19 +315,47 @@ class HandyController:
             self._send_v3_command("hsp/stop")
             self._hsp_streaming = False
         if self._hamp_started:
-            if not self._send_command("hamp/stop"):
+            if not self._send_hamp_stop():
                 return False
             self._hamp_started = False
             self._reset_motion_cache()
         if self._current_mode != MODE_HDSP:
-            if not self._send_command("mode", {"mode": MODE_HDSP}):
+            if not self._send_mode_command(MODE_HDSP):
                 return False
             self._current_mode = MODE_HDSP
             self._reset_motion_cache()
         return True
 
     def supports_continuous_streaming(self):
-        return bool(self.firmware_version == "fw4" and self.handy_key and self.api_v3_key)
+        return self.supports_api_v3_control()
+
+    def _send_mode_command(self, mode):
+        body = {"mode": int(mode)}
+        if self.supports_api_v3_control():
+            if self._send_v3_command("mode2", body):
+                return True
+            if not self._api_v3_auth_failed:
+                return False
+        return self._send_command("mode", body)
+
+    def _send_hamp_start(self):
+        if self.supports_api_v3_control():
+            if self._send_v3_command("hamp/start"):
+                return True
+            if not self._api_v3_auth_failed:
+                return False
+        return self._send_command("hamp/start")
+
+    def _send_hamp_stop(self):
+        if self.supports_api_v3_control():
+            if self._send_v3_command("hamp/stop"):
+                return True
+            if not self._api_v3_auth_failed:
+                return False
+        return self._send_command("hamp/stop")
+
+    def _estimated_server_time_ms(self):
+        return int(round(time.time() * 1000.0))
 
     def _safe_percent(self, p):
         try:
@@ -314,8 +370,18 @@ class HandyController:
         velocity = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
         return int(round(velocity))
 
+    def effective_speed_for_relative(self, speed):
+        return self._relative_speed_to_velocity(speed)
+
     def max_velocity_for_relative_speed(self, speed):
         return min(self.max_user_speed, self._relative_speed_to_velocity(speed))
+
+    def _velocity_to_v3_ratio(self, velocity):
+        try:
+            velocity = float(velocity)
+        except (TypeError, ValueError):
+            velocity = 0.0
+        return round(max(0.0, min(1.0, velocity / 100.0)), 4)
 
     def _relative_depth_to_mm(self, depth):
         absolute_pos_pct = self._relative_depth_to_physical_percent(depth)
@@ -339,6 +405,16 @@ class HandyController:
         planned_velocity = int(round(distance_mm / duration_seconds))
         planned_velocity = max(self.min_user_speed, planned_velocity)
         return min(max_velocity, planned_velocity)
+
+    def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+        try:
+            velocity = max(1.0, float(velocity))
+        except (TypeError, ValueError):
+            velocity = max(1.0, float(self.min_user_speed or 1))
+        distance_mm = abs(self._relative_depth_to_mm(end_depth) - self._relative_depth_to_mm(start_depth))
+        if distance_mm <= 0:
+            return 1
+        return max(1, int(round((distance_mm / velocity) * 1000.0)))
 
     def move(self, speed, depth, stroke_range):
         """
@@ -405,7 +481,7 @@ class HandyController:
         self.last_stroke_range = int(round(relative_range_pct))
         return True
 
-    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None):
+    def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None, duration_ms=None):
         """Move to a single calibrated depth target for pattern previews."""
         if not self.handy_key:
             self._record_command_result("hdsp/xava", ok=False, error="missing Handy key")
@@ -430,6 +506,32 @@ class HandyController:
                 self.min_user_speed,
                 min(self.max_velocity_for_relative_speed(relative_speed_pct), int(round(velocity))),
             )
+
+        if self.supports_api_v3_control():
+            if duration_ms is None:
+                duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
+            else:
+                try:
+                    duration_ms = int(round(float(duration_ms)))
+                except (TypeError, ValueError):
+                    duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
+                duration_ms = max(1, duration_ms)
+            body = {
+                "xp": round(relative_pos_pct / 100.0, 4),
+                "t": duration_ms,
+                "stop_on_target": bool(stop_on_target),
+                "immediate_rsp": False,
+            }
+            if not self._send_v3_command("hdsp/xpt", body):
+                return False
+
+            self._current_mode = MODE_HDSP
+            self._last_velocity = velocity
+            self.last_stroke_speed = velocity
+            self.last_relative_speed = intent_speed_pct
+            self.last_depth_pos = int(round(relative_pos_pct))
+            return True
+
         position = self._relative_depth_to_mm(relative_pos_pct)
         body = {"position": position, "velocity": velocity, "stopOnTarget": bool(stop_on_target)}
         if not self._send_command("hdsp/xava", body):
@@ -466,10 +568,10 @@ class HandyController:
 
     def _ensure_hsp(self, stream_id=None):
         if not self.supports_continuous_streaming():
-            self._record_command_result("hsp/setup", ok=False, error="missing Handy API v3 key")
+            self._record_command_result("hsp/setup", ok=False, error="Handy firmware v4 and connection key required")
             return False
         if self._hamp_started:
-            if not self._send_command("hamp/stop"):
+            if not self._send_hamp_stop():
                 return False
             self._hamp_started = False
             self._reset_motion_cache()
@@ -486,7 +588,7 @@ class HandyController:
             self._last_v3_stroke_bounds = bounds
 
         if self._current_mode != MODE_HSP:
-            if not self._send_v3_command("mode2", {"mode": MODE_HSP}):
+            if not self._send_mode_command(MODE_HSP):
                 return False
             self._current_mode = MODE_HSP
             self._reset_motion_cache()
@@ -526,12 +628,14 @@ class HandyController:
         }
         if tail_point_threshold is not None:
             add["tail_point_threshold"] = max(1, int(tail_point_threshold))
+        if not self._send_v3_command("hsp/add", add):
+            return False
         body = {
             "start_time": max(0, int(round(start_time_ms))),
+            "server_time": self._estimated_server_time_ms(),
             "playback_rate": 1.0,
             "pause_on_starving": True,
             "loop": False,
-            "add": add,
         }
         if not self._send_v3_command("hsp/play", body):
             return False
@@ -587,7 +691,15 @@ class HandyController:
         bounds = (slide_min, slide_max)
         if bounds == self._last_slide_bounds:
             return True
-        if self._send_command("slide", {"min": slide_min, "max": slide_max}):
+        if self.supports_api_v3_control():
+            stroke_min = round(max(0.0, min(1.0, (100.0 - slide_max) / 100.0)), 4)
+            stroke_max = round(max(0.0, min(1.0, (100.0 - slide_min) / 100.0)), 4)
+            ok = self._send_v3_command("hamp/stroke", {"min": stroke_min, "max": stroke_max})
+            if not ok and self._api_v3_auth_failed:
+                ok = self._send_command("slide", {"min": slide_min, "max": slide_max})
+        else:
+            ok = self._send_command("slide", {"min": slide_min, "max": slide_max})
+        if ok:
             self._last_slide_bounds = bounds
             return True
         return False
@@ -595,7 +707,13 @@ class HandyController:
     def _send_velocity(self, velocity):
         if velocity == self._last_velocity:
             return True
-        if self._send_command("hamp/velocity", {"velocity": velocity}):
+        if self.supports_api_v3_control():
+            ok = self._send_v3_command("hamp/velocity", {"velocity": self._velocity_to_v3_ratio(velocity)})
+            if not ok and self._api_v3_auth_failed:
+                ok = self._send_command("hamp/velocity", {"velocity": velocity})
+        else:
+            ok = self._send_command("hamp/velocity", {"velocity": velocity})
+        if ok:
             self._last_velocity = velocity
             return True
         return False
@@ -606,9 +724,9 @@ class HandyController:
             self._send_v3_command("hsp/stop")
             self._hsp_streaming = False
         if self._current_mode != MODE_HAMP:
-            if self._send_command("mode", {"mode": MODE_HAMP}):
+            if self._send_mode_command(MODE_HAMP):
                 self._current_mode = MODE_HAMP
-        stopped = self._send_command("hamp/stop")
+        stopped = self._send_hamp_stop()
         self.last_stroke_speed = 0
         self.last_relative_speed = 0
         self._hamp_started = False
@@ -658,7 +776,7 @@ class HandyController:
             "hamp_started": self._hamp_started,
             "hsp_streaming": self._hsp_streaming,
             "firmware_version": self.firmware_version,
-            "api_v3_enabled": bool(self.api_v3_key),
+            "api_v3_enabled": self.supports_api_v3_control(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),
             "last_command": self.last_command_result(),
         }

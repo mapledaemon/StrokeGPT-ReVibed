@@ -15,7 +15,7 @@ from strokegpt.handy import HandyController
 
 class RecordingHandyController(HandyController):
     def __init__(self):
-        super().__init__(handy_key="test")
+        super().__init__(handy_key="test", firmware_version="fw3")
         self.commands = []
 
     def _send_command(self, path, body=None):
@@ -27,7 +27,7 @@ class RecordingHandyController(HandyController):
 class RecordingV3HandyController(RecordingHandyController):
     def __init__(self):
         super().__init__()
-        self.set_handy_api_key("app-key")
+        self.set_firmware_version("fw4")
         self.v3_commands = []
 
     def _send_v3_command(self, path, body=None):
@@ -161,6 +161,22 @@ class HandyControllerTests(unittest.TestCase):
         )
         self.assertNotIn("secret", str(diagnostics["last_command"]))
 
+    def test_send_v3_command_uses_connection_key_for_v3_auth(self):
+        handy = HandyController(handy_key="secret")
+
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=200),
+            create=True,
+        ) as put:
+            self.assertTrue(handy._send_v3_command("mode2", {"mode": 0}))
+
+        _args, kwargs = put.call_args
+        self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "secret")
+        self.assertTrue(handy.supports_continuous_streaming())
+        self.assertNotIn("secret", str(handy.diagnostics()["last_command"]))
+
     def test_send_command_records_failure_instead_of_raising_name_error(self):
         handy = HandyController(handy_key="secret")
         error = handy_module.requests.exceptions.RequestException("device offline")
@@ -267,15 +283,65 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
-    def test_supports_continuous_streaming_requires_v3_application_key(self):
+    def test_supports_continuous_streaming_uses_saved_connection_key(self):
         handy = RecordingHandyController()
 
         self.assertFalse(handy.supports_continuous_streaming())
-        handy.set_handy_api_key("app-key")
+        handy.set_firmware_version("fw4")
 
         self.assertTrue(handy.supports_continuous_streaming())
         handy.set_firmware_version("v3")
         self.assertFalse(handy.supports_continuous_streaming())
+
+    def test_v3_unauthorized_falls_back_to_legacy_hamp_commands(self):
+        class UnauthorizedV3HandyController(RecordingV3HandyController):
+            def _send_v3_command(self, path, body=None):
+                self.v3_commands.append((path, body or {}))
+                self._record_command_result(path, body, ok=False, status_code=401, error="Unauthorized")
+                self._disable_api_v3_control()
+                return False
+
+        handy = UnauthorizedV3HandyController()
+
+        self.assertTrue(handy.move(50, 50, 50))
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["mode2"])
+        self.assertEqual(
+            [path for path, _body in handy.commands],
+            ["mode", "hamp/start", "slide", "hamp/velocity"],
+        )
+        self.assertFalse(handy.supports_continuous_streaming())
+
+    def test_fw4_hamp_uses_v3_stroke_and_velocity_units(self):
+        handy = RecordingV3HandyController()
+        handy.update_settings(10, 70, 10, 90)
+
+        handy.move(50, 60, 50)
+
+        self.assertEqual(
+            [path for path, _body in handy.v3_commands],
+            ["mode2", "hamp/start", "hamp/stroke", "hamp/velocity"],
+        )
+        self.assertEqual(handy.commands, [])
+        self.assertEqual(handy.v3_commands[0][1], {"mode": 0})
+        self.assertEqual(handy.v3_commands[2][1], {"min": 0.38, "max": 0.78})
+        self.assertEqual(handy.v3_commands[3][1], {"velocity": 0.4})
+
+    def test_fw4_position_move_uses_xpt_duration_from_speed_limits(self):
+        handy = RecordingV3HandyController()
+        handy.update_settings(10, 70, 0, 100)
+        handy.last_depth_pos = 25
+
+        handy.move_to_depth(50, 75)
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["mode2", "hdsp/xpt"])
+        self.assertEqual(handy.commands, [])
+        self.assertEqual(handy.v3_commands[0][1], {"mode": 2})
+        body = handy.v3_commands[-1][1]
+        self.assertEqual(body["xp"], 0.75)
+        self.assertEqual(body["t"], 1375)
+        self.assertTrue(body["stop_on_target"])
+        self.assertFalse(body["immediate_rsp"])
 
     def test_start_continuous_stream_uses_hsp_timed_points(self):
         handy = RecordingV3HandyController()
@@ -294,24 +360,26 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(
             [path for path, _body in handy.v3_commands],
-            ["slider/stroke", "mode2", "hsp/setup", "hsp/play"],
+            ["slider/stroke", "mode2", "hsp/setup", "hsp/add", "hsp/play"],
         )
         self.assertEqual(handy.v3_commands[0][1], {"min": 0.1, "max": 0.9})
         self.assertEqual(handy.v3_commands[1][1], {"mode": 4})
-        body = handy.v3_commands[-1][1]
-        self.assertEqual(body["start_time"], 0)
-        self.assertTrue(body["pause_on_starving"])
-        self.assertFalse(body["loop"])
-        self.assertTrue(body["add"]["flush"])
-        self.assertEqual(body["add"]["tail_point_stream_index"], 3)
+        add = handy.v3_commands[3][1]
+        self.assertTrue(add["flush"])
+        self.assertEqual(add["tail_point_stream_index"], 3)
         self.assertEqual(
-            body["add"]["points"],
+            add["points"],
             [
                 {"t": 0, "x": 10},
                 {"t": 160, "x": 50},
                 {"t": 320, "x": 90},
             ],
         )
+        body = handy.v3_commands[-1][1]
+        self.assertEqual(body["start_time"], 0)
+        self.assertIn("server_time", body)
+        self.assertTrue(body["pause_on_starving"])
+        self.assertFalse(body["loop"])
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
         self.assertEqual(handy.diagnostics()["depth"], 100)

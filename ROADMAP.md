@@ -40,6 +40,9 @@ mode controls still have rough edges that block daily use.
   HSP point spacing / HDSP per-sample command speed, effective cycle timing,
   and the final Handy command metadata instead of treating any one of those
   fields as "the speed."
+- Include non-pattern LLM and Legacy Auto targets in that validation. Their
+  default-backend path should stay on live stroke control, while named patterns
+  and anchor programs use the continuous position/script transport.
 - Treat regular Freestyle stops, end-of-sequence stalls, and the
   Auto-to-Freestyle no-action case as the current major reliability bug
   cluster. Reproduce the cases where the motion indicator advances but the

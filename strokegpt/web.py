@@ -140,7 +140,6 @@ settings.load()
 
 handy = HandyController(
     settings.handy_key,
-    api_v3_key=settings.handy_api_v3_key,
     firmware_version=settings.handy_firmware_version,
 )
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
@@ -544,7 +543,7 @@ def diagnostics_latency_payload():
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
     handy.set_firmware_version(settings.handy_firmware_version)
-    handy.set_handy_api_key(settings.handy_api_v3_key)
+    handy.set_handy_api_key("")
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)

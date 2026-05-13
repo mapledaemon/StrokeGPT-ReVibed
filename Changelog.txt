@@ -8,6 +8,29 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #186 - Fix Firmware V4 Handy Control Schema
+------------------------------------------------------------
+
+Branch: codex-fw4-speed-control
+
+- Corrected the firmware v4/API v3 Handy control path after real-device
+  testing showed `mode2` could fail with 401 Unauthorized when the app used a
+  separate stale API v3 key. API v3 commands now use the saved Handy
+  connection key, and legacy `handy_api_v3_key` settings are cleared instead
+  of continuing to influence runtime control.
+- Removed the redundant API v3 app-key field from Device settings so the UI
+  has one Handy credential plus the firmware selector. Firmware v4 still
+  enables HSP timed-point streaming when a Handy connection key is configured;
+  firmware v3 remains the legacy fallback.
+- Added a defensive fallback that disables API v3 for the session and retries
+  legacy HAMP/HDSP commands if a v3 authorization failure is observed, so a
+  bad v3 response does not leave all Handy control broken.
+- Preserved the continuous-motion schema work from PR #185 while tightening
+  tests around v3 auth headers, 401 fallback behavior, stale key migration,
+  settings routes, frontend Device controls, and variable-speed continuous
+  sampling.
+
+
 2026-05-13 - PR #185 - Firmware Aware Continuous Streaming
 -----------------------------------------------------------
 

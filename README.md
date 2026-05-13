@@ -146,7 +146,7 @@ StrokeGPT tab.
 ## First Run
 
 1. Paste your Handy connection key in **Profile menu > Settings > Device**.
-2. Select your Handy firmware path in **Device**. Firmware v4 can use API v3 HSP continuous streaming when you add an API v3 app key; firmware v3 uses the legacy compatibility path.
+2. Select your Handy firmware path in **Device**. Firmware v4 can use API v3 HSP continuous streaming with the saved Handy connection key; firmware v3 uses the legacy compatibility path.
 3. Pick a model in **Profile menu > Settings > Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
 4. Optional: run **Profile menu > Settings > Diagnostics > Run Setup Checks** to verify Ollama, selected-model GPU use, optional voice dependencies, and CUDA visibility.
 5. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.
@@ -161,7 +161,7 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Persona** — change the AI persona prompt and display name.
 - **Model** — pick, download, add, or delete saved Ollama model options; switch the active model; see install state, model sizes, and GPU/VRAM status. The default options include the current Gemma preset plus `huihui_ai/granite4.1-abliterated:3b` (2.1 GB) and `huihui_ai/granite4.1-abliterated:8b` (5.3 GB).
 - **Voice** — pick ElevenLabs or local Chatterbox, configure voice samples, see Torch/CUDA status.
-- **Device** — Handy key, firmware v3/v4 path, optional API v3 app key for FW4 HSP streaming, stroke range, range test.
+- **Device** — Handy key, firmware v3/v4 path, stroke range, range test.
 - **Motion** — speed limits, motion backend (Continuous position is the default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion pattern enable/disable, weights, import/export, thumbs feedback.
 - **Diagnostics** — setup checks, runtime latency tests for Ollama/loaded voice paths, and diagnostics verbosity.
 - **Advanced** — **Reset All Settings** (clears the saved settings file, stops motion, returns to setup).

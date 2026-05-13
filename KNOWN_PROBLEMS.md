@@ -56,6 +56,10 @@ Follow-up work:
 - Compare HAMP legacy, finite position playback, and Continuous position on
   the physical Handy using the same speed limits, depth/range settings, and
   pattern set.
+- Re-test plain LLM and Legacy Auto targets that do not resolve to a named
+  fixed pattern. These should now use live stroke control in the default
+  continuous backend instead of single-depth position playback, so visible
+  speed changes should translate to device velocity changes again.
 - Verify that Continuous position speed changes now affect HSP point timing on
   firmware v4 and HDSP fallback cadence/command-speed budget on legacy paths.
   The trace separates semantic `intent_speed`, sampled `sample_speed`,

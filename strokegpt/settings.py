@@ -148,7 +148,7 @@ def default_settings_dict():
     return {
         "handy_key": "",
         "handy_firmware_version": DEFAULT_HANDY_FIRMWARE_VERSION,
-        "handy_api_v3_key": str(os.getenv("STROKEGPT_HANDY_API_KEY", "") or "").strip(),
+        "handy_api_v3_key": "",
         "ai_name": "BOT",
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
@@ -291,7 +291,9 @@ class SettingsManager:
         self.handy_firmware_version = self._normalize_handy_firmware_version(
             data.get("handy_firmware_version", defaults["handy_firmware_version"])
         )
-        self.handy_api_v3_key = str(data.get("handy_api_v3_key", defaults["handy_api_v3_key"]) or "").strip()
+        # Compatibility shim - do not extend. Older builds stored a separate
+        # API v3 app key here; current v3 control uses the Handy connection key.
+        self.handy_api_v3_key = defaults["handy_api_v3_key"]
         self.ai_name = str(data.get("ai_name", defaults["ai_name"]) or defaults["ai_name"])
 
         loaded_model = normalize_ollama_model(data.get("ollama_model", DEFAULT_OLLAMA_MODEL))

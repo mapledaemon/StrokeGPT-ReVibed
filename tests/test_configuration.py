@@ -310,6 +310,14 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
         self.assertEqual(settings.motion_backend, "continuous")
 
+    def test_legacy_handy_api_v3_key_is_cleared_on_load(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"handy_api_v3_key": "stale-app-key"}))
+        settings.load()
+
+        self.assertEqual(settings.handy_api_v3_key, "")
+
     def test_diagnostics_levels_are_normalized(self):
         fake_path = FakePath(json.dumps({
             "motion_diagnostics_level": "verbose",
