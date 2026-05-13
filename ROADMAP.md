@@ -321,6 +321,17 @@ a clean tree first.
   into focused modules. Do the voice-generation refactor after the chat/UI
   refactor so TTS cutoffs and text/voice mismatch bugs can be separated from
   chat-pipeline bugs first.
+- Evaluate local voice-cloning TTS replacements only after the provider
+  boundary exists. Keep Chatterbox Turbo as the latency baseline; compare
+  F5-TTS and CosyVoice only if they preserve reference-audio cloning, explicit
+  model downloads, and local/offline operation. CosyVoice should be treated as
+  a poor default choice unless it can install and run cleanly on Windows without
+  requiring Docker, WSL, or a Linux-only Triton/TensorRT stack as the normal
+  path. If it works only through that heavier deployment shape, keep it as an
+  optional advanced NVIDIA-runtime experiment at most. Any candidate benchmark
+  should measure cold load, warm first-audio latency, real-time factor, VRAM
+  use, and coexistence with Ollama plus voice input on an 8 GB RTX 5060-class
+  machine before changing the recommended local TTS provider.
 - Treat frontend source-text tests as static contract coverage, not behavioral
   proof. When a future bug depends on DOM mutation, state transitions, or
   handler outcomes, prefer a `tests/js/*.test.mjs` behavioral test and avoid
