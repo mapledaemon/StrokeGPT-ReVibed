@@ -8,6 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Motion Transport Capture Diagnostics
+---------------------------------------------------------------
+
+Branch: codex/motion-transport-capture-diagnostics
+
+- Added a Settings > Diagnostics motion transport capture flow that brackets
+  real-device testing without starting motion automatically. Start Capture
+  records the current motion-trace and Handy command-history offsets; Stop
+  Capture returns the new trace rows, new Handy command rows, before/after
+  sanitized diagnostics, path counts, and a status summary that distinguishes
+  HSP timed-point streaming from HDSP or HAMP fallback paths.
+- Rendered the capture summary and JSON payload in the Diagnostics tab with a
+  Download JSON action so physical-device observations can be paired with the
+  exact transport path the app sent.
+- Added Flask route coverage for HSP captures and HDSP fallback warnings, plus
+  frontend behavioral coverage for the Diagnostics tab renderer and static
+  asset checks for the new controls.
+
+
 2026-05-13 - PR #191 - Restore Continuous Relative Tempo
 ---------------------------------------------------------
 

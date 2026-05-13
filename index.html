@@ -468,6 +468,17 @@
                     <div id="latency-test-results" class="diagnostics-results latency-test-results" aria-live="polite"></div>
                 </div>
                 <div class="settings-subsection diagnostics-panel">
+                    <h4>Motion Transport Capture</h4>
+                    <div class="diagnostics-actions">
+                        <button id="start-motion-capture-btn" class="my-button" data-requires-backend>Start Capture</button>
+                        <button id="finish-motion-capture-btn" class="my-button" data-requires-backend disabled>Stop Capture</button>
+                        <button id="download-motion-capture-btn" class="my-button" disabled>Download JSON</button>
+                    </div>
+                    <span id="motion-capture-status" class="settings-help">Capture the active motion trace and Handy command transport.</span>
+                    <div id="motion-capture-results" class="diagnostics-results motion-capture-results" aria-live="polite"></div>
+                    <pre id="motion-capture-output" class="diagnostics-output motion-capture-output">No motion transport capture recorded.</pre>
+                </div>
+                <div class="settings-subsection diagnostics-panel">
                     <h4>Diagnostic Detail</h4>
                     <div class="diagnostics-level-grid">
                         <label class="settings-field-label" for="ollama-diagnostics-level-select">

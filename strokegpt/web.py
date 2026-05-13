@@ -146,6 +146,7 @@ handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth
 motion = MotionController(handy)
 intent_matcher = IntentMatcher()
 motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
+motion_transport_capture_session = None
 
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
 llm = LLMService(url=LLM_URL, model=ollama_model)
@@ -539,6 +540,203 @@ def diagnostics_latency_payload():
         diagnostics_dir=DIAGNOSTICS_DIR,
         ollama_status=_ollama_status_payload,
     )
+
+
+def _motion_transport_run_settings():
+    return {
+        "backend": motion.backend,
+        "firmware": settings.handy_firmware_version,
+        "min_speed": settings.min_speed,
+        "max_speed": settings.max_speed,
+        "min_depth": settings.min_depth,
+        "max_depth": settings.max_depth,
+        "motion_style": settings.motion_style,
+        "active_mode": app_state.active_mode_name,
+    }
+
+
+def _motion_transport_snapshot():
+    diagnostics = handy.diagnostics()
+    observability = motion.observability_snapshot(diagnostics)
+    handy_diagnostics = dict(diagnostics)
+    command_history = list(handy_diagnostics.pop("command_history", []) or [])
+    return {
+        "captured_at": time.time(),
+        "run": _motion_transport_run_settings(),
+        "motion": {
+            "backend": observability.get("backend"),
+            "source": observability.get("source"),
+            "label": observability.get("label"),
+            "playback_active": bool(observability.get("playback_active")),
+            "last_command_time": observability.get("last_command_time"),
+        },
+        "handy_diagnostics": handy_diagnostics,
+        "motion_trace": list(observability.get("trace") or []),
+        "handy_command_history": command_history,
+    }
+
+
+def _motion_transport_summary(motion_trace, command_history):
+    paths = [str(command.get("path") or "") for command in command_history if isinstance(command, dict)]
+    path_counts = {}
+    for path in paths:
+        path_counts[path] = path_counts.get(path, 0) + 1
+
+    hsp_count = sum(count for path, count in path_counts.items() if path.startswith("hsp/"))
+    hdsp_count = sum(count for path, count in path_counts.items() if path.startswith("hdsp/"))
+    hamp_count = sum(
+        count
+        for path, count in path_counts.items()
+        if path.startswith("hamp/") or path in {"slide", "mode", "mode2"}
+    )
+    failed_count = sum(
+        1
+        for command in command_history
+        if isinstance(command, dict) and command.get("ok") is False
+    )
+    schemas = sorted(
+        {
+            str(point.get("continuous_schema"))
+            for point in motion_trace
+            if isinstance(point, dict) and point.get("continuous_schema")
+        }
+    )
+
+    if failed_count:
+        status = "error"
+        message = f"Captured {failed_count} failed Handy command(s)."
+    elif hsp_count:
+        status = "ok"
+        message = "Captured HSP timed-point transport."
+    elif hdsp_count:
+        status = "warning"
+        message = "Captured HDSP position transport; HSP was not used in this capture."
+    elif hamp_count:
+        status = "warning"
+        message = "Captured HAMP or mode/slide commands; continuous HSP was not used."
+    elif motion_trace:
+        status = "warning"
+        message = "Captured motion trace rows but no Handy command history."
+    else:
+        status = "warning"
+        message = "No motion commands were captured."
+
+    return {
+        "status": status,
+        "message": message,
+        "trace_rows": len(motion_trace),
+        "command_rows": len(command_history),
+        "path_counts": path_counts,
+        "hsp_commands": hsp_count,
+        "hdsp_commands": hdsp_count,
+        "hamp_or_mode_commands": hamp_count,
+        "failed_commands": failed_count,
+        "continuous_schemas": schemas,
+    }
+
+
+def _slice_from_index(items, start_index):
+    try:
+        start = max(0, int(start_index))
+    except (TypeError, ValueError):
+        start = 0
+    if start > len(items):
+        start = 0
+    return items[start:]
+
+
+def motion_transport_capture_payload(action="snapshot"):
+    global motion_transport_capture_session
+
+    action = str(action or "snapshot").strip().lower()
+    snapshot = _motion_transport_snapshot()
+
+    if action == "start":
+        with app_state.lock:
+            motion_transport_capture_session = {
+                "started_at": snapshot["captured_at"],
+                "trace_count": len(snapshot["motion_trace"]),
+                "command_count": len(snapshot["handy_command_history"]),
+                "before": snapshot,
+            }
+        return {
+            "status": "started",
+            "message": "Motion transport capture started.",
+            "active": True,
+            "capture": {
+                "started_at": snapshot["captured_at"],
+                "run": snapshot["run"],
+                "before": snapshot["handy_diagnostics"],
+                "summary": {
+                    "status": "info",
+                    "message": "Run motion now, then stop the capture.",
+                    "trace_rows": 0,
+                    "command_rows": 0,
+                    "path_counts": {},
+                    "hsp_commands": 0,
+                    "hdsp_commands": 0,
+                    "hamp_or_mode_commands": 0,
+                    "failed_commands": 0,
+                    "continuous_schemas": [],
+                },
+            },
+        }
+
+    if action == "cancel":
+        with app_state.lock:
+            motion_transport_capture_session = None
+        return {
+            "status": "success",
+            "message": "Motion transport capture cleared.",
+            "active": False,
+        }
+
+    with app_state.lock:
+        session = motion_transport_capture_session
+        if action == "finish":
+            motion_transport_capture_session = None
+
+    if action == "finish" and session:
+        motion_trace = _slice_from_index(snapshot["motion_trace"], session.get("trace_count", 0))
+        command_history = _slice_from_index(snapshot["handy_command_history"], session.get("command_count", 0))
+        capture = {
+            "started_at": session.get("started_at"),
+            "finished_at": snapshot["captured_at"],
+            "run": snapshot["run"],
+            "before": session.get("before", {}).get("handy_diagnostics", {}),
+            "after": snapshot["handy_diagnostics"],
+            "motion": snapshot["motion"],
+            "motion_trace": motion_trace,
+            "handy_command_history": command_history,
+        }
+        capture["summary"] = _motion_transport_summary(motion_trace, command_history)
+        return {
+            "status": "success",
+            "message": capture["summary"]["message"],
+            "active": False,
+            "capture": capture,
+        }
+
+    capture = {
+        "started_at": snapshot["captured_at"],
+        "finished_at": snapshot["captured_at"],
+        "run": snapshot["run"],
+        "after": snapshot["handy_diagnostics"],
+        "motion": snapshot["motion"],
+        "motion_trace": snapshot["motion_trace"],
+        "handy_command_history": snapshot["handy_command_history"],
+    }
+    capture["summary"] = _motion_transport_summary(
+        capture["motion_trace"],
+        capture["handy_command_history"],
+    )
+    return {
+        "status": "success",
+        "message": capture["summary"]["message"],
+        "active": bool(motion_transport_capture_session),
+        "capture": capture,
+    }
+
 
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
