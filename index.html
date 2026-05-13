@@ -484,6 +484,23 @@
             </div>
         </div>
     </div>
+    <div id="ollama-model-required-dialog" class="modal-overlay priority-modal" aria-modal="true" role="dialog" aria-labelledby="ollama-model-required-title">
+        <div class="modal-box model-required-box">
+            <div class="modal-header">
+                <h3 id="ollama-model-required-title">Choose Ollama Model</h3>
+                <button id="close-ollama-model-required-btn" class="modal-close" aria-label="Close model setup">&times;</button>
+            </div>
+            <p id="ollama-model-required-message" class="settings-help">The selected Ollama model is not installed.</p>
+            <label class="settings-field-label" for="ollama-model-required-select">Model</label>
+            <select id="ollama-model-required-select" class="select-box" data-requires-backend></select>
+            <div class="model-actions model-actions-wide">
+                <button id="use-available-ollama-model-btn" class="my-button" data-requires-backend>Use Selected</button>
+                <button id="download-required-ollama-model-btn" class="my-button" data-requires-backend>Download Selected</button>
+                <button id="open-model-settings-btn" class="my-button">Model Settings</button>
+            </div>
+            <div id="ollama-model-required-status" class="settings-status-line">Select an installed model or download one before chatting.</div>
+        </div>
+    </div>
     <div id="about-dialog" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="about-dialog-title">
         <div class="modal-box about-box">
             <div class="modal-header">

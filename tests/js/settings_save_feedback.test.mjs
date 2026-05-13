@@ -63,6 +63,16 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         resetStubElement('ollama-model-select');
         resetStubElement('ollama-model-input');
         resetStubElement('ollama-model-status');
+        resetStubElement('ollama-model-required-dialog');
+        resetStubElement('close-ollama-model-required-btn');
+        resetStubElement('ollama-model-required-message');
+        resetStubElement('ollama-model-required-select');
+        resetStubElement('use-available-ollama-model-btn');
+        resetStubElement('download-required-ollama-model-btn');
+        resetStubElement('open-model-settings-btn');
+        resetStubElement('ollama-model-required-status');
+        resetStubElement('settings-dialog');
+        resetStubElement('setup-overlay');
         const statusText = getStubElement('status-text');
         statusText.textContent = 'baseline';
         state.connectionLost = false;
@@ -70,6 +80,7 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         state.ollamaModels = [];
         state.ollamaCurrentModel = '';
         state.ollamaModelDetails = {};
+        state.ollamaModelPromptDismissedKey = '';
 
         originalFetch = globalThis.fetch;
         originalConfirm = globalThis.window.confirm;
@@ -427,6 +438,122 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.strictEqual(downloadButton.textContent, 'Downloading 50%...');
         assert.strictEqual(downloadButton.disabled, true);
         assert.match(state.chatModelBlockedMessage, /50%/);
+    });
+
+    it('updateOllamaStatus opens a model chooser when an installed alternate exists', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                ollama_model: 'installed/model:tag',
+                ollama_models: ['preferred/model:tag', 'installed/model:tag'],
+                ollama_status: {
+                    available: true,
+                    current_model: 'installed/model:tag',
+                    current_model_installed: true,
+                    installed_model_names: ['installed/model:tag'],
+                    installed_model_candidates: ['installed/model:tag'],
+                    model_selection_required: false,
+                    suggested_model: '',
+                    download: {},
+                    diagnostics_level: 'compact',
+                    llm_diagnostics: {},
+                    model_details: {
+                        'installed/model:tag': {
+                            name: 'installed/model:tag',
+                            installed: true,
+                            size_label: '3.0 GB',
+                        },
+                        'preferred/model:tag': {
+                            name: 'preferred/model:tag',
+                            installed: false,
+                            size_label: '5.0 GB',
+                        },
+                    },
+                    gpu_status: {},
+                    message: 'Current model is installed: installed/model:tag',
+                },
+            });
+        };
+
+        populateModelOptions(
+            ['preferred/model:tag', 'installed/model:tag'],
+            'preferred/model:tag',
+            {
+                model_details: {
+                    'preferred/model:tag': {
+                        name: 'preferred/model:tag',
+                        installed: false,
+                        size_label: '5.0 GB',
+                    },
+                    'installed/model:tag': {
+                        name: 'installed/model:tag',
+                        installed: true,
+                        size_label: '3.0 GB',
+                    },
+                },
+            },
+        );
+
+        updateOllamaStatus({
+            available: true,
+            current_model: 'preferred/model:tag',
+            current_model_installed: false,
+            model_selection_required: true,
+            installed_model_names: ['installed/model:tag'],
+            installed_model_candidates: ['installed/model:tag'],
+            suggested_model: 'installed/model:tag',
+            download: {},
+            diagnostics_level: 'compact',
+            llm_diagnostics: {},
+            model_details: {
+                'preferred/model:tag': {
+                    name: 'preferred/model:tag',
+                    installed: false,
+                    size_label: '5.0 GB',
+                },
+                'installed/model:tag': {
+                    name: 'installed/model:tag',
+                    installed: true,
+                    size_label: '3.0 GB',
+                },
+            },
+            gpu_status: {},
+            message: 'Selected model is not installed: preferred/model:tag. Installed model available: installed/model:tag.',
+        });
+
+        const dialog = getStubElement('ollama-model-required-dialog');
+        const message = getStubElement('ollama-model-required-message');
+        const select = getStubElement('ollama-model-required-select');
+        const useButton = getStubElement('use-available-ollama-model-btn');
+        const downloadButton = getStubElement('download-required-ollama-model-btn');
+
+        assert.strictEqual(dialog.classList.contains('open'), true);
+        assert.match(message.textContent, /preferred\/model:tag/);
+        assert.match(message.textContent, /installed\/model:tag/);
+        assert.strictEqual(select.value, 'installed/model:tag');
+        assert.strictEqual(select.children[0].textContent, 'installed/model:tag (installed)');
+        assert.strictEqual(useButton.disabled, false);
+        assert.strictEqual(downloadButton.disabled, true);
+        assert.match(state.chatModelBlockedMessage, /Settings > Model/);
+
+        select.value = 'preferred/model:tag';
+        select.dispatchEvent('change');
+        assert.strictEqual(useButton.disabled, true);
+        assert.strictEqual(downloadButton.disabled, false);
+
+        select.value = 'installed/model:tag';
+        select.dispatchEvent('change');
+        useButton.click();
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests, [[
+            '/set_ollama_model',
+            { model: 'installed/model:tag' },
+        ]]);
+        assert.strictEqual(dialog.classList.contains('open'), false);
+        assert.strictEqual(state.chatModelBlockedMessage, '');
     });
 
     it('updateOllamaStatus treats startup unchecked status as non-blocking', () => {

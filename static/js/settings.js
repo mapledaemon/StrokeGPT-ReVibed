@@ -119,6 +119,138 @@ function modelNeedsDownload(detail = {}) {
     return !detail.installed;
 }
 
+function modelsMatch(left, right) {
+    left = normalizeModelName(left);
+    right = normalizeModelName(right);
+    return left === right || `${left}:latest` === right || left === `${right}:latest`;
+}
+
+function installedModelNamesFromStatus(status = {}) {
+    const names = [];
+    const add = model => {
+        const normalized = normalizeModelName(model);
+        if (normalized && !names.some(item => modelsMatch(item, normalized))) names.push(normalized);
+    };
+    (status.installed_model_names || []).forEach(add);
+    Object.values(status.model_details || {}).forEach(detail => {
+        if (detail && detail.installed) add(detail.name);
+    });
+    return names;
+}
+
+function isInstalledModel(model, installedNames = []) {
+    return installedNames.some(installed => modelsMatch(model, installed));
+}
+
+function ollamaModelPromptKey(status = {}) {
+    const installed = installedModelNamesFromStatus(status).sort().join('|');
+    return `${normalizeModelName(status.current_model)}::${installed}`;
+}
+
+function shouldPromptForOllamaModel(status = {}) {
+    const download = status.download || {};
+    if (status.unchecked || status.available !== true) return false;
+    if (download.state === 'downloading') return false;
+    return status.current_model_installed === false || status.model_selection_required === true;
+}
+
+function ollamaModelSelectionOptions(status = {}) {
+    const installedNames = installedModelNamesFromStatus(status);
+    const options = [];
+    const add = (model, installed = false) => {
+        const normalized = normalizeModelName(model);
+        if (!normalized) return;
+        const alreadyAdded = options.some(item => modelsMatch(item.model, normalized));
+        if (alreadyAdded) return;
+        options.push({
+            model: normalized,
+            installed: installed || isInstalledModel(normalized, installedNames),
+        });
+    };
+    (status.installed_model_candidates || []).forEach(model => add(model, true));
+    installedNames.forEach(model => add(model, true));
+    state.ollamaModels.forEach(model => add(model));
+    add(status.current_model);
+    return options;
+}
+
+function closeOllamaModelRequiredDialog({dismiss = true} = {}) {
+    if (!el.ollamaModelRequiredDialog) return;
+    el.ollamaModelRequiredDialog.classList.remove('open');
+    if (dismiss) state.ollamaModelPromptDismissedKey = ollamaModelPromptKey(state.ollamaStatus);
+}
+
+function syncOllamaModelRequiredActions() {
+    if (!el.ollamaModelRequiredSelect) return;
+    const selected = normalizeModelName(el.ollamaModelRequiredSelect.value);
+    const selectedOption = Array.from(el.ollamaModelRequiredSelect.children || []).find(option => modelsMatch(option.value, selected));
+    const installed = selectedOption?.dataset?.installed === 'true';
+    const downloading = state.ollamaDownloadPolling;
+    if (el.useAvailableOllamaModelBtn) {
+        el.useAvailableOllamaModelBtn.disabled = !selected || !installed || downloading;
+    }
+    if (el.downloadRequiredOllamaModelBtn) {
+        el.downloadRequiredOllamaModelBtn.disabled = !selected || installed || downloading;
+    }
+    if (el.ollamaModelRequiredStatus) {
+        el.ollamaModelRequiredStatus.textContent = installed
+            ? `Use ${selected} now, or open Model settings for more options.`
+            : `Download ${selected} before chatting, or choose an installed model.`;
+        el.ollamaModelRequiredStatus.style.color = installed ? 'var(--cyan)' : 'var(--yellow)';
+    }
+}
+
+function showOllamaModelRequiredDialog(status = {}) {
+    if (!el.ollamaModelRequiredDialog || !el.ollamaModelRequiredSelect) return;
+    const current = normalizeModelName(status.current_model);
+    const suggested = normalizeModelName(status.suggested_model);
+    const options = ollamaModelSelectionOptions(status);
+    el.ollamaModelRequiredSelect.replaceChildren();
+    options.forEach(({model, installed}) => {
+        const option = D.createElement('option');
+        option.value = model;
+        option.textContent = installed ? `${model} (installed)` : `${model} (download required)`;
+        option.dataset.installed = installed ? 'true' : 'false';
+        el.ollamaModelRequiredSelect.appendChild(option);
+    });
+    if (suggested) el.ollamaModelRequiredSelect.value = suggested;
+    else if (options.length) el.ollamaModelRequiredSelect.value = options[0].model;
+    if (el.ollamaModelRequiredMessage) {
+        el.ollamaModelRequiredMessage.textContent = suggested
+            ? `The selected model ${current} is not installed. ${suggested} is installed and can be selected now, or download ${current} before chatting.`
+            : `The selected model ${current || 'from settings'} is not installed. Select an installed model or download one before chatting.`;
+    }
+    syncOllamaModelRequiredActions();
+    el.ollamaModelRequiredDialog.classList.add('open');
+    el.ollamaModelRequiredSelect.focus?.();
+}
+
+function maybePromptForOllamaModelSelection(status = {}) {
+    if (!el.ollamaModelRequiredDialog) return;
+    if (!shouldPromptForOllamaModel(status)) {
+        closeOllamaModelRequiredDialog({dismiss: false});
+        return;
+    }
+    const key = ollamaModelPromptKey(status);
+    if (el.ollamaModelRequiredDialog.classList.contains('open')) {
+        showOllamaModelRequiredDialog(status);
+        return;
+    }
+    if (state.ollamaModelPromptDismissedKey === key) return;
+    showOllamaModelRequiredDialog(status);
+}
+
+function openModelSettingsFromPrompt() {
+    closeOllamaModelRequiredDialog();
+    if (el.setupOverlay) el.setupOverlay.style.display = 'none';
+    openSettings('model');
+    if (el.ollamaModelStatus) {
+        el.ollamaModelStatus.textContent = 'Select an installed model or download the selected model before chatting.';
+        el.ollamaModelStatus.style.color = 'var(--yellow)';
+    }
+    el.ollamaModelSelect?.focus?.();
+}
+
 export function normalizePersonaPrompt(prompt) {
     return (prompt || '').trim().replace(/\s+/g, ' ');
 }
@@ -309,6 +441,7 @@ export function updateOllamaStatus(status) {
     }
     updateChatModelAvailability(status);
     updateOllamaDiagnostics(status);
+    maybePromptForOllamaModelSelection(status);
 }
 
 function chatModelBlockedMessage(status = {}) {
@@ -324,6 +457,10 @@ function chatModelBlockedMessage(status = {}) {
         return 'Ollama offline - start Ollama before chatting.';
     }
     if (!status.current_model_installed) {
+        const suggested = normalizeModelName(status.suggested_model);
+        if (suggested) {
+            return `Model not installed - select ${suggested} or download ${status.current_model || 'the selected model'} in Settings > Model before chatting.`;
+        }
         return `Model not installed - download ${status.current_model || 'the selected model'} in Settings > Model before chatting.`;
     }
     return '';
@@ -453,7 +590,7 @@ async function setOllamaModel(model) {
     if (!normalized) {
         el.ollamaModelStatus.textContent = 'Enter an Ollama model name first.';
         el.ollamaModelStatus.style.color = 'var(--yellow)';
-        return;
+        return null;
     }
     const data = await apiCall('/set_ollama_model', {
         method: 'POST',
@@ -466,6 +603,7 @@ async function setOllamaModel(model) {
     } else {
         reportSaveFailure(el.ollamaModelStatus, data, `Could not set model to ${normalized}.`);
     }
+    return data;
 }
 
 async function deleteOllamaModel(model) {
@@ -491,10 +629,10 @@ async function downloadOllamaModel(modelOverride = '') {
     if (!model) {
         el.ollamaModelStatus.textContent = 'Enter or select an Ollama model first.';
         el.ollamaModelStatus.style.color = 'var(--yellow)';
-        return;
+        return null;
     }
     const ok = window.confirm(`Download ${model} with Ollama now? This may download several GB.`);
-    if (!ok) return;
+    if (!ok) return null;
     el.ollamaModelStatus.textContent = `Starting download for ${model}... Progress: 0%.`;
     el.ollamaModelStatus.style.color = 'var(--comment)';
     const data = await apiCall('/pull_ollama_model', {
@@ -506,6 +644,7 @@ async function downloadOllamaModel(modelOverride = '') {
         populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         updateOllamaStatus(data.ollama_status);
     }
+    return data;
 }
 
 async function resetAllSettings() {
@@ -610,6 +749,7 @@ export function initSettingsControls({addChatMessage}) {
         if (event.key === 'Escape') {
             closeProfileMenu();
             closeAboutDialog();
+            closeOllamaModelRequiredDialog();
         }
     });
     el.toggleSidebarBtn.addEventListener('click', () => {
@@ -629,6 +769,14 @@ export function initSettingsControls({addChatMessage}) {
             if (event.target === el.aboutDialog) closeAboutDialog();
         });
     }
+    if (el.closeOllamaModelRequiredBtn) {
+        el.closeOllamaModelRequiredBtn.addEventListener('click', () => closeOllamaModelRequiredDialog());
+    }
+    if (el.ollamaModelRequiredDialog) {
+        el.ollamaModelRequiredDialog.addEventListener('click', event => {
+            if (event.target === el.ollamaModelRequiredDialog) closeOllamaModelRequiredDialog();
+        });
+    }
     el.settingsTabs.forEach(tab => {
         tab.addEventListener('click', () => setSettingsTab(tab.dataset.settingsTab));
     });
@@ -643,6 +791,26 @@ export function initSettingsControls({addChatMessage}) {
     D.getElementById('save-ollama-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelInput.value));
     el.downloadOllamaModelBtn.addEventListener('click', downloadOllamaModel);
     el.refreshOllamaStatusBtn.addEventListener('click', refreshOllamaStatus);
+    if (el.ollamaModelRequiredSelect) {
+        el.ollamaModelRequiredSelect.addEventListener('change', syncOllamaModelRequiredActions);
+    }
+    if (el.useAvailableOllamaModelBtn) {
+        el.useAvailableOllamaModelBtn.addEventListener('click', async () => {
+            const data = await setOllamaModel(el.ollamaModelRequiredSelect?.value);
+            if (data?.status === 'success' && data.ollama_status?.current_model_installed !== false) {
+                closeOllamaModelRequiredDialog({dismiss: false});
+            }
+        });
+    }
+    if (el.downloadRequiredOllamaModelBtn) {
+        el.downloadRequiredOllamaModelBtn.addEventListener('click', async () => {
+            const data = await downloadOllamaModel(el.ollamaModelRequiredSelect?.value);
+            if (data) closeOllamaModelRequiredDialog({dismiss: false});
+        });
+    }
+    if (el.openModelSettingsBtn) {
+        el.openModelSettingsBtn.addEventListener('click', openModelSettingsFromPrompt);
+    }
     el.saveMotionDiagnosticsLevelBtn.addEventListener('click', saveDiagnosticsLevels);
     el.saveOllamaDiagnosticsLevelBtn.addEventListener('click', saveDiagnosticsLevels);
     el.ollamaModelSelect.addEventListener('change', () => {

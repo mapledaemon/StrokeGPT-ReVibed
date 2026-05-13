@@ -285,8 +285,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .timing-row span { padding: 0 5px; }
 .modal-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.72); z-index: 9000; padding: 16px; }
 .modal-overlay.open { display: flex; }
+.priority-modal { z-index: 10002; }
 .modal-box { width: min(640px, 100%); max-height: 90vh; overflow-y: auto; background: var(--background); border: 1px solid #2d333d; border-radius: 8px; box-shadow: 0 16px 40px var(--shadow); padding: 18px; }
 .settings-box { width: min(860px, 100%); }
+.model-required-box { width: min(34rem, 100%); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--background-lighter); padding-bottom: 12px; margin-bottom: 14px; }
 .modal-header h3 { margin: 0; color: var(--cyan); font-size: 1.1rem; }
 .modal-close { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #37404c; background: var(--background-lighter); color: var(--foreground); cursor: pointer; font-size: 1.2rem; }
