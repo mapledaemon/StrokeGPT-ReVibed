@@ -904,7 +904,13 @@ class MotionControllerTests(unittest.TestCase):
 
         try:
             controller.apply_continuous_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
-            self.assertTrue(self.wait_until(lambda: len(handy.position_durations) >= 4), handy.position_durations)
+            self.assertTrue(
+                self.wait_until(
+                    lambda: len(handy.position_durations) >= 4
+                    and len({move[3] for move in handy.position_moves if move[3] is not None}) > 1
+                ),
+                handy.position_moves,
+            )
 
             self.assertTrue(all(duration is None for duration in handy.position_durations))
             self.assertGreater(len({move[3] for move in handy.position_moves if move[3] is not None}), 1)
