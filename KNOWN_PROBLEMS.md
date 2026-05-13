@@ -71,7 +71,7 @@ Follow-up work:
   Flexible Position may stretch `xpt.t` for the same reason.
   Continuous HDSP fallback should show varied `handy_duration_ms` values because
   its `xpt.t` is derived from the velocity budget again. If speed still feels
-  compressed, compare point-preview intervals, wire HSP `x` values (`0..1000`),
+  compressed, compare point-preview intervals, wire HSP `x` values (`0..100`),
   `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, and physical
   movement before changing sampler math again. HSP transport now separates
   phase timing from physical transport timing: `phase_interval_ms` records the

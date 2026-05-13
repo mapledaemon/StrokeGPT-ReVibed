@@ -11,7 +11,7 @@ HANDY_API_V2_BASE_URL = "https://www.handyfeeling.com/api/handy/v2/"
 HANDY_API_V3_BASE_URL = "https://www.handyfeeling.com/api/handy-rest/v3/"
 HANDY_COMMAND_HISTORY_LIMIT = 60
 HANDY_COMMAND_POINTS_PREVIEW = 12
-HSP_POINT_SCALE = 10
+HSP_POINT_MAX = 100
 HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
 HSP_STREAM_ID_MAX = 4294967295
 # Handy position transports use absolute velocity/duration math. The app's
@@ -672,7 +672,7 @@ class HandyController:
         physical_depth = self._relative_depth_to_physical_percent(app_depth)
         return {
             "t": at_ms,
-            "x": max(0, min(1000, int(round(physical_depth * HSP_POINT_SCALE)))),
+            "x": max(0, min(HSP_POINT_MAX, int(round(physical_depth)))),
         }
 
     def _stream_points_body(self, points):

@@ -26,6 +26,10 @@ Branch: codex-continuous-absolute-transport-cap
   consults `max_velocity_for_relative_speed(sample_target.speed)` again, while
   preserving the configured max-speed stretch guard for physically impossible
   HSP point slopes.
+- Corrected continuous HSP point `x` encoding back to current funscript-style
+  `0..100` position units after checking Syncopathy's active web/BLE HSP paths.
+  The previous `0..1000` scaling was validating the wrong schema and could make
+  firmware clamp or misread the timed stream, masking every speed-mapping fix.
 
 
 2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling

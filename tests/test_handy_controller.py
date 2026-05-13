@@ -400,9 +400,9 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(
             add["points"],
             [
-                {"t": 0, "x": 100},
-                {"t": 160, "x": 500},
-                {"t": 320, "x": 900},
+                {"t": 0, "x": 10},
+                {"t": 160, "x": 50},
+                {"t": 320, "x": 90},
             ],
         )
         self.assertEqual(handy.v3_commands[4][1], {"tail_point_threshold": 1})
@@ -446,7 +446,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], 16)
         self.assertEqual(len(body["points_preview"]), 12)
         self.assertEqual(body["points_preview"][0], {"t": 0, "x": 0})
-        self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 110})
+        self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 11})
         self.assertTrue(body["points_truncated"])
         self.assertNotIn("test", str(diagnostics))
 
@@ -466,7 +466,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertFalse(body["flush"])
         self.assertEqual(body["tail_point_stream_index"], 4)
         self.assertNotIn("tail_point_threshold", body)
-        self.assertEqual(body["points"], [{"t": 480, "x": 650}])
+        self.assertEqual(body["points"], [{"t": 480, "x": 65}])
         self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
         self.assertEqual(handy.diagnostics()["relative_speed"], 50)
 

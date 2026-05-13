@@ -209,7 +209,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   transport contract. For v3 HDSP `xpt`, send `xp` as the current REST v3
   normalized physical position (`0..1`) after applying local stroke-depth
   calibration; HSP timed points keep app positions in `0..100` internally and
-  send calibrated physical wire `x` values in firmware HSP `0..1000` units.
+  send calibrated physical wire `x` values in current HSP/funscript `0..100`
+  position units. Do not multiply HSP `x` values into a `0..1000` range unless
+  current upstream Handy documentation and real-device traces prove that the
+  REST v3 HSP point schema changed again.
   Firmware v3 / legacy mode, or v4 without an API v3 app authorized connection,
   keeps the legacy HDSP direct-position fallback. Do not add a second
   user-facing Handy API key field unless the upstream API requires a distinct
