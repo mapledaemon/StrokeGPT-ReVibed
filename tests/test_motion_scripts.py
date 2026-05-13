@@ -13,6 +13,7 @@ from strokegpt.motion_patterns import (
     expand_pattern,
     continuous_plan_depth_range,
     continuous_motion_plan,
+    sample_continuous_motion,
     sample_continuous_plan,
     inject_intermediate_actions,
     limit_action_delta,
@@ -284,10 +285,9 @@ class MotionScriptPlannerTests(unittest.TestCase):
     def test_motion_target_for_sample_boosts_speed_from_position_rate(self):
         # Without a ``position_per_second`` hint the sample target uses
         # the LLM-supplied base speed verbatim. With a hint, the per-
-        # sample speed is lifted to reflect the pattern's authored rate
-        # of change, mirroring the ``preserve_timing`` segment-speed
-        # boost that ``_actions_to_frames`` applies for imported
-        # patterns. Slow segments fall back to the base speed.
+        # sample command budget is lifted relative to that base. Slow
+        # segments fall back to the base speed; fast segments should not
+        # turn a low user speed into an uncapped maximum-speed chase.
         target = MotionTarget(40, 50, 80, "stroke")
         style = FrameStyle(name="stroke")
 
@@ -304,16 +304,13 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreaterEqual(round(slow.speed), 40)
         # A fast rate of change boosts the per-sample speed above base.
         self.assertGreater(fast.speed, base.speed)
-        # The segment-speed boost is clamped at the 100% relative ceiling
-        # before clamping to MotionTarget limits, so saturation patterns
-        # stay representable instead of overflowing.
-        self.assertLessEqual(round(fast.speed), 100)
+        # The boost is bounded around the user's requested speed instead
+        # of jumping directly to the absolute 100% relative ceiling.
+        self.assertLessEqual(round(fast.speed), 54)
 
     def test_motion_target_for_sample_speed_scale_applies_to_segment_boost(self):
         # When the pattern's style declares a non-unit ``speed_scale``,
-        # both the base speed and the per-sample segment boost must
-        # scale together so the boosted speed never crosses the
-        # style's intended ceiling relationship.
+        # the base speed and relative per-sample boost scale together.
         target = MotionTarget(30, 50, 80, "fast-style")
         style = FrameStyle(name="fast-style", speed_scale=1.5)
 
@@ -321,18 +318,18 @@ class MotionScriptPlannerTests(unittest.TestCase):
             50.0, target, style, label="fast-style", position_per_second=160.0,
         )
 
-        # speed_scale=1.5 lifts both the base speed (45) and the segment
-        # speed (100 * 1.5 = 150, clamped to 100 by MotionTarget). The
-        # max() picks the higher one; the MotionTarget clamp keeps it
-        # representable.
+        # speed_scale=1.5 lifts the base speed to 45, then the tangent
+        # multiplier adds per-sample headroom without replacing the user
+        # intent with an absolute derivative-derived speed.
         self.assertGreaterEqual(round(boosted.speed), 45)
+        self.assertLess(round(boosted.speed), 100)
 
     def test_sample_continuous_plan_speed_varies_inside_one_cycle(self):
-        # The whole point of this slice: a pattern with sharp climbs
-        # should produce per-sample speeds that differ across the
-        # cycle, instead of broadcasting a single ``target.speed`` to
-        # every HDSP frame. Sample a known-asymmetric pattern at a
-        # spread of phases and assert the speed track is non-constant.
+        # A pattern with sharp climbs should produce per-sample command
+        # budgets that differ across the cycle, instead of broadcasting
+        # a single ``target.speed`` to every HDSP frame. The budget must
+        # remain tied to the intent speed, though; otherwise low speed
+        # settings still collapse back to maximum XAVA velocity.
         plan = continuous_motion_plan("ramp")
         target = MotionTarget(40, 50, 80, "ramp")
 
@@ -346,6 +343,22 @@ class MotionScriptPlannerTests(unittest.TestCase):
         ]
 
         self.assertGreater(max(speeds) - min(speeds), 5)
+        self.assertLessEqual(max(speeds), 54)
+
+    def test_sample_continuous_motion_scales_cadence_from_intent_speed(self):
+        plan = continuous_motion_plan("stroke")
+        slow_target = MotionTarget(20, 50, 80, "stroke")
+        fast_target = MotionTarget(80, 50, 80, "stroke")
+        elapsed = plan.duration_seconds * 0.25
+
+        slow = sample_continuous_motion(plan, slow_target, elapsed)
+        fast = sample_continuous_motion(plan, fast_target, elapsed)
+
+        self.assertGreater(slow.effective_duration_seconds, fast.effective_duration_seconds)
+        self.assertLess(slow.tempo_scale, fast.tempo_scale)
+        self.assertNotEqual(round(slow.target.depth), round(fast.target.depth))
+        self.assertEqual(round(slow.intent_speed), 20)
+        self.assertEqual(round(fast.intent_speed), 80)
 
     def test_sample_continuous_plan_keeps_base_speed_on_flat_segments(self):
         # A symmetric pattern like ``hold`` spends a meaningful fraction

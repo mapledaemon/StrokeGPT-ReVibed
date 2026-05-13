@@ -42,6 +42,8 @@ DEFAULT_PERSONA_PROMPTS = [
     "An energetic and passionate boyfriend",
     "An energetic and passionate partner",
 ]
+DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
+HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
 DEFAULT_MOTION_BACKEND = "continuous"
 MOTION_BACKENDS = {"continuous", "position", "hamp"}
 DEFAULT_MOTION_STYLE = "balanced"
@@ -145,6 +147,8 @@ def default_settings_dict():
     voice_input_model = default_voice_input_model(voice_input_provider)
     return {
         "handy_key": "",
+        "handy_firmware_version": DEFAULT_HANDY_FIRMWARE_VERSION,
+        "handy_api_v3_key": str(os.getenv("STROKEGPT_HANDY_API_KEY", "") or "").strip(),
         "ai_name": "BOT",
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
@@ -284,6 +288,10 @@ class SettingsManager:
         data = data if isinstance(data, dict) else {}
 
         self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "")
+        self.handy_firmware_version = self._normalize_handy_firmware_version(
+            data.get("handy_firmware_version", defaults["handy_firmware_version"])
+        )
+        self.handy_api_v3_key = str(data.get("handy_api_v3_key", defaults["handy_api_v3_key"]) or "").strip()
         self.ai_name = str(data.get("ai_name", defaults["ai_name"]) or defaults["ai_name"])
 
         loaded_model = normalize_ollama_model(data.get("ollama_model", DEFAULT_OLLAMA_MODEL))
@@ -487,6 +495,8 @@ class SettingsManager:
     def to_dict(self):
         return {
             "handy_key": self.handy_key,
+            "handy_firmware_version": self._normalize_handy_firmware_version(self.handy_firmware_version),
+            "handy_api_v3_key": self.handy_api_v3_key,
             "ai_name": self.ai_name,
             "ollama_model": self.ollama_model,
             "ollama_models": self._normalize_model_list(self.ollama_models, include_current=True),
@@ -695,6 +705,14 @@ class SettingsManager:
         if cleaned in {"position", "position_script", "flexible_position", "flexible"}:
             return "position"
         return DEFAULT_MOTION_BACKEND
+
+    def _normalize_handy_firmware_version(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "").replace("_", "")
+        if cleaned in {"3", "v3", "fw3", "firmware3", "firmwarev3"}:
+            return "fw3"
+        if cleaned in {"4", "v4", "fw4", "firmware4", "firmwarev4"}:
+            return "fw4"
+        return DEFAULT_HANDY_FIRMWARE_VERSION
 
     def _normalize_motion_style(self, value):
         cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")

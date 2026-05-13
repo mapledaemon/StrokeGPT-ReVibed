@@ -56,6 +56,12 @@ Follow-up work:
 - Compare HAMP legacy, finite position playback, and Continuous position on
   the physical Handy using the same speed limits, depth/range settings, and
   pattern set.
+- Verify that Continuous position speed changes now affect HSP point timing on
+  firmware v4 and HDSP fallback cadence/command-speed budget on legacy paths.
+  The trace separates semantic `intent_speed`, sampled `sample_speed`,
+  `sample_tempo_scale`, `effective_cycle_ms`, `sample_interval_ms`, HSP point
+  metadata, and final fallback `handy_velocity`; use those fields together
+  when diagnosing fixed-speed feel.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,
@@ -63,7 +69,7 @@ Follow-up work:
   `command_ms`) plus the Handy command-result fields (`handy_ok`,
   `handy_path`, `handy_status`, and `handy_error`) during device testing to
   distinguish planner waits, controller command timing, and rejected/failed
-  XAVA requests.
+  HSP/HDSP requests.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.

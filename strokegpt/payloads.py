@@ -707,6 +707,21 @@ def settings_payload(
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
         "handy_key": settings.handy_key,
+        "handy_firmware_version": settings.handy_firmware_version,
+        "handy_firmware_options": [
+            {
+                "id": "fw4",
+                "label": "Firmware v4 / API v3",
+                "description": "Current Handy firmware path. Continuous backend can use HSP timed point streaming when an API v3 app key is configured.",
+            },
+            {
+                "id": "fw3",
+                "label": "Firmware v3 / legacy",
+                "description": "Legacy compatibility path using API v2 HDSP/HAMP direct commands.",
+            },
+        ],
+        "handy_api_v3_key": settings.handy_api_v3_key,
+        "handy_api_v3_enabled": bool(settings.handy_api_v3_key),
         "ai_name": settings.ai_name,
         "elevenlabs_key": settings.elevenlabs_api_key,
         "ollama_model": llm.model,

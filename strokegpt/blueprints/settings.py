@@ -251,3 +251,34 @@ def set_handy_key_route():
         "message": connection.get("message", "Handy connection check completed."),
         "connection": connection,
     })
+
+
+@settings_blueprint.route('/set_handy_device_config', methods=['POST'])
+def set_handy_device_config_route():
+    web = _web()
+    data = web._request_json()
+    firmware_version = web.settings._normalize_handy_firmware_version(
+        data.get("handy_firmware_version", web.settings.handy_firmware_version)
+    )
+    api_v3_key = str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
+
+    web.settings.handy_firmware_version = firmware_version
+    web.settings.handy_api_v3_key = api_v3_key
+    web.handy.set_firmware_version(firmware_version)
+    web.handy.set_handy_api_key(api_v3_key)
+    web.settings.save()
+
+    v4_ready = firmware_version == "fw4" and bool(api_v3_key)
+    return jsonify({
+        "status": "success",
+        "handy_firmware_version": firmware_version,
+        "handy_api_v3_enabled": bool(api_v3_key),
+        "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
+        "message": (
+            "Handy firmware set to v4; HSP continuous streaming is available."
+            if v4_ready
+            else "Handy firmware set to v4; add an API v3 app key to use HSP continuous streaming."
+            if firmware_version == "fw4"
+            else "Handy firmware set to v3 legacy mode."
+        ),
+    })

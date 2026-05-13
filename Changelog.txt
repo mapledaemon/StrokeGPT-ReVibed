@@ -8,6 +8,30 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #185 - Firmware Aware Continuous Streaming
+-----------------------------------------------------------
+
+Branch: codex-motion-sample-schema
+
+- Reworked the continuous backend around the current Handy firmware/API split
+  instead of trying to make repeated HDSP position commands carry all speed
+  semantics. Firmware v4 plus an API v3 app key now uses HSP timed point
+  streaming, while firmware v3 or missing API v3 credentials keep the HDSP
+  `xava` fallback path.
+- Added a Device-tab firmware selector and API v3 app-key setting so the
+  operator can choose the same v3/v4 compatibility path used by current Handy
+  applications without hiding the requirement in code or environment state.
+- Split continuous sampling into a richer `MotionSample` schema that keeps
+  user/LLM speed intent, sampled command speed, pattern phase, cadence, and
+  position-rate metadata separate. This makes traces show whether speed
+  variation is encoded as HSP point timing, HDSP command speed, or fallback
+  behavior.
+- Added regression coverage for HSP setup/play/add commands, FW4/FW3
+  capability gating, speed-scaled continuous cadence, the HDSP fallback path,
+  settings persistence, settings payloads, route behavior, and the frontend
+  Device-tab controls.
+
+
 2026-05-13 - PR #184 - Vary Continuous-Backend Speed With Per-Sample Position Rate
 -----------------------------------------------------------------------------------
 

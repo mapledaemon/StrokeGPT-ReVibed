@@ -24,6 +24,18 @@ class RecordingHandyController(HandyController):
         return True
 
 
+class RecordingV3HandyController(RecordingHandyController):
+    def __init__(self):
+        super().__init__()
+        self.set_handy_api_key("app-key")
+        self.v3_commands = []
+
+    def _send_v3_command(self, path, body=None):
+        self.v3_commands.append((path, body or {}))
+        self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
+        return True
+
+
 class FakeResponse:
     def __init__(self, status_code=204, payload=None):
         self.status_code = status_code
@@ -236,6 +248,17 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["velocity"], 18)
         self.assertFalse(body["stopOnTarget"])
 
+    def test_move_to_depth_keeps_intent_speed_separate_from_command_speed(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 70, 0, 100)
+
+        handy.move_to_depth(90, 75, stop_on_target=False, velocity=60, intent_speed=20)
+
+        body = handy.commands[-1][1]
+        self.assertEqual(body["velocity"], 60)
+        self.assertEqual(handy.diagnostics()["velocity"], 60)
+        self.assertEqual(handy.diagnostics()["relative_speed"], 20)
+
     def test_move_to_depth_reuses_hdsp_mode_for_position_stream(self):
         handy = RecordingHandyController()
 
@@ -243,6 +266,74 @@ class HandyControllerTests(unittest.TestCase):
         handy.move_to_depth(60, 75)
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
+
+    def test_supports_continuous_streaming_requires_v3_application_key(self):
+        handy = RecordingHandyController()
+
+        self.assertFalse(handy.supports_continuous_streaming())
+        handy.set_handy_api_key("app-key")
+
+        self.assertTrue(handy.supports_continuous_streaming())
+        handy.set_firmware_version("v3")
+        self.assertFalse(handy.supports_continuous_streaming())
+
+    def test_start_continuous_stream_uses_hsp_timed_points(self):
+        handy = RecordingV3HandyController()
+        handy.update_settings(10, 70, 10, 90)
+
+        result = handy.start_continuous_stream(
+            [
+                {"t": 0, "x": 0, "intent_speed": 30, "range": 80},
+                {"t": 160, "x": 50, "intent_speed": 30, "range": 80},
+                {"t": 320, "x": 100, "intent_speed": 30, "range": 80},
+            ],
+            tail_point_stream_index=3,
+            tail_point_threshold=1,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [path for path, _body in handy.v3_commands],
+            ["slider/stroke", "mode2", "hsp/setup", "hsp/play"],
+        )
+        self.assertEqual(handy.v3_commands[0][1], {"min": 0.1, "max": 0.9})
+        self.assertEqual(handy.v3_commands[1][1], {"mode": 4})
+        body = handy.v3_commands[-1][1]
+        self.assertEqual(body["start_time"], 0)
+        self.assertTrue(body["pause_on_starving"])
+        self.assertFalse(body["loop"])
+        self.assertTrue(body["add"]["flush"])
+        self.assertEqual(body["add"]["tail_point_stream_index"], 3)
+        self.assertEqual(
+            body["add"]["points"],
+            [
+                {"t": 0, "x": 10},
+                {"t": 160, "x": 50},
+                {"t": 320, "x": 90},
+            ],
+        )
+        self.assertEqual(handy.diagnostics()["mode"], 4)
+        self.assertEqual(handy.diagnostics()["relative_speed"], 30)
+        self.assertEqual(handy.diagnostics()["depth"], 100)
+
+    def test_append_continuous_stream_adds_points_without_flush(self):
+        handy = RecordingV3HandyController()
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual(handy.v3_commands[-1][0], "hsp/add")
+        body = handy.v3_commands[-1][1]
+        self.assertFalse(body["flush"])
+        self.assertEqual(body["tail_point_stream_index"], 4)
+        self.assertEqual(body["tail_point_threshold"], 2)
+        self.assertEqual(body["points"], [{"t": 480, "x": 65}])
+        self.assertEqual(handy.diagnostics()["relative_speed"], 44)
 
     def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
         handy = RecordingHandyController()

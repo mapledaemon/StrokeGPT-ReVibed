@@ -36,6 +36,10 @@ mode controls still have rough edges that block daily use.
 - Use the PR #42 trace fields and the expanded status/debug diagnostics UI
   during manual Freestyle testing to identify whether stops are planner-side,
   API-side, or Handy position-mode behavior.
+- When validating Continuous position speed, compare semantic intent speed,
+  HSP point spacing / HDSP per-sample command speed, effective cycle timing,
+  and the final Handy command metadata instead of treating any one of those
+  fields as "the speed."
 - Treat regular Freestyle stops, end-of-sequence stalls, and the
   Auto-to-Freestyle no-action case as the current major reliability bug
   cluster. Reproduce the cases where the motion indicator advances but the
@@ -296,9 +300,9 @@ a clean tree first.
   continuous backend is at least as recoverable for basic strokes and stop
   behavior.
 - Preserve the current shared backend guard rails: user-speed-relative XAVA
-  velocity caps, depth-jump splitting, turn-apex smoothing for finite
-  position/script callers, and uninterrupted stop/pause generation changes for
-  continuous sampled planners.
+  velocity caps, speed-scaled continuous sample intervals, depth-jump
+  splitting, turn-apex smoothing for finite position/script callers, and
+  uninterrupted stop/pause generation changes for continuous sampled planners.
 - Prototype inertia-aware direction changes and stops for the continuous
   schema, so sampled output does not expose obvious step boundaries or abrupt
   reversals.

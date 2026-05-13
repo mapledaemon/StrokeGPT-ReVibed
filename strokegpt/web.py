@@ -138,7 +138,11 @@ LLM_URL = f"{OLLAMA_BASE_URL}/api/chat"
 settings = SettingsManager(settings_file_path="my_settings.json")
 settings.load()
 
-handy = HandyController(settings.handy_key)
+handy = HandyController(
+    settings.handy_key,
+    api_v3_key=settings.handy_api_v3_key,
+    firmware_version=settings.handy_firmware_version,
+)
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
 motion = MotionController(handy)
 intent_matcher = IntentMatcher()
@@ -539,6 +543,8 @@ def diagnostics_latency_payload():
 
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
+    handy.set_firmware_version(settings.handy_firmware_version)
+    handy.set_handy_api_key(settings.handy_api_v3_key)
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)
