@@ -5,6 +5,7 @@ from .settings import (
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
+    DEFAULT_OLLAMA_MODEL_OPTIONS,
     normalize_ollama_model,
 )
 
@@ -29,16 +30,12 @@ def format_bytes(value):
 
 
 KNOWN_OLLAMA_MODEL_DETAILS = {
-    "huihui_ai/granite4.1-abliterated:3b": {
-        "size": int(2.1 * 1024 * 1024 * 1024),
-        "size_label": "2.1 GB",
+    option["name"]: {
+        "size": option["size"],
+        "size_label": option["size_label"],
         "source": "catalog",
-    },
-    "huihui_ai/granite4.1-abliterated:8b": {
-        "size": int(5.3 * 1024 * 1024 * 1024),
-        "size_label": "5.3 GB",
-        "source": "catalog",
-    },
+    }
+    for option in DEFAULT_OLLAMA_MODEL_OPTIONS
 }
 
 

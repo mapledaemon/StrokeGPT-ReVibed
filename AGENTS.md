@@ -72,8 +72,8 @@ behavior, and route motion changes through the shared controller path.
 - `scripts/bootstrap_windows.ps1`: first-run Windows helper that downloads or
   clones the repo, optionally installs Git, and then runs the installer.
 - `scripts/install_windows.ps1`: Windows install helper with prompts for
-  Python 3.11, Ollama, CUDA PyTorch, and optional Parakeet voice-input runtime
-  setup.
+  Python 3.11, Ollama, default Ollama model download, CUDA PyTorch, and
+  optional Parakeet voice-input runtime setup.
 - `scripts/update_windows.ps1`: Windows user-update helper for Git
   fast-forward, dependency refresh, optional Parakeet runtime refresh, and
   validation.

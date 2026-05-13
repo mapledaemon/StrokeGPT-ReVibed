@@ -9,13 +9,33 @@ from pathlib import Path
 
 DEFAULT_OLLAMA_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
 LEGACY_OLLAMA_MODEL = "huihui_ai/gemma-4-abliterated:e2b"
-DEFAULT_OLLAMA_MODELS = [
-    DEFAULT_OLLAMA_MODEL,
-    "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b",
-    "huihui_ai/granite4.1-abliterated:3b",
-    "huihui_ai/granite4.1-abliterated:8b",
-    LEGACY_OLLAMA_MODEL,
+DEFAULT_OLLAMA_MODEL_OPTIONS = [
+    {
+        "name": DEFAULT_OLLAMA_MODEL,
+        "label": "Gemma e4b Aggressive",
+        "size": int(6.3 * 1024 * 1024 * 1024),
+        "size_label": "6.3 GB",
+    },
+    {
+        "name": "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b",
+        "label": "Gemma e2b Aggressive",
+        "size": int(4.4 * 1024 * 1024 * 1024),
+        "size_label": "4.4 GB",
+    },
+    {
+        "name": "huihui_ai/granite4.1-abliterated:3b",
+        "label": "Granite 3B Abliterated",
+        "size": int(2.1 * 1024 * 1024 * 1024),
+        "size_label": "2.1 GB",
+    },
+    {
+        "name": "huihui_ai/granite4.1-abliterated:8b",
+        "label": "Granite 8B Abliterated",
+        "size": int(5.3 * 1024 * 1024 * 1024),
+        "size_label": "5.3 GB",
+    },
 ]
+DEFAULT_OLLAMA_MODELS = [item["name"] for item in DEFAULT_OLLAMA_MODEL_OPTIONS] + [LEGACY_OLLAMA_MODEL]
 DEFAULT_PERSONA_PROMPT = "An energetic and passionate girlfriend"
 DEFAULT_PERSONA_PROMPTS = [
     DEFAULT_PERSONA_PROMPT,

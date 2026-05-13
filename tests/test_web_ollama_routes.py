@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 from tests._web_support import WebTestCase
-from strokegpt.settings import DEFAULT_OLLAMA_MODELS
+from strokegpt.settings import DEFAULT_OLLAMA_MODEL_OPTIONS, DEFAULT_OLLAMA_MODELS
 
 
 class WebOllamaRouteTests(WebTestCase):
@@ -132,8 +132,8 @@ class WebOllamaRouteTests(WebTestCase):
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             details = data["model_details"]
-            self.assertEqual(details["huihui_ai/granite4.1-abliterated:3b"]["size_label"], "2.1 GB")
-            self.assertEqual(details["huihui_ai/granite4.1-abliterated:8b"]["size_label"], "5.3 GB")
+            for option in DEFAULT_OLLAMA_MODEL_OPTIONS:
+                self.assertEqual(details[option["name"]]["size_label"], option["size_label"])
         finally:
             settings.ollama_model = original_model
             settings.ollama_models = original_models

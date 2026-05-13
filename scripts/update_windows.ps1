@@ -89,7 +89,7 @@ if (-not $SkipDependencies) {
     Write-Host ""
     if (-not (Test-Path $VenvPython)) {
         Write-Host "No .venv found. Running the Windows installer without model downloads..."
-        & $InstallScript -NonInteractive -InstallOllama No -InstallCudaTorch No -InstallParakeet No
+        & $InstallScript -NonInteractive -InstallOllama No -InstallCudaTorch No -InstallParakeet No -DownloadOllamaModel No
     } else {
         Write-Host "Updating Python dependencies in .venv..."
         & $VenvPython -m pip install --upgrade pip
