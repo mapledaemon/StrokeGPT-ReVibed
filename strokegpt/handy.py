@@ -106,6 +106,62 @@ class HandyController:
             print(f"[HANDY ERROR] Problem: {e}", file=sys.stderr)
             return False
 
+    def check_connection(self):
+        """Probe the current Handy key without starting motion."""
+        path = "slide/position/absolute"
+        if not self.handy_key:
+            self._record_command_result(path, ok=False, error="missing Handy key")
+            return {
+                "status": "error",
+                "connected": False,
+                "message": "Handy connection key is missing.",
+                "last_command": self.last_command_result(),
+            }
+
+        headers = {"X-Connection-Key": self.handy_key}
+        started_at = time.monotonic()
+        response = None
+        try:
+            response = requests.get(f"{self.base_url}{path}", headers=headers, timeout=10)
+            response.raise_for_status()
+            elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            self._record_command_result(
+                path,
+                ok=True,
+                status_code=getattr(response, "status_code", None),
+                elapsed_ms=elapsed_ms,
+            )
+            result = {
+                "status": "connected",
+                "connected": True,
+                "message": "Connected to Handy.",
+                "last_command": self.last_command_result(),
+            }
+            try:
+                data = response.json()
+                if isinstance(data, dict) and data.get("position") is not None:
+                    result["position_mm"] = float(data["position"])
+            except (TypeError, ValueError, AttributeError):
+                pass
+            return result
+        except requests.exceptions.RequestException as e:
+            elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            error_response = getattr(e, "response", None) or response
+            self._record_command_result(
+                path,
+                ok=False,
+                status_code=getattr(error_response, "status_code", None),
+                elapsed_ms=elapsed_ms,
+                error=e,
+            )
+            print(f"[HANDY ERROR] Connection check failed: {e}", file=sys.stderr)
+            return {
+                "status": "error",
+                "connected": False,
+                "message": f"Handy connection failed: {e}",
+                "last_command": self.last_command_result(),
+            }
+
     def _ensure_hamp(self):
         if self._current_mode != 0:
             if not self._send_command("mode", {"mode": 0}):

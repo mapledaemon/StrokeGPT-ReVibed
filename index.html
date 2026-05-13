@@ -135,6 +135,15 @@
                 <div class="handy-cylinder-cap handy-cylinder-cap-bottom"></div>
             </div>
         </div>
+        <div id="sidebar-handy-panel" class="setting-section sidebar-handy-panel">
+            <h3>Handy Connection</h3>
+            <div id="sidebar-handy-key-status" class="sidebar-handy-status" aria-live="polite">Disconnected</div>
+            <label class="settings-field-label" for="sidebar-handy-key-input">Connection Key</label>
+            <div class="sidebar-handy-key-row">
+                <input type="password" id="sidebar-handy-key-input" class="input-text" placeholder="Connection key" autocomplete="off" data-requires-backend>
+                <button id="sidebar-save-handy-key-btn" class="my-button" type="button" data-requires-backend>Connect</button>
+            </div>
+        </div>
         <div class="sidebar-stop-section">
             <button id="emergency-stop-all-btn" class="my-button sidebar-button stop" title="Hotkey: Stop media key" data-requires-backend>STOP EVERYTHING</button>
         </div>
@@ -393,8 +402,8 @@
                 <div class="settings-subsection device-panel">
                     <h4>Handy Connection</h4>
                     <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key" data-requires-backend>
-                    <button id="save-handy-key-btn" class="my-button" data-requires-backend>Save Connection Key</button>
-                    <div id="handy-key-status" style="font-size: 0.85em; color: var(--comment);">Connection key is saved locally.</div>
+                    <button id="save-handy-key-btn" class="my-button" data-requires-backend>Connect</button>
+                    <div id="handy-key-status" style="font-size: 0.85em; color: var(--red-hover);">Disconnected</div>
                 </div>
                 <div class="settings-subsection device-panel">
                     <h4>Stroke Range</h4>

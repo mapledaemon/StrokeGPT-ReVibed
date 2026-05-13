@@ -25,11 +25,15 @@ class RecordingHandyController(HandyController):
 
 
 class FakeResponse:
-    def __init__(self, status_code=204):
+    def __init__(self, status_code=204, payload=None):
         self.status_code = status_code
+        self.payload = payload or {}
 
     def raise_for_status(self):
         return None
+
+    def json(self):
+        return dict(self.payload)
 
 
 class HandyControllerTests(unittest.TestCase):
@@ -148,6 +152,41 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["last_command"]["status_code"], 503)
         self.assertEqual(diagnostics["last_command"]["body"], {"min": 10, "max": 90})
         self.assertIn("device offline", diagnostics["last_command"]["error"])
+
+    def test_check_connection_probes_position_without_motion(self):
+        handy = HandyController(handy_key="secret")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"position": 42.5}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        _args, kwargs = get.call_args
+        self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["position_mm"], 42.5)
+        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertTrue(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 200)
+        self.assertNotIn("secret", str(result))
+
+    def test_check_connection_records_failure_without_motion(self):
+        handy = HandyController(handy_key="secret")
+        error = handy_module.requests.exceptions.RequestException("device offline")
+        error.response = FakeResponse(status_code=503)
+
+        with mock.patch("strokegpt.handy.requests.get", side_effect=error, create=True):
+            result = handy.check_connection()
+
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("device offline", result["message"])
+        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 503)
 
     def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
         handy = RecordingHandyController()
