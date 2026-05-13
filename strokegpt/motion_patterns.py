@@ -1,7 +1,7 @@
 import json
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -73,6 +73,29 @@ class ContinuousMotionPlan:
     style: FrameStyle
     duration_seconds: float
     normalized_range: tuple[float, float] = (0.0, 100.0)
+
+
+@dataclass(frozen=True)
+class MotionSample:
+    """Controller sample with intent speed separated from device speed.
+
+    ``target.speed`` is the per-sample command-speed budget used for HDSP
+    velocity caps. It may vary inside the cycle, but stays anchored to the
+    user/LLM intent instead of becoming an absolute derivative-derived speed.
+    ``intent_speed`` is the semantic speed that should remain visible as
+    current state and planner context.
+    """
+
+    target: MotionTarget
+    intent_speed: float
+    phase: float
+    normalized_pos: float
+    position_per_second: float
+    tempo_scale: float
+    effective_duration_seconds: float
+
+    def with_target(self, target: MotionTarget) -> "MotionSample":
+        return replace(self, target=target)
 
 
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
@@ -657,13 +680,11 @@ def _motion_target_for_sample(
 
     When ``position_per_second`` is provided (the per-sample tangent of
     the pattern's normalized position, sampled at the pattern's own
-    cycle dt), the speed is boosted to reflect the pattern's intrinsic
-    rate of change. Slow segments fall back to the LLM-supplied base
-    speed; fast segments lift above it so the device feels a difference
-    between a slow hold and a quick climb. This mirrors the
-    ``preserve_timing`` segment-speed boost that
-    ``_actions_to_frames`` applies for studio-imported patterns. Pass
-    ``None`` to opt out and keep the constant base speed.
+    cycle dt), the speed budget is lifted by a bounded multiplier of the
+    user/LLM base speed. Slow segments fall back to the base speed; fast
+    segments get extra budget without allowing a low user speed to turn
+    back into a full-speed XAVA chase. Pass ``None`` to opt out and keep
+    the constant base speed.
     """
     target = target.clamped()
     half_range = target.stroke_range / 2.0
@@ -686,8 +707,12 @@ def _motion_target_for_sample(
     base_speed = target.speed * style.speed_scale
     speed = base_speed
     if position_per_second is not None and position_per_second > 0:
-        segment_speed = _clamp((float(position_per_second) / 160.0) * 100.0, 8.0, 100.0)
-        speed = max(base_speed, segment_speed * style.speed_scale)
+        rate = _clamp(
+            (float(position_per_second) - SAMPLE_SPEED_BOOST_START_PPS) / SAMPLE_SPEED_BOOST_WINDOW_PPS,
+            0.0,
+            1.0,
+        )
+        speed = base_speed * (1.0 + rate * SAMPLE_SPEED_BOOST_MAX_MULTIPLIER)
 
     return MotionTarget(
         speed=speed,
@@ -793,14 +818,29 @@ JITTER_CYCLE_SECONDS = 5.0
 # show through. Stays in seconds so per-cycle phase delta scales with
 # the plan's own ``duration_seconds``.
 SAMPLE_DERIVATIVE_DT_SECONDS = 0.04
+SAMPLE_SPEED_BOOST_START_PPS = 60.0
+SAMPLE_SPEED_BOOST_WINDOW_PPS = 160.0
+SAMPLE_SPEED_BOOST_MAX_MULTIPLIER = 0.35
 
 
-def sample_continuous_plan(
+def _continuous_intent_tempo_scale(speed: float) -> float:
+    """Map semantic speed to live-plan phase rate.
+
+    A speed of 50 preserves the authored plan cadence. Lower speeds stretch
+    the cycle; higher speeds compress it. This keeps user speed changes visible
+    in the actual position timeline instead of expressing them only as an HDSP
+    velocity cap.
+    """
+
+    return _clamp(0.5 + _clamp(float(speed or 0.0)) / 100.0, 0.5, 1.5)
+
+
+def sample_continuous_motion(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
     elapsed_seconds: float,
-) -> MotionTarget:
-    """Sample the plan at ``elapsed_seconds`` into the target window.
+) -> MotionSample:
+    """Sample the plan at ``elapsed_seconds`` into controller output.
 
     Position is sampled phase-cyclically with Catmull-Rom across four
     cyclic neighbors, so consecutive cycles do not produce a per-cycle
@@ -811,18 +851,24 @@ def sample_continuous_plan(
 
     A short-window position derivative (``SAMPLE_DERIVATIVE_DT_SECONDS``)
     is computed from the same cyclic Catmull-Rom sampler and forwarded
-    to ``_motion_target_for_sample`` so the per-sample speed reflects
-    the pattern's intrinsic rate of change. Without this hook the
-    continuous backend would send a constant ``target.speed`` across
-    the whole cycle and on-device motion would feel like only the
-    position pattern varies (Motion Speed Per-Sample Variability,
-    ROADMAP Up Next #1 follow-up).
+    to ``_motion_target_for_sample`` so the per-sample speed budget still
+    reflects the pattern's intrinsic rate of change. The boost is bounded
+    relative to the semantic intent speed, so a low-speed request cannot
+    saturate every fast segment at the maximum HDSP velocity.
+
+    The returned ``MotionSample`` keeps semantic intent speed separate
+    from the command-speed budget. The semantic speed also scales the
+    phase rate, so "slower" and "faster" change the actual pattern cadence
+    instead of only changing how aggressively each target is chased.
     """
     elapsed = max(0.0, float(elapsed_seconds or 0.0))
+    target = target.clamped()
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
-    phase = (elapsed / duration_seconds) % 1.0
+    tempo_scale = _continuous_intent_tempo_scale(target.speed)
+    effective_duration_seconds = duration_seconds / tempo_scale
+    phase = (elapsed / effective_duration_seconds) % 1.0
     pos = _sample_action_position(plan.actions, phase)
-    next_phase = (phase + SAMPLE_DERIVATIVE_DT_SECONDS / duration_seconds) % 1.0
+    next_phase = (phase + SAMPLE_DERIVATIVE_DT_SECONDS / effective_duration_seconds) % 1.0
     next_pos = _sample_action_position(plan.actions, next_phase)
     position_per_second = abs(next_pos - pos) / SAMPLE_DERIVATIVE_DT_SECONDS
     base_label = str(target.label or plan.name or "pattern").strip()
@@ -830,14 +876,32 @@ def sample_continuous_plan(
     if style_label and _clean_label(style_label) not in _clean_label(base_label):
         base_label = f"{base_label} {style_label}".strip()
     jitter_phase = (elapsed % JITTER_CYCLE_SECONDS) / JITTER_CYCLE_SECONDS
-    return _motion_target_for_sample(
-        pos,
-        target,
-        plan.style,
-        label=f"{base_label} continuous",
-        jitter_phase=jitter_phase,
+    return MotionSample(
+        target=_motion_target_for_sample(
+            pos,
+            target,
+            plan.style,
+            label=f"{base_label} continuous",
+            jitter_phase=jitter_phase,
+            position_per_second=position_per_second,
+        ),
+        intent_speed=target.speed,
+        phase=phase,
+        normalized_pos=pos,
         position_per_second=position_per_second,
+        tempo_scale=tempo_scale,
+        effective_duration_seconds=effective_duration_seconds,
     )
+
+
+def sample_continuous_plan(
+    plan: ContinuousMotionPlan,
+    target: MotionTarget,
+    elapsed_seconds: float,
+) -> MotionTarget:
+    """Compatibility projection for callers that only need a target."""
+
+    return sample_continuous_motion(plan, target, elapsed_seconds).target
 
 
 def _blend_from_current(

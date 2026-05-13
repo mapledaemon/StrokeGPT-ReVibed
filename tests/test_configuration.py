@@ -64,6 +64,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_style"], "expressive")
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
+        self.assertEqual(saved["handy_firmware_version"], "fw4")
+        self.assertEqual(saved["handy_api_v3_key"], "")
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
@@ -284,6 +286,21 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.file_path = FakePath(json.dumps({"motion_backend": "pattern-position"}))
         settings.load()
         self.assertEqual(settings.motion_backend, "continuous")
+
+    def test_handy_firmware_version_is_normalized(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"handy_firmware_version": "v3"}))
+        settings.load()
+        self.assertEqual(settings.handy_firmware_version, "fw3")
+
+        settings.file_path = FakePath(json.dumps({"handy_firmware_version": "firmware-v4"}))
+        settings.load()
+        self.assertEqual(settings.handy_firmware_version, "fw4")
+
+        settings.file_path = FakePath(json.dumps({"handy_firmware_version": "bad"}))
+        settings.load()
+        self.assertEqual(settings.handy_firmware_version, "fw4")
 
         settings.file_path = FakePath(json.dumps({"motion_backend": "hamp"}))
         settings.load()

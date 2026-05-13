@@ -406,6 +406,18 @@
                     <div id="handy-key-status" style="font-size: 0.85em; color: var(--red-hover);">Disconnected</div>
                 </div>
                 <div class="settings-subsection device-panel">
+                    <h4>Handy Firmware</h4>
+                    <label class="settings-field-label" for="handy-firmware-select">Firmware</label>
+                    <select id="handy-firmware-select" class="select-box" data-requires-backend>
+                        <option value="fw4">Firmware v4 / API v3</option>
+                        <option value="fw3">Firmware v3 / legacy</option>
+                    </select>
+                    <label class="settings-field-label" for="handy-api-v3-key-input">API v3 App Key</label>
+                    <input type="password" id="handy-api-v3-key-input" class="input-text" placeholder="Required for FW4 HSP streaming" autocomplete="off" data-requires-backend>
+                    <button id="save-handy-device-config-btn" class="my-button" data-requires-backend>Save Firmware</button>
+                    <div id="handy-firmware-status" class="settings-help">Firmware path not saved yet.</div>
+                </div>
+                <div class="settings-subsection device-panel">
                     <h4>Stroke Range</h4>
                     <div class="slider-container"><label for="motion-depth-min-slider">Tip / Out</label><input type="range" min="0" max="100" value="5" id="motion-depth-min-slider" data-requires-backend><span id="motion-depth-min-val">5%</span></div>
                     <div class="slider-container"><label for="motion-depth-max-slider">Base / In</label><input type="range" min="0" max="100" value="100" id="motion-depth-max-slider" data-requires-backend><span id="motion-depth-max-val">100%</span></div>

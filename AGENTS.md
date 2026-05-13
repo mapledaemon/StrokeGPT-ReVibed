@@ -52,8 +52,9 @@ behavior, and route motion changes through the shared controller path.
   waypoint semantics.
 - `strokegpt/motion_preferences.py`: visible pattern weights and feedback
   summaries for LLM context.
-- `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes
-  and the JSON loader that materializes the built-in catalog at import time.
+- `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes,
+  the continuous `MotionSample` schema, and the JSON loader that materializes
+  the built-in catalog at import time.
 - `strokegpt/builtin_patterns.json`: pure data file holding the 34 built-in
   `MotionPattern` definitions consumed by `motion_patterns._load_builtin
   _patterns()`. Keeping the data in JSON keeps it free of Python imports.
@@ -191,6 +192,24 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   phase-sampled as live position control until the next command or stop.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
+- Handy firmware selection is persisted as `handy_firmware_version`. Firmware
+  v4 plus a configured API v3 app key enables HSP timed point streaming for
+  the continuous backend. Firmware v3 / legacy mode, or v4 without an API v3
+  app key, keeps the HDSP direct-position fallback. Do not hardcode borrowed
+  third-party API keys; store local keys only in `my_settings.json` or
+  environment variables.
+- Continuous position keeps semantic intent speed separate from the transport
+  schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
+  speed as timed point spacing and position deltas; HDSP fallback derives a
+  per-sample command-speed budget in `MotionSample.target.speed`, with the
+  Handy command's `velocity` as the final mm/s value after distance, command
+  interval, and user speed-limit clamping. Derived sample speed must remain
+  intent-relative; do not let a low requested speed saturate every fallback
+  XAVA frame at the user maximum, and do not feed derived sample speed back
+  into `motion.current_target()`, Freestyle scoring, or LLM context.
+  Continuous morphing and step limiting smooth depth/range only; do not
+  interpolate or delta-limit the command-speed budget as if it were a spatial
+  target.
 - `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. `shaft` is accepted as the user-facing midpoint label, with `middle`/`mid` kept as aliases. Treat anchors as soft waypoints, not hard stops.
 - Spatial cues should treat `tip`, `shaft`, and `base` as regions of emphasis,
   not single lock points. `shaft` is the in-between region; ordinary zone cues

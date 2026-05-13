@@ -81,6 +81,45 @@ class WebSettingsRouteTests(WebTestCase):
             settings.handy_key = original_key
             handy.set_api_key(original_runtime_key)
 
+    def test_set_handy_device_config_saves_firmware_and_v3_key(self):
+        from strokegpt.web import handy, settings
+
+        original = settings.to_dict()
+        original_runtime = {
+            "firmware": handy.firmware_version,
+            "api_v3_key": handy.api_v3_key,
+        }
+        try:
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/set_handy_device_config", json={
+                    "handy_firmware_version": "v4",
+                    "handy_api_v3_key": "app-key",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["handy_firmware_version"], "fw4")
+            self.assertTrue(data["handy_api_v3_enabled"])
+            self.assertEqual(settings.handy_firmware_version, "fw4")
+            self.assertEqual(settings.handy_api_v3_key, "app-key")
+            self.assertEqual(handy.firmware_version, "fw4")
+            self.assertEqual(handy.api_v3_key, "app-key")
+            save.assert_called_once()
+
+            response = self.client.post("/set_handy_device_config", json={
+                "handy_firmware_version": "v3",
+                "handy_api_v3_key": "app-key",
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["handy_firmware_version"], "fw3")
+            self.assertFalse(data["continuous_streaming_supported"])
+        finally:
+            settings.apply_dict(original)
+            handy.set_firmware_version(original_runtime["firmware"])
+            handy.set_handy_api_key(original_runtime["api_v3_key"])
+
     def test_numeric_routes_fall_back_on_invalid_values(self):
         from strokegpt.web import handy, settings
 
