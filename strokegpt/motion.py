@@ -37,7 +37,14 @@ CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
-CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 0.8
+CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.04
+CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.85
+CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.2
+CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 1.5
+CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
+CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
+CONTINUOUS_HSP_SYNC_FILTER = 0.35
+CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -121,6 +128,7 @@ class ContinuousPhaseState:
     generation: int
     started_at: float
     offset_seconds: float = 0.0
+    stream_offset_seconds: float = 0.0
     phase_rate: float = 1.0
     plan: Any = None
     target: Optional[MotionTarget] = None
@@ -1187,8 +1195,25 @@ class MotionController:
         plan_key = self._continuous_plan_key(plan)
         clamped_target = target.clamped()
         start_target = self.current_target()
+        if not self._supports_continuous_streaming():
+            self._record_continuous_stream_unavailable(
+                clamped_target,
+                source=source,
+                trace_metadata=trace_metadata,
+            )
+            return True
+
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
+            stream_offset_seconds = self._continuous_stream_offset_seconds(started_at)
+            replacing_active_stream = stream_offset_seconds is not None and self._is_frame_playback_active()
+            preserve_replacement_phase = (
+                replacing_active_stream
+                and self._continuous_phase_state is not None
+                and self._continuous_phase_state.key == plan_key
+            )
+            if stream_offset_seconds is None:
+                stream_offset_seconds = phase_offset_seconds
             self._generation += 1
             generation = self._generation
             self._continuous_phase_state = ContinuousPhaseState(
@@ -1196,6 +1221,7 @@ class MotionController:
                 generation=generation,
                 started_at=started_at,
                 offset_seconds=phase_offset_seconds,
+                stream_offset_seconds=stream_offset_seconds,
                 plan=plan,
                 target=clamped_target,
             )
@@ -1210,6 +1236,9 @@ class MotionController:
                 generation,
                 started_at,
                 phase_offset_seconds,
+                stream_offset_seconds,
+                replacing_active_stream,
+                preserve_replacement_phase,
                 start_target,
                 trace_metadata,
             ),
@@ -1249,6 +1278,76 @@ class MotionController:
             phase_rate = 1.0
         return state.offset_seconds + max(0.0, now - state.started_at) * phase_rate
 
+    def _continuous_stream_offset_seconds(self, now: float) -> Optional[float]:
+        state = self._continuous_phase_state
+        if state is None or state.generation != self._generation:
+            return None
+        return max(0.0, float(state.stream_offset_seconds or 0.0)) + max(0.0, now - state.started_at)
+
+    def _is_frame_playback_active(self) -> bool:
+        with self._observability_lock:
+            return bool(self._frame_playback_active)
+
+    def _record_continuous_stream_unavailable(
+        self,
+        target: MotionTarget,
+        *,
+        source: str,
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        self._set_frame_playback_active(False)
+        current = self.current_target()
+        label = f"{target.label or 'continuous'} continuous unavailable"
+        self._record_target(current, source=source, label=label)
+        extras = {
+            "continuous": True,
+            "continuous_schema": "hsp_unavailable",
+            "continuous_error": "continuous_hsp_unavailable",
+            "deprecated_fallback": "hdsp",
+            "requested_label": target.label,
+            "requested_speed": round(float(target.speed), 3),
+            "requested_depth": round(float(target.depth), 3),
+            "requested_stroke_range": round(float(target.stroke_range), 3),
+        }
+        reason = self._continuous_stream_unavailable_reason()
+        if reason:
+            extras["continuous_unavailable_reason"] = reason
+        if trace_metadata:
+            for key, value in trace_metadata.items():
+                extras.setdefault(str(key), value)
+        self._augment_last_trace(extras)
+
+    def _continuous_stream_unavailable_reason(self) -> str:
+        firmware = getattr(self.handy, "firmware_version", None)
+        if firmware and str(firmware).lower() not in {"4", "v4"}:
+            return "firmware_not_v4"
+        reason = getattr(self.handy, "api_v3_unavailable_reason", None)
+        if callable(reason):
+            try:
+                value = reason()
+            except Exception:
+                value = None
+            if value:
+                return str(value)
+        return "hsp_streaming_not_supported"
+
+    def _continuous_replacement_lead_seconds(self) -> float:
+        lead = CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS
+        last_command = None
+        if hasattr(self.handy, "last_command_result"):
+            try:
+                last_command = self.handy.last_command_result()
+            except Exception:
+                last_command = None
+        if isinstance(last_command, dict) and str(last_command.get("path") or "").startswith("hsp/"):
+            try:
+                elapsed_seconds = max(0.0, float(last_command.get("elapsed_ms")) / 1000.0)
+            except (TypeError, ValueError):
+                elapsed_seconds = 0.0
+            if elapsed_seconds > 0:
+                lead = max(lead, elapsed_seconds + CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS)
+        return _clamp(lead, CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
+
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
             return CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS
@@ -1276,6 +1375,7 @@ class MotionController:
         plan_key: tuple[Any, ...],
         generation: int,
         phase_offset_seconds: float,
+        stream_offset_seconds: float | None = None,
         phase_rate: float = 1.0,
     ) -> None:
         try:
@@ -1290,6 +1390,7 @@ class MotionController:
                 generation=generation,
                 started_at=time.monotonic(),
                 offset_seconds=max(0.0, float(phase_offset_seconds or 0.0)),
+                stream_offset_seconds=max(0.0, float(stream_offset_seconds if stream_offset_seconds is not None else phase_offset_seconds or 0.0)),
                 phase_rate=phase_rate,
                 plan=plan,
                 target=target,
@@ -1358,29 +1459,30 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        stream_offset_seconds: float,
+        replacing_active_stream: bool,
+        preserve_replacement_phase: bool,
         start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        if self._supports_continuous_streaming():
-            started = self._run_continuous_stream_plan(
-                plan,
+        if not self._supports_continuous_streaming():
+            self._record_continuous_stream_unavailable(
                 target,
-                source,
-                generation,
-                started_at,
-                phase_offset_seconds,
-                start_target,
+                source=source,
                 trace_metadata=trace_metadata,
             )
-            if started:
-                return
-        self._run_continuous_hdsp_plan(
+            return
+
+        self._run_continuous_stream_plan(
             plan,
             target,
             source,
             generation,
             started_at,
             phase_offset_seconds,
+            stream_offset_seconds,
+            replacing_active_stream,
+            preserve_replacement_phase,
             start_target,
             trace_metadata=trace_metadata,
         )
@@ -1402,11 +1504,68 @@ class MotionController:
         """Keep HSP and Flexible Position on the same timed point schema."""
         from .motion_patterns import continuous_plan_timed_phase_points
 
-        return continuous_plan_timed_phase_points(
+        points = continuous_plan_timed_phase_points(
             plan,
             effective_duration_seconds,
             target_interval_seconds=CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
         )
+        return self._coalesce_hsp_stream_phase_points(points, effective_duration_seconds)
+
+    def _coalesce_hsp_stream_phase_points(
+        self,
+        points: tuple[dict[str, Any], ...],
+        effective_duration_seconds: float,
+    ) -> tuple[dict[str, Any], ...]:
+        """Drop sub-frame prepared points that make HSP jerk without adding shape detail."""
+        if len(points) <= 2:
+            return points
+        duration = max(0.001, float(effective_duration_seconds or 0.001))
+        min_phase_delta = CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS / duration
+        accepted: list[dict[str, Any]] = [dict(points[0])]
+        skipped = 0
+        for index, point in enumerate(points[1:], start=1):
+            candidate = dict(point)
+            phase_delta = float(candidate["phase"]) - float(accepted[-1]["phase"])
+            is_last = index == len(points) - 1
+            if phase_delta < min_phase_delta:
+                skipped += 1
+                if is_last and len(accepted) > 1:
+                    if skipped:
+                        candidate["hsp_interval_limited_points"] = skipped
+                    accepted[-1] = candidate
+                    skipped = 0
+                continue
+            if skipped:
+                candidate["hsp_interval_limited_points"] = skipped
+                skipped = 0
+            accepted.append(candidate)
+        return tuple(accepted)
+
+    def _continuous_transition_phase_seconds(
+        self,
+        plan,
+        target: MotionTarget,
+        start_target: MotionTarget,
+        effective_duration_seconds: float,
+        sample_continuous_motion,
+    ) -> float:
+        duration = max(0.1, float(effective_duration_seconds or 0.1))
+        best_seconds = 0.0
+        best_score = float("inf")
+        count = max(8, int(CONTINUOUS_TRANSITION_PHASE_CANDIDATES))
+        start_range = float(start_target.stroke_range)
+        start_depth = float(start_target.depth)
+        for index in range(count):
+            seconds = (duration * index) / count
+            sample = self._sample_continuous_motion(plan, target, seconds, sample_continuous_motion)
+            sample_target = sample.target.clamped()
+            depth_delta = sample_target.depth - start_depth
+            range_delta = (sample_target.stroke_range - start_range) * 0.35
+            score = depth_delta * depth_delta + range_delta * range_delta
+            if score < best_score:
+                best_score = score
+                best_seconds = seconds
+        return best_seconds
 
     def _run_continuous_stream_plan(
         self,
@@ -1416,6 +1575,9 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        stream_offset_seconds: float,
+        replacing_active_stream: bool,
+        preserve_replacement_phase: bool,
         start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
@@ -1443,8 +1605,24 @@ class MotionController:
         if not hsp_phase_points:
             return False
         stream_duration_seconds = effective_duration_seconds
-        play_start_seconds = phase_offset_seconds % effective_duration_seconds
-        play_start_stream_seconds = play_start_seconds
+        if replacing_active_stream and not preserve_replacement_phase:
+            phase_offset_seconds = self._continuous_transition_phase_seconds(
+                plan,
+                target,
+                start_target,
+                effective_duration_seconds,
+                sample_continuous_motion,
+            )
+        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
+        logical_start_seconds = phase_offset_seconds + (
+            replacement_lead_seconds if preserve_replacement_phase else 0.0
+        )
+        play_start_seconds = logical_start_seconds % effective_duration_seconds
+        hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else play_start_seconds
+        if replacing_active_stream:
+            play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds
+        else:
+            play_start_stream_seconds = play_start_seconds
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
         stream_seconds = play_start_stream_seconds
         sample_index = 0
@@ -1520,6 +1698,7 @@ class MotionController:
             authored_point: bool,
             sample,
             phase_interval: float,
+            hsp_interval_limited_points: int = 0,
         ) -> None:
             nonlocal previous_point_time_seconds, previous_phase_time_seconds
             nonlocal sample_index, stream_index, stream_seconds
@@ -1547,6 +1726,8 @@ class MotionController:
                 "sample_interval_seconds": command_interval,
                 "authored_point": authored_point,
             }
+            if hsp_interval_limited_points:
+                point["hsp_interval_limited_points"] = int(hsp_interval_limited_points)
             phase_schedule.append((point_stream_seconds, point_seconds))
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
@@ -1623,6 +1804,7 @@ class MotionController:
                     phase_point["authored"],
                     sample,
                     phase_interval,
+                    int(phase_point.get("hsp_interval_limited_points") or 0),
                 )
                 advance_phase_cursor()
             return points
@@ -1664,10 +1846,12 @@ class MotionController:
                     "hsp_batch_index": batch_index,
                     "hsp_point_time_ms": point["t"],
                     "hsp_point_logical_time_ms": point["logical_t"],
+                    "sample_index": point["sample_index"],
                     "hsp_stream_index": point["stream_index"],
                     "cycle_ms": cycle_ms,
                     "phase_offset_ms": phase_offset_ms,
                     "hsp_play_start_ms": play_start_ms,
+                    "hsp_replacement_lead_ms": round(replacement_lead_seconds * 1000.0, 1),
                     "hsp_stream_cycle_ms": stream_cycle_ms,
                     "hsp_transport_time_scale": round(
                         point["sample_interval_seconds"] / max(0.001, point["phase_interval_seconds"]),
@@ -1687,6 +1871,8 @@ class MotionController:
                     "transport_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
+                if point.get("hsp_interval_limited_points"):
+                    extras["hsp_interval_limited_points"] = int(point["hsp_interval_limited_points"])
                 if previous_recorded_point is not None:
                     dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
                     if dt_seconds > 0:
@@ -1735,7 +1921,7 @@ class MotionController:
             record_batch(
                 initial_points,
                 result=started,
-                kind="play",
+                kind="replace" if replacing_active_stream else "play",
                 send_started_at=send_started_at,
                 send_ended_at=send_ended_at,
             )
@@ -1751,7 +1937,7 @@ class MotionController:
                 self._set_frame_playback_active(True)
 
                 elapsed = max(0.0, time.monotonic() - started_at)
-                hsp_elapsed = play_start_stream_seconds + elapsed
+                hsp_elapsed = hsp_clock_start_seconds + elapsed
                 current_phase_seconds, phase_rate = phase_at_stream_time(hsp_elapsed)
                 self._refresh_continuous_phase_state(
                     plan=plan,
@@ -1759,6 +1945,7 @@ class MotionController:
                     plan_key=plan_key,
                     generation=generation,
                     phase_offset_seconds=current_phase_seconds,
+                    stream_offset_seconds=hsp_elapsed,
                     phase_rate=phase_rate,
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
@@ -1790,7 +1977,7 @@ class MotionController:
                     and elapsed >= next_sync_elapsed
                     and hsp_elapsed <= stream_seconds
                 ):
-                    sync_filter = 0.9 if sync_count == 0 else 0.5
+                    sync_filter = CONTINUOUS_HSP_SYNC_FILTER
                     try:
                         synced = sync_stream(int(round(hsp_elapsed * 1000.0)), filter=sync_filter)
                     except Exception as exc:
@@ -1808,7 +1995,7 @@ class MotionController:
                     )
                     self._augment_last_trace(sync_extras)
                     sync_count += 1
-                    next_sync_elapsed = elapsed + (sync_count + 1 if sync_count < 3 else 10.0)
+                    next_sync_elapsed = elapsed + CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS
 
                 sleep_seconds = max(0.02, min(0.08, buffer_remaining - CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS))
                 if not self._sleep_with_pause(sleep_seconds, generation):

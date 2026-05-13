@@ -221,18 +221,20 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   stroke-depth calibration to each HSP point unless current upstream Handy
   documentation and real-device traces prove that the REST v3 HSP point schema
   changed again. Firmware v3 / legacy mode, v4 without the Application ID, or
-  v4 after an API v3 401 auth failure keeps the legacy HDSP direct-position
-  fallback. When diagnosing fixed-speed continuous motion, check
+  v4 after an API v3 401 auth failure should not silently run Continuous
+  through HDSP direct-position fallback; report HSP as unavailable and let the
+  user choose HAMP legacy or fix credentials. When diagnosing fixed-speed
+  continuous motion, check
   `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`, and
   `api_v3_unavailable_reason` before changing sampler math.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
-  speed as timed point spacing and position deltas; HDSP fallback derives a
-  per-sample command-speed budget in `MotionSample.target.speed`, with the
-  Handy command's `velocity` as the final mm/s value after distance, command
-  interval, and user speed-limit clamping. Derived sample speed must remain
-  intent-relative; do not let a low requested speed saturate every fallback
-  XAVA frame at the user maximum, and do not feed derived sample speed back
+  speed as timed point spacing and position deltas; direct-position HDSP paths
+  derive a per-sample command-speed budget in `MotionSample.target.speed`, with
+  the Handy command's `velocity` as the final mm/s value after distance,
+  command interval, and user speed-limit clamping. Derived sample speed must
+  remain intent-relative; do not let a low requested speed saturate every
+  direct-position XAVA frame at the user maximum, and do not feed it back
   into `motion.current_target()`, Freestyle scoring, or LLM context. Continuous
   HSP must not apply saved speed limits by rewriting `MotionTarget.speed`
   before sampling; that converts physical velocity back into relative intent
@@ -245,24 +247,36 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   point-to-point velocity budget because that flattens fast segments into a
   fixed-slope feel. Flexible Position `xpt.t` durations may still be stretched
   when an authored timed move exceeds the configured Handy speed cap.
-  Pattern swaps should not repeat HSP setup while an HSP stream is already
-  active. Rebuffer the replacement plan through a flushed `/hsp/add`, update
-  `/hsp/threshold`, then replay with server-time metadata and
-  `pause_on_starving: false` so pattern changes do not stop motion during
-  setup latency. Active HSP streams should periodically correct firmware
-  playback time through `/hsp/synctime` and preserve sanitized response state in
-  diagnostics so planned point timing can be compared with device-reported
-  playback. Sparse built-in HSP streams should keep
+  Pattern swaps should not repeat HSP setup or resend `/hsp/play` while an HSP
+  stream is already active. Rebuffer the replacement plan through a flushed
+  `/hsp/add` scheduled against the active HSP stream clock, update
+  `/hsp/threshold`, and keep playback running so pattern changes do not pause
+  during setup or play-start latency. Replacement points need enough future
+  lead time to survive observed REST command latency; use recent HSP command
+  timing plus padding rather than scheduling the first replacement point only a
+  few milliseconds ahead of the estimated clock. Active HSP streams should only correct
+  firmware playback time through soft, delayed `/hsp/synctime` updates and
+  preserve sanitized response state in diagnostics so planned point timing can
+  be compared with device-reported playback. If the response state reports
+  `current_time_ms` already past the buffered point range, restart `/hsp/play`
+  at the first newly-added point instead of sending more expired points or
+  trying to pull the firmware clock back through `/hsp/synctime`.
+  Sparse built-in HSP streams should keep
   authored endpoints but insert Catmull-Rom intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
-  keyframes. Replacement HSP streams should include an exact point at
-  `hsp/play.start_time` and no pre-start points so mid-cycle swaps do not snap
-  toward a stale endpoint. During active continuous playback,
+  keyframes, while filtering sub-frame prepared points that create transport
+  chatter without materially changing the curve. Replacement HSP streams should
+  include an exact point at the replacement stream time and no pre-start points
+  so mid-cycle swaps do not snap toward a stale endpoint. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
   from the active plan clock; do not use the tail of the future HSP buffer as
   the current device state. If an active HSP append fails, treat the stream as
-  failed and fall back to HDSP direct position playback instead of exiting the
-  continuous worker as if playback succeeded.
+  failed and stop the continuous worker without demoting to HDSP direct
+  position playback.
+  Same-pattern continuous updates should preserve phase. New-pattern
+  replacements may choose the phase whose sampled depth/range is closest to
+  the current target before minimum-jerk morphing, instead of always starting
+  at phase zero and forcing a larger transition.
   Keep direct-position step limiting on HDSP/direct fallback moves instead of
   applying it to every HSP point. Flexible Position fixed-pattern playback
   uses the same `TimedMotionPoint` projection as HSP streaming so `hdsp/xpt`

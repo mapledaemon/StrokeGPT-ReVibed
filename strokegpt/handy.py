@@ -14,6 +14,7 @@ HANDY_COMMAND_POINTS_PREVIEW = 12
 HSP_POINT_MAX = 100
 HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
 HSP_STREAM_ID_MAX = 4294967295
+HSP_STALE_CLOCK_TOLERANCE_MS = 500
 # Handy position transports use absolute velocity/duration math. The app's
 # saved speed limits remain 0-100 percent-style controls, so timed position
 # and HSP guards convert those percentages onto this mm/s device scale.
@@ -879,6 +880,56 @@ class HandyController:
             return True
         return self._send_v3_command("hsp/threshold", {"tail_point_threshold": threshold})
 
+    def _hsp_point_time_bounds(self, points):
+        times = []
+        for point in points or ():
+            if not isinstance(point, dict):
+                continue
+            try:
+                times.append(int(round(float(point.get("t")))))
+            except (TypeError, ValueError):
+                continue
+        if not times:
+            return None
+        return min(times), max(times)
+
+    def _hsp_state_clock_is_past_points(self, points):
+        state = self._last_hsp_state if isinstance(self._last_hsp_state, dict) else None
+        bounds = self._hsp_point_time_bounds(points)
+        if not state or not bounds:
+            return False
+        try:
+            current_time = int(state.get("current_time_ms"))
+        except (TypeError, ValueError):
+            return False
+        _first_point_time, last_point_time = bounds
+        try:
+            state_last_point_time = int(state.get("last_point_time_ms"))
+        except (TypeError, ValueError):
+            state_last_point_time = last_point_time
+        latest_known_point = max(last_point_time, state_last_point_time)
+        return current_time > latest_known_point + HSP_STALE_CLOCK_TOLERANCE_MS
+
+    def _send_hsp_play(self, start_time_ms):
+        body = {
+            "start_time": max(0, int(round(start_time_ms))),
+            "server_time": self._estimated_server_time_ms(),
+            "playback_rate": 1.0,
+            "pause_on_starving": False,
+            "loop": False,
+        }
+        return self._send_v3_command("hsp/play", body)
+
+    def _restart_hsp_if_clock_is_stale(self, stream_points, start_time_ms=None):
+        if not self._hsp_state_clock_is_past_points(stream_points):
+            return None
+        if start_time_ms is None:
+            bounds = self._hsp_point_time_bounds(stream_points)
+            if not bounds:
+                return None
+            start_time_ms = bounds[0]
+        return bool(self._send_hsp_play(start_time_ms))
+
     def start_continuous_stream(
         self,
         points,
@@ -906,16 +957,20 @@ class HandyController:
         }
         if not self._send_v3_command("hsp/add", add):
             return False
+        add_result = self._last_command_result
         if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
-        body = {
-            "start_time": max(0, int(round(start_time_ms))),
-            "server_time": self._estimated_server_time_ms(),
-            "playback_rate": 1.0,
-            "pause_on_starving": False,
-            "loop": False,
-        }
-        if not self._send_v3_command("hsp/play", body):
+        if replace_active_stream:
+            restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
+            if restarted is False:
+                return False
+            if add_result is not None and restarted is not True:
+                self._last_command_result = add_result
+            self._hsp_streaming = True
+            self._update_stream_state(points[0])
+            return True
+
+        if not self._send_hsp_play(start_time_ms):
             return False
 
         self._hsp_streaming = True
@@ -942,7 +997,10 @@ class HandyController:
         add_result = self._last_command_result
         if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
-        if add_result is not None:
+        restarted = self._restart_hsp_if_clock_is_stale(stream_points)
+        if restarted is False:
+            return False
+        if add_result is not None and restarted is not True:
             self._last_command_result = add_result
         self._hsp_streaming = True
         return True

@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-13 - Unreleased - Restore Handy API V3 Auth Diagnostics
-----------------------------------------------------------------
+2026-05-13 - Unreleased - Stabilize Continuous HSP Playback
+------------------------------------------------------------
 
 Branch: codex-handy-v3-auth-diagnostics
 
@@ -27,6 +27,27 @@ Branch: codex-handy-v3-auth-diagnostics
 - Migrated existing settings with a blank API v3 credential to the built-in
   public Application ID on load so already-installed apps pick it up after
   restart instead of staying on HDSP fallback.
+- Deprecated Continuous-to-HDSP fallback for named pattern playback. When HSP is
+  unavailable, Continuous now records `continuous_schema=hsp_unavailable`
+  instead of sending slow direct-position fallback moves that feel fixed-speed.
+- Changed active HSP pattern swaps to flush replacement points with `/hsp/add`
+  and update `/hsp/threshold` without replaying `/hsp/play`, scheduling the new
+  buffer against the active HSP stream clock so pattern changes do not pause or
+  snap back to stale cycle-local timestamps.
+- Added stale HSP clock recovery: if firmware reports `current_time_ms` already
+  far beyond the buffered point range after `/hsp/add` or `/hsp/threshold`, the
+  controller restarts `/hsp/play` at the first newly-added point instead of
+  continuing to append points that firmware treats as already expired.
+- Gave HSP replacement streams enough lead time to survive observed REST API
+  latency and scale that lead from recent HSP command timing, so pattern swaps
+  do not flush the active buffer with points that are already nearly expired.
+- Aligned new-pattern transitions to the phase whose sampled depth/range is
+  closest to the current motion target while preserving phase for same-pattern
+  speed/depth updates, keeping the older Catmull/minimum-jerk transition feel
+  without forcing every new pattern to start at phase zero.
+- Delayed and softened HSP clock sync and filtered sub-frame prepared points in
+  the HSP stream projection to reduce transport chatter while preserving the
+  timed point spacing that restored real speed variation.
 
 
 2026-05-13 - PR #192 - Motion Transport Capture Diagnostics
