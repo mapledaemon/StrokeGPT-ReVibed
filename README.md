@@ -41,9 +41,10 @@ The bootstrap script downloads StrokeGPT-ReVibed to
 `Documents\StrokeGPT-ReVibed`, installs Git for Windows when needed so future
 updates work, and then starts `scripts\install_windows.ps1`. The installer
 creates `.venv`, installs Python 3.11 when missing, installs app dependencies,
-asks whether to install Ollama when it is missing, and asks whether to install
-optional NVIDIA CUDA / Parakeet voice components. It does not download Ollama or
-voice model weights; those downloads stay inside the app so progress is visible.
+asks whether to install Ollama when it is missing, offers to download one of the
+default Ollama models with live `ollama pull` progress, and asks whether to
+install optional NVIDIA CUDA / Parakeet voice components. Voice model downloads
+stay inside the app so progress is visible there.
 
 If you do not want to use the bootstrap script, download the repository from
 GitHub with **Code > Download ZIP**, extract it, open PowerShell inside the
@@ -97,6 +98,20 @@ local settings such as `my_settings.json` are left alone. Use
 isolated NVIDIA Parakeet runtime.
 
 ### Ollama GPU acceleration
+
+The Windows installer can download one of the four default Ollama model options:
+
+| Model | Size |
+| --- | ---: |
+| `huihui_ai/granite4.1-abliterated:3b` | 2.1 GB |
+| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b` | 4.4 GB |
+| `huihui_ai/granite4.1-abliterated:8b` | 5.3 GB |
+| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` | 6.3 GB |
+
+The installer prints detected NVIDIA VRAM when `nvidia-smi` is available. Model
+size is only the model file size; context and runtime overhead need additional
+memory. If a model is close to or above GPU VRAM, Ollama may partially run it in
+system memory and chat can be slow.
 
 The app checks Ollama's running-model status and warns during setup when the selected model is loaded but reports no VRAM use. A nonzero `/api/ps` `size_vram` value is treated as GPU use, even when it is lower than total loaded model memory. The check is only definitive after Ollama has loaded the selected model at least once; send one chat message or run `ollama ps` after loading a model if the status is still unknown. For exact CPU/GPU split details, use the `ollama ps` Processor column.
 

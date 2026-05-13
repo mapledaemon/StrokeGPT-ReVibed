@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #172 - Add Ollama Model Choice To Windows Install
+------------------------------------------------------------------
+
+Branch: codex/ollama-install-model-choice
+
+- Added a Windows installer prompt to download one of the four default Ollama
+  models after Ollama is available, with model names, sizes, live `ollama pull`
+  progress, and a visible VRAM-capacity warning.
+- Added NVIDIA VRAM detection to the installer so users can compare model file
+  size against available GPU memory before choosing a model.
+- Kept the update script non-pulling by explicitly passing
+  `-DownloadOllamaModel No` when it has to recreate a missing `.venv`.
+- Added known size metadata for all four default app model options so the
+  Settings > Model list labels Gemma and Granite defaults consistently.
+- Updated README install/GPU guidance and script regression coverage for the
+  model choice flow.
+
+
 2026-05-13 - PR #171 - Add Windows First-Run Bootstrap
 -------------------------------------------------------
 
