@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #173 - Windows Python Probe Fix
+------------------------------------------------
+
+Branch: codex/windows-python-probe-fix
+
+- Fixed the Windows installer Python detection probe so a present `py.exe`
+  launcher with no installed Python no longer stops the script before the
+  Python 3.11 `winget` install prompt can run.
+- Applied the same non-terminating Python candidate probe to the optional
+  Parakeet installer so missing Python reports the intended setup message.
+
+
 2026-05-13 - PR #172 - Add Ollama Model Choice To Windows Install
 ------------------------------------------------------------------
 

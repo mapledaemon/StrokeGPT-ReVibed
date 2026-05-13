@@ -190,8 +190,16 @@ function Test-PythonCommand {
         $prefix = $Command[1..($Command.Count - 1)]
     }
 
-    & $exe @prefix -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
-    return $LASTEXITCODE -eq 0
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & $exe @prefix -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
 }
 
 function Find-PythonCandidate {

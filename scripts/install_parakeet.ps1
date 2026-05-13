@@ -10,17 +10,39 @@ $VenvPython = Join-Path $ProjectRoot ".venv-parakeet\Scripts\python.exe"
 
 Set-Location $ProjectRoot
 
+function Test-PythonCommand {
+    param(
+        [string[]]$Command,
+        [int]$MinimumMinor = 10
+    )
+
+    $exe = $Command[0]
+    $prefix = @()
+    if ($Command.Count -gt 1) {
+        $prefix = $Command[1..($Command.Count - 1)]
+    }
+
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & $exe @prefix -c "import sys; raise SystemExit(0 if sys.version_info >= (3, $MinimumMinor) else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+}
+
 function Find-Python {
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        & py -3.11 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-        if ($LASTEXITCODE -eq 0) {
+        if (Test-PythonCommand @("py", "-3.11") -MinimumMinor 11) {
             return @("py", "-3.11")
         }
     }
 
     if (Get-Command python -ErrorAction SilentlyContinue) {
-        & python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
-        if ($LASTEXITCODE -eq 0) {
+        if (Test-PythonCommand @("python")) {
             return @("python")
         }
     }
