@@ -743,7 +743,7 @@ class HandyController:
         }
         if not self._send_v3_command("hsp/add", add):
             return False
-        if not self._send_hsp_threshold(tail_point_threshold):
+        if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
         body = {
             "start_time": max(0, int(round(start_time_ms))),
@@ -776,7 +776,7 @@ class HandyController:
         if not self._send_v3_command("hsp/add", body):
             return False
         add_result = self._last_command_result
-        if not self._send_hsp_threshold(tail_point_threshold):
+        if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
         if add_result is not None:
             self._last_command_result = add_result

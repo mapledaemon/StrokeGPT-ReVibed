@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional
 
@@ -36,6 +36,7 @@ CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
+CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -119,6 +120,7 @@ class ContinuousPhaseState:
     generation: int
     started_at: float
     offset_seconds: float = 0.0
+    phase_rate: float = 1.0
     plan: Any = None
     target: Optional[MotionTarget] = None
 
@@ -1132,29 +1134,6 @@ class MotionController:
         self._move_to_depth_accepts_duration_ms = supported
         return supported
 
-    def _effective_speed_for_timing(self, speed: float) -> float:
-        effective = None
-        if hasattr(self.handy, "effective_speed_for_relative"):
-            try:
-                effective = self.handy.effective_speed_for_relative(speed)
-            except (TypeError, ValueError):
-                effective = None
-        if effective is None:
-            effective = speed
-        try:
-            return _clamp(float(effective))
-        except (TypeError, ValueError):
-            return _clamp(speed)
-
-    def _continuous_timing_target(self, target: MotionTarget) -> MotionTarget:
-        return MotionTarget(
-            self._effective_speed_for_timing(target.speed),
-            target.depth,
-            target.stroke_range,
-            label=target.label,
-            motion_program=target.motion_program,
-        ).clamped()
-
     def _sample_continuous_motion(
         self,
         plan,
@@ -1162,10 +1141,7 @@ class MotionController:
         elapsed_seconds: float,
         sample_continuous_motion,
     ):
-        sample = sample_continuous_motion(plan, self._continuous_timing_target(target), elapsed_seconds)
-        if sample.intent_speed != target.speed:
-            sample = replace(sample, intent_speed=target.speed)
-        return sample
+        return sample_continuous_motion(plan, target, elapsed_seconds)
 
     def apply_continuous_target(
         self,
@@ -1237,9 +1213,11 @@ class MotionController:
         state = self._continuous_phase_state
         if state is None or state.generation != self._generation or state.key != plan_key:
             return 0.0
-        cycle_seconds = max(0.1, float(getattr(plan, "duration_seconds", 0.1) or 0.1))
-        elapsed = state.offset_seconds + max(0.0, now - state.started_at)
-        return elapsed % cycle_seconds
+        try:
+            phase_rate = max(0.0, float(state.phase_rate))
+        except (TypeError, ValueError):
+            phase_rate = 1.0
+        return state.offset_seconds + max(0.0, now - state.started_at) * phase_rate
 
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
@@ -1259,6 +1237,55 @@ class MotionController:
             CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
             CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
         )
+
+    def _continuous_transport_interval(
+        self,
+        previous_target: MotionTarget,
+        sample_target: MotionTarget,
+        phase_interval_seconds: float,
+    ) -> float:
+        try:
+            phase_interval = max(0.001, float(phase_interval_seconds))
+        except (TypeError, ValueError):
+            phase_interval = self._continuous_sample_interval()
+
+        max_velocity = getattr(self.handy, "max_velocity_for_relative_speed", None)
+        duration_for_depth = getattr(self.handy, "duration_ms_for_depth_interval", None)
+        if callable(max_velocity) and callable(duration_for_depth):
+            try:
+                velocity = max_velocity(sample_target.speed)
+                duration_ms = duration_for_depth(velocity, previous_target.depth, sample_target.depth)
+                return max(phase_interval, max(0.001, float(duration_ms) / 1000.0))
+            except Exception:
+                pass
+        return phase_interval
+
+    def _refresh_continuous_phase_state(
+        self,
+        *,
+        plan,
+        target: MotionTarget,
+        plan_key: tuple[Any, ...],
+        generation: int,
+        phase_offset_seconds: float,
+        phase_rate: float = 1.0,
+    ) -> None:
+        try:
+            phase_rate = max(0.0, float(phase_rate))
+        except (TypeError, ValueError):
+            phase_rate = 1.0
+        with self._lock:
+            if generation != self._generation:
+                return
+            self._continuous_phase_state = ContinuousPhaseState(
+                key=plan_key,
+                generation=generation,
+                started_at=time.monotonic(),
+                offset_seconds=max(0.0, float(phase_offset_seconds or 0.0)),
+                phase_rate=phase_rate,
+                plan=plan,
+                target=target,
+            )
 
     def _interpolate_target(self, start: MotionTarget, end: MotionTarget, amount: float, label: str) -> MotionTarget:
         return MotionTarget(
@@ -1359,6 +1386,35 @@ class MotionController:
         except Exception:
             return False
 
+    def _hsp_stream_phase_points(
+        self,
+        phase_points: tuple[tuple[float, float], ...],
+        effective_duration_seconds: float,
+    ) -> tuple[dict[str, Any], ...]:
+        """Keep authored HSP endpoints while filling long gaps with curve samples."""
+        if not phase_points:
+            return ()
+        duration = max(0.001, float(effective_duration_seconds or 0.001))
+        target_interval = max(0.001, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+        dense: list[dict[str, Any]] = [{"phase": float(phase_points[0][0]), "authored": True}]
+        previous_phase = float(phase_points[0][0])
+        for raw_phase, _pos in phase_points[1:]:
+            phase = float(raw_phase)
+            segment_seconds = max(0.0, (phase - previous_phase) * duration)
+            if segment_seconds > target_interval:
+                intermediate_count = max(0, int(round(segment_seconds / target_interval)) - 1)
+                for step in range(1, intermediate_count + 1):
+                    amount = step / (intermediate_count + 1)
+                    dense.append(
+                        {
+                            "phase": previous_phase + (phase - previous_phase) * amount,
+                            "authored": False,
+                        }
+                    )
+            dense.append({"phase": phase, "authored": True})
+            previous_phase = phase
+        return tuple(dense)
+
     def _run_continuous_stream_plan(
         self,
         plan,
@@ -1393,97 +1449,206 @@ class MotionController:
             sample_continuous_motion,
         )
         effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
+        hsp_phase_points = self._hsp_stream_phase_points(phase_points, effective_duration_seconds)
         stream_duration_seconds = effective_duration_seconds
         play_start_seconds = phase_offset_seconds % effective_duration_seconds
         play_start_stream_seconds = play_start_seconds
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
-        stream_seconds = 0.0
+        stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
         batch_index = 0
         previous_command_ended_at = None
         previous_recorded_point = None
         previous_point_time_seconds = None
+        previous_phase_time_seconds = None
+        previous_output_target = start_target
+        phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
         program_range = continuous_plan_depth_range(plan, target)
         plan_name = str(getattr(plan, "name", "") or "continuous")
+        plan_key = self._continuous_plan_key(plan)
         cycle_ms = round(plan.duration_seconds * 1000.0, 1)
         phase_offset_ms = round(play_start_seconds * 1000.0, 1)
         play_start_ms = round(play_start_stream_seconds * 1000.0, 1)
         stream_cycle_ms = round(stream_duration_seconds * 1000.0, 1)
         morph_ms = round(morph_seconds * 1000.0, 1)
         start_phase = play_start_seconds / effective_duration_seconds
-        next_phase_index = 0
-        for index, (phase, _) in enumerate(phase_points):
-            if phase <= start_phase:
-                next_phase_index = index
-            else:
-                break
+        phase_epsilon = 0.000001
+        start_point_authored = any(
+            bool(point.get("authored")) and abs(float(point["phase"]) - start_phase) <= phase_epsilon
+            for point in hsp_phase_points
+        )
+        start_point_pending = True
         next_cycle_index = 0
+        next_phase_index = 0
+        for index, point in enumerate(hsp_phase_points):
+            if float(point["phase"]) > start_phase + phase_epsilon:
+                next_phase_index = index
+                break
+        else:
+            next_cycle_index = 1
+            next_phase_index = 1 if len(hsp_phase_points) > 1 and hsp_phase_points[0]["phase"] <= 0.0 else 0
 
         def advance_phase_cursor() -> None:
             nonlocal next_cycle_index, next_phase_index
             next_phase_index += 1
-            if next_phase_index >= len(phase_points):
+            if next_phase_index >= len(hsp_phase_points):
                 next_cycle_index += 1
-                next_phase_index = 1 if len(phase_points) > 1 and phase_points[0][0] <= 0.0 else 0
+                next_phase_index = 1 if len(hsp_phase_points) > 1 and hsp_phase_points[0]["phase"] <= 0.0 else 0
+
+        def sample_stream_point(
+            point_seconds: float,
+            point_stream_seconds: float,
+        ):
+            sample = self._sample_continuous_motion(
+                plan,
+                target,
+                point_seconds,
+                sample_continuous_motion,
+            )
+            stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
+            if stream_elapsed < morph_seconds:
+                amount = _minimum_jerk(stream_elapsed / morph_seconds)
+                sample = sample.with_target(
+                    self._interpolate_continuous_spatial_target(
+                        start_target,
+                        sample.target,
+                        amount,
+                        f"{sample.target.label or plan_name} morph",
+                    )
+                )
+            return sample
+
+        def append_stream_point(
+            points: list[dict[str, Any]],
+            point_seconds: float,
+            point_stream_seconds: float,
+            authored_point: bool,
+            sample,
+            phase_interval: float,
+        ) -> None:
+            nonlocal previous_point_time_seconds, previous_phase_time_seconds, previous_output_target
+            nonlocal sample_index, stream_index, stream_seconds
+            command_interval = (
+                base_interval
+                if previous_point_time_seconds is None
+                else max(0.001, point_stream_seconds - previous_point_time_seconds)
+            )
+            stream_index += 1
+            point = {
+                "t": int(round(point_stream_seconds * 1000.0)),
+                "logical_t": int(round(point_seconds * 1000.0)),
+                "x": sample.target.depth,
+                "speed": sample.target.speed,
+                "intent_speed": sample.intent_speed,
+                "range": sample.target.stroke_range,
+                "label": sample.target.label or plan_name,
+                "sample_index": sample_index,
+                "stream_index": stream_index,
+                "phase": sample.phase,
+                "position_per_second": sample.position_per_second,
+                "tempo_scale": sample.tempo_scale,
+                "effective_duration_seconds": sample.effective_duration_seconds,
+                "phase_interval_seconds": phase_interval,
+                "sample_interval_seconds": command_interval,
+                "authored_point": authored_point,
+            }
+            phase_schedule.append((point_stream_seconds, point_seconds))
+            points.append(point)
+            previous_point_time_seconds = point_stream_seconds
+            previous_phase_time_seconds = point_seconds
+            previous_output_target = sample.target
+            sample_index += 1
+            stream_seconds = point_stream_seconds
+
+        def phase_at_stream_time(elapsed_seconds: float) -> tuple[float, float]:
+            if not phase_schedule:
+                return play_start_seconds, 1.0
+            elapsed_seconds = max(0.0, float(elapsed_seconds or 0.0))
+            while len(phase_schedule) > 2 and phase_schedule[1][0] <= elapsed_seconds:
+                phase_schedule.popleft()
+            previous_stream, previous_phase = phase_schedule[0]
+            for next_stream, next_phase in list(phase_schedule)[1:]:
+                stream_delta = max(0.0, next_stream - previous_stream)
+                phase_delta = next_phase - previous_phase
+                if elapsed_seconds <= next_stream:
+                    if stream_delta <= 0:
+                        return previous_phase, 0.0
+                    amount = _clamp((elapsed_seconds - previous_stream) / stream_delta, 0.0, 1.0)
+                    return previous_phase + phase_delta * amount, phase_delta / stream_delta
+                previous_stream, previous_phase = next_stream, next_phase
+            if len(phase_schedule) >= 2:
+                prior_stream, prior_phase = phase_schedule[-2]
+                last_stream, last_phase = phase_schedule[-1]
+                stream_delta = max(0.0, last_stream - prior_stream)
+                phase_delta = last_phase - prior_phase
+                rate = phase_delta / stream_delta if stream_delta > 0 else 0.0
+                return last_phase + max(0.0, elapsed_seconds - last_stream) * rate, rate
+            return previous_phase, 1.0
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
-            nonlocal previous_point_time_seconds, sample_index, stream_index, stream_seconds
+            nonlocal start_point_pending
             points: list[dict[str, Any]] = []
+            if start_point_pending:
+                start_point_pending = False
+                sample = sample_stream_point(play_start_seconds, play_start_stream_seconds)
+                append_stream_point(
+                    points,
+                    play_start_seconds,
+                    play_start_stream_seconds,
+                    start_point_authored,
+                    sample,
+                    base_interval,
+                )
             while len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND:
-                phase, _ = phase_points[next_phase_index]
+                phase_point = hsp_phase_points[next_phase_index]
+                phase = phase_point["phase"]
                 point_seconds = (next_cycle_index * effective_duration_seconds) + (
                     phase * effective_duration_seconds
                 )
-                point_stream_seconds = point_seconds
+                phase_interval = (
+                    base_interval
+                    if previous_phase_time_seconds is None
+                    else max(0.001, point_seconds - previous_phase_time_seconds)
+                )
+                provisional_stream_seconds = (
+                    stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
+                ) + phase_interval
+                sample = sample_stream_point(point_seconds, provisional_stream_seconds)
+                transport_interval = self._continuous_transport_interval(
+                    previous_output_target,
+                    sample.target,
+                    phase_interval,
+                )
+                for _attempt in range(3):
+                    candidate_stream_seconds = (
+                        stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
+                    ) + transport_interval
+                    sample = sample_stream_point(point_seconds, candidate_stream_seconds)
+                    adjusted_interval = self._continuous_transport_interval(
+                        previous_output_target,
+                        sample.target,
+                        phase_interval,
+                    )
+                    if abs(adjusted_interval - transport_interval) <= 0.001:
+                        break
+                    transport_interval = adjusted_interval
+                point_stream_seconds = (
+                    stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
+                ) + transport_interval
                 if point_stream_seconds > until_seconds and len(points) >= min_points:
                     break
 
-                sample = self._sample_continuous_motion(
-                    plan,
-                    target,
+                sample = sample_stream_point(point_seconds, point_stream_seconds)
+                append_stream_point(
+                    points,
                     point_seconds,
-                    sample_continuous_motion,
+                    point_stream_seconds,
+                    phase_point["authored"],
+                    sample,
+                    phase_interval,
                 )
-                stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
-                if stream_elapsed < morph_seconds:
-                    amount = _minimum_jerk(stream_elapsed / morph_seconds)
-                    sample = sample.with_target(
-                        self._interpolate_continuous_spatial_target(
-                            start_target,
-                            sample.target,
-                            amount,
-                            f"{sample.target.label or plan_name} morph",
-                        )
-                    )
-                command_interval = (
-                    base_interval
-                    if previous_point_time_seconds is None
-                    else max(0.001, point_stream_seconds - previous_point_time_seconds)
-                )
-                stream_index += 1
-                points.append(
-                    {
-                        "t": int(round(point_stream_seconds * 1000.0)),
-                        "logical_t": int(round(point_seconds * 1000.0)),
-                        "x": sample.target.depth,
-                        "speed": sample.target.speed,
-                        "intent_speed": sample.intent_speed,
-                        "range": sample.target.stroke_range,
-                        "label": sample.target.label or plan_name,
-                        "sample_index": sample_index,
-                        "stream_index": stream_index,
-                        "phase": sample.phase,
-                        "position_per_second": sample.position_per_second,
-                        "tempo_scale": sample.tempo_scale,
-                        "effective_duration_seconds": sample.effective_duration_seconds,
-                        "sample_interval_seconds": command_interval,
-                    }
-                )
-                previous_point_time_seconds = point_stream_seconds
-                sample_index += 1
-                stream_seconds = point_stream_seconds
                 advance_phase_cursor()
             return points
 
@@ -1529,7 +1694,11 @@ class MotionController:
                     "phase_offset_ms": phase_offset_ms,
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_stream_cycle_ms": stream_cycle_ms,
-                    "hsp_transport_time_scale": 1.0,
+                    "hsp_transport_time_scale": round(
+                        point["sample_interval_seconds"] / max(0.001, point["phase_interval_seconds"]),
+                        3,
+                    ),
+                    "hsp_authored_point": bool(point.get("authored_point")),
                     "morph_ms": morph_ms,
                     "intent_speed": int(round(point["intent_speed"])),
                     "sample_speed": int(round(point["speed"])),
@@ -1538,7 +1707,9 @@ class MotionController:
                     "sample_tempo_scale": round(point["tempo_scale"], 3),
                     "effective_cycle_ms": round(point["effective_duration_seconds"] * 1000.0, 1),
                     "base_interval_ms": round(base_interval * 1000.0, 1),
+                    "phase_interval_ms": round(point["phase_interval_seconds"] * 1000.0, 1),
                     "sample_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
+                    "transport_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
                 if previous_recorded_point is not None:
@@ -1605,6 +1776,15 @@ class MotionController:
 
                 elapsed = max(0.0, time.monotonic() - started_at)
                 hsp_elapsed = play_start_stream_seconds + elapsed
+                current_phase_seconds, phase_rate = phase_at_stream_time(hsp_elapsed)
+                self._refresh_continuous_phase_state(
+                    plan=plan,
+                    target=target,
+                    plan_key=plan_key,
+                    generation=generation,
+                    phase_offset_seconds=current_phase_seconds,
+                    phase_rate=phase_rate,
+                )
                 buffer_remaining = stream_seconds - hsp_elapsed
                 if buffer_remaining <= CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS:
                     until = hsp_elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS

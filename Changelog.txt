@@ -8,6 +8,45 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling
+-------------------------------------------------------
+
+Branch: codex-hsp-densify-sparse-patterns
+
+- Restored smooth continuous HSP motion for sparse built-in patterns by
+  inserting Catmull-Rom intermediate samples inside long authored action
+  segments before streaming timed points to firmware v4. Authored endpoints
+  still land on their original timestamps, but sparse patterns no longer reach
+  the device as a handful of long linear keyframe segments that feel fixed
+  speed.
+- Kept dense authored timing intact: short imported/funscript-style intervals
+  do not get extra points, so PR #188's timing-fidelity fix remains for fast
+  dense scripts while built-in patterns regain the smooth per-cycle curve.
+- Added HSP trace metadata that marks whether each streamed point is an
+  authored endpoint or an inserted intermediate sample, plus regression
+  coverage that sparse `stroke` HSP streams stay below the target point
+  interval and include both point types.
+- Reintroduced a bounded HSP transport clock so point timestamps stretch only
+  when the authored/densified segment would exceed the configured physical
+  velocity budget. This targets the observed "visualizer is fast but hardware
+  feels fixed" failure mode where impossible HSP slopes can make firmware
+  saturate at one device speed and erase the intended variation.
+- Made HSP replacement streams start with an exact point at `hsp/play`
+  `start_time`, then send only future points. Mid-cycle updates no longer
+  include stale pre-start points that could make firmware snap toward an old
+  endpoint before the new stream is underway.
+- Kept `/hsp/threshold` failures from killing an otherwise buffered HSP stream
+  unless they also disable API v3 auth. Threshold updates are useful
+  observability/refill hints, but a transient threshold failure should not
+  starve Milk or Freestyle motion after `/hsp/add` has already succeeded.
+- Fixed continuous speed scaling at the sampler boundary by keeping
+  `MotionTarget.speed` as relative user/LLM intent until the final Handy
+  transport calculation. The previous path converted intent speed into
+  physical Handy velocity before sampling, then treated the derived sample
+  speed as relative and mapped it through speed limits again, compressing high
+  speeds into a narrow low-speed range before HSP or HDSP could use them.
+
+
 2026-05-13 - PR #188 - Restore Position Speed Range
 ----------------------------------------------------
 

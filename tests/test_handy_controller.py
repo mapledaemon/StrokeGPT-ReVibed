@@ -39,6 +39,16 @@ class RecordingV3HandyController(RecordingHandyController):
         return 123456
 
 
+class ThresholdFailingV3HandyController(RecordingV3HandyController):
+    def _send_v3_command(self, path, body=None):
+        self.v3_commands.append((path, body or {}))
+        if path == "hsp/threshold":
+            self._record_command_result(path, body, ok=False, status_code=503, error="threshold unavailable")
+            return False
+        self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
+        return True
+
+
 class FakeResponse:
     def __init__(self, status_code=204, payload=None):
         self.status_code = status_code
@@ -459,6 +469,37 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], [{"t": 480, "x": 650}])
         self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
         self.assertEqual(handy.diagnostics()["relative_speed"], 50)
+
+    def test_start_continuous_stream_keeps_playing_when_threshold_update_fails(self):
+        handy = ThresholdFailingV3HandyController()
+
+        result = handy.start_continuous_stream(
+            [
+                {"t": 0, "x": 20, "intent_speed": 30, "range": 80},
+                {"t": 160, "x": 70, "intent_speed": 30, "range": 80},
+            ],
+            tail_point_stream_index=2,
+            tail_point_threshold=1,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual([path for path, _body in handy.v3_commands][-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/play")
+        self.assertTrue(handy.supports_continuous_streaming())
+
+    def test_append_continuous_stream_keeps_add_result_when_threshold_update_fails(self):
+        handy = ThresholdFailingV3HandyController()
+
+        result = handy.append_continuous_stream(
+            [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+            tail_point_stream_index=4,
+            tail_point_threshold=2,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold"])
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
+        self.assertTrue(handy.supports_continuous_streaming())
 
     def test_start_continuous_stream_resets_hsp_stream_for_replacement(self):
         handy = RecordingV3HandyController()
