@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from tests._web_support import WebTestCase
 
@@ -57,6 +58,18 @@ class WebRuntimeStateTests(WebTestCase):
         )
 
         self.assertEqual(selected, 5001)
+
+    def test_startup_browser_flag_is_opt_in(self):
+        from strokegpt.web import _env_flag
+
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(_env_flag("STROKEGPT_OPEN_BROWSER"))
+
+        with mock.patch.dict("os.environ", {"STROKEGPT_OPEN_BROWSER": "1"}):
+            self.assertTrue(_env_flag("STROKEGPT_OPEN_BROWSER"))
+
+        with mock.patch.dict("os.environ", {"STROKEGPT_OPEN_BROWSER": "off"}):
+            self.assertFalse(_env_flag("STROKEGPT_OPEN_BROWSER"))
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 import types
+import webbrowser
 from pathlib import Path
 import requests
 from flask import Flask, Response, request, jsonify, render_template_string, send_from_directory, stream_with_context
@@ -82,6 +83,13 @@ def _env_int(name, default):
     return value
 
 
+def _env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
 def _port_candidates(start_port, fallback_count=10):
     return [port for port in range(start_port, min(65535, start_port + fallback_count) + 1)]
 
@@ -104,6 +112,13 @@ def _select_bind_port(host, start_port, fallback_count=10, can_bind=_can_bind):
 
 def _display_host(host):
     return "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+
+
+def _open_browser(url):
+    try:
+        webbrowser.open(url)
+    except Exception as exc:
+        print(f"[WARN] Could not open browser automatically: {exc}")
 
 
 def _request_json():
@@ -1863,7 +1878,10 @@ def main():
     if port != requested_port:
         print(f"[WARN] Port {requested_port} is unavailable; using {port} instead.")
     print(f"[INFO] Starting Handy AI app at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
-    print(f"[INFO] Open http://{_display_host(host)}:{port}")
+    url = f"http://{_display_host(host)}:{port}"
+    print(f"[INFO] Open {url}")
+    if _env_flag("STROKEGPT_OPEN_BROWSER"):
+        threading.Timer(1.0, _open_browser, args=(url,)).start()
     app.run(host=host, port=port, debug=False)
 
 

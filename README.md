@@ -44,7 +44,10 @@ creates `.venv`, installs Python 3.11 when missing, installs app dependencies,
 asks whether to install Ollama when it is missing, offers to download one of the
 default Ollama models with live `ollama pull` progress, and asks whether to
 install optional NVIDIA CUDA / Parakeet voice components. Voice model downloads
-stay inside the app so progress is visible there.
+stay inside the app so progress is visible there. After install, double-click
+`Run StrokeGPT-ReVibed.cmd` in the install folder to start the app without
+typing commands; the launcher opens the browser after the local server chooses
+its port.
 
 If you do not want to use the bootstrap script, download the repository from
 GitHub with **Code > Download ZIP**, extract it, open PowerShell inside the
@@ -121,10 +124,9 @@ Ollama GPU setup depends on the hardware path. NVIDIA and Apple systems use thei
 
 **Windows:**
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-python app.py
-```
+Double-click `Run StrokeGPT-ReVibed.cmd` in the `StrokeGPT-ReVibed` folder.
+Leave the launcher window open while using the app. It starts the installed
+virtual environment and opens the browser automatically.
 
 **macOS / Linux:**
 
