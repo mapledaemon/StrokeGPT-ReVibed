@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-13 - Unreleased - Windows Winget Output Fix
----------------------------------------------------
+2026-05-13 - PR #176 - Windows Winget Output Fix
+------------------------------------------------
 
 Branch: codex/windows-winget-output-fix
 
