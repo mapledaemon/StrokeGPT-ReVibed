@@ -11,6 +11,9 @@ HANDY_API_V2_BASE_URL = "https://www.handyfeeling.com/api/handy/v2/"
 HANDY_API_V3_BASE_URL = "https://www.handyfeeling.com/api/handy-rest/v3/"
 HANDY_COMMAND_HISTORY_LIMIT = 60
 HANDY_COMMAND_POINTS_PREVIEW = 12
+HSP_POINT_SCALE = 10
+HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
+HSP_STREAM_ID_MAX = 4294967295
 
 class HandyController:
     def __init__(
@@ -49,6 +52,9 @@ class HandyController:
         self._last_command_result = None
         self._command_history = deque(maxlen=HANDY_COMMAND_HISTORY_LIMIT)
         self._api_v3_auth_failed = False
+        self._hsp_stream_id = 0
+        self._server_time_offset_ms = None
+        self._server_time_synced_at = 0.0
 
     def _normalize_base_url(self, value):
         cleaned = str(value or "").strip() or HANDY_API_V2_BASE_URL
@@ -68,6 +74,9 @@ class HandyController:
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._hsp_stream_id = 0
+            self._server_time_offset_ms = None
+            self._server_time_synced_at = 0.0
             self._reset_motion_cache()
         self.handy_key = key
 
@@ -80,6 +89,9 @@ class HandyController:
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._hsp_stream_id = 0
+            self._server_time_offset_ms = None
+            self._server_time_synced_at = 0.0
             self._reset_motion_cache()
         self.api_v3_key = cleaned
 
@@ -90,6 +102,9 @@ class HandyController:
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._hsp_stream_id = 0
+            self._server_time_offset_ms = None
+            self._server_time_synced_at = 0.0
             self._reset_motion_cache()
         self.firmware_version = normalized
 
@@ -231,6 +246,9 @@ class HandyController:
         self._current_mode = None
         self._hamp_started = False
         self._hsp_streaming = False
+        self._hsp_stream_id = 0
+        self._server_time_offset_ms = None
+        self._server_time_synced_at = 0.0
         self._reset_motion_cache()
 
     def supports_api_v3_control(self):
@@ -381,8 +399,56 @@ class HandyController:
                 return False
         return self._send_command("hamp/stop")
 
+    def _parse_server_time_ms(self, payload):
+        if isinstance(payload, (int, float)):
+            return float(payload)
+        if isinstance(payload, str):
+            try:
+                return float(payload)
+            except ValueError:
+                return None
+        if not isinstance(payload, dict):
+            return None
+        for key in ("server_time", "serverTime", "server_time_ms", "serverTimeMs", "time", "now"):
+            if key not in payload:
+                continue
+            try:
+                return float(payload[key])
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _refresh_server_time_offset(self):
+        started_monotonic = time.monotonic()
+        started_wall_ms = time.time() * 1000.0
+        response = None
+        try:
+            response = requests.get(f"{self.api_v3_base_url}servertime", timeout=5)
+            response.raise_for_status()
+            ended_wall_ms = time.time() * 1000.0
+            try:
+                payload = response.json()
+            except (TypeError, ValueError, AttributeError):
+                payload = getattr(response, "text", None)
+        except Exception:
+            return False
+
+        server_time_ms = self._parse_server_time_ms(payload)
+        if server_time_ms is None:
+            return False
+        local_midpoint_ms = (started_wall_ms + ended_wall_ms) / 2.0
+        self._server_time_offset_ms = server_time_ms - local_midpoint_ms
+        self._server_time_synced_at = started_monotonic
+        return True
+
     def _estimated_server_time_ms(self):
-        return int(round(time.time() * 1000.0))
+        offset_age = time.monotonic() - float(self._server_time_synced_at or 0.0)
+        if self._server_time_offset_ms is None or offset_age > HSP_SERVER_TIME_SYNC_TTL_SECONDS:
+            self._refresh_server_time_offset()
+        now_ms = time.time() * 1000.0
+        if self._server_time_offset_ms is None:
+            return int(round(now_ms))
+        return int(round(now_ms + self._server_time_offset_ms))
 
     def _safe_percent(self, p):
         try:
@@ -535,16 +601,18 @@ class HandyController:
             )
 
         if self.supports_api_v3_control():
+            minimum_duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
             if duration_ms is None:
-                duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
+                duration_ms = minimum_duration_ms
             else:
                 try:
                     duration_ms = int(round(float(duration_ms)))
                 except (TypeError, ValueError):
-                    duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
-                duration_ms = max(1, duration_ms)
+                    duration_ms = minimum_duration_ms
+                duration_ms = max(1, minimum_duration_ms, duration_ms)
+            physical_pos_pct = self._relative_depth_to_physical_percent(relative_pos_pct)
             body = {
-                "xp": round(relative_pos_pct, 3),
+                "xp": round(max(0.0, min(1.0, physical_pos_pct / 100.0)), 4),
                 "t": duration_ms,
                 "stop_on_target": bool(stop_on_target),
                 "immediate_rsp": False,
@@ -582,7 +650,7 @@ class HandyController:
         physical_depth = self._relative_depth_to_physical_percent(app_depth)
         return {
             "t": at_ms,
-            "x": max(0, min(100, int(round(physical_depth)))),
+            "x": max(0, min(1000, int(round(physical_depth * HSP_POINT_SCALE)))),
         }
 
     def _stream_points_body(self, points):
@@ -603,6 +671,12 @@ class HandyController:
             self._hamp_started = False
             self._reset_motion_cache()
 
+        if self._current_mode != MODE_HSP:
+            if not self._send_mode_command(MODE_HSP):
+                return False
+            self._current_mode = MODE_HSP
+            self._reset_motion_cache()
+
         bounds = (
             round(self._safe_percent(self.min_handy_depth) / 100.0, 4),
             round(self._safe_percent(self.max_handy_depth) / 100.0, 4),
@@ -614,22 +688,34 @@ class HandyController:
                 return False
             self._last_v3_stroke_bounds = bounds
 
-        if self._current_mode != MODE_HSP:
-            if not self._send_mode_command(MODE_HSP):
-                return False
-            self._current_mode = MODE_HSP
-            self._reset_motion_cache()
-
-        body = {}
+        body = None
         if stream_id is not None:
+            body = {}
             try:
                 body["stream_id"] = max(1, min(4294967295, int(stream_id)))
             except (TypeError, ValueError):
                 pass
-        if not self._send_v3_command("hsp/setup", body):
-            return False
+        if body is not None or not self._hsp_streaming:
+            if not self._send_v3_command("hsp/setup", body or {}):
+                return False
         self._hsp_streaming = True
         return True
+
+    def _next_hsp_stream_id(self):
+        if self._hsp_stream_id >= HSP_STREAM_ID_MAX:
+            self._hsp_stream_id = 1
+        else:
+            self._hsp_stream_id = max(1, int(self._hsp_stream_id or 0) + 1)
+        return self._hsp_stream_id
+
+    def _send_hsp_threshold(self, tail_point_threshold):
+        if tail_point_threshold is None:
+            return True
+        try:
+            threshold = max(0, int(tail_point_threshold))
+        except (TypeError, ValueError):
+            return True
+        return self._send_v3_command("hsp/threshold", {"tail_point_threshold": threshold})
 
     def start_continuous_stream(
         self,
@@ -644,31 +730,32 @@ class HandyController:
         if not stream_points:
             self._record_command_result("hsp/play", ok=False, error="empty HSP point stream")
             return False
+        if stream_id is None:
+            stream_id = self._next_hsp_stream_id()
         if not self._ensure_hsp(stream_id=stream_id):
             return False
 
         tail_index = int(tail_point_stream_index or len(stream_points))
         add = {
             "points": stream_points[:100],
-            "flush": True,
+            "flush": False,
             "tail_point_stream_index": max(1, tail_index),
         }
-        if tail_point_threshold is not None:
-            add["tail_point_threshold"] = max(1, int(tail_point_threshold))
         if not self._send_v3_command("hsp/add", add):
+            return False
+        if not self._send_hsp_threshold(tail_point_threshold):
             return False
         body = {
             "start_time": max(0, int(round(start_time_ms))),
             "server_time": self._estimated_server_time_ms(),
             "playback_rate": 1.0,
-            "pause_on_starving": True,
             "loop": False,
         }
         if not self._send_v3_command("hsp/play", body):
             return False
 
         self._hsp_streaming = True
-        self._update_stream_state(points[-1])
+        self._update_stream_state(points[0])
         return True
 
     def append_continuous_stream(
@@ -686,12 +773,14 @@ class HandyController:
             "flush": False,
             "tail_point_stream_index": max(1, int(tail_point_stream_index)),
         }
-        if tail_point_threshold is not None:
-            body["tail_point_threshold"] = max(1, int(tail_point_threshold))
         if not self._send_v3_command("hsp/add", body):
             return False
+        add_result = self._last_command_result
+        if not self._send_hsp_threshold(tail_point_threshold):
+            return False
+        if add_result is not None:
+            self._last_command_result = add_result
         self._hsp_streaming = True
-        self._update_stream_state(points[-1])
         return True
 
     def _update_stream_state(self, point):
@@ -802,6 +891,7 @@ class HandyController:
             "mode": self._current_mode,
             "hamp_started": self._hamp_started,
             "hsp_streaming": self._hsp_streaming,
+            "hsp_stream_id": self._hsp_stream_id,
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),

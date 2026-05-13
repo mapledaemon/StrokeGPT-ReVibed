@@ -181,7 +181,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   result (`path`, `ok`, status, elapsed milliseconds, safe body fields, and
   error text). Motion trace rows may mirror that as `handy_ok` /
   `handy_path` / `handy_status` / `handy_error`; use those fields to separate
-  planner waits from device/API rejection during real-device debugging.
+  planner waits from device/API rejection during real-device debugging. HSP
+  trace rows use scheduled point times and also include
+  `hsp_segment_depth_per_second` after the first point so reviewers can inspect
+  the actual timed-point transport slope instead of the time a future batch was
+  buffered.
 - `strokegpt/motion_patterns.py` prepares pattern actions before expansion: sort/dedupe, minimum interval filtering, repeat expansion, eased interpolation, large-step limiting, and redundant point simplification. Keep that pipeline dependency-free unless a larger funscript importer is deliberately added.
 - `strokegpt/motion_preferences.py` turns enabled fixed patterns and thumbs
   feedback into simple LLM-facing weights. Disabled fixed patterns should stay
@@ -202,12 +206,14 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   HDSP `xpt` duration moves for position playback. HSP playback should follow
   the current v3 split of `hsp/add` timed points followed by `hsp/play` with
   server time metadata; do not rely on speed-only visualizer fields as the
-  transport contract. For v3 HDSP `xpt`, `xp` is the documented percent
-  position (`0..100`), not a normalized fraction; HAMP and slider stroke
-  settings remain normalized `0..1`. Firmware v3 / legacy mode, or v4 without
-  an API v3 app authorized connection, keeps the legacy HDSP direct-position
-  fallback. Do not add a second user-facing Handy API key field unless the
-  upstream API requires a distinct credential again.
+  transport contract. For v3 HDSP `xpt`, send `xp` as the current REST v3
+  normalized physical position (`0..1`) after applying local stroke-depth
+  calibration; HSP timed points keep app positions in `0..100` internally and
+  send calibrated physical wire `x` values in firmware HSP `0..1000` units.
+  Firmware v3 / legacy mode, or v4 without an API v3 app authorized connection,
+  keeps the legacy HDSP direct-position fallback. Do not add a second
+  user-facing Handy API key field unless the upstream API requires a distinct
+  credential again.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
   speed as timed point spacing and position deltas; HDSP fallback derives a
@@ -219,7 +225,25 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   into `motion.current_target()`, Freestyle scoring, or LLM context.
   Continuous morphing and step limiting smooth depth/range only; do not
   interpolate or delta-limit the command-speed budget as if it were a spatial
-  target.
+  target. HSP timed-point streams must preserve authored action timing and
+  point-to-point depth deltas because their timestamps are the transport
+  timing contract; do not resample them through the fixed controller cadence.
+  Do not apply HDSP/HAMP velocity-cap retiming to HSP timestamps; that makes
+  the device play a slow script while speed diagnostics still show the original
+  sampled budget. Flexible Position `xpt.t` durations may be stretched when an
+  authored timed move exceeds the configured Handy speed cap.
+  Pattern swaps should start a fresh HSP stream id and rebuffer the replacement
+  plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
+  stream ids with new zero-based point times. HSP `play` should use server-time
+  metadata and should not request pause-on-starving unless real-device testing
+  proves that is the desired behavior. During active continuous playback,
+  `MotionController.current_target()` estimates the current sampled target
+  from the active plan clock; do not use the tail of the future HSP buffer as
+  the current device state.
+  Keep direct-position step limiting on HDSP/direct fallback moves instead of
+  applying it to every HSP point. Flexible Position fixed-pattern playback
+  must also preserve authored action timing so it does not flatten patterns
+  before they reach HDSP.
 - `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. `shaft` is accepted as the user-facing midpoint label, with `middle`/`mid` kept as aliases. Treat anchors as soft waypoints, not hard stops.
 - Spatial cues should treat `tip`, `shaft`, and `base` as regions of emphasis,
   not single lock points. `shaft` is the in-between region; ordinary zone cues

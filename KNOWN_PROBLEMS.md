@@ -64,8 +64,20 @@ Follow-up work:
   firmware v4 and HDSP fallback cadence/command-speed budget on legacy paths.
   The trace separates semantic `intent_speed`, sampled `sample_speed`,
   `sample_tempo_scale`, `effective_cycle_ms`, `sample_interval_ms`, HSP point
-  metadata, and final fallback `handy_velocity`; use those fields together
-  when diagnosing fixed-speed feel.
+  metadata, final fallback `handy_velocity`, and HSP `hsp_transport_time_scale`;
+  use those fields together when diagnosing fixed-speed feel. HSP should now
+  preserve authored sub-sample action intervals without hidden timestamp
+  stretching; `hsp_transport_time_scale` should remain `1.0`. Flexible Position
+  may stretch `xpt.t` when authored timing exceeds the configured speed cap.
+  Continuous HDSP fallback should show varied `handy_duration_ms` values because
+  its `xpt.t` is derived from the velocity budget again. If speed still feels
+  compressed, compare point-preview intervals, wire HSP `x` values (`0..1000`),
+  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, and physical
+  movement before changing sampler math again. Pattern swaps now intentionally
+  issue a fresh HSP stream id, buffer points with `/hsp/add`, update the tail
+  threshold via `/hsp/threshold`, and play without `pause_on_starving`; if swaps
+  still pause, inspect the `server_time`, threshold, and starvation behavior in
+  command history before changing sampler math again.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,

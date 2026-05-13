@@ -303,7 +303,10 @@ a clean tree first.
   continuous backend is at least as recoverable for basic strokes and stop
   behavior.
 - Preserve the current shared backend guard rails: user-speed-relative XAVA
-  velocity caps, speed-scaled continuous sample intervals, depth-jump
+  velocity caps, speed-scaled continuous sample intervals, authored
+  action-timing and slope preservation for HSP plus Flexible Position,
+  Flexible Position duration stretching when authored timing exceeds the
+  configured velocity cap, no hidden HSP timestamp stretching, depth-jump
   splitting, turn-apex smoothing for finite position/script callers, and
   uninterrupted stop/pause generation changes for continuous sampled planners.
 - Prototype inertia-aware direction changes and stops for the continuous

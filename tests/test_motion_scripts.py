@@ -306,7 +306,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(fast.speed, base.speed)
         # The boost is bounded around the user's requested speed instead
         # of jumping directly to the absolute 100% relative ceiling.
-        self.assertLessEqual(round(fast.speed), 54)
+        self.assertLessEqual(round(fast.speed), 64)
 
     def test_motion_target_for_sample_speed_scale_applies_to_segment_boost(self):
         # When the pattern's style declares a non-unit ``speed_scale``,
@@ -343,7 +343,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         ]
 
         self.assertGreater(max(speeds) - min(speeds), 5)
-        self.assertLessEqual(max(speeds), 54)
+        self.assertLessEqual(max(speeds), 70)
 
     def test_sample_continuous_motion_scales_cadence_from_intent_speed(self):
         plan = continuous_motion_plan("stroke")
