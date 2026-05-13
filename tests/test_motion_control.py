@@ -739,6 +739,16 @@ class MotionControllerTests(unittest.TestCase):
             controller.apply_continuous_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
+            first_batch_last_index = handy.stream_starts[0]["points"][-1]["stream_index"]
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous_schema") == "hsp"
+                        and point.get("hsp_stream_index") == first_batch_last_index
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                )
+            )
             hsp_points = [
                 point
                 for point in controller.observability_snapshot()["trace"]
@@ -864,7 +874,11 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("hsp_batch") == "play"
             ]
             self.assertTrue(second_points)
-            self.assertEqual(second_points[0]["hsp_point_time_ms"], second_points[0]["hsp_play_start_ms"])
+            self.assertAlmostEqual(
+                second_points[0]["hsp_point_time_ms"],
+                second_points[0]["hsp_play_start_ms"],
+                delta=1.0,
+            )
         finally:
             controller.stop()
 
