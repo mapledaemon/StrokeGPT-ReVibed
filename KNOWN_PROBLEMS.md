@@ -66,22 +66,26 @@ Follow-up work:
   `sample_tempo_scale`, `effective_cycle_ms`, `sample_interval_ms`, HSP point
   metadata, final fallback `handy_velocity`, and HSP `hsp_transport_time_scale`;
   use those fields together when diagnosing fixed-speed feel. HSP should now
-  preserve authored sub-sample phase intervals while stretching transport
-  timestamps only when a segment would exceed the configured speed cap.
-  Flexible Position may stretch `xpt.t` for the same reason.
+  preserve authored sub-sample phase intervals without local point-to-point
+  velocity stretching. Flexible Position may still stretch `xpt.t` when an
+  authored direct position move would exceed the configured speed cap.
   Continuous HDSP fallback should show varied `handy_duration_ms` values because
   its `xpt.t` is derived from the velocity budget again. If speed still feels
-  compressed, compare point-preview intervals, wire HSP `x` values (`0..1000`),
-  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, and physical
-  movement before changing sampler math again. HSP transport now separates
-  phase timing from physical transport timing: `phase_interval_ms` records the
-  authored/densified pattern interval, while `transport_interval_ms` records
-  any stretch needed to stay under the configured physical speed budget. If the
-  device still feels fixed, compare `hsp_segment_mm_per_second` against saved
-  speed limits to see whether firmware is still being driven into saturation.
+  compressed, compare point-preview intervals, wire HSP `x` values (`0..100`
+  position units relative to the active `/slider/stroke` window),
+  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, HSP response
+  state, and physical movement before changing sampler math again. For HSP,
+  `phase_interval_ms`, `transport_interval_ms`, and `sample_interval_ms` should
+  match; if they diverge, software is flattening the timed stream again.
+  `physical_speed` and `hsp_segment_mm_per_second` in HSP trace rows are planned
+  outgoing point slopes, not measured device speed. Use
+  `hsp_state_current_time_ms`, `hsp_state_current_point`,
+  `hsp_state_play_state`, and `hsp_clock_sync` rows to confirm whether firmware
+  is actually advancing through the streamed points at the planned time.
   Pattern swaps now intentionally issue a fresh HSP stream id, start with an
-  exact point at `hsp/play.start_time`, buffer points with `/hsp/add`, update
-  the tail threshold via `/hsp/threshold`, and play without `pause_on_starving`;
+  exact point at `hsp/play.start_time`, flush the replacement buffer through
+  `/hsp/add`, update the tail threshold via `/hsp/threshold`, and play with
+  `pause_on_starving: false`;
   if swaps still pause, inspect the `server_time`, threshold, and starvation
   behavior in command history before changing sampler math again. Sparse
   built-in patterns should now include inserted HSP intermediate points between
@@ -99,11 +103,14 @@ Follow-up work:
   that history to compare what the app actually sent in HAMP, HDSP, and HSP
   before changing sampler math again.
 - If Continuous still feels fixed-speed, first verify that `sample_tempo_scale`
-  spans the expected relative intent range before inspecting transport. A
+  spans the expected saved speed-limit range before inspecting transport. A
   prior regression converted relative intent speed into physical Handy velocity
   before sampling, then mapped that derived speed through limits again at the
   transport boundary; that double scaling compressed patterns into a narrow
-  low-speed band even when the visualizer showed changing sample speeds.
+  low-speed band even when the visualizer showed changing sample speeds. HSP
+  should not have a local point-to-point duration ceiling; saved speed settings
+  are 0-100 app percentages and should affect HSP through semantic tempo, while
+  timed position/HDSP transports convert them to absolute mm/s duration caps.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.

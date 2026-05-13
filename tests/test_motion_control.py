@@ -61,6 +61,7 @@ class StreamingFakeHandy(FakeHandy):
         super().__init__()
         self.stream_starts = []
         self.stream_appends = []
+        self.stream_syncs = []
         self._last_command = None
 
     def supports_continuous_streaming(self):
@@ -104,6 +105,26 @@ class StreamingFakeHandy(FakeHandy):
             self.last_depth_pos = last.get("x", self.last_depth_pos)
         return True
 
+    def sync_continuous_stream_time(self, current_time_ms, *, filter=0.5):
+        self.stream_syncs.append({"current_time_ms": current_time_ms, "filter": filter})
+        self._last_command = {
+            "path": "hsp/synctime",
+            "ok": True,
+            "status_code": 200,
+            "elapsed_ms": 3.0,
+            "body": {"current_time": current_time_ms, "filter": filter},
+            "response": {
+                "hsp_state": {
+                    "play_state": "playing",
+                    "current_time_ms": current_time_ms,
+                    "current_point": 2,
+                    "points": 24,
+                    "stream_id": 1,
+                },
+            },
+        }
+        return True
+
     def append_continuous_stream(
         self,
         points,
@@ -144,6 +165,10 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
         super().__init__()
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.min_user_speed = min_speed
+        self.max_user_speed = max_speed
+        self.min_absolute_user_speed = min_speed * 4
+        self.max_absolute_user_speed = max_speed * 4
 
     def effective_speed_for_relative(self, speed):
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
@@ -160,6 +185,8 @@ class VelocityCappedStreamingFakeHandy(StreamingFakeHandy):
     def __init__(self, max_velocity):
         super().__init__()
         self.max_velocity = max_velocity
+        self.max_user_speed = max_velocity
+        self.max_absolute_user_speed = max_velocity
 
     def max_velocity_for_relative_speed(self, _speed):
         return self.max_velocity
@@ -777,7 +804,7 @@ class MotionControllerTests(unittest.TestCase):
 
             slow_points = slow_handy.stream_starts[0]["points"]
             fast_points = fast_handy.stream_starts[0]["points"]
-            self.assertGreater(slow_points[2]["t"], fast_points[2]["t"])
+            self.assertGreater(slow_points[3]["t"], fast_points[3]["t"])
             self.assertLess(len(slow_points), len(fast_points))
         finally:
             slow_controller.stop()
@@ -799,8 +826,17 @@ class MotionControllerTests(unittest.TestCase):
         self.assertAlmostEqual(fast.tempo_scale, 1.3, places=3)
         self.assertGreater(fast.tempo_scale - slow.tempo_scale, 0.5)
 
-    def test_continuous_hsp_stretches_impossible_segments_to_velocity_budget(self):
-        handy = VelocityCappedStreamingFakeHandy(max_velocity=45)
+    def test_continuous_hsp_preserves_point_timing_without_velocity_stretch(self):
+        class HspVelocityTrapHandy(VelocityCappedStreamingFakeHandy):
+            def __init__(self):
+                super().__init__(max_velocity=45)
+                self.duration_calls = []
+
+            def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+                self.duration_calls.append((velocity, start_depth, end_depth))
+                return super().duration_ms_for_depth_interval(velocity, start_depth, end_depth)
+
+        handy = HspVelocityTrapHandy()
         controller = MotionController(handy, step_delay=0.16)
 
         try:
@@ -815,8 +851,9 @@ class MotionControllerTests(unittest.TestCase):
                 if right["t"] > left["t"] and abs(right["x"] - left["x"]) > 0.01
             ]
             self.assertTrue(rates)
-            self.assertLessEqual(max(rates), handy.max_velocity + 3)
+            self.assertGreater(max(rates), handy.max_velocity * 2)
             self.assertGreater(max(rates) - min(rates), 40.0)
+            self.assertEqual(handy.duration_calls, [])
 
             scales = [
                 point["hsp_transport_time_scale"]
@@ -824,7 +861,7 @@ class MotionControllerTests(unittest.TestCase):
                 if point.get("continuous_schema") == "hsp" and "hsp_transport_time_scale" in point
             ]
             self.assertTrue(scales)
-            self.assertGreater(max(scales), 1.0)
+            self.assertEqual(set(scales), {1.0})
         finally:
             controller.stop()
 
@@ -845,6 +882,29 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(append_points)
             self.assertEqual(append_points[-1]["handy_path"], "hsp/add")
             self.assertGreater(append_points[-1]["hsp_stream_index"], len(handy.stream_starts[0]["points"]))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_periodically_syncs_firmware_clock(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_syncs) >= 1, timeout=1.4), handy.stream_syncs)
+
+            first_sync = handy.stream_syncs[0]
+            self.assertGreater(first_sync["current_time_ms"], 0)
+            self.assertAlmostEqual(first_sync["filter"], 0.9)
+
+            sync_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("hsp_clock_sync")
+            ]
+            self.assertTrue(sync_points)
+            self.assertEqual(sync_points[-1]["handy_path"], "hsp/synctime")
+            self.assertEqual(sync_points[-1]["hsp_state_current_time_ms"], first_sync["current_time_ms"])
         finally:
             controller.stop()
 

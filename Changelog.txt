@@ -8,6 +8,34 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #190 - Correct Continuous HSP Transport Schema
+---------------------------------------------------------------
+
+Branch: codex-continuous-absolute-transport-cap
+
+- Stopped retiming continuous HSP point streams through a local
+  point-to-point velocity cap. HSP now preserves the sampled timed-point
+  spacing that firmware consumes, while HDSP and Flexible Position keep their
+  absolute mm/s duration caps for direct position moves.
+- Applied saved 0-100 speed limits to the continuous semantic target before
+  sampling, so lowering the Motion max-speed setting still slows HSP cadence
+  without flattening every fast segment into the same capped slope.
+- Corrected continuous HSP point `x` encoding back to current funscript-style
+  `0..100` position units after checking Syncopathy's active web/BLE HSP paths,
+  and stopped pre-applying the local stroke-depth calibration to those points
+  because `/slider/stroke` already carries that range to firmware.
+- Made replacement HSP starts flush the new point buffer and explicitly set
+  `pause_on_starving: false`, matching the current API contract more closely
+  and avoiding avoidable stalls during pattern changes.
+- Added periodic HSP `/synctime` updates while continuous streams are playing,
+  so the app corrects the firmware playback clock instead of assuming the
+  outgoing point timeline is what the device is actually executing.
+- Recorded sanitized HSP response state in Handy diagnostics and motion trace
+  extras, making it clear that HSP `physical_speed` is only the planned
+  point-slope estimate unless it lines up with device-reported
+  `current_time` / `current_point` state.
+
+
 2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling
 -------------------------------------------------------
 

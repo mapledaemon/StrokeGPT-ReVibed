@@ -37,6 +37,7 @@ CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
+CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 0.8
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -876,6 +877,30 @@ class MotionController:
                 extras["handy_stop_on_target"] = bool(body.get("stopOnTarget"))
             if "stop_on_target" in body:
                 extras["handy_stop_on_target"] = bool(body.get("stop_on_target"))
+            if "current_time" in body:
+                extras["handy_hsp_synctime_ms"] = body.get("current_time")
+            if "filter" in body:
+                extras["handy_hsp_synctime_filter"] = body.get("filter")
+        response = last_command.get("response")
+        hsp_state = response.get("hsp_state") if isinstance(response, dict) else None
+        if isinstance(hsp_state, dict):
+            hsp_mapping = {
+                "play_state": "hsp_state_play_state",
+                "current_time_ms": "hsp_state_current_time_ms",
+                "first_point_time_ms": "hsp_state_first_point_time_ms",
+                "last_point_time_ms": "hsp_state_last_point_time_ms",
+                "points": "hsp_state_points",
+                "max_points": "hsp_state_max_points",
+                "current_point": "hsp_state_current_point",
+                "stream_id": "hsp_state_stream_id",
+                "tail_point_stream_index": "hsp_state_tail_point_stream_index",
+                "tail_point_stream_index_threshold": "hsp_state_tail_point_stream_index_threshold",
+                "pause_on_starving": "hsp_state_pause_on_starving",
+                "playback_rate": "hsp_state_playback_rate",
+            }
+            for source_key, trace_key in hsp_mapping.items():
+                if source_key in hsp_state:
+                    extras[trace_key] = hsp_state[source_key]
         error = str(last_command.get("error") or "").strip()
         if error:
             extras["handy_error"] = error
@@ -899,6 +924,11 @@ class MotionController:
         }
 
     def _position_velocity_cap(self, target: MotionTarget) -> int | None:
+        if hasattr(self.handy, "max_absolute_velocity_for_relative_speed"):
+            try:
+                return int(round(self.handy.max_absolute_velocity_for_relative_speed(target.speed)))
+            except (TypeError, ValueError):
+                return None
         if hasattr(self.handy, "max_velocity_for_relative_speed"):
             try:
                 return int(round(self.handy.max_velocity_for_relative_speed(target.speed)))
@@ -1143,6 +1173,23 @@ class MotionController:
     ):
         return sample_continuous_motion(plan, target, elapsed_seconds)
 
+    def _continuous_target_with_speed_limits(self, target: MotionTarget) -> MotionTarget:
+        target = target.clamped()
+        effective_speed = getattr(self.handy, "effective_speed_for_relative", None)
+        if not callable(effective_speed):
+            return target
+        try:
+            speed = _clamp(float(effective_speed(target.speed)))
+        except (TypeError, ValueError):
+            return target
+        return MotionTarget(
+            speed,
+            target.depth,
+            target.stroke_range,
+            label=target.label,
+            motion_program=target.motion_program,
+        ).clamped()
+
     def apply_continuous_target(
         self,
         target: MotionTarget,
@@ -1155,7 +1202,7 @@ class MotionController:
 
         started_at = time.monotonic()
         plan_key = self._continuous_plan_key(plan)
-        clamped_target = target.clamped()
+        clamped_target = self._continuous_target_with_speed_limits(target)
         start_target = self.current_target()
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
@@ -1237,28 +1284,6 @@ class MotionController:
             CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
             CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
         )
-
-    def _continuous_transport_interval(
-        self,
-        previous_target: MotionTarget,
-        sample_target: MotionTarget,
-        phase_interval_seconds: float,
-    ) -> float:
-        try:
-            phase_interval = max(0.001, float(phase_interval_seconds))
-        except (TypeError, ValueError):
-            phase_interval = self._continuous_sample_interval()
-
-        max_velocity = getattr(self.handy, "max_velocity_for_relative_speed", None)
-        duration_for_depth = getattr(self.handy, "duration_ms_for_depth_interval", None)
-        if callable(max_velocity) and callable(duration_for_depth):
-            try:
-                velocity = max_velocity(sample_target.speed)
-                duration_ms = duration_for_depth(velocity, previous_target.depth, sample_target.depth)
-                return max(phase_interval, max(0.001, float(duration_ms) / 1000.0))
-            except Exception:
-                pass
-        return phase_interval
 
     def _refresh_continuous_phase_state(
         self,
@@ -1434,6 +1459,7 @@ class MotionController:
 
         start_stream = getattr(self.handy, "start_continuous_stream", None)
         append_stream = getattr(self.handy, "append_continuous_stream", None)
+        sync_stream = getattr(self.handy, "sync_continuous_stream_time", None)
         if not callable(start_stream) or not callable(append_stream):
             return False
 
@@ -1462,9 +1488,10 @@ class MotionController:
         previous_recorded_point = None
         previous_point_time_seconds = None
         previous_phase_time_seconds = None
-        previous_output_target = start_target
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
+        sync_count = 0
+        next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None
         program_range = continuous_plan_depth_range(plan, target)
         plan_name = str(getattr(plan, "name", "") or "continuous")
         plan_key = self._continuous_plan_key(plan)
@@ -1528,7 +1555,7 @@ class MotionController:
             sample,
             phase_interval: float,
         ) -> None:
-            nonlocal previous_point_time_seconds, previous_phase_time_seconds, previous_output_target
+            nonlocal previous_point_time_seconds, previous_phase_time_seconds
             nonlocal sample_index, stream_index, stream_seconds
             command_interval = (
                 base_interval
@@ -1558,7 +1585,6 @@ class MotionController:
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
             previous_phase_time_seconds = point_seconds
-            previous_output_target = sample.target
             sample_index += 1
             stream_seconds = point_stream_seconds
 
@@ -1616,24 +1642,7 @@ class MotionController:
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + phase_interval
                 sample = sample_stream_point(point_seconds, provisional_stream_seconds)
-                transport_interval = self._continuous_transport_interval(
-                    previous_output_target,
-                    sample.target,
-                    phase_interval,
-                )
-                for _attempt in range(3):
-                    candidate_stream_seconds = (
-                        stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
-                    ) + transport_interval
-                    sample = sample_stream_point(point_seconds, candidate_stream_seconds)
-                    adjusted_interval = self._continuous_transport_interval(
-                        previous_output_target,
-                        sample.target,
-                        phase_interval,
-                    )
-                    if abs(adjusted_interval - transport_interval) <= 0.001:
-                        break
-                    transport_interval = adjusted_interval
+                transport_interval = phase_interval
                 point_stream_seconds = (
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + transport_interval
@@ -1728,6 +1737,7 @@ class MotionController:
                                 physical_speed = distance_mm / dt_seconds
                                 extras["hsp_segment_mm_per_second"] = round(physical_speed, 1)
                                 extras["physical_speed"] = int(round(physical_speed))
+                                extras["physical_speed_source"] = "planned_hsp_point_slope"
                             except (TypeError, ValueError):
                                 pass
                 if program_range is not None:
@@ -1807,6 +1817,32 @@ class MotionController:
                         )
                         if appended is False:
                             return True
+
+                if (
+                    callable(sync_stream)
+                    and next_sync_elapsed is not None
+                    and elapsed >= next_sync_elapsed
+                    and hsp_elapsed <= stream_seconds
+                ):
+                    sync_filter = 0.9 if sync_count == 0 else 0.5
+                    try:
+                        synced = sync_stream(int(round(hsp_elapsed * 1000.0)), filter=sync_filter)
+                    except Exception as exc:
+                        synced = False
+                        sync_extras = {"handy_ok": False, "handy_error": str(exc)[:180]}
+                    else:
+                        sync_extras = self._handy_command_trace_extras(synced)
+                    sync_extras.update(
+                        {
+                            "hsp_clock_sync": True,
+                            "hsp_sync_count": sync_count + 1,
+                            "hsp_synctime_ms": int(round(hsp_elapsed * 1000.0)),
+                            "hsp_synctime_filter": sync_filter,
+                        }
+                    )
+                    self._augment_last_trace(sync_extras)
+                    sync_count += 1
+                    next_sync_elapsed = elapsed + (sync_count + 1 if sync_count < 3 else 10.0)
 
                 sleep_seconds = max(0.02, min(0.08, buffer_remaining - CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS))
                 if not self._sleep_with_pause(sleep_seconds, generation):
