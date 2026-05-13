@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #197 - Logo Splash Polish
+------------------------------------------
+
+Branch: codex/logo-overlap-polish
+
+- Moved the splash logo waveform to the right so it no longer overlaps the
+  ReVibed wordmark and changed the Handy emblem's straight center line into a
+  small solid vertical pill while preserving the multicolor curved stroke.
+
+
 2026-05-13 - PR #196 - Diagnostics Tab Visual Polish
 -----------------------------------------------------
 
