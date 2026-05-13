@@ -202,10 +202,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   HDSP `xpt` duration moves for position playback. HSP playback should follow
   the current v3 split of `hsp/add` timed points followed by `hsp/play` with
   server time metadata; do not rely on speed-only visualizer fields as the
-  transport contract. Firmware v3 / legacy mode, or v4 without an API v3 app
-  authorized connection, keeps the legacy HDSP direct-position fallback. Do not
-  add a second user-facing Handy API key field unless the upstream API requires
-  a distinct credential again.
+  transport contract. For v3 HDSP `xpt`, `xp` is the documented percent
+  position (`0..100`), not a normalized fraction; HAMP and slider stroke
+  settings remain normalized `0..1`. Firmware v3 / legacy mode, or v4 without
+  an API v3 app authorized connection, keeps the legacy HDSP direct-position
+  fallback. Do not add a second user-facing Handy API key field unless the
+  upstream API requires a distinct credential again.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
   speed as timed point spacing and position deltas; HDSP fallback derives a

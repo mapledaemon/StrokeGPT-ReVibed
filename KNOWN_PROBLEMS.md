@@ -73,7 +73,10 @@ Follow-up work:
   `command_ms`) plus the Handy command-result fields (`handy_ok`,
   `handy_path`, `handy_status`, and `handy_error`) during device testing to
   distinguish planner waits, controller command timing, and rejected/failed
-  HSP/HDSP requests.
+  HSP/HDSP requests. Handy diagnostics now also include a bounded
+  `command_history` with sanitized request bodies and HSP point previews; use
+  that history to compare what the app actually sent in HAMP, HDSP, and HSP
+  before changing sampler math again.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.
