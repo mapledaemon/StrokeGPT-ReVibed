@@ -46,7 +46,7 @@ class HandyController:
         if not isinstance(body, dict):
             return {}
         result = {}
-        for key in ("mode", "min", "max", "position", "velocity", "stopOnTarget"):
+        for key in ("mode", "min", "max", "position", "velocity", "duration", "stopOnTarget"):
             if key in body:
                 result[key] = body[key]
         return result
@@ -325,6 +325,7 @@ class HandyController:
             return False
 
         self._current_mode = MODE_HDSP
+        self._last_velocity = velocity
         self.last_stroke_speed = velocity
         self.last_relative_speed = relative_speed_pct
         self.last_depth_pos = int(round(relative_pos_pct))

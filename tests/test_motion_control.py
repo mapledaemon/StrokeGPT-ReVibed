@@ -56,6 +56,7 @@ class FailingPositionHandy(FakeHandy):
             "ok": False,
             "status_code": 503,
             "elapsed_ms": 12.5,
+            "body": {"velocity": velocity, "stopOnTarget": stop_on_target},
             "error": "device offline",
         }
         return False
@@ -871,6 +872,8 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(point["handy_path"], "hdsp/xava")
         self.assertEqual(point["handy_status"], 503)
         self.assertEqual(point["handy_elapsed_ms"], 12.5)
+        self.assertEqual(point["handy_velocity"], 50)
+        self.assertTrue(point["handy_stop_on_target"])
         self.assertEqual(point["handy_error"], "device offline")
 
 
