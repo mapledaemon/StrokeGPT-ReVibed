@@ -12,8 +12,8 @@ Experimental local app, not a finished release. Expect rough edges in the UI, lo
 
 ## What You Need
 
-- Python 3.11 (recommended, especially for local voice)
-- [Ollama](https://docs.ollama.com/) running locally
+- Windows: PowerShell and an internet connection. The bootstrap and installer can install Git, Python 3.11, Ollama, and optional NVIDIA voice dependencies when `winget` is available.
+- macOS / Linux: Python 3.11 and [Ollama](https://docs.ollama.com/) running locally.
 - A Handy connection key (the device API requires internet)
 - Optional: ElevenLabs API key for hosted voice
 - Optional: NVIDIA GPU with CUDA-enabled PyTorch for fast local voice
@@ -23,9 +23,39 @@ Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Sw
 
 ## Install
 
-### 1. Install prerequisites
+### Windows: first-time setup
 
-- **Windows:** install [Python](https://www.python.org/downloads/windows/) and enable *Add python.exe to PATH*. The Windows setup script can install Ollama through `winget` when available.
+Open **PowerShell** from the Windows Start menu. You do not need to run it as
+administrator; if `winget` installs Git, Python, Ollama, or driver-adjacent
+components, Windows may show a normal UAC prompt. Paste these lines and press
+Enter:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+$bootstrap = "$env:TEMP\strokegpt-bootstrap.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1" -OutFile $bootstrap
+powershell -ExecutionPolicy Bypass -File $bootstrap
+```
+
+The bootstrap script downloads StrokeGPT-ReVibed to
+`Documents\StrokeGPT-ReVibed`, installs Git for Windows when needed so future
+updates work, and then starts `scripts\install_windows.ps1`. The installer
+creates `.venv`, installs Python 3.11 when missing, installs app dependencies,
+asks whether to install Ollama when it is missing, and asks whether to install
+optional NVIDIA CUDA / Parakeet voice components. It does not download Ollama or
+voice model weights; those downloads stay inside the app so progress is visible.
+
+If you do not want to use the bootstrap script, download the repository from
+GitHub with **Code > Download ZIP**, extract it, open PowerShell inside the
+extracted `StrokeGPT-ReVibed` folder, and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\install_windows.ps1
+```
+
+### macOS / Linux prerequisites
+
 - **macOS:** [Python](https://www.python.org/downloads/macos/) and [Ollama](https://docs.ollama.com/macos). Open Ollama once after install so the `ollama` command is on PATH.
 - **Linux (Debian/Ubuntu):**
 
@@ -37,24 +67,9 @@ Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Sw
 
   Use your distro's equivalent packages if you are not on Debian or Ubuntu.
 
-### 2. Set up the project
+### macOS / Linux setup
 
 From the `StrokeGPT-ReVibed` folder:
-
-**Windows (PowerShell):**
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\install_windows.ps1
-```
-
-The Windows installer is the normal one-script path. It creates or updates
-`.venv`, installs app dependencies, asks whether to install Ollama when it is
-missing, and asks whether to install optional NVIDIA CUDA / Parakeet voice
-components. It does not download Ollama or voice model weights; those downloads
-stay inside the app so progress is visible.
-
-**macOS / Linux:**
 
 ```bash
 python3 -m venv .venv

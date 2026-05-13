@@ -9,9 +9,14 @@ class InstallScriptTests(unittest.TestCase):
     def test_windows_installer_prompts_for_optional_runtime_dependencies(self):
         script = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
 
+        self.assertIn('[string]$InstallPython = "Prompt"', script)
         self.assertIn('[string]$InstallOllama = "Prompt"', script)
         self.assertIn('[string]$InstallCudaTorch = "Prompt"', script)
         self.assertIn('[string]$InstallParakeet = "Prompt"', script)
+        self.assertIn('Python.Python.3.11', script)
+        self.assertIn('Install-PythonIfRequested', script)
+        self.assertIn('Refresh-PathFromRegistry', script)
+        self.assertIn('winget install --id $PythonWingetId', script)
         self.assertIn("Read-Host", script)
         self.assertIn("winget install --id Ollama.Ollama", script)
         self.assertIn("https://download.pytorch.org/whl/cu128", script)
@@ -32,6 +37,20 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("-UpdateParakeet", script)
         self.assertIn("[switch]$RunValidation", script)
         self.assertNotIn("ollama pull", script)
+
+    def test_windows_bootstrap_downloads_or_clones_repo_and_runs_installer(self):
+        script = (PROJECT_ROOT / "scripts" / "bootstrap_windows.ps1").read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn('Git.Git', script)
+        self.assertIn('git clone', script)
+        self.assertIn('archive/refs/heads/master.zip', script)
+        self.assertIn('Expand-Archive', script)
+        self.assertIn('install_windows.ps1', script)
+        self.assertIn('Administrator PowerShell is not required', script)
+        self.assertIn('Documents")) "StrokeGPT-ReVibed"', script)
+        self.assertIn('raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1', readme)
+        self.assertIn('You do not need to run it as', readme)
 
     def test_parakeet_installer_defaults_to_blackwell_capable_pytorch_wheels(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")
