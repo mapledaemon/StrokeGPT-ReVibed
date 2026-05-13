@@ -273,6 +273,102 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_preload_phase, "error")
         self.assertIn("download failed", service._local_preload_error)
 
+    @unittest.skipIf(importlib.util.find_spec("torch") is None, "torch not installed")
+    def test_local_waveform_coerces_chatterbox_conditionals_to_float32(self):
+        import numpy as np
+        import torch
+
+        class DummyT3Cond:
+            def __init__(self):
+                self.speaker_emb = torch.ones(1, 256, dtype=torch.float64)
+                self.cond_prompt_speech_tokens = torch.ones(1, 4, dtype=torch.long)
+                self.emotion_adv = torch.ones(1, 1, 1, dtype=torch.float64)
+
+            def to(self, *, device=None, dtype=None):
+                for name, value in vars(self).items():
+                    if not torch.is_tensor(value):
+                        continue
+                    if value.is_floating_point():
+                        setattr(self, name, value.to(device=device, dtype=dtype))
+                    elif device:
+                        setattr(self, name, value.to(device=device))
+                return self
+
+        class DummyConditionals:
+            def __init__(self):
+                self.t3 = DummyT3Cond()
+                self.gen = {
+                    "embedding": torch.ones(1, 4, dtype=torch.float64),
+                    "prompt_token": torch.ones(1, dtype=torch.long),
+                }
+
+        class DummyModel:
+            sr = 24000
+            device = "cpu"
+
+            def __init__(self):
+                self.s3gen = types.SimpleNamespace(tokenizer=DummyTokenizer())
+                self.ve = DummyVoiceEncoder()
+                self.conds = DummyConditionals()
+                self.generate_default_dtype = None
+                self.generate_kwargs = None
+
+            def prepare_conditionals(self, _path, exaggeration=0.5, norm_loudness=True):
+                prompt_audio = self.norm_loudness(np.ones(4, dtype=np.float64), 24000)
+                self.s3gen.tokenizer._prepare_audio([prompt_audio])
+                self.ve.embeds_from_wavs([prompt_audio], sample_rate=16000)
+                self.conds = DummyConditionals()
+
+            def norm_loudness(self, wav, _sr):
+                return np.asarray(wav, dtype=np.float64)
+
+            def generate(self, _text, **kwargs):
+                self.generate_default_dtype = torch.get_default_dtype()
+                self.generate_kwargs = kwargs
+                self.t3_speaker_dtype = self.conds.t3.speaker_emb.dtype
+                self.t3_token_dtype = self.conds.t3.cond_prompt_speech_tokens.dtype
+                self.gen_embedding_dtype = self.conds.gen["embedding"].dtype
+                self.gen_token_dtype = self.conds.gen["prompt_token"].dtype
+                return torch.ones(1, 4, dtype=torch.float64)
+
+        class DummyTokenizer:
+            def __init__(self):
+                self.input_dtype = None
+
+            def _prepare_audio(self, wavs):
+                self.input_dtype = wavs[0].dtype
+                return wavs
+
+        class DummyVoiceEncoder:
+            def __init__(self):
+                self.input_dtype = None
+
+            def embeds_from_wavs(self, wavs, **_kwargs):
+                self.input_dtype = wavs[0].dtype
+                return np.ones((1, 4), dtype=np.float32)
+
+        service = AudioService()
+        service.local_prompt_path = "sample.wav"
+        model = DummyModel()
+        original_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.float64)
+            waveform = service._generate_local_waveform(model, "Ready.")
+            restored_dtype = torch.get_default_dtype()
+        finally:
+            torch.set_default_dtype(original_dtype)
+
+        self.assertEqual(model.generate_default_dtype, torch.float32)
+        self.assertEqual(restored_dtype, torch.float64)
+        self.assertEqual(model.t3_speaker_dtype, torch.float32)
+        self.assertEqual(model.t3_token_dtype, torch.long)
+        self.assertEqual(model.gen_embedding_dtype, torch.float32)
+        self.assertEqual(model.gen_token_dtype, torch.long)
+        self.assertEqual(waveform.dtype, torch.float32)
+        self.assertEqual(model.s3gen.tokenizer.input_dtype, np.float32)
+        self.assertEqual(model.ve.input_dtype, np.float32)
+        self.assertNotIn("audio_prompt_path", model.generate_kwargs)
+
     def test_local_tts_text_is_split_for_lower_first_audio_latency(self):
         service = AudioService()
         text = "First sentence is short. " + ("This sentence has enough words to make the local text to speech splitter create more than one chunk. " * 5)
