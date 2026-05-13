@@ -32,22 +32,25 @@ POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
 CONTINUOUS_SAMPLE_INTERVAL_SECONDS = 0.16
 CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS = 0.08
 CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
-CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 2.4
-CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
-CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
+CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 3.4
+CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 3.4
+CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
-CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
-CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.04
-CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.85
+CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.16
+CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.09
+CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
+CONTINUOUS_HSP_MIN_DEPTH_DELTA = 2.0
+CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS = 0.28
+CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.0
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.2
-CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 1.5
+CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 0.0
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
 CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
-CONTINUOUS_MORPH_SECONDS = 0.65
-CONTINUOUS_MIN_MORPH_SECONDS = 0.32
-CONTINUOUS_MAX_MORPH_SECONDS = 1.15
+CONTINUOUS_MORPH_SECONDS = 0.95
+CONTINUOUS_MIN_MORPH_SECONDS = 0.45
+CONTINUOUS_MAX_MORPH_SECONDS = 1.8
 
 
 def _depth_direction(start: "MotionTarget", end: "MotionTarget", threshold: float = 7.0) -> int:
@@ -1451,6 +1454,10 @@ class MotionController:
             CONTINUOUS_MAX_MORPH_SECONDS,
         )
 
+    def _continuous_morph_amount(self, progress: float) -> float:
+        progress = _clamp(progress, 0.0, 1.0)
+        return _clamp(progress * 0.65 + _minimum_jerk(progress) * 0.35)
+
     def _run_continuous_plan(
         self,
         plan,
@@ -1541,6 +1548,29 @@ class MotionController:
             accepted.append(candidate)
         return tuple(accepted)
 
+    def _hsp_tail_point_threshold(self, points: list[dict[str, Any]]) -> int:
+        if not points:
+            return 0
+        tail = points[-1]
+        try:
+            tail_index = int(tail.get("stream_index") or len(points))
+            tail_seconds = float(tail["t"]) / 1000.0
+        except (KeyError, TypeError, ValueError):
+            return max(0, len(points) - 1)
+
+        threshold_seconds = tail_seconds - CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS
+        threshold_index = int(points[0].get("stream_index") or 1)
+        for point in points:
+            try:
+                point_seconds = float(point["t"]) / 1000.0
+                point_index = int(point.get("stream_index") or threshold_index)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if point_seconds > threshold_seconds:
+                break
+            threshold_index = point_index
+        return max(0, min(tail_index, threshold_index))
+
     def _continuous_transition_phase_seconds(
         self,
         plan,
@@ -1630,8 +1660,10 @@ class MotionController:
         batch_index = 0
         previous_command_ended_at = None
         previous_recorded_point = None
+        previous_stream_point = None
         previous_point_time_seconds = None
         previous_phase_time_seconds = None
+        pending_hsp_twitch_filtered_points = 0
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
         sync_count = 0
@@ -1680,7 +1712,7 @@ class MotionController:
             )
             stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
             if stream_elapsed < morph_seconds:
-                amount = _minimum_jerk(stream_elapsed / morph_seconds)
+                amount = self._continuous_morph_amount(stream_elapsed / morph_seconds)
                 sample = sample.with_target(
                     self._interpolate_continuous_spatial_target(
                         start_target,
@@ -1699,9 +1731,10 @@ class MotionController:
             sample,
             phase_interval: float,
             hsp_interval_limited_points: int = 0,
+            hsp_twitch_filtered_points: int = 0,
         ) -> None:
             nonlocal previous_point_time_seconds, previous_phase_time_seconds
-            nonlocal sample_index, stream_index, stream_seconds
+            nonlocal previous_stream_point, sample_index, stream_index, stream_seconds
             command_interval = (
                 base_interval
                 if previous_point_time_seconds is None
@@ -1728,12 +1761,29 @@ class MotionController:
             }
             if hsp_interval_limited_points:
                 point["hsp_interval_limited_points"] = int(hsp_interval_limited_points)
+            if hsp_twitch_filtered_points:
+                point["hsp_twitch_filtered_points"] = int(hsp_twitch_filtered_points)
             phase_schedule.append((point_stream_seconds, point_seconds))
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
             previous_phase_time_seconds = point_seconds
+            previous_stream_point = point
             sample_index += 1
             stream_seconds = point_stream_seconds
+
+        def should_filter_hsp_twitch(point_stream_seconds: float, sample) -> bool:
+            if previous_stream_point is None:
+                return False
+            try:
+                previous_depth = float(previous_stream_point["x"])
+                previous_seconds = float(previous_stream_point["t"]) / 1000.0
+                depth_delta = abs(float(sample.target.depth) - previous_depth)
+                elapsed_since_previous = point_stream_seconds - previous_seconds
+            except (KeyError, TypeError, ValueError):
+                return False
+            if elapsed_since_previous >= CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS:
+                return False
+            return depth_delta < CONTINUOUS_HSP_MIN_DEPTH_DELTA
 
         def phase_at_stream_time(elapsed_seconds: float) -> tuple[float, float]:
             if not phase_schedule:
@@ -1761,7 +1811,7 @@ class MotionController:
             return previous_phase, 1.0
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
-            nonlocal start_point_pending
+            nonlocal start_point_pending, pending_hsp_twitch_filtered_points
             points: list[dict[str, Any]] = []
             if start_point_pending:
                 start_point_pending = False
@@ -1797,6 +1847,11 @@ class MotionController:
                     break
 
                 sample = sample_stream_point(point_seconds, point_stream_seconds)
+                interval_limited_points = int(phase_point.get("hsp_interval_limited_points") or 0)
+                if should_filter_hsp_twitch(point_stream_seconds, sample):
+                    pending_hsp_twitch_filtered_points += 1 + interval_limited_points
+                    advance_phase_cursor()
+                    continue
                 append_stream_point(
                     points,
                     point_seconds,
@@ -1804,8 +1859,10 @@ class MotionController:
                     phase_point["authored"],
                     sample,
                     phase_interval,
-                    int(phase_point.get("hsp_interval_limited_points") or 0),
+                    interval_limited_points,
+                    pending_hsp_twitch_filtered_points,
                 )
+                pending_hsp_twitch_filtered_points = 0
                 advance_phase_cursor()
             return points
 
@@ -1873,6 +1930,8 @@ class MotionController:
                 }
                 if point.get("hsp_interval_limited_points"):
                     extras["hsp_interval_limited_points"] = int(point["hsp_interval_limited_points"])
+                if point.get("hsp_twitch_filtered_points"):
+                    extras["hsp_twitch_filtered_points"] = int(point["hsp_twitch_filtered_points"])
                 if previous_recorded_point is not None:
                     dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
                     if dt_seconds > 0:
@@ -1915,7 +1974,7 @@ class MotionController:
                 initial_points,
                 start_time_ms=int(round(play_start_stream_seconds * 1000.0)),
                 tail_point_stream_index=initial_points[-1]["stream_index"],
-                tail_point_threshold=max(0, initial_points[-1]["stream_index"] - 2),
+                tail_point_threshold=self._hsp_tail_point_threshold(initial_points),
             )
             send_ended_at = time.monotonic()
             record_batch(
@@ -1958,7 +2017,7 @@ class MotionController:
                         appended = append_stream(
                             points,
                             tail_point_stream_index=points[-1]["stream_index"],
-                            tail_point_threshold=max(0, points[-1]["stream_index"] - 2),
+                            tail_point_threshold=self._hsp_tail_point_threshold(points),
                         )
                         send_ended_at = time.monotonic()
                         record_batch(
@@ -2054,7 +2113,7 @@ class MotionController:
                 sample_elapsed = phase_offset_seconds + elapsed
                 sample = self._sample_continuous_motion(plan, target, sample_elapsed, sample_continuous_motion)
                 if elapsed < morph_seconds:
-                    amount = _minimum_jerk(elapsed / morph_seconds)
+                    amount = self._continuous_morph_amount(elapsed / morph_seconds)
                     sample = sample.with_target(
                         self._interpolate_continuous_spatial_target(
                             start_target,

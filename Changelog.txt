@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #194 - Stabilize HSP Transition Buffering
+----------------------------------------------------------
+
+Branch: codex-hsp-transition-buffering
+
+- Increased the live HSP buffer and moved the tail threshold back from the end
+  of each batch, matching reference players that ask for refills before the
+  device is nearly starved instead of two points from the tail.
+- Removed future-delay scheduling from active HSP replacements so a pattern
+  swap no longer flushes the current buffer and then leaves the device waiting
+  for the first replacement point.
+- Raised the HSP transport point floor and filtered tiny high-frequency point
+  changes while still emitting periodic hold points, so dense pattern
+  interpolation no longer sends no-op twitches that the device cannot
+  physically follow.
+- Lengthened continuous spatial morphs but changed their easing to start
+  moving immediately, preserving smoother pattern changes without creating a
+  visible pause at the beginning of the transition.
+
+
 2026-05-13 - PR #193 - Stabilize Continuous HSP Playback
 ---------------------------------------------------------
 
