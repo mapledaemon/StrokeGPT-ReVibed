@@ -6,6 +6,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class InstallScriptTests(unittest.TestCase):
+    def test_windows_launcher_runs_installed_virtualenv(self):
+        launcher = (PROJECT_ROOT / "Run StrokeGPT-ReVibed.cmd").read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        installer = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('cd /d "%~dp0"', launcher)
+        self.assertIn('set "PYTHON_EXE=%~dp0.venv\\Scripts\\python.exe"', launcher)
+        self.assertIn('set "STROKEGPT_OPEN_BROWSER=1"', launcher)
+        self.assertIn('"%PYTHON_EXE%" app.py', launcher)
+        self.assertIn("Run scripts\\install_windows.ps1 first", launcher)
+        self.assertIn("pause", launcher)
+        self.assertIn("Run StrokeGPT-ReVibed.cmd", installer)
+        self.assertIn("Run StrokeGPT-ReVibed.cmd", readme)
+
     def test_windows_installer_prompts_for_optional_runtime_dependencies(self):
         script = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
 

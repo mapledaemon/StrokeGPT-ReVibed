@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #178 - Windows One-Click Launcher
+-------------------------------------------------
+
+Branch: codex/windows-launcher-script
+
+- Added a double-clickable `Run StrokeGPT-ReVibed.cmd` Windows launcher that
+  starts the installed `.venv` directly, keeps the server window open for
+  diagnostics, and asks the app to open the selected local URL in the browser.
+- Updated the Windows installer finish message and README start instructions so
+  users do not need to activate `.venv` or type `python app.py` after setup.
+
+
 2026-05-13 - PR #177 - Quiet Winget Progress
 --------------------------------------------
 

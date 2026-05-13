@@ -566,8 +566,7 @@ Install-ParakeetIfRequested -NvidiaDetected $NvidiaDetected
 
 Write-Host ""
 Write-Host "Install complete."
-Write-Host "Start the app with:"
-Write-Host "  .\.venv\Scripts\Activate.ps1"
-Write-Host "  python app.py"
+Write-Host "Start the app later by double-clicking:"
+Write-Host "  Run StrokeGPT-ReVibed.cmd"
 Write-Host ""
 Write-Host "Use the app's Model or Voice settings for any model downloads you skipped during setup."
