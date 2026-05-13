@@ -222,7 +222,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   interval, and user speed-limit clamping. Derived sample speed must remain
   intent-relative; do not let a low requested speed saturate every fallback
   XAVA frame at the user maximum, and do not feed derived sample speed back
-  into `motion.current_target()`, Freestyle scoring, or LLM context.
+  into `motion.current_target()`, Freestyle scoring, or LLM context. Do not
+  convert relative intent speed into physical Handy velocity before calling
+  `sample_continuous_motion()`; physical speed limits belong at the HSP/HDSP
+  transport boundary, not inside the pattern sampler.
   Continuous morphing and step limiting smooth depth/range only; do not
   interpolate or delta-limit the command-speed budget as if it were a spatial
   target. HSP timed-point streams must preserve authored phase timing and

@@ -18,6 +18,7 @@ from strokegpt.motion import (
     POSITION_MAX_DEPTH_STEP,
     POSITION_PASS_THROUGH_MIN_SECONDS,
 )
+from strokegpt.motion_patterns import continuous_motion_plan, sample_continuous_motion
 
 
 class FakeHandy:
@@ -146,6 +147,13 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
 
     def effective_speed_for_relative(self, speed):
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
+
+    def max_velocity_for_relative_speed(self, speed):
+        return self.effective_speed_for_relative(speed)
+
+    def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+        distance = abs(float(end_depth) - float(start_depth))
+        return max(1, int(round((distance / max(1.0, float(velocity))) * 1000.0)))
 
 
 class VelocityCappedStreamingFakeHandy(StreamingFakeHandy):
@@ -759,10 +767,27 @@ class MotionControllerTests(unittest.TestCase):
 
             slow_points = slow_handy.stream_starts[0]["points"]
             fast_points = fast_handy.stream_starts[0]["points"]
-            self.assertGreater(slow_points[1]["t"], fast_points[1]["t"])
+            self.assertGreater(slow_points[2]["t"], fast_points[2]["t"])
+            self.assertLess(len(slow_points), len(fast_points))
         finally:
             slow_controller.stop()
             fast_controller.stop()
+
+    def test_continuous_sampler_keeps_relative_speed_before_transport_limits(self):
+        handy = SpeedLimitStreamingFakeHandy(10, 30)
+        controller = MotionController(handy, step_delay=0.16)
+        plan = continuous_motion_plan("stroke")
+        slow_target = MotionTarget(20, 50, 80, "stroke")
+        fast_target = MotionTarget(80, 50, 80, "stroke")
+
+        slow = controller._sample_continuous_motion(plan, slow_target, 0.25, sample_continuous_motion)
+        fast = controller._sample_continuous_motion(plan, fast_target, 0.25, sample_continuous_motion)
+
+        self.assertEqual(round(slow.intent_speed), 20)
+        self.assertEqual(round(fast.intent_speed), 80)
+        self.assertAlmostEqual(slow.tempo_scale, 0.7, places=3)
+        self.assertAlmostEqual(fast.tempo_scale, 1.3, places=3)
+        self.assertGreater(fast.tempo_scale - slow.tempo_scale, 0.5)
 
     def test_continuous_hsp_stretches_impossible_segments_to_velocity_budget(self):
         handy = VelocityCappedStreamingFakeHandy(max_velocity=45)

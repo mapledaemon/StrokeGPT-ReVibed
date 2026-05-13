@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional
 
@@ -1134,29 +1134,6 @@ class MotionController:
         self._move_to_depth_accepts_duration_ms = supported
         return supported
 
-    def _effective_speed_for_timing(self, speed: float) -> float:
-        effective = None
-        if hasattr(self.handy, "effective_speed_for_relative"):
-            try:
-                effective = self.handy.effective_speed_for_relative(speed)
-            except (TypeError, ValueError):
-                effective = None
-        if effective is None:
-            effective = speed
-        try:
-            return _clamp(float(effective))
-        except (TypeError, ValueError):
-            return _clamp(speed)
-
-    def _continuous_timing_target(self, target: MotionTarget) -> MotionTarget:
-        return MotionTarget(
-            self._effective_speed_for_timing(target.speed),
-            target.depth,
-            target.stroke_range,
-            label=target.label,
-            motion_program=target.motion_program,
-        ).clamped()
-
     def _sample_continuous_motion(
         self,
         plan,
@@ -1164,10 +1141,7 @@ class MotionController:
         elapsed_seconds: float,
         sample_continuous_motion,
     ):
-        sample = sample_continuous_motion(plan, self._continuous_timing_target(target), elapsed_seconds)
-        if sample.intent_speed != target.speed:
-            sample = replace(sample, intent_speed=target.speed)
-        return sample
+        return sample_continuous_motion(plan, target, elapsed_seconds)
 
     def apply_continuous_target(
         self,

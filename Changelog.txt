@@ -39,6 +39,12 @@ Branch: codex-hsp-densify-sparse-patterns
   unless they also disable API v3 auth. Threshold updates are useful
   observability/refill hints, but a transient threshold failure should not
   starve Milk or Freestyle motion after `/hsp/add` has already succeeded.
+- Fixed continuous speed scaling at the sampler boundary by keeping
+  `MotionTarget.speed` as relative user/LLM intent until the final Handy
+  transport calculation. The previous path converted intent speed into
+  physical Handy velocity before sampling, then treated the derived sample
+  speed as relative and mapped it through speed limits again, compressing high
+  speeds into a narrow low-speed range before HSP or HDSP could use them.
 
 
 2026-05-13 - PR #188 - Restore Position Speed Range

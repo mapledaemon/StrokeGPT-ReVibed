@@ -98,6 +98,12 @@ Follow-up work:
   `command_history` with sanitized request bodies and HSP point previews; use
   that history to compare what the app actually sent in HAMP, HDSP, and HSP
   before changing sampler math again.
+- If Continuous still feels fixed-speed, first verify that `sample_tempo_scale`
+  spans the expected relative intent range before inspecting transport. A
+  prior regression converted relative intent speed into physical Handy velocity
+  before sampling, then mapped that derived speed through limits again at the
+  transport boundary; that double scaling compressed patterns into a narrow
+  low-speed band even when the visualizer showed changing sample speeds.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.
