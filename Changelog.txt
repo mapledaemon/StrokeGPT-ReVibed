@@ -8,6 +8,61 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Restore Position Speed Range
+------------------------------------------------------
+
+Branch: codex-continuous-speed-range
+
+- Refactored firmware v4 HSP continuous playback to stream the authored
+  pattern action timings instead of resampling every pattern through the
+  controller's fixed 160 ms command cadence. Fast patterns such as flick and
+  flutter can now send their 15-40 ms authored intervals to HSP instead of
+  being aliased into fixed-cadence motion before the device sees them.
+- Restored authored timing for Flexible Position fixed-pattern playback, so
+  the shared pattern expansion path no longer flattens fast/slow segments
+  before HDSP sees them.
+- Broadened the shared pattern-rate speed budget while keeping it
+  intent-relative, so low requested speeds no longer collapse back into a
+  maximum-speed chase while faster requests still get meaningful headroom.
+- Kept HSP timed-point spacing as the actual transport speed instead of
+  stretching it through an HDSP-style velocity cap. Hidden HSP retiming made
+  the device play a slow script while diagnostics still showed the original
+  sampled speed budget.
+- Scaled HSP point `x` values from app/script `0..100` through the calibrated
+  depth window into firmware HSP `0..1000` units. Sending `0..100` left the
+  device traversing only about a tenth of the intended point span, which
+  explains visualizer-fast patterns feeling physically slow and fixed.
+- Mapped HSP trace rows onto their scheduled point times instead of the moment
+  the app buffered a batch. The in-app visualizer should now reflect the
+  stream timeline the device receives instead of making buffered future points
+  appear as an artificially fast burst.
+- Stretched Flexible Position `xpt.t` durations against the configured
+  velocity cap so finite HDSP playback does not request impossible timed moves
+  when authored scripts exceed saved speed limits.
+- Stopped forcing continuous HDSP fallback samples into a fixed `xpt.t`
+  command interval, so fallback position playback can use the varied velocity
+  budget it already reports in diagnostics.
+- Updated firmware v4 HDSP `xpt` position payloads to send calibrated
+  normalized REST v3 `xp` values, matching current Handy player behavior
+  instead of the stale percent-body assumption.
+- Added HSP segment-slope trace metadata so reviewers can inspect the actual
+  timed-point transport range instead of relying on the speed visualizer or
+  semantic `sample_speed` alone.
+- Realigned HSP stream replacement with current player/API behavior: each
+  continuous pattern replacement now gets a fresh stream id, sends HSP
+  threshold updates through `/hsp/threshold` instead of embedding them in
+  `/hsp/add`, estimates `server_time` from `/servertime` when available, and
+  no longer asks firmware to pause on starvation. This targets the observed
+  pattern-change pauses as a transport-state bug rather than another speed
+  visualizer mismatch.
+- Estimated the current continuous target from the active plan instead of the
+  tail of the future point buffer, so pattern changes blend from the sampled
+  present-time position rather than from buffered future points.
+- Added regression coverage that checks HSP timed streams preserve authored
+  sub-sample intervals, keep varied segment slopes, keep HSP timing free of
+  hidden velocity-cap stretching, and report scheduled trace timestamps.
+
+
 2026-05-13 - PR #187 - Fix Handy V3 Position Schema Diagnostics
 ----------------------------------------------------------------
 

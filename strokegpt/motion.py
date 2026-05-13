@@ -32,10 +32,10 @@ POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
 CONTINUOUS_SAMPLE_INTERVAL_SECONDS = 0.16
 CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS = 0.08
 CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
-CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 0.9
-CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 0.72
-CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 0.36
-CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 24
+CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 2.4
+CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
+CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
+CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -119,6 +119,8 @@ class ContinuousPhaseState:
     generation: int
     started_at: float
     offset_seconds: float = 0.0
+    plan: Any = None
+    target: Optional[MotionTarget] = None
 
 
 @dataclass(frozen=True)
@@ -687,12 +689,47 @@ class MotionController:
         return "hamp"
 
     def current_target(self) -> MotionTarget:
+        estimated = self._estimated_continuous_target()
+        if estimated is not None:
+            return estimated.clamped()
         return MotionTarget(
             self.handy.last_relative_speed,
             self.handy.last_depth_pos,
             getattr(self.handy, "last_stroke_range", 50),
             label="current",
         ).clamped()
+
+    def _estimated_continuous_target(self) -> Optional[MotionTarget]:
+        try:
+            state = self._continuous_phase_state
+            generation = self._generation
+            active = self._frame_playback_active
+            if (
+                not active
+                or state is None
+                or state.generation != generation
+                or state.plan is None
+                or state.target is None
+            ):
+                return None
+            from .motion_patterns import sample_continuous_motion
+
+            elapsed = state.offset_seconds + max(0.0, time.monotonic() - state.started_at)
+            sample = self._sample_continuous_motion(
+                state.plan,
+                state.target,
+                elapsed,
+                sample_continuous_motion,
+            )
+            return MotionTarget(
+                sample.intent_speed,
+                sample.target.depth,
+                sample.target.stroke_range,
+                label=sample.target.label,
+                motion_program=sample.target.motion_program,
+            )
+        except Exception:
+            return None
 
     def apply_target(self, target: MotionTarget, smooth: bool = True, source: str = "target") -> None:
         if target.speed <= 0:
@@ -741,7 +778,7 @@ class MotionController:
             self.apply_target(target, source=source)
             return
 
-        frames = self._expanded_frames(target)
+        frames = self._expanded_frames(target, preserve_timing=self.backend == "position")
         if frames:
             if self.backend == "position":
                 self.apply_position_frames(frames, source=source)
@@ -898,6 +935,31 @@ class MotionController:
         if cap is not None:
             velocity = min(velocity, cap)
         return max(0, velocity)
+
+    def _minimum_position_duration_seconds(self, start: MotionTarget, target: MotionTarget) -> float:
+        if abs(target.depth - start.depth) <= 0.001:
+            return 0.0
+
+        velocity = self._position_velocity_cap(target)
+        if velocity is None or velocity <= 0:
+            return 0.0
+
+        if hasattr(self.handy, "duration_ms_for_depth_interval"):
+            try:
+                duration_ms = self.handy.duration_ms_for_depth_interval(velocity, start.depth, target.depth)
+                return max(0.0, float(duration_ms) / 1000.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        relative_to_mm = getattr(self.handy, "_relative_depth_to_mm", None)
+        if callable(relative_to_mm):
+            try:
+                distance_mm = abs(float(relative_to_mm(target.depth)) - float(relative_to_mm(start.depth)))
+                return distance_mm / max(1.0, float(velocity))
+            except (TypeError, ValueError):
+                return 0.0
+
+        return 0.0
 
     def _coerce_position_frame(self, frame: Any) -> Optional[PositionFrame]:
         target = getattr(frame, "target", None)
@@ -1117,6 +1179,8 @@ class MotionController:
 
         started_at = time.monotonic()
         plan_key = self._continuous_plan_key(plan)
+        clamped_target = target.clamped()
+        start_target = self.current_target()
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
             self._generation += 1
@@ -1126,12 +1190,23 @@ class MotionController:
                 generation=generation,
                 started_at=started_at,
                 offset_seconds=phase_offset_seconds,
+                plan=plan,
+                target=clamped_target,
             )
         self._set_frame_playback_active(True)
 
         thread = threading.Thread(
             target=self._run_continuous_plan,
-            args=(plan, target.clamped(), source, generation, started_at, phase_offset_seconds, trace_metadata),
+            args=(
+                plan,
+                clamped_target,
+                source,
+                generation,
+                started_at,
+                phase_offset_seconds,
+                start_target,
+                trace_metadata,
+            ),
             daemon=True,
         )
         thread.start()
@@ -1248,6 +1323,7 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         if self._supports_continuous_streaming():
@@ -1258,6 +1334,7 @@ class MotionController:
                 generation,
                 started_at,
                 phase_offset_seconds,
+                start_target,
                 trace_metadata=trace_metadata,
             )
             if started:
@@ -1269,6 +1346,7 @@ class MotionController:
             generation,
             started_at,
             phase_offset_seconds,
+            start_target,
             trace_metadata=trace_metadata,
         )
 
@@ -1281,37 +1359,6 @@ class MotionController:
         except Exception:
             return False
 
-    def _continuous_stream_sample(
-        self,
-        *,
-        plan,
-        target: MotionTarget,
-        start_target: MotionTarget,
-        previous_target: MotionTarget,
-        stream_seconds: float,
-        phase_offset_seconds: float,
-        morph_seconds: float,
-        plan_name: str,
-        sample_continuous_motion,
-    ):
-        sample = self._sample_continuous_motion(
-            plan,
-            target,
-            phase_offset_seconds + stream_seconds,
-            sample_continuous_motion,
-        )
-        if stream_seconds < morph_seconds:
-            amount = _minimum_jerk(stream_seconds / morph_seconds)
-            sample = sample.with_target(
-                self._interpolate_continuous_spatial_target(
-                    start_target,
-                    sample.target,
-                    amount,
-                    f"{sample.target.label or plan_name} morph",
-                )
-            )
-        return sample.with_target(self._limit_continuous_step(previous_target, sample.target))
-
     def _run_continuous_stream_plan(
         self,
         plan,
@@ -1320,9 +1367,14 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
-        from .motion_patterns import continuous_plan_depth_range, sample_continuous_motion
+        from .motion_patterns import (
+            continuous_plan_depth_range,
+            continuous_plan_phase_points,
+            sample_continuous_motion,
+        )
 
         start_stream = getattr(self.handy, "start_continuous_stream", None)
         append_stream = getattr(self.handy, "append_continuous_stream", None)
@@ -1330,50 +1382,91 @@ class MotionController:
             return False
 
         base_interval = self._continuous_sample_interval()
+        phase_points = continuous_plan_phase_points(plan)
+        if not phase_points:
+            return False
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
-        start_target = self.current_target()
         initial_sample = self._sample_continuous_motion(
             plan,
             target,
             phase_offset_seconds,
             sample_continuous_motion,
         )
+        effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
+        stream_duration_seconds = effective_duration_seconds
+        play_start_seconds = phase_offset_seconds % effective_duration_seconds
+        play_start_stream_seconds = play_start_seconds
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
-        previous_target = start_target
         stream_seconds = 0.0
         sample_index = 0
         stream_index = 0
         batch_index = 0
         previous_command_ended_at = None
+        previous_recorded_point = None
+        previous_point_time_seconds = None
+        stream_wall_zero = None
         program_range = continuous_plan_depth_range(plan, target)
         plan_name = str(getattr(plan, "name", "") or "continuous")
         cycle_ms = round(plan.duration_seconds * 1000.0, 1)
-        phase_offset_ms = round(phase_offset_seconds * 1000.0, 1)
+        phase_offset_ms = round(play_start_seconds * 1000.0, 1)
+        play_start_ms = round(play_start_stream_seconds * 1000.0, 1)
+        stream_cycle_ms = round(stream_duration_seconds * 1000.0, 1)
         morph_ms = round(morph_seconds * 1000.0, 1)
+        start_phase = play_start_seconds / effective_duration_seconds
+        next_phase_index = 0
+        for index, (phase, _) in enumerate(phase_points):
+            if phase <= start_phase:
+                next_phase_index = index
+            else:
+                break
+        next_cycle_index = 0
 
-        def build_batch(until_seconds: float) -> list[dict[str, Any]]:
-            nonlocal previous_target, sample_index, stream_index, stream_seconds
+        def advance_phase_cursor() -> None:
+            nonlocal next_cycle_index, next_phase_index
+            next_phase_index += 1
+            if next_phase_index >= len(phase_points):
+                next_cycle_index += 1
+                next_phase_index = 1 if len(phase_points) > 1 and phase_points[0][0] <= 0.0 else 0
+
+        def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
+            nonlocal previous_point_time_seconds, sample_index, stream_index, stream_seconds
             points: list[dict[str, Any]] = []
-            while (
-                stream_seconds <= until_seconds
-                and len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND
-            ):
-                sample = self._continuous_stream_sample(
-                    plan=plan,
-                    target=target,
-                    start_target=start_target,
-                    previous_target=previous_target,
-                    stream_seconds=stream_seconds,
-                    phase_offset_seconds=phase_offset_seconds,
-                    morph_seconds=morph_seconds,
-                    plan_name=plan_name,
-                    sample_continuous_motion=sample_continuous_motion,
+            while len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND:
+                phase, _ = phase_points[next_phase_index]
+                point_seconds = (next_cycle_index * effective_duration_seconds) + (
+                    phase * effective_duration_seconds
                 )
-                command_interval = self._continuous_command_interval(sample.tempo_scale, base_interval)
+                point_stream_seconds = point_seconds
+                if point_stream_seconds > until_seconds and len(points) >= min_points:
+                    break
+
+                sample = self._sample_continuous_motion(
+                    plan,
+                    target,
+                    point_seconds,
+                    sample_continuous_motion,
+                )
+                stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
+                if stream_elapsed < morph_seconds:
+                    amount = _minimum_jerk(stream_elapsed / morph_seconds)
+                    sample = sample.with_target(
+                        self._interpolate_continuous_spatial_target(
+                            start_target,
+                            sample.target,
+                            amount,
+                            f"{sample.target.label or plan_name} morph",
+                        )
+                    )
+                command_interval = (
+                    base_interval
+                    if previous_point_time_seconds is None
+                    else max(0.001, point_stream_seconds - previous_point_time_seconds)
+                )
                 stream_index += 1
                 points.append(
                     {
-                        "t": int(round(stream_seconds * 1000.0)),
+                        "t": int(round(point_stream_seconds * 1000.0)),
+                        "logical_t": int(round(point_seconds * 1000.0)),
                         "x": sample.target.depth,
                         "speed": sample.target.speed,
                         "intent_speed": sample.intent_speed,
@@ -1388,9 +1481,10 @@ class MotionController:
                         "sample_interval_seconds": command_interval,
                     }
                 )
-                previous_target = sample.target
+                previous_point_time_seconds = point_stream_seconds
                 sample_index += 1
-                stream_seconds += command_interval
+                stream_seconds = point_stream_seconds
+                advance_phase_cursor()
             return points
 
         def record_batch(
@@ -1401,13 +1495,19 @@ class MotionController:
             send_started_at: float,
             send_ended_at: float,
         ) -> None:
-            nonlocal previous_command_ended_at
+            nonlocal previous_command_ended_at, previous_recorded_point, stream_wall_zero
             command_extras = self._handy_command_trace_extras(result)
             batch_gap_ms = None
             if previous_command_ended_at is not None:
                 batch_gap_ms = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
             previous_command_ended_at = send_ended_at
+            wall_now = time.time()
+            mono_now = time.monotonic()
+            send_ended_wall = wall_now - max(0.0, mono_now - send_ended_at)
+            if stream_wall_zero is None:
+                stream_wall_zero = send_ended_wall - play_start_stream_seconds
             for point in points:
+                scheduled_wall_time = stream_wall_zero + (point["t"] / 1000.0)
                 stream_target = MotionTarget(
                     point["speed"],
                     point["x"],
@@ -1417,14 +1517,19 @@ class MotionController:
                 )
                 self._record_target(stream_target, source=source)
                 extras = {
+                    "t": round(scheduled_wall_time, 3),
                     "continuous": True,
                     "continuous_schema": "hsp",
                     "hsp_batch": kind,
                     "hsp_batch_index": batch_index,
                     "hsp_point_time_ms": point["t"],
+                    "hsp_point_logical_time_ms": point["logical_t"],
                     "hsp_stream_index": point["stream_index"],
                     "cycle_ms": cycle_ms,
                     "phase_offset_ms": phase_offset_ms,
+                    "hsp_play_start_ms": play_start_ms,
+                    "hsp_stream_cycle_ms": stream_cycle_ms,
+                    "hsp_transport_time_scale": 1.0,
                     "morph_ms": morph_ms,
                     "intent_speed": int(round(point["intent_speed"])),
                     "sample_speed": int(round(point["speed"])),
@@ -1436,6 +1541,24 @@ class MotionController:
                     "sample_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
                     "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
                 }
+                if previous_recorded_point is not None:
+                    dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
+                    if dt_seconds > 0:
+                        depth_delta = point["x"] - previous_recorded_point["x"]
+                        extras["hsp_segment_depth_delta"] = round(depth_delta, 1)
+                        extras["hsp_segment_depth_per_second"] = round(abs(depth_delta) / dt_seconds, 1)
+                        relative_to_mm = getattr(self.handy, "_relative_depth_to_mm", None)
+                        if callable(relative_to_mm):
+                            try:
+                                distance_mm = abs(
+                                    float(relative_to_mm(point["x"]))
+                                    - float(relative_to_mm(previous_recorded_point["x"]))
+                                )
+                                physical_speed = distance_mm / dt_seconds
+                                extras["hsp_segment_mm_per_second"] = round(physical_speed, 1)
+                                extras["physical_speed"] = int(round(physical_speed))
+                            except (TypeError, ValueError):
+                                pass
                 if program_range is not None:
                     extras["program_range"] = program_range
                 if batch_gap_ms is not None:
@@ -1445,17 +1568,21 @@ class MotionController:
                         extras.setdefault(str(key), value)
                 extras.update(command_extras)
                 self._augment_last_trace(extras)
+                previous_recorded_point = point
 
         try:
-            initial_points = build_batch(CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS)
+            initial_points = build_batch(
+                play_start_stream_seconds + CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS,
+                min_points=min(3, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND),
+            )
             if not initial_points:
                 return False
             send_started_at = time.monotonic()
             started = start_stream(
                 initial_points,
-                start_time_ms=0,
+                start_time_ms=int(round(play_start_stream_seconds * 1000.0)),
                 tail_point_stream_index=initial_points[-1]["stream_index"],
-                tail_point_threshold=max(1, initial_points[-1]["stream_index"] - 2),
+                tail_point_threshold=max(0, initial_points[-1]["stream_index"] - 2),
             )
             send_ended_at = time.monotonic()
             record_batch(
@@ -1477,9 +1604,10 @@ class MotionController:
                 self._set_frame_playback_active(True)
 
                 elapsed = max(0.0, time.monotonic() - started_at)
-                buffer_remaining = stream_seconds - elapsed
+                hsp_elapsed = play_start_stream_seconds + elapsed
+                buffer_remaining = stream_seconds - hsp_elapsed
                 if buffer_remaining <= CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS:
-                    until = elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
+                    until = hsp_elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
                     points = build_batch(until)
                     if points:
                         batch_index += 1
@@ -1487,7 +1615,7 @@ class MotionController:
                         appended = append_stream(
                             points,
                             tail_point_stream_index=points[-1]["stream_index"],
-                            tail_point_threshold=max(1, points[-1]["stream_index"] - 2),
+                            tail_point_threshold=max(0, points[-1]["stream_index"] - 2),
                         )
                         send_ended_at = time.monotonic()
                         record_batch(
@@ -1519,6 +1647,7 @@ class MotionController:
         generation: int,
         started_at: float,
         phase_offset_seconds: float,
+        start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         from .motion_patterns import continuous_plan_depth_range, sample_continuous_motion
@@ -1526,7 +1655,6 @@ class MotionController:
         base_interval = self._continuous_sample_interval()
         next_tick = started_at
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
-        start_target = self.current_target()
         initial_sample = self._sample_continuous_motion(
             plan,
             target,
@@ -1576,7 +1704,6 @@ class MotionController:
                     stop_on_target=False,
                     velocity=velocity,
                     intent_speed=sample.intent_speed,
-                    duration_ms=max(1, int(round(command_interval * 1000.0))),
                     source=source,
                 )
                 send_ended_at = time.monotonic()
@@ -1700,6 +1827,11 @@ class MotionController:
                 if not self._wait_for_resume(generation):
                     return False
                 delay_seconds = self.step_delay * frame.delay_factor if self.step_delay > 0 else 0
+                if frame.phase.startswith("timed"):
+                    delay_seconds = max(
+                        delay_seconds,
+                        self._minimum_position_duration_seconds(previous_target, frame.target),
+                    )
                 is_last_frame = index == frame_count - 1
                 is_pass_through_final = is_last_frame and not final_stop_on_target and not stop_after
                 velocity_seconds = delay_seconds
@@ -1841,7 +1973,7 @@ class MotionController:
             extras["batch_gap_ms"] = batch_gap_ms
         return extras
 
-    def _expanded_frames(self, target: MotionTarget) -> list[Any]:
+    def _expanded_frames(self, target: MotionTarget, *, preserve_timing: bool = False) -> list[Any]:
         current = self.current_target()
         if target.motion_program:
             from .motion_patterns import expand_anchor_program
@@ -1852,7 +1984,13 @@ class MotionController:
         if pattern:
             from .motion_patterns import expand_pattern
 
-            return expand_pattern(pattern, current, target)
+            return expand_pattern(
+                pattern,
+                current,
+                target,
+                preserve_timing=preserve_timing,
+                base_step_seconds=self.step_delay,
+            )
         return []
 
     def _pattern_from_label(self, label: str) -> Optional[str]:

@@ -35,6 +35,9 @@ class RecordingV3HandyController(RecordingHandyController):
         self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
         return True
 
+    def _estimated_server_time_ms(self):
+        return 123456
+
 
 class FakeResponse:
     def __init__(self, status_code=204, payload=None):
@@ -331,9 +334,9 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.v3_commands[2][1], {"min": 0.38, "max": 0.78})
         self.assertEqual(handy.v3_commands[3][1], {"velocity": 0.4})
 
-    def test_fw4_position_move_uses_xpt_percent_and_duration_from_speed_limits(self):
+    def test_fw4_position_move_uses_normalized_xpt_and_duration_from_speed_limits(self):
         handy = RecordingV3HandyController()
-        handy.update_settings(10, 70, 0, 100)
+        handy.update_settings(10, 70, 20, 80)
         handy.last_depth_pos = 25
 
         handy.move_to_depth(50, 75)
@@ -342,10 +345,21 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.commands, [])
         self.assertEqual(handy.v3_commands[0][1], {"mode": 2})
         body = handy.v3_commands[-1][1]
-        self.assertEqual(body["xp"], 75)
-        self.assertEqual(body["t"], 1375)
+        self.assertEqual(body["xp"], 0.65)
+        self.assertEqual(body["t"], 825)
         self.assertTrue(body["stop_on_target"])
         self.assertFalse(body["immediate_rsp"])
+
+    def test_fw4_position_move_does_not_honor_too_short_timed_duration(self):
+        handy = RecordingV3HandyController()
+        handy.update_settings(10, 70, 0, 100)
+        handy.last_depth_pos = 10
+
+        handy.move_to_depth(40, 90, duration_ms=1, stop_on_target=False)
+
+        body = handy.v3_commands[-1][1]
+        self.assertGreater(body["t"], 1)
+        self.assertFalse(body["stop_on_target"])
 
     def test_start_continuous_stream_uses_hsp_timed_points(self):
         handy = RecordingV3HandyController()
@@ -364,29 +378,47 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(
             [path for path, _body in handy.v3_commands],
-            ["slider/stroke", "mode2", "hsp/setup", "hsp/add", "hsp/play"],
+            ["mode2", "slider/stroke", "hsp/setup", "hsp/add", "hsp/threshold", "hsp/play"],
         )
-        self.assertEqual(handy.v3_commands[0][1], {"min": 0.1, "max": 0.9})
-        self.assertEqual(handy.v3_commands[1][1], {"mode": 4})
+        self.assertEqual(handy.v3_commands[0][1], {"mode": 4})
+        self.assertEqual(handy.v3_commands[1][1], {"min": 0.1, "max": 0.9})
+        self.assertEqual(handy.v3_commands[2][1], {"stream_id": 1})
         add = handy.v3_commands[3][1]
-        self.assertTrue(add["flush"])
+        self.assertFalse(add["flush"])
         self.assertEqual(add["tail_point_stream_index"], 3)
+        self.assertNotIn("tail_point_threshold", add)
         self.assertEqual(
             add["points"],
             [
-                {"t": 0, "x": 10},
-                {"t": 160, "x": 50},
-                {"t": 320, "x": 90},
+                {"t": 0, "x": 100},
+                {"t": 160, "x": 500},
+                {"t": 320, "x": 900},
             ],
         )
+        self.assertEqual(handy.v3_commands[4][1], {"tail_point_threshold": 1})
         body = handy.v3_commands[-1][1]
         self.assertEqual(body["start_time"], 0)
-        self.assertIn("server_time", body)
-        self.assertTrue(body["pause_on_starving"])
+        self.assertEqual(body["server_time"], 123456)
+        self.assertNotIn("pause_on_starving", body)
         self.assertFalse(body["loop"])
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
-        self.assertEqual(handy.diagnostics()["depth"], 100)
+        self.assertEqual(handy.diagnostics()["depth"], 0)
+
+    def test_hsp_server_time_estimate_uses_servertime_offset(self):
+        handy = HandyController(handy_key="test")
+
+        def fake_get(url, timeout):
+            self.assertEqual(url, f"{handy.api_v3_base_url}servertime")
+            self.assertEqual(timeout, 5)
+            return FakeResponse(payload={"server_time": 1000500})
+
+        with (
+            mock.patch.object(handy_module.requests, "get", side_effect=fake_get, create=True),
+            mock.patch.object(handy_module.time, "monotonic", side_effect=[10.0, 10.0]),
+            mock.patch.object(handy_module.time, "time", side_effect=[1000.0, 1000.1, 1000.2]),
+        ):
+            self.assertEqual(handy._estimated_server_time_ms(), 1000650)
 
     def test_diagnostics_include_hsp_point_preview_without_secret_values(self):
         handy = RecordingV3HandyController()
@@ -404,7 +436,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], 16)
         self.assertEqual(len(body["points_preview"]), 12)
         self.assertEqual(body["points_preview"][0], {"t": 0, "x": 0})
-        self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 11})
+        self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 110})
         self.assertTrue(body["points_truncated"])
         self.assertNotIn("test", str(diagnostics))
 
@@ -419,13 +451,38 @@ class HandyControllerTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(handy.v3_commands[-1][0], "hsp/add")
-        body = handy.v3_commands[-1][1]
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold"])
+        body = handy.v3_commands[-2][1]
         self.assertFalse(body["flush"])
         self.assertEqual(body["tail_point_stream_index"], 4)
-        self.assertEqual(body["tail_point_threshold"], 2)
-        self.assertEqual(body["points"], [{"t": 480, "x": 65}])
-        self.assertEqual(handy.diagnostics()["relative_speed"], 44)
+        self.assertNotIn("tail_point_threshold", body)
+        self.assertEqual(body["points"], [{"t": 480, "x": 650}])
+        self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
+        self.assertEqual(handy.diagnostics()["relative_speed"], 50)
+
+    def test_start_continuous_stream_resets_hsp_stream_for_replacement(self):
+        handy = RecordingV3HandyController()
+
+        self.assertTrue(
+            handy.start_continuous_stream(
+                [{"t": 0, "x": 20, "intent_speed": 30, "range": 80}],
+                tail_point_stream_index=1,
+                tail_point_threshold=0,
+            )
+        )
+        self.assertTrue(
+            handy.start_continuous_stream(
+                [{"t": 0, "x": 80, "intent_speed": 60, "range": 80}],
+                tail_point_stream_index=1,
+                tail_point_threshold=0,
+            )
+        )
+
+        paths = [path for path, _body in handy.v3_commands]
+        self.assertEqual(paths.count("hsp/setup"), 2)
+        setup_bodies = [body for path, body in handy.v3_commands if path == "hsp/setup"]
+        self.assertEqual(setup_bodies, [{"stream_id": 1}, {"stream_id": 2}])
+        self.assertEqual(paths[-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
 
     def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
         handy = RecordingHandyController()

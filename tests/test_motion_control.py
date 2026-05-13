@@ -8,11 +8,13 @@ from strokegpt.motion import (
     CONTINUOUS_MIN_MORPH_SECONDS,
     CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
+    CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
     MotionTarget,
     PositionFrame,
+    POSITION_MAX_DEPTH_STEP,
     POSITION_PASS_THROUGH_MIN_SECONDS,
 )
 
@@ -143,6 +145,32 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
 
     def effective_speed_for_relative(self, speed):
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
+
+
+class VelocityCappedStreamingFakeHandy(StreamingFakeHandy):
+    def __init__(self, max_velocity):
+        super().__init__()
+        self.max_velocity = max_velocity
+
+    def max_velocity_for_relative_speed(self, _speed):
+        return self.max_velocity
+
+    def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+        distance = abs(float(end_depth) - float(start_depth))
+        return max(1, int(round((distance / max(1.0, float(velocity))) * 1000.0)))
+
+
+class CappedPositionFakeHandy(FakeHandy):
+    def __init__(self, max_velocity):
+        super().__init__()
+        self.max_velocity = max_velocity
+
+    def max_velocity_for_relative_speed(self, _speed):
+        return self.max_velocity
+
+    def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
+        distance = abs(float(end_depth) - float(start_depth))
+        return max(1, int(round((distance / max(1.0, float(velocity))) * 1000.0)))
 
 
 class FailingPositionHandy(FakeHandy):
@@ -586,6 +614,7 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertEqual(handy.position_moves, [])
             first_batch = handy.stream_starts[0]["points"]
+            self.assertIsNone(handy.stream_starts[0]["stream_id"])
             self.assertGreater(len(first_batch), 3)
             self.assertEqual(first_batch[0]["t"], 0)
             self.assertTrue(all(a["t"] < b["t"] for a, b in zip(first_batch, first_batch[1:])))
@@ -620,6 +649,75 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_stream_preserves_timed_pattern_slopes(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(
+                MotionTarget(50, 50, 80, "milk"),
+                source="unit test",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            segment_depths = [abs(right["x"] - left["x"]) for left, right in zip(points, points[1:])]
+            segment_rates = [
+                abs(right["x"] - left["x"]) / ((right["t"] - left["t"]) / 1000.0)
+                for left, right in zip(points, points[1:])
+                if right["t"] > left["t"]
+            ]
+
+            self.assertGreater(max(segment_depths), POSITION_MAX_DEPTH_STEP * 2.0)
+            self.assertGreater(max(segment_rates), 120.0)
+            trace_rates = [
+                point["hsp_segment_depth_per_second"]
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp" and "hsp_segment_depth_per_second" in point
+            ]
+            self.assertGreater(max(trace_rates), 120.0)
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_stream_preserves_authored_subsample_timing(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(50, 50, 80, "flick"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+
+            self.assertGreater(points[-1]["t"], 2000)
+            self.assertLess(min(intervals), CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000 * 0.5)
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_trace_uses_scheduled_point_times(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertGreater(len(hsp_points), 3)
+            trace_span = hsp_points[-1]["t"] - hsp_points[0]["t"]
+            stream_span = (
+                hsp_points[-1]["hsp_point_time_ms"] - hsp_points[0]["hsp_point_time_ms"]
+            ) / 1000.0
+            self.assertGreater(stream_span, 1.0)
+            self.assertAlmostEqual(trace_span, stream_span, delta=0.1)
+        finally:
+            controller.stop()
+
     def test_continuous_hsp_timing_uses_configured_speed_limits(self):
         slow_handy = SpeedLimitStreamingFakeHandy(10, 30)
         fast_handy = SpeedLimitStreamingFakeHandy(70, 90)
@@ -637,6 +735,35 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             slow_controller.stop()
             fast_controller.stop()
+
+    def test_continuous_hsp_does_not_stretch_timing_to_hdsp_velocity_cap(self):
+        handy = VelocityCappedStreamingFakeHandy(max_velocity=45)
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            self.assertGreaterEqual(len(points), 3)
+            rates = [
+                abs(right["x"] - left["x"]) / ((right["t"] - left["t"]) / 1000.0)
+                for left, right in zip(points, points[1:])
+                if right["t"] > left["t"] and abs(right["x"] - left["x"]) > 0.01
+            ]
+            self.assertTrue(rates)
+            self.assertGreater(max(rates), handy.max_velocity * 2)
+            self.assertGreater(max(rates) - min(rates), 40.0)
+
+            scales = [
+                point["hsp_transport_time_scale"]
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp" and "hsp_transport_time_scale" in point
+            ]
+            self.assertTrue(scales)
+            self.assertEqual(max(scales), 1.0)
+        finally:
+            controller.stop()
 
     def test_continuous_hsp_trace_records_append_batches(self):
         handy = StreamingFakeHandy()
@@ -683,7 +810,7 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(points)
             self.assertTrue(all(point["intent_speed"] == 20 for point in points))
             self.assertTrue(any(point["sample_speed"] > point["intent_speed"] for point in points))
-            self.assertLessEqual(max(point["sample_speed"] for point in points), 30)
+            self.assertLessEqual(max(point["sample_speed"] for point in points), 40)
         finally:
             controller.stop()
 
@@ -711,8 +838,8 @@ class MotionControllerTests(unittest.TestCase):
             )
             first_move = handy.position_moves[0]
             self.assertEqual(first_point["intent_speed"], 20)
-            self.assertLessEqual(first_point["sample_speed"], 30)
-            self.assertLessEqual(round(first_move[0]), 30)
+            self.assertLessEqual(first_point["sample_speed"], 40)
+            self.assertLessEqual(round(first_move[0]), 40)
             self.assertEqual(round(handy.position_intent_speeds[0]), 20)
         finally:
             controller.stop()
@@ -767,7 +894,20 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertGreater(point["sample_interval_ms"], point["base_interval_ms"])
             self.assertAlmostEqual(point["sample_interval_ms"], round(duration_seconds * 1000.0, 1))
-            self.assertLessEqual(round(speed), 30)
+            self.assertLessEqual(round(speed), 40)
+        finally:
+            controller.stop()
+
+    def test_continuous_hdsp_fallback_keeps_duration_under_velocity_budget(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.position_durations) >= 4), handy.position_durations)
+
+            self.assertTrue(all(duration is None for duration in handy.position_durations))
+            self.assertGreater(len({move[3] for move in handy.position_moves if move[3] is not None}), 1)
         finally:
             controller.stop()
 
@@ -884,6 +1024,46 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreater(len(handy.position_moves), 4)
         self.assertEqual(handy.moves, [])
         self.assertGreater(len({depth for _, depth, _, _ in handy.position_moves}), 3)
+
+    def test_position_backend_uses_authored_pattern_timing(self):
+        controller = MotionController(FakeHandy(), step_delay=0.16)
+        controller.set_backend("position")
+        captured = []
+
+        def capture_position_frames(frames, **_kwargs):
+            captured.extend(frames)
+            return True
+
+        controller.apply_position_frames = capture_position_frames
+
+        controller.apply_generated_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+
+        timed = [frame for frame in captured if getattr(frame, "phase", "") == "timed-pattern"]
+        self.assertTrue(timed)
+        self.assertGreater(max(frame.target.speed for frame in timed), 90)
+        self.assertTrue(any(frame.delay_factor < 0.2 for frame in timed[1:]))
+
+    def test_position_backend_stretches_timed_frames_to_velocity_cap(self):
+        handy = CappedPositionFakeHandy(max_velocity=25)
+        controller = MotionController(handy, step_delay=0.16)
+        controller.set_backend("position")
+
+        controller.apply_generated_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+
+        previous_depth = 30
+        checked = 0
+        for move, duration_ms in zip(handy.position_moves, handy.position_durations):
+            _speed, depth, _stop_on_target, _velocity = move
+            if duration_ms is not None:
+                required = handy.duration_ms_for_depth_interval(
+                    handy.max_velocity,
+                    previous_depth,
+                    depth,
+                )
+                self.assertGreaterEqual(duration_ms + 50, required)
+                checked += 1
+            previous_depth = depth
+        self.assertGreater(checked, 0)
 
     def test_position_backend_routes_plain_chat_targets_through_position_smoothing(self):
         handy = FakeHandy()

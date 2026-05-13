@@ -497,8 +497,7 @@ def _actions_to_frames(
         if preserve_timing and index > 0 and interval_ms > 0:
             position_delta = abs(action.pos - previous_pos)
             position_per_second = position_delta / max(0.05, interval_ms / 1000.0)
-            segment_speed = _clamp((position_per_second / 160.0) * 100.0, 8.0, 100.0)
-            speed = max(speed, segment_speed * style.speed_scale)
+            speed = _speed_budget_for_position_rate(target.speed, style, position_per_second)
         previous_pos = action.pos
 
         frames.append(
@@ -548,6 +547,32 @@ def _continuous_cycle_ms(actions: tuple[PatternAction, ...]) -> int:
 def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
     return _clamp((_continuous_cycle_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
+
+
+def continuous_plan_phase_points(plan: ContinuousMotionPlan) -> tuple[tuple[float, float], ...]:
+    """Return authored action positions as normalized cycle phases.
+
+    HSP timed-point streaming should preserve the pattern's authored event
+    timing instead of resampling the curve at the controller command cadence.
+    The final point closes the implicit wrap segment so the device interpolates
+    from the last authored action back to the first across the same span used
+    by the continuous sampler.
+    """
+    actions = tuple(getattr(plan, "actions", ()) or ())
+    if not actions:
+        return ()
+
+    cycle_ms = _continuous_cycle_ms(actions)
+    if cycle_ms <= 0:
+        return ()
+
+    first_at = actions[0].at
+    points = [
+        (_clamp((action.at - first_at) / cycle_ms, 0.0, 1.0), _clamp(action.pos))
+        for action in actions
+    ]
+    points.append((1.0, _clamp(actions[0].pos)))
+    return tuple(points)
 
 
 def _sample_action_position(
@@ -680,11 +705,11 @@ def _motion_target_for_sample(
 
     When ``position_per_second`` is provided (the per-sample tangent of
     the pattern's normalized position, sampled at the pattern's own
-    cycle dt), the speed budget is lifted by a bounded multiplier of the
-    user/LLM base speed. Slow segments fall back to the base speed; fast
-    segments get extra budget without allowing a low user speed to turn
-    back into a full-speed XAVA chase. Pass ``None`` to opt out and keep
-    the constant base speed.
+    cycle dt), the speed budget follows the authored movement rate while
+    staying scaled by the user/LLM intent. Slow segments fall back to the
+    base speed; fast segments get a wider transport budget without
+    allowing a low user speed to turn back into a full-speed chase. Pass
+    ``None`` to opt out and keep the constant base speed.
     """
     target = target.clamped()
     half_range = target.stroke_range / 2.0
@@ -704,15 +729,7 @@ def _motion_target_for_sample(
     depth = depth + depth_offset
     local_range = max(5.0, local_range + range_offset)
 
-    base_speed = target.speed * style.speed_scale
-    speed = base_speed
-    if position_per_second is not None and position_per_second > 0:
-        rate = _clamp(
-            (float(position_per_second) - SAMPLE_SPEED_BOOST_START_PPS) / SAMPLE_SPEED_BOOST_WINDOW_PPS,
-            0.0,
-            1.0,
-        )
-        speed = base_speed * (1.0 + rate * SAMPLE_SPEED_BOOST_MAX_MULTIPLIER)
+    speed = _speed_budget_for_position_rate(target.speed, style, position_per_second)
 
     return MotionTarget(
         speed=speed,
@@ -818,9 +835,7 @@ JITTER_CYCLE_SECONDS = 5.0
 # show through. Stays in seconds so per-cycle phase delta scales with
 # the plan's own ``duration_seconds``.
 SAMPLE_DERIVATIVE_DT_SECONDS = 0.04
-SAMPLE_SPEED_BOOST_START_PPS = 60.0
-SAMPLE_SPEED_BOOST_WINDOW_PPS = 160.0
-SAMPLE_SPEED_BOOST_MAX_MULTIPLIER = 0.35
+POSITION_RATE_SPEED_FULL_SCALE_PPS = 160.0
 
 
 def _continuous_intent_tempo_scale(speed: float) -> float:
@@ -833,6 +848,25 @@ def _continuous_intent_tempo_scale(speed: float) -> float:
     """
 
     return _clamp(0.5 + _clamp(float(speed or 0.0)) / 100.0, 0.5, 1.5)
+
+
+def _speed_budget_for_position_rate(
+    target_speed: float,
+    style: FrameStyle,
+    position_per_second: Optional[float],
+) -> float:
+    base_speed = target_speed * style.speed_scale
+    if position_per_second is None or position_per_second <= 0:
+        return base_speed
+
+    authored_speed = _clamp(
+        (float(position_per_second) / POSITION_RATE_SPEED_FULL_SCALE_PPS) * 100.0,
+        8.0,
+        100.0,
+    ) * style.speed_scale
+    intent_ratio = _clamp(target_speed) / 100.0
+    intent_ceiling = base_speed + (100.0 - base_speed) * intent_ratio
+    return max(base_speed, min(authored_speed, intent_ceiling))
 
 
 def sample_continuous_motion(
@@ -852,8 +886,8 @@ def sample_continuous_motion(
     A short-window position derivative (``SAMPLE_DERIVATIVE_DT_SECONDS``)
     is computed from the same cyclic Catmull-Rom sampler and forwarded
     to ``_motion_target_for_sample`` so the per-sample speed budget still
-    reflects the pattern's intrinsic rate of change. The boost is bounded
-    relative to the semantic intent speed, so a low-speed request cannot
+    reflects the pattern's intrinsic rate of change. The transport budget
+    is still scaled by semantic intent, so a low-speed request cannot
     saturate every fast segment at the maximum HDSP velocity.
 
     The returned ``MotionSample`` keeps semantic intent speed separate
@@ -1063,12 +1097,22 @@ def expand_pattern(
     current: MotionTarget,
     target: MotionTarget,
     rng: Optional[random.Random] = None,
+    *,
+    preserve_timing: bool = False,
+    base_step_seconds: float = 0.25,
 ) -> list[PatternFrame]:
     pattern = PATTERNS.get((pattern_name or "").lower())
     if not pattern:
         return []
 
-    return expand_motion_pattern(pattern, current, target, rng=rng)
+    return expand_motion_pattern(
+        pattern,
+        current,
+        target,
+        rng=rng,
+        preserve_timing=preserve_timing,
+        base_step_seconds=base_step_seconds,
+    )
 
 
 def expand_motion_pattern(
