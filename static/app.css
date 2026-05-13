@@ -404,6 +404,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-training-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
 .motion-training-status { min-height: 38px; display: flex; align-items: center; padding: 8px 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.85rem; overflow-wrap: anywhere; }
 .motion-training-toolbar .my-button { width: auto; min-width: 132px; min-height: 38px; padding: 8px 10px; font-size: 0.9rem; }
+.motion-studio-entry-actions { display: grid; grid-template-columns: repeat(2, minmax(112px, 1fr)); gap: 8px; }
+.motion-studio-entry-actions .my-button { width: auto; min-width: 0; min-height: 36px; padding: 8px 10px; font-size: 0.86rem; }
 .motion-training-pattern-list { flex: 1; max-height: none; min-height: 0; padding-right: 4px; }
 .motion-training-pattern-row { grid-template-columns: 1fr; align-items: stretch; gap: 8px; padding: 8px; cursor: pointer; }
 .motion-training-pattern-row .motion-pattern-main { width: 100%; }
@@ -417,6 +419,37 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-training-detail-header h4 { margin: 0; color: var(--foreground); font-size: 1rem; overflow-wrap: anywhere; }
 .motion-backend-stack { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 260px; }
 .motion-backend-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; white-space: nowrap; }
+.motion-studio-panel { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: rgba(20, 23, 30, 0.78); }
+.motion-studio-panel[hidden], .motion-studio-actions[hidden], .motion-studio-crop-panel[hidden] { display: none; }
+.motion-studio-actions { display: grid; grid-template-columns: repeat(2, minmax(118px, 1fr)); gap: 8px; }
+.motion-studio-actions .my-button, .motion-studio-crop-fields .my-button { width: auto; min-width: 0; min-height: 34px; padding: 7px 9px; font-size: 0.82rem; }
+.motion-studio-draw-toggle-btn.active, #motion-studio-draw-toggle-btn.active { border-color: rgba(127, 183, 163, 0.86); background: #263d36; color: var(--foreground); }
+.motion-studio-status { min-height: 30px; display: flex; align-items: center; padding: 6px 8px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.82rem; overflow-wrap: anywhere; }
+.motion-studio-crop-panel { display: flex; flex-direction: column; gap: 8px; }
+.motion-studio-crop-header { display: flex; justify-content: space-between; gap: 10px; color: var(--comment); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
+.motion-studio-crop-header span:last-child { color: var(--foreground); text-align: right; text-transform: none; font-weight: 600; }
+.motion-studio-timeline-controls { display: grid; grid-template-columns: 34px minmax(180px, 1fr) 34px 52px; gap: 8px; align-items: center; }
+.motion-studio-timeline-controls .my-button { width: auto; min-width: 0; min-height: 34px; padding: 7px 9px; font-size: 0.82rem; }
+.motion-studio-zoom-field, .motion-studio-pan-field { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 34px; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; font-weight: 700; }
+.motion-studio-zoom-field input[type="range"], .motion-studio-pan-field input[type="range"] { width: 100%; min-width: 0; accent-color: var(--purple); }
+.motion-studio-zoom-field small, .motion-studio-pan-field small { color: var(--foreground); font-size: 0.72rem; font-weight: 700; text-align: right; white-space: nowrap; }
+.motion-studio-crop-timeline { position: relative; height: 104px; min-width: 0; border: 1px solid #37404c; border-radius: 6px; background: #101217; overflow: hidden; touch-action: none; cursor: crosshair; }
+.motion-studio-crop-timeline.disabled { opacity: 0.62; cursor: default; }
+#motion-studio-crop-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.motion-studio-crop-selection { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; background: rgba(127, 183, 163, 0.16); border-left: 2px solid rgba(216, 182, 106, 0.95); border-right: 2px solid rgba(216, 182, 106, 0.95); pointer-events: none; }
+.motion-studio-crop-handle { position: absolute; top: 0; bottom: 0; width: 16px; min-width: 16px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: ew-resize; transform: translateX(-50%); z-index: 2; }
+.motion-studio-crop-handle[hidden] { display: none; }
+.motion-studio-crop-handle::before { content: ""; position: absolute; top: 7px; bottom: 7px; left: 6px; width: 4px; border-radius: 3px; background: var(--yellow); box-shadow: 0 0 0 1px rgba(16, 18, 23, 0.8), 0 0 10px rgba(216, 182, 106, 0.35); }
+.motion-studio-crop-handle::after { content: ""; position: absolute; top: 50%; left: 2px; width: 12px; height: 24px; border: 1px solid rgba(216, 182, 106, 0.85); border-radius: 4px; background: rgba(32, 38, 46, 0.95); transform: translateY(-50%); }
+.motion-studio-crop-handle:hover::after, .motion-studio-crop-handle:focus-visible::after { border-color: var(--foreground); box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.28); }
+.motion-studio-crop-handle:disabled { cursor: default; opacity: 0.45; }
+.motion-studio-crop-handle-start { left: 0; }
+.motion-studio-crop-handle-end { left: 100%; }
+.motion-studio-crop-fields { display: grid; grid-template-columns: repeat(2, minmax(100px, 0.55fr)) repeat(2, minmax(110px, 0.7fr)); gap: 8px; align-items: stretch; }
+.motion-studio-crop-field { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; min-height: 34px; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.8rem; }
+.motion-studio-crop-field span { color: var(--foreground); font-weight: 700; }
+.motion-studio-crop-field input[type="number"] { min-width: 0; height: 28px; padding: 5px 7px; border: 1px solid #37404c; border-radius: 5px; background: #101217; color: var(--foreground); }
+.motion-studio-crop-field small { color: var(--comment); font-size: 0.72rem; }
 .motion-training-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-height: 0; flex: 0 0 auto; }
 .motion-training-preview-panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 .motion-training-preview-label { color: var(--comment); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
@@ -477,6 +510,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
     .motion-training-pattern-list { max-height: min(18rem, 34vh); }
     .motion-training-detail-pane { overflow: visible; }
+    .motion-studio-actions, .motion-studio-entry-actions { grid-template-columns: repeat(2, minmax(118px, 1fr)); }
     .motion-training-preview-wrap { height: clamp(240px, 36vh, 360px); }
 }
 
@@ -517,9 +551,11 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-training-box { width: 100%; height: calc(100vh - 16px); max-height: calc(100vh - 16px); }
     .about-wallet-grid { grid-template-columns: 1fr; }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
-    .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row { grid-template-columns: 1fr; }
+    .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row, .motion-studio-actions, .motion-studio-entry-actions, .motion-studio-timeline-controls, .motion-studio-crop-fields { grid-template-columns: 1fr; }
     .motion-training-timing-control { grid-template-columns: minmax(0, 1fr) 38px 38px; }
-    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button { width: 100%; }
+    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button, .motion-studio-actions .my-button, .motion-studio-entry-actions .my-button, .motion-studio-timeline-controls .my-button, .motion-studio-crop-fields .my-button { width: 100%; }
+    .motion-studio-crop-header { flex-direction: column; gap: 4px; }
+    .motion-studio-crop-header span:last-child { text-align: left; }
     .motion-backend-stack { justify-content: flex-start; max-width: none; }
     .motion-training-preview-wrap { height: 260px; min-height: 220px; }
 }

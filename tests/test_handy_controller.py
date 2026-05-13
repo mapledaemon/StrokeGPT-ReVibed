@@ -91,6 +91,17 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual([path for path, _body in handy.commands].count("slide"), 2)
         self.assertEqual([path for path, _body in handy.commands].count("hamp/velocity"), 2)
 
+    def test_stop_switches_from_hdsp_to_hamp_before_stopping(self):
+        handy = RecordingHandyController()
+        handy.move_to_depth(50, 70)
+        handy.commands.clear()
+
+        handy.stop()
+
+        self.assertEqual([path for path, _body in handy.commands], ["mode", "hamp/stop"])
+        self.assertEqual(handy.commands[0][1], {"mode": 0})
+        self.assertEqual(handy.diagnostics()["mode"], 0)
+
     def test_diagnostics_report_cached_motion_state(self):
         handy = RecordingHandyController()
 
@@ -205,12 +216,14 @@ class HandyControllerTests(unittest.TestCase):
         result = handy.move_to_depth(50, 25)
 
         self.assertTrue(result)
-        self.assertEqual([path for path, _body in handy.commands], ["hdsp/xava"])
-        body = handy.commands[0][1]
+        self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava"])
+        self.assertEqual(handy.commands[0][1], {"mode": 2})
+        body = handy.commands[1][1]
         self.assertEqual(body["velocity"], 50)
         self.assertAlmostEqual(body["position"], handy.FULL_TRAVEL_MM * 0.3)
         self.assertTrue(body["stopOnTarget"])
         self.assertEqual(handy.last_stroke_range, 50)
+        self.assertEqual(handy.diagnostics()["mode"], 2)
 
     def test_move_to_depth_can_keep_intermediate_targets_moving(self):
         handy = RecordingHandyController()
@@ -218,9 +231,17 @@ class HandyControllerTests(unittest.TestCase):
 
         handy.move_to_depth(50, 75, stop_on_target=False, velocity=18)
 
-        body = handy.commands[0][1]
+        body = handy.commands[-1][1]
         self.assertEqual(body["velocity"], 18)
         self.assertFalse(body["stopOnTarget"])
+
+    def test_move_to_depth_reuses_hdsp_mode_for_position_stream(self):
+        handy = RecordingHandyController()
+
+        handy.move_to_depth(40, 25)
+        handy.move_to_depth(60, 75)
+
+        self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
     def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
         handy = RecordingHandyController()
@@ -247,7 +268,8 @@ class HandyControllerTests(unittest.TestCase):
 
         handy.move_to_depth(40, 20)
 
-        self.assertEqual([path for path, _body in handy.commands], ["hamp/stop", "hdsp/xava"])
+        self.assertEqual([path for path, _body in handy.commands], ["hamp/stop", "mode", "hdsp/xava"])
+        self.assertEqual(handy.commands[1][1], {"mode": 2})
         self.assertFalse(handy._hamp_started)
 
     def test_depth_range_runs_low_high_low_once(self):
@@ -256,6 +278,7 @@ class HandyControllerTests(unittest.TestCase):
         result = handy.test_depth_range(80, 20, velocity_mm_per_sec=1000, pause_seconds=0)
 
         self.assertEqual(result, {"min_depth": 20, "max_depth": 80})
+        self.assertEqual(handy.commands[0], ("mode", {"mode": 2}))
         positions = [body["position"] for path, body in handy.commands if path == "hdsp/xava"]
         self.assertEqual(len(positions), 3)
         self.assertEqual(positions[0], handy.FULL_TRAVEL_MM * 0.2)

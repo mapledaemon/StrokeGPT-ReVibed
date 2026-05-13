@@ -92,6 +92,9 @@ describe('motion/audio save feedback', () => {
         state.motionTrainingOriginalPattern = null;
         state.motionTrainingEditedPattern = null;
         state.motionTrainingDirty = false;
+        state.motionStudioSourcePattern = null;
+        state.motionStudioCropStartMs = 0;
+        state.motionStudioCropEndMs = 0;
     });
 
     afterEach(() => {
@@ -247,6 +250,45 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('status-text');
         assert.strictEqual(status.textContent, 'Generated pattern was rejected.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('play crop previews the current import crop without saving it first', async () => {
+        let requestBody = null;
+        globalThis.fetch = async (_url, options = {}) => {
+            requestBody = JSON.parse(options.body);
+            return jsonResponse(200, {
+                status: 'started',
+                motion_training: {
+                    state: 'starting',
+                    pattern_id: 'imported-wave 0.5-1.5s crop-preview',
+                    pattern_name: 'Imported Wave 0.5-1.5s crop',
+                    message: 'Crop preview started.',
+                    preview: true,
+                },
+            });
+        };
+        state.motionStudioSourcePattern = {
+            id: 'imported-wave',
+            name: 'Imported Wave',
+            actions: [
+                { at: 0, pos: 0 },
+                { at: 1000, pos: 100 },
+                { at: 2000, pos: 0 },
+            ],
+        };
+        state.motionStudioCropStartMs = 500;
+        state.motionStudioCropEndMs = 1500;
+
+        getStubElement('motion-studio-play-crop-btn').click();
+        await flushAsyncHandlers();
+
+        assert.strictEqual(requestBody.pattern.name, 'Imported Wave 0.5-1.5s crop');
+        assert.deepStrictEqual(requestBody.pattern.actions.map(action => action.at), [0, 500, 1000]);
+        assert.strictEqual(state.motionTraining.preview, true);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Crop preview started.');
+        state.motionStudioSourcePattern = null;
+        state.motionStudioCropStartMs = 0;
+        state.motionStudioCropEndMs = 0;
     });
 
     it('likeLastMove surfaces the backend message on global status', async () => {

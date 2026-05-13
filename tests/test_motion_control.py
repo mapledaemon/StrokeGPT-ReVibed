@@ -682,6 +682,52 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(snapshot["source"], "pattern preview")
         self.assertEqual(snapshot["trace"][-1]["label"], "preview stopped")
 
+    def test_timed_position_frames_preserve_split_segment_delay(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.25)
+        frames = [
+            SimpleNamespace(
+                target=MotionTarget(90, 90, 10, "fast timed segment"),
+                delay_factor=0.4,
+                phase="timed-pattern",
+            ),
+        ]
+
+        playback_frames = controller._position_playback_frames(frames)
+
+        self.assertGreater(len(playback_frames), 1)
+        self.assertAlmostEqual(sum(frame.delay_factor for frame in playback_frames), 0.4)
+        self.assertEqual(playback_frames[-1].phase, "timed-pattern")
+        self.assertTrue(all(frame.phase in {"timed-blend", "timed-pattern"} for frame in playback_frames))
+
+    def test_apply_position_frames_keeps_timed_speed_variation_after_splitting(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.25)
+        frames = [
+            SimpleNamespace(
+                target=MotionTarget(90, 90, 10, "fast timed segment"),
+                delay_factor=0.4,
+                phase="timed-pattern",
+            ),
+            SimpleNamespace(
+                target=MotionTarget(24, 20, 10, "slow timed segment"),
+                delay_factor=3.2,
+                phase="timed-pattern",
+            ),
+        ]
+
+        completed = controller.apply_position_frames(
+            frames,
+            stop_after=False,
+            final_stop_on_target=False,
+        )
+
+        self.assertTrue(completed)
+        durations = [interval[3] for interval in handy.velocity_intervals]
+        velocities = [move[3] for move in handy.position_moves if move[3] is not None]
+        self.assertGreater(max(durations), min(durations) * 4)
+        self.assertGreater(max(velocities), min(velocities) * 2)
+
     def test_apply_position_frames_softens_direction_reversals(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)

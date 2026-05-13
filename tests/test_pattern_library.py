@@ -448,6 +448,38 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertTrue(calls[0]["stop_after"])
         self.assertEqual(tuple(Path(self.temp_dir.name).iterdir()), ())
 
+    def test_training_preview_preserves_unsaved_pattern_timing(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+        self.web.handy.last_relative_speed = 35
+        self.web.handy.last_depth_pos = 50
+        self.web.handy.last_stroke_range = 80
+
+        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
+            calls.append({"frames": frames, "stop_after": stop_after})
+            if stop_after:
+                self.web.motion.stop()
+            return True
+
+        self.web.motion.apply_position_frames = fake_apply_position_frames
+        response = self.client.post("/motion_training/preview", json={
+            "pattern": {
+                "id": "timed-preview",
+                "name": "Timed Preview",
+                "actions": [{"at": 0, "pos": 50}, {"at": 100, "pos": 95}, {"at": 900, "pos": 100}],
+            }
+        })
+
+        self.assertEqual(response.status_code, 200)
+        for _ in range(10):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        pattern_frames = [frame for frame in calls[0]["frames"] if frame.phase == "timed-pattern"]
+        self.assertEqual([round(frame.delay_factor, 2) for frame in pattern_frames], [0.0, 0.4, 3.2])
+        self.assertGreater(pattern_frames[1].target.speed, pattern_frames[2].target.speed)
+
     def test_save_generated_pattern_writes_trained_pattern_file(self):
         response = self.client.post("/motion_patterns/save_generated", json={
             "pattern": {

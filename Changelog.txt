@@ -8,6 +8,35 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #182 - Motion Pattern Studio
+---------------------------------------------
+
+Branch: codex-motion-pattern-studio
+
+- Retitled the Motion Training workspace to Motion Pattern Studio and added
+  separate library-side entry points for importing/cropping a funscript or
+  starting a new drawn pattern.
+- Added a video-editor-style import crop timeline with a source graph strip,
+  shaded selected range, draggable start/end trim handles, and precise second
+  fields before loading the crop as an unsaved pattern.
+- Made the import crop timeline zoomable with fit/step controls, a pan window
+  slider, and speed-based intensity coloring for dense funscript motion.
+- Added a Handy-backed Play Crop action so the currently selected import slice
+  can be previewed before loading it as the unsaved crop.
+- Preserved imported/trained pattern timestamps during training preview and
+  playback so funscript crops vary speed from their action timing instead of
+  using the built-in pattern cadence.
+- Restored the Handy HDSP mode switch before position-stream commands and kept
+  timing-preserving safety splits from flattening fast/slow crop segments.
+- Added freehand drawing on the edited graph for creating a new temporary
+  pattern, plus clear/toggle controls that keep the saved pattern workflow
+  unchanged until the user explicitly saves.
+- Kept the creation/import panel hidden while browsing saved library patterns
+  so per-pattern editing does not show funscript import controls.
+- Added JavaScript helper coverage for funscript import, crop interpolation,
+  dense-action capping, and blank drawn-pattern creation.
+
+
 2026-05-13 - PR #181 - Handy Connection Panel
 ---------------------------------------------
 

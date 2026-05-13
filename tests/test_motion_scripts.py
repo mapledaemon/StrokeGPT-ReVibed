@@ -494,6 +494,46 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertLess(sum(frame.delay_factor for frame in faster_frames), normal_delay)
         self.assertGreater(sum(frame.delay_factor for frame in slower_frames), normal_delay)
 
+    def test_timing_preserving_motion_pattern_uses_action_intervals(self):
+        actions = (
+            PatternAction(0, 50),
+            PatternAction(100, 95),
+            PatternAction(900, 100),
+        )
+        target = MotionTarget(35, 50, 80, "timed import")
+
+        frames = expand_motion_pattern(
+            MotionPattern("timed", actions, tempo_scale=1.0),
+            MotionTarget(35, 50, 80),
+            target,
+            rng=random.Random(17),
+            preserve_timing=True,
+            base_step_seconds=0.25,
+        )
+        pattern_frames = [frame for frame in frames if frame.phase == "timed-pattern"]
+
+        self.assertEqual([round(frame.delay_factor, 2) for frame in pattern_frames], [0.0, 0.4, 3.2])
+        self.assertGreater(pattern_frames[1].target.speed, pattern_frames[2].target.speed)
+
+    def test_normal_motion_pattern_keeps_existing_normalized_cadence(self):
+        actions = (
+            PatternAction(0, 50),
+            PatternAction(100, 95),
+            PatternAction(900, 100),
+        )
+        target = MotionTarget(35, 50, 80, "normalized")
+
+        frames = expand_motion_pattern(
+            MotionPattern("normalized", actions, tempo_scale=1.0),
+            MotionTarget(35, 50, 80),
+            target,
+            rng=random.Random(18),
+        )
+        pattern_frames = [frame for frame in frames if frame.phase == "pattern"]
+
+        self.assertEqual([round(frame.delay_factor, 2) for frame in pattern_frames], [0.4, 0.33, 1.1])
+        self.assertTrue(all(round(frame.target.speed) == 35 for frame in pattern_frames))
+
     def test_pattern_action_normalizer_sorts_dedupes_and_preserves_endpoint(self):
         actions = normalize_actions(
             (

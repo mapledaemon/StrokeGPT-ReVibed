@@ -359,10 +359,6 @@ build on the current surface without crowding Settings.
 - Add transform history with per-step undo/redo.
 - Add remaining pattern transforms: repeat a stroke shape, simplify noisy
   points, mirror timing, and apply subtle randomized variation.
-- Add a funscript import workflow that graphs the source actions before
-  saving and lets users cut the timeline down to the useful section so
-  imported patterns do not keep unwanted video-synchronization lead-in,
-  dead space, or unrelated motion.
 - Add pattern sequencing: alternate multiple patterns in order with small
   blends between segments to avoid stutter.
 - Keep compact Motion settings limited to management: enablement, weights,

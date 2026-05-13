@@ -2,6 +2,9 @@ import sys
 import time
 import requests
 
+MODE_HAMP = 0
+MODE_HDSP = 2
+
 class HandyController:
     def __init__(self, handy_key="", base_url="https://www.handyfeeling.com/api/handy/v2/"):
         self.handy_key = handy_key
@@ -163,16 +166,29 @@ class HandyController:
             }
 
     def _ensure_hamp(self):
-        if self._current_mode != 0:
-            if not self._send_command("mode", {"mode": 0}):
+        if self._current_mode != MODE_HAMP:
+            if not self._send_command("mode", {"mode": MODE_HAMP}):
                 return False
-            self._current_mode = 0
+            self._current_mode = MODE_HAMP
             self._hamp_started = False
             self._reset_motion_cache()
         if not self._hamp_started:
             if not self._send_command("hamp/start"):
                 return False
             self._hamp_started = True
+        return True
+
+    def _ensure_hdsp(self):
+        if self._hamp_started:
+            if not self._send_command("hamp/stop"):
+                return False
+            self._hamp_started = False
+            self._reset_motion_cache()
+        if self._current_mode != MODE_HDSP:
+            if not self._send_command("mode", {"mode": MODE_HDSP}):
+                return False
+            self._current_mode = MODE_HDSP
+            self._reset_motion_cache()
         return True
 
     def _safe_percent(self, p):
@@ -291,11 +307,8 @@ class HandyController:
             print("[WARN] Incomplete position move received, ignoring.")
             return False
 
-        if self._hamp_started:
-            if not self._send_command("hamp/stop"):
-                return False
-            self._hamp_started = False
-            self._reset_motion_cache()
+        if not self._ensure_hdsp():
+            return False
 
         relative_speed_pct = self._safe_percent(speed)
         relative_pos_pct = self._safe_percent(depth)
@@ -311,7 +324,7 @@ class HandyController:
         if not self._send_command("hdsp/xava", body):
             return False
 
-        self._current_mode = None
+        self._current_mode = MODE_HDSP
         self.last_stroke_speed = velocity
         self.last_relative_speed = relative_speed_pct
         self.last_depth_pos = int(round(relative_pos_pct))
@@ -345,6 +358,9 @@ class HandyController:
 
     def stop(self):
         """Stops all movement."""
+        if self._current_mode != MODE_HAMP:
+            if self._send_command("mode", {"mode": MODE_HAMP}):
+                self._current_mode = MODE_HAMP
         stopped = self._send_command("hamp/stop")
         self.last_stroke_speed = 0
         self.last_relative_speed = 0
@@ -407,7 +423,9 @@ class HandyController:
             target_mm = min(current_pos_mm + JOG_STEP_MM, max_mm)
         elif direction == 'down':
             target_mm = max(current_pos_mm - JOG_STEP_MM, min_mm)
-        
+
+        if not self._ensure_hdsp():
+            return current_pos_mm
         self._send_command(
             "hdsp/xava",
             {"position": target_mm, "velocity": JOG_VELOCITY_MM_PER_SEC, "stopOnTarget": True},
@@ -421,6 +439,9 @@ class HandyController:
         low_mm = self.FULL_TRAVEL_MM * low_pct / 100.0
         high_mm = self.FULL_TRAVEL_MM * high_pct / 100.0
         velocity = max(5.0, float(velocity_mm_per_sec))
+
+        if not self._ensure_hdsp():
+            return {"min_depth": int(round(low_pct)), "max_depth": int(round(high_pct))}
 
         for position in (low_mm, high_mm, low_mm):
             self._send_command(
