@@ -79,6 +79,10 @@ describe('Handy visualizer tracking', () => {
             'motion-depth-meter-value',
             'motion-sequence-indicator',
             'motion-diagnostics-panel',
+            'handy-key-status',
+            'sidebar-handy-key-status',
+            'handy-key-input',
+            'sidebar-handy-key-input',
             'active-mode-status',
             'active-mode-label',
             'edging-timer',
@@ -87,6 +91,7 @@ describe('Handy visualizer tracking', () => {
         ].forEach(resetStubElement);
         state.motionDiagnosticsLevel = 'compact';
         state.motionObservability = null;
+        state.myHandyKey = '';
         state.activeModeName = '';
         state.activeModeElapsedSeconds = null;
         state.connectionLost = false;
@@ -201,5 +206,45 @@ describe('Handy visualizer tracking', () => {
         assert.equal(range.style.top, '8%');
         assert.equal(range.style.height, '84%');
         assert.notEqual(getStubElement('handy-cylinder-position').style.top, '50%');
+    });
+
+    it('mirrors Handy connection status below the visualizer', () => {
+        state.myHandyKey = 'saved-key';
+
+        updateMotionObservability({
+            backend: 'continuous',
+            diagnostics: {
+                relative_speed: 0,
+                depth: 50,
+                last_command: {
+                    path: 'hdsp/xava',
+                    ok: false,
+                    status_code: 503,
+                    error: 'device offline',
+                },
+            },
+        });
+
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Error');
+        assert.equal(getStubElement('handy-key-status').textContent, 'Error');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--yellow)');
+        assert.equal(getStubElement('sidebar-handy-key-status').title, 'Handy hdsp/xava 503 failed: device offline');
+
+        updateMotionObservability({
+            backend: 'continuous',
+            diagnostics: {
+                relative_speed: 0,
+                depth: 50,
+                last_command: {
+                    path: 'hamp/velocity',
+                    ok: true,
+                    status_code: 204,
+                },
+            },
+        });
+
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Connected');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
+        assert.equal(getStubElement('sidebar-handy-key-status').title, 'Handy hamp/velocity OK.');
     });
 });

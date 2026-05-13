@@ -243,4 +243,11 @@ def set_handy_key_route():
     web.handy.set_api_key(key)
     web.settings.handy_key = key
     web.settings.save()
-    return jsonify({"status": "success"})
+    connection = web.handy.check_connection()
+    return jsonify({
+        "status": "success",
+        "connected": bool(connection.get("connected")),
+        "connection_status": connection.get("status", "error"),
+        "message": connection.get("message", "Handy connection check completed."),
+        "connection": connection,
+    })

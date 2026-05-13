@@ -1,6 +1,6 @@
 import { D, apiCall, el, state } from './context.js';
 import { populateAudioSettings, populateLocalEngineOptions, populateLocalStyleOptions, updateAudioProviderUi, updateLocalTtsStatus } from './audio.js';
-import { populateDeviceSettings } from './device-control.js';
+import { applyHandyConnectionResult, markHandyConnectionKeySaved, populateDeviceSettings } from './device-control.js';
 import { populateMotionSettings } from './motion-control.js';
 import { populateVoiceInputSettings } from './voice-input.js';
 import {
@@ -53,14 +53,16 @@ export function renderSetup(isReturningUser = false, data = {}) {
                 const key = D.getElementById('setup-key').value.trim();
                 if (!key) return;
                 state.myHandyKey = key;
-                await apiCall('/set_handy_key', {
+                const res = await apiCall('/set_handy_key', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({key: state.myHandyKey}),
                 });
-                el.handyKeyInput.value = state.myHandyKey;
-                el.handyKeyStatus.textContent = 'Connection key saved.';
-                el.handyKeyStatus.style.color = 'var(--cyan)';
+                if (res && res.status === 'success') {
+                    applyHandyConnectionResult(state.myHandyKey, res);
+                } else {
+                    markHandyConnectionKeySaved(state.myHandyKey);
+                }
                 step = 2;
                 displayStep();
             };

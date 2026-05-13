@@ -258,7 +258,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   only show partial CPU/GPU fallback when Ollama reports an explicit processor
   split. Deleting a built-in default should hide that option in settings
   instead of forcing it back on the next save. Do not hide large model
-  downloads in startup code.
+  downloads in startup code. The default Ollama model catalog is intentionally
+  duplicated in `strokegpt/settings.py` (`DEFAULT_OLLAMA_MODEL_OPTIONS`) and
+  `scripts/install_windows.ps1` (`$DefaultOllamaModelChoices`) because the
+  installer must run before importing the app. Update both surfaces, plus the
+  README and installer/model tests, whenever changing the default options.
 - Saved settings should stay centralized in `SettingsManager.to_dict()` and `default_settings_dict()` so reset, migration, and future portability work use one schema.
 - Before pushing a PR, provide a local PowerShell validation script for the
   user to run, include a final app launch step for manual browser/device
@@ -325,8 +329,10 @@ code mutates, write a behavioral test instead.
 Behavioral tests live under `tests/js/` as `*.test.mjs` files and run
 through Node's stdlib `node:test` runner. No `package.json`, no
 `node_modules`, no `npm install`. The runner is invoked from
-`tests/test_frontend_runtime.py`, which subprocesses
-`node --import ./tests/js/_harness.mjs --test ./tests/js`.
+`tests/test_frontend_runtime.py`, which preloads `tests/js/_harness.mjs`
+and passes each `*.test.mjs` file explicitly; do not pass the `tests/js`
+directory directly because Node 24 rejects directory arguments for ESM test
+resolution.
 
 `tests/js/_harness.mjs` installs a small DOM stub on `globalThis` so
 production modules can evaluate without a browser (`context.js` touches

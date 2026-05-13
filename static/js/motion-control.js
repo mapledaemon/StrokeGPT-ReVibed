@@ -33,6 +33,7 @@ import {
     renderMotionFeedbackHistory,
     saveMotionFeedbackOptions,
 } from './motion/feedback-controls.js';
+import { updateHandyConnectionStatusFromMotion } from './device-control.js';
 import {
     drawMotionTrainingPreview,
     drawOpenMotionTrainingPreview,
@@ -863,6 +864,7 @@ export function updateMotionObservability(payload = {}) {
     updateMotionSequenceIndicator(payload);
     updateMotionDiagnosticsPanel(payload);
     updateHandyCylinder(payload);
+    updateHandyConnectionStatusFromMotion(payload);
 }
 
 function startHandyCylinderAnimation() {

@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #181 - Handy Connection Panel
+---------------------------------------------
+
+Branch: codex-handy-connection-panel
+
+- Added a compact Handy connection panel below the sidebar visualizer so the
+  connection key and latest Handy command status remain visible without opening
+  Settings.
+- Changed the Handy key action to `Connect`, and made it run an immediate
+  non-motion Handy connection probe instead of only saving the key locally.
+- Reduced the connection tile to explicit `Connected`, `Disconnected`, and
+  `Error` states with green, red, and yellow status colors.
+- Kept the sidebar and Settings > Device Handy key fields synchronized through
+  the existing `/set_handy_key` save path.
+- Documented the duplicated default Ollama model catalog maintenance point in
+  `AGENTS.md`, and clarified the portable Node 24 frontend test invocation.
+
+
 2026-05-13 - PR #180 - Model Selector Spacing
 ---------------------------------------------
 

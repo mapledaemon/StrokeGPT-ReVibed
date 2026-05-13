@@ -50,6 +50,37 @@ class WebSettingsRouteTests(WebTestCase):
                 finally:
                     response.close()
 
+    def test_set_handy_key_saves_and_checks_connection(self):
+        from strokegpt.web import handy, settings
+
+        original_key = settings.handy_key
+        original_runtime_key = handy.handy_key
+        connection_payload = {
+            "status": "connected",
+            "connected": True,
+            "message": "Connected to Handy.",
+            "last_command": {"path": "slide/position/absolute", "ok": True, "status_code": 200},
+        }
+        try:
+            with mock.patch.object(settings, "save") as save, \
+                    mock.patch.object(handy, "check_connection", return_value=connection_payload) as check:
+                response = self.client.post("/set_handy_key", json={"key": "probe-key"})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["connected"])
+            self.assertEqual(data["connection_status"], "connected")
+            self.assertEqual(data["message"], "Connected to Handy.")
+            self.assertEqual(data["connection"], connection_payload)
+            self.assertEqual(settings.handy_key, "probe-key")
+            self.assertEqual(handy.handy_key, "probe-key")
+            save.assert_called_once()
+            check.assert_called_once()
+        finally:
+            settings.handy_key = original_key
+            handy.set_api_key(original_runtime_key)
+
     def test_numeric_routes_fall_back_on_invalid_values(self):
         from strokegpt.web import handy, settings
 

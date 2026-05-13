@@ -89,6 +89,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "download-local-tts-model-button",
             "test-local-tts-button",
             "save-handy-key-btn",
+            "sidebar-handy-key-input",
+            "sidebar-save-handy-key-btn",
             "motion-depth-min-slider",
             "motion-depth-max-slider",
             "test-motion-depth-range",
