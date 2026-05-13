@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from collections import deque
 import requests
 
 MODE_HAMP = 0
@@ -8,6 +9,8 @@ MODE_HDSP = 2
 MODE_HSP = 4
 HANDY_API_V2_BASE_URL = "https://www.handyfeeling.com/api/handy/v2/"
 HANDY_API_V3_BASE_URL = "https://www.handyfeeling.com/api/handy-rest/v3/"
+HANDY_COMMAND_HISTORY_LIMIT = 60
+HANDY_COMMAND_POINTS_PREVIEW = 12
 
 class HandyController:
     def __init__(
@@ -44,6 +47,7 @@ class HandyController:
         self._last_v3_stroke_bounds = None
         self._last_velocity = None
         self._last_command_result = None
+        self._command_history = deque(maxlen=HANDY_COMMAND_HISTORY_LIMIT)
         self._api_v3_auth_failed = False
 
     def _normalize_base_url(self, value):
@@ -101,6 +105,19 @@ class HandyController:
         self._last_v3_stroke_bounds = None
         self._last_velocity = None
 
+    def _safe_points_preview(self, points):
+        preview = []
+        for point in points[:HANDY_COMMAND_POINTS_PREVIEW]:
+            if not isinstance(point, dict):
+                continue
+            safe_point = {}
+            for key in ("t", "x", "at", "pos"):
+                if key in point:
+                    safe_point[key] = point[key]
+            if safe_point:
+                preview.append(safe_point)
+        return preview
+
     def _safe_command_body(self, body):
         if not isinstance(body, dict):
             return {}
@@ -135,11 +152,17 @@ class HandyController:
                 result[key] = body[key]
         if "points" in body and isinstance(body["points"], list):
             result["points"] = len(body["points"])
+            result["points_preview"] = self._safe_points_preview(body["points"])
+            if len(body["points"]) > HANDY_COMMAND_POINTS_PREVIEW:
+                result["points_truncated"] = True
         if "add" in body and isinstance(body["add"], dict):
             add = body["add"]
             safe_add = {}
             if "points" in add and isinstance(add["points"], list):
                 safe_add["points"] = len(add["points"])
+                safe_add["points_preview"] = self._safe_points_preview(add["points"])
+                if len(add["points"]) > HANDY_COMMAND_POINTS_PREVIEW:
+                    safe_add["points_truncated"] = True
             for key in ("flush", "tail_point_stream_index", "tail_point_threshold"):
                 if key in add:
                     safe_add[key] = add[key]
@@ -168,9 +191,13 @@ class HandyController:
         if error:
             result["error"] = str(error)[:180]
         self._last_command_result = result
+        self._command_history.append(result)
 
     def last_command_result(self):
         return dict(self._last_command_result) if self._last_command_result else None
+
+    def command_history(self):
+        return [dict(command) for command in self._command_history]
 
     def _send_command(self, path, body=None):
         if not self.handy_key:
@@ -517,7 +544,7 @@ class HandyController:
                     duration_ms = self.duration_ms_for_depth_interval(velocity, self.last_depth_pos, relative_pos_pct)
                 duration_ms = max(1, duration_ms)
             body = {
-                "xp": round(relative_pos_pct / 100.0, 4),
+                "xp": round(relative_pos_pct, 3),
                 "t": duration_ms,
                 "stop_on_target": bool(stop_on_target),
                 "immediate_rsp": False,
@@ -779,6 +806,7 @@ class HandyController:
             "api_v3_enabled": self.supports_api_v3_control(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),
             "last_command": self.last_command_result(),
+            "command_history": self.command_history(),
         }
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):

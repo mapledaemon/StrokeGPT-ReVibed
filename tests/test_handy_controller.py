@@ -135,6 +135,10 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["last_command"]["path"], "hamp/velocity")
         self.assertTrue(diagnostics["last_command"]["ok"])
         self.assertEqual(diagnostics["last_command"]["status_code"], 204)
+        self.assertEqual(
+            [command["path"] for command in diagnostics["command_history"]],
+            ["mode", "hamp/start", "slide", "hamp/velocity"],
+        )
 
     def test_send_command_records_success_without_secret_headers(self):
         handy = HandyController(handy_key="secret")
@@ -327,7 +331,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.v3_commands[2][1], {"min": 0.38, "max": 0.78})
         self.assertEqual(handy.v3_commands[3][1], {"velocity": 0.4})
 
-    def test_fw4_position_move_uses_xpt_duration_from_speed_limits(self):
+    def test_fw4_position_move_uses_xpt_percent_and_duration_from_speed_limits(self):
         handy = RecordingV3HandyController()
         handy.update_settings(10, 70, 0, 100)
         handy.last_depth_pos = 25
@@ -338,7 +342,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.commands, [])
         self.assertEqual(handy.v3_commands[0][1], {"mode": 2})
         body = handy.v3_commands[-1][1]
-        self.assertEqual(body["xp"], 0.75)
+        self.assertEqual(body["xp"], 75)
         self.assertEqual(body["t"], 1375)
         self.assertTrue(body["stop_on_target"])
         self.assertFalse(body["immediate_rsp"])
@@ -383,6 +387,26 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
         self.assertEqual(handy.diagnostics()["depth"], 100)
+
+    def test_diagnostics_include_hsp_point_preview_without_secret_values(self):
+        handy = RecordingV3HandyController()
+
+        handy.start_continuous_stream(
+            [{"t": index * 80, "x": index, "intent_speed": 30, "range": 80} for index in range(16)],
+            tail_point_stream_index=16,
+            tail_point_threshold=14,
+        )
+
+        diagnostics = handy.diagnostics()
+        history = diagnostics["command_history"]
+        add_command = next(command for command in history if command["path"] == "hsp/add")
+        body = add_command["body"]
+        self.assertEqual(body["points"], 16)
+        self.assertEqual(len(body["points_preview"]), 12)
+        self.assertEqual(body["points_preview"][0], {"t": 0, "x": 0})
+        self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 11})
+        self.assertTrue(body["points_truncated"])
+        self.assertNotIn("test", str(diagnostics))
 
     def test_append_continuous_stream_adds_points_without_flush(self):
         handy = RecordingV3HandyController()
