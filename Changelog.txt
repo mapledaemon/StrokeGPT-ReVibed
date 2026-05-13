@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #176 - Windows Winget Output Fix
+------------------------------------------------
+
+Branch: codex/windows-winget-output-fix
+
+- Fixed the Windows installer path where winget's Python install progress was
+  captured as part of the selected Python command after a fresh Python install,
+  causing virtual environment creation to fail with an invalid `& $exe` target.
+- Kept winget progress visible in the console while storing its exit code
+  explicitly, and applied the same output handling to the Ollama winget install
+  path.
+
+
 2026-05-13 - PR #175 - CosyVoice Provider Roadmap
 -------------------------------------------------
 

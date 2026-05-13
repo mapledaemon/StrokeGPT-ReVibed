@@ -251,8 +251,9 @@ function Install-PythonIfRequested {
     }
 
     Write-Host "Installing Python 3.11 with winget..."
-    & winget install --id $PythonWingetId -e --source winget
-    if ($LASTEXITCODE -ne 0) {
+    & winget install --id $PythonWingetId -e --source winget | Out-Host
+    $pythonInstallExitCode = $LASTEXITCODE
+    if ($pythonInstallExitCode -ne 0) {
         throw "Python install failed."
     }
 
@@ -423,8 +424,9 @@ function Install-OllamaIfRequested {
     }
 
     Write-Host "Installing Ollama with winget..."
-    & winget install --id Ollama.Ollama -e --source winget
-    if ($LASTEXITCODE -ne 0) {
+    & winget install --id Ollama.Ollama -e --source winget | Out-Host
+    $ollamaInstallExitCode = $LASTEXITCODE
+    if ($ollamaInstallExitCode -ne 0) {
         throw "Ollama install failed."
     }
     Refresh-PathFromRegistry
