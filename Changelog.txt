@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #175 - CosyVoice Provider Roadmap
+-------------------------------------------------
+
+Branch: codex/cosyvoice-roadmap
+
+- Added roadmap criteria for evaluating local voice-cloning TTS replacements
+  against Chatterbox Turbo before changing the recommended local provider.
+- Documented CosyVoice as a poor default choice unless it can install and run
+  cleanly on Windows without making Docker, WSL, or Linux-only Triton/TensorRT
+  deployment the normal path.
+
+
 2026-05-13 - PR #174 - Python Compatibility Roadmap
 ---------------------------------------------------
 
