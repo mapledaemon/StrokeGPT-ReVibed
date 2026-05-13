@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #187 - Fix Handy V3 Position Schema Diagnostics
+----------------------------------------------------------------
+
+Branch: codex-handy-v3-schema-diagnostics
+
+- Corrected the firmware v4 HDSP `xpt` request body so `xp` is sent as the
+  documented percent position (`0..100`) instead of a normalized `0..1`
+  fraction. This targets an actual outgoing Handy command-schema mismatch
+  instead of another speculative continuous-sampler rewrite.
+- Added a sanitized recent Handy command history to diagnostics, including
+  bounded HSP point previews, so real-device checks can compare what the app
+  sent through HAMP, HDSP, and HSP before changing planner or sampler math
+  again.
+- Documented the v3 unit split in the shared handoff: HDSP `xpt.xp` is
+  percent-position, while HAMP and slider stroke settings remain normalized.
+
+
 2026-05-13 - PR #186 - Fix Firmware V4 Handy Control Schema
 ------------------------------------------------------------
 
