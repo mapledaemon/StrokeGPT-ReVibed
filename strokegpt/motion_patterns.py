@@ -637,6 +637,7 @@ def _motion_target_for_sample(
     *,
     label: str,
     jitter_phase: float = 0.0,
+    position_per_second: Optional[float] = None,
 ) -> MotionTarget:
     """Project the sampled normalized position onto the live target window.
 
@@ -653,6 +654,16 @@ def _motion_target_for_sample(
 
     Both perturbations are no-ops when the relevant jitter amount is
     zero or negative, so patterns that opt out of jitter cost nothing.
+
+    When ``position_per_second`` is provided (the per-sample tangent of
+    the pattern's normalized position, sampled at the pattern's own
+    cycle dt), the speed is boosted to reflect the pattern's intrinsic
+    rate of change. Slow segments fall back to the LLM-supplied base
+    speed; fast segments lift above it so the device feels a difference
+    between a slow hold and a quick climb. This mirrors the
+    ``preserve_timing`` segment-speed boost that
+    ``_actions_to_frames`` applies for studio-imported patterns. Pass
+    ``None`` to opt out and keep the constant base speed.
     """
     target = target.clamped()
     half_range = target.stroke_range / 2.0
@@ -672,8 +683,14 @@ def _motion_target_for_sample(
     depth = depth + depth_offset
     local_range = max(5.0, local_range + range_offset)
 
+    base_speed = target.speed * style.speed_scale
+    speed = base_speed
+    if position_per_second is not None and position_per_second > 0:
+        segment_speed = _clamp((float(position_per_second) / 160.0) * 100.0, 8.0, 100.0)
+        speed = max(base_speed, segment_speed * style.speed_scale)
+
     return MotionTarget(
-        speed=target.speed * style.speed_scale,
+        speed=speed,
         depth=depth,
         stroke_range=local_range,
         label=label,
@@ -768,6 +785,16 @@ def continuous_anchor_motion_plan(
 JITTER_CYCLE_SECONDS = 5.0
 
 
+# Phase-relative tangent window used when computing the per-sample
+# position rate of change for ``_motion_target_for_sample``. Long enough
+# to average over Catmull-Rom curvature so the derivative reflects the
+# pattern's authored rhythm rather than tiny sample-to-sample wobble;
+# short enough that an asymmetric pattern's fast/slow segments still
+# show through. Stays in seconds so per-cycle phase delta scales with
+# the plan's own ``duration_seconds``.
+SAMPLE_DERIVATIVE_DT_SECONDS = 0.04
+
+
 def sample_continuous_plan(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
@@ -781,11 +808,23 @@ def sample_continuous_plan(
     style declares any) ride on a slow ``JITTER_CYCLE_SECONDS`` cycle
     independent of the pattern cycle, so jitter does not synchronize
     with the stroke -- the result feels organic rather than periodic.
+
+    A short-window position derivative (``SAMPLE_DERIVATIVE_DT_SECONDS``)
+    is computed from the same cyclic Catmull-Rom sampler and forwarded
+    to ``_motion_target_for_sample`` so the per-sample speed reflects
+    the pattern's intrinsic rate of change. Without this hook the
+    continuous backend would send a constant ``target.speed`` across
+    the whole cycle and on-device motion would feel like only the
+    position pattern varies (Motion Speed Per-Sample Variability,
+    ROADMAP Up Next #1 follow-up).
     """
     elapsed = max(0.0, float(elapsed_seconds or 0.0))
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     phase = (elapsed / duration_seconds) % 1.0
     pos = _sample_action_position(plan.actions, phase)
+    next_phase = (phase + SAMPLE_DERIVATIVE_DT_SECONDS / duration_seconds) % 1.0
+    next_pos = _sample_action_position(plan.actions, next_phase)
+    position_per_second = abs(next_pos - pos) / SAMPLE_DERIVATIVE_DT_SECONDS
     base_label = str(target.label or plan.name or "pattern").strip()
     style_label = str(plan.name or "").strip()
     if style_label and _clean_label(style_label) not in _clean_label(base_label):
@@ -797,6 +836,7 @@ def sample_continuous_plan(
         plan.style,
         label=f"{base_label} continuous",
         jitter_phase=jitter_phase,
+        position_per_second=position_per_second,
     )
 
 

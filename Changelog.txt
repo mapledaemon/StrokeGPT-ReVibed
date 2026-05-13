@@ -8,6 +8,48 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #184 - Vary Continuous-Backend Speed With Per-Sample Position Rate
+-----------------------------------------------------------------------------------
+
+Branch: claude-continuous-speed-per-sample
+
+- Diagnosed an on-device observation that motion speed appeared fixed
+  across one pattern playback while only the position pattern varied:
+  the default ``continuous`` backend's sampler
+  (``_motion_target_for_sample`` via ``sample_continuous_plan``) was
+  returning ``speed = target.speed * style.speed_scale`` verbatim for
+  every HDSP frame, so every sample inside one cycle ran at the same
+  speed. PR #182 had already taught ``_actions_to_frames`` to lift
+  per-frame speed when ``preserve_timing=True`` (the Motion Pattern
+  Studio's imported-pattern preview), but the continuous backend's own
+  sampler never got that boost -- regular chat-driven motion stayed
+  flat.
+- Compute a short-window position derivative inside
+  ``sample_continuous_plan`` (``SAMPLE_DERIVATIVE_DT_SECONDS = 0.04``,
+  re-using the cyclic Catmull-Rom sampler at ``phase`` and ``phase +
+  dt / duration``) and forward it as a new keyword-only
+  ``position_per_second`` argument to ``_motion_target_for_sample``.
+  When provided, the per-sample speed lifts to
+  ``max(base_speed, clamp((position_per_second / 160) * 100, 8, 100) *
+  style.speed_scale)`` -- the exact boost formula
+  ``_actions_to_frames`` already applies. Slow segments fall back to
+  the LLM-supplied base speed; fast segments lift above it so the
+  device feels a difference between a slow hold and a quick climb.
+- Opt-in via keyword arg defaulting to ``None``: only
+  ``sample_continuous_plan`` passes it. Every other direct caller of
+  ``_motion_target_for_sample`` keeps its prior behavior, so motion-
+  training Studio preview, anchor-program playback, and the existing
+  test surface are unaffected.
+- Added four contract tests in ``tests/test_motion_scripts.py``:
+  helper-level no-hint / slow-hint / fast-hint speed behavior, the
+  ``style.speed_scale`` interaction with the boost, the asymmetric
+  ``ramp`` plan produces a varied speed track across one cycle
+  (>=5%-point spread, replacing the prior flat constant), and the
+  symmetric ``hold`` plan never drops below the LLM-supplied base
+  speed even when the local derivative is small. Total suite 406 ->
+  410.
+
+
 2026-05-13 - PR #183 - Restore Smooth Handy Position Playback
 --------------------------------------------------------------
 
