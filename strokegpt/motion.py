@@ -36,6 +36,7 @@ CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.0
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
+CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
 CONTINUOUS_MORPH_SECONDS = 0.65
 CONTINUOUS_MIN_MORPH_SECONDS = 0.32
 CONTINUOUS_MAX_MORPH_SECONDS = 1.15
@@ -1359,6 +1360,35 @@ class MotionController:
         except Exception:
             return False
 
+    def _hsp_stream_phase_points(
+        self,
+        phase_points: tuple[tuple[float, float], ...],
+        effective_duration_seconds: float,
+    ) -> tuple[dict[str, Any], ...]:
+        """Keep authored HSP endpoints while filling long gaps with curve samples."""
+        if not phase_points:
+            return ()
+        duration = max(0.001, float(effective_duration_seconds or 0.001))
+        target_interval = max(0.001, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+        dense: list[dict[str, Any]] = [{"phase": float(phase_points[0][0]), "authored": True}]
+        previous_phase = float(phase_points[0][0])
+        for raw_phase, _pos in phase_points[1:]:
+            phase = float(raw_phase)
+            segment_seconds = max(0.0, (phase - previous_phase) * duration)
+            if segment_seconds > target_interval:
+                intermediate_count = max(0, int(round(segment_seconds / target_interval)) - 1)
+                for step in range(1, intermediate_count + 1):
+                    amount = step / (intermediate_count + 1)
+                    dense.append(
+                        {
+                            "phase": previous_phase + (phase - previous_phase) * amount,
+                            "authored": False,
+                        }
+                    )
+            dense.append({"phase": phase, "authored": True})
+            previous_phase = phase
+        return tuple(dense)
+
     def _run_continuous_stream_plan(
         self,
         plan,
@@ -1393,6 +1423,7 @@ class MotionController:
             sample_continuous_motion,
         )
         effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
+        hsp_phase_points = self._hsp_stream_phase_points(phase_points, effective_duration_seconds)
         stream_duration_seconds = effective_duration_seconds
         play_start_seconds = phase_offset_seconds % effective_duration_seconds
         play_start_stream_seconds = play_start_seconds
@@ -1414,7 +1445,8 @@ class MotionController:
         morph_ms = round(morph_seconds * 1000.0, 1)
         start_phase = play_start_seconds / effective_duration_seconds
         next_phase_index = 0
-        for index, (phase, _) in enumerate(phase_points):
+        for index, point in enumerate(hsp_phase_points):
+            phase = point["phase"]
             if phase <= start_phase:
                 next_phase_index = index
             else:
@@ -1424,15 +1456,16 @@ class MotionController:
         def advance_phase_cursor() -> None:
             nonlocal next_cycle_index, next_phase_index
             next_phase_index += 1
-            if next_phase_index >= len(phase_points):
+            if next_phase_index >= len(hsp_phase_points):
                 next_cycle_index += 1
-                next_phase_index = 1 if len(phase_points) > 1 and phase_points[0][0] <= 0.0 else 0
+                next_phase_index = 1 if len(hsp_phase_points) > 1 and hsp_phase_points[0]["phase"] <= 0.0 else 0
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
             nonlocal previous_point_time_seconds, sample_index, stream_index, stream_seconds
             points: list[dict[str, Any]] = []
             while len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND:
-                phase, _ = phase_points[next_phase_index]
+                phase_point = hsp_phase_points[next_phase_index]
+                phase = phase_point["phase"]
                 point_seconds = (next_cycle_index * effective_duration_seconds) + (
                     phase * effective_duration_seconds
                 )
@@ -1479,6 +1512,7 @@ class MotionController:
                         "tempo_scale": sample.tempo_scale,
                         "effective_duration_seconds": sample.effective_duration_seconds,
                         "sample_interval_seconds": command_interval,
+                        "authored_point": phase_point["authored"],
                     }
                 )
                 previous_point_time_seconds = point_stream_seconds
@@ -1530,6 +1564,7 @@ class MotionController:
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_stream_cycle_ms": stream_cycle_ms,
                     "hsp_transport_time_scale": 1.0,
+                    "hsp_authored_point": bool(point.get("authored_point")),
                     "morph_ms": morph_ms,
                     "intent_speed": int(round(point["intent_speed"])),
                     "sample_speed": int(round(point["speed"])),

@@ -77,7 +77,10 @@ Follow-up work:
   issue a fresh HSP stream id, buffer points with `/hsp/add`, update the tail
   threshold via `/hsp/threshold`, and play without `pause_on_starving`; if swaps
   still pause, inspect the `server_time`, threshold, and starvation behavior in
-  command history before changing sampler math again.
+  command history before changing sampler math again. Sparse built-in patterns
+  should now include inserted HSP intermediate points between authored endpoints;
+  verify on-device that this restores smooth speed variation without disturbing
+  dense imported timing.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,

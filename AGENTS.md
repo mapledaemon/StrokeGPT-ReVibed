@@ -236,7 +236,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
   stream ids with new zero-based point times. HSP `play` should use server-time
   metadata and should not request pause-on-starving unless real-device testing
-  proves that is the desired behavior. During active continuous playback,
+  proves that is the desired behavior. Sparse built-in HSP streams should keep
+  authored endpoints but insert Catmull-Rom intermediate points inside long
+  segments so firmware receives the smooth curve rather than long linear
+  keyframes. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
   from the active plan clock; do not use the tail of the future HSP buffer as
   the current device state.

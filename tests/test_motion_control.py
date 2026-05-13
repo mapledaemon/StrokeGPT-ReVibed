@@ -8,6 +8,7 @@ from strokegpt.motion import (
     CONTINUOUS_MIN_MORPH_SECONDS,
     CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     IntentMatcher,
     MotionController,
@@ -646,6 +647,33 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertGreater(len(segment_rates), 2)
             self.assertGreater(max(segment_rates), min(segment_rates) * 1.25)
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_densifies_sparse_authored_segments(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+
+            self.assertGreater(len(points), 12)
+            self.assertLessEqual(
+                max(intervals),
+                int(round(CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS * 1000.0 * 1.6)),
+            )
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertTrue(any(point.get("hsp_authored_point") is False for point in hsp_points))
+            self.assertTrue(any(point.get("hsp_authored_point") is True for point in hsp_points))
         finally:
             controller.stop()
 
