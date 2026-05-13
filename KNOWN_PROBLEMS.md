@@ -82,15 +82,18 @@ Follow-up work:
   `hsp_state_current_time_ms`, `hsp_state_current_point`,
   `hsp_state_play_state`, and `hsp_clock_sync` rows to confirm whether firmware
   is actually advancing through the streamed points at the planned time.
-  Pattern swaps now intentionally issue a fresh HSP stream id, start with an
-  exact point at `hsp/play.start_time`, flush the replacement buffer through
+  Pattern swaps should reuse an already-active HSP setup, start with an exact
+  point at `hsp/play.start_time`, flush the replacement buffer through
   `/hsp/add`, update the tail threshold via `/hsp/threshold`, and play with
   `pause_on_starving: false`;
-  if swaps still pause, inspect the `server_time`, threshold, and starvation
-  behavior in command history before changing sampler math again. Sparse
-  built-in patterns should now include inserted HSP intermediate points between
-  authored endpoints; verify on-device that this restores smooth speed
-  variation without disturbing dense imported timing.
+  if swaps still pause, inspect whether command history shows a repeated
+  `hsp/setup`, stale `server_time`, threshold, or starvation behavior before
+  changing sampler math again. Sparse
+  built-in patterns now share one timed point projection for HSP and Flexible
+  Position, including inserted intermediate points between authored endpoints;
+  verify on-device that this restores smooth speed variation without disturbing
+  dense imported timing. HAMP should be compared as the legacy stroke-window
+  adapter rather than as a timed-point transport.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,
@@ -103,14 +106,15 @@ Follow-up work:
   that history to compare what the app actually sent in HAMP, HDSP, and HSP
   before changing sampler math again.
 - If Continuous still feels fixed-speed, first verify that `sample_tempo_scale`
-  spans the expected saved speed-limit range before inspecting transport. A
-  prior regression converted relative intent speed into physical Handy velocity
-  before sampling, then mapped that derived speed through limits again at the
-  transport boundary; that double scaling compressed patterns into a narrow
-  low-speed band even when the visualizer showed changing sample speeds. HSP
-  should not have a local point-to-point duration ceiling; saved speed settings
-  are 0-100 app percentages and should affect HSP through semantic tempo, while
-  timed position/HDSP transports convert them to absolute mm/s duration caps.
+  spans the full relative intent range for explicit slow/fast requests
+  regardless of the saved velocity-limit band. A prior regression converted
+  relative intent speed into physical Handy velocity before sampling, then
+  treated that velocity as relative intent again; that unit mix compressed
+  patterns into a narrow low-speed band even when the visualizer showed
+  changing sample speeds. HSP should not have a local point-to-point duration
+  ceiling, and it should not rewrite `MotionTarget.speed` through
+  `effective_speed_for_relative()` before sampling. Timed position/HDSP
+  transports still convert speed settings to absolute mm/s duration caps.
 - Confirm intra-script reversal smoothing is apparent on-device for fast
   patterns, wide strokes, and Edge/Milk scripts.
 - Keep HAMP selectable until these checks pass.

@@ -207,8 +207,12 @@ def _uses_continuous_motion(motion_controller) -> bool:
     return getattr(motion_controller, "backend", "") == "continuous"
 
 
+def _uses_timed_pattern_motion(motion_controller) -> bool:
+    return getattr(motion_controller, "backend", "") in {"continuous", "position"}
+
+
 def _apply_mode_motion(motion_controller, target, source):
-    if _uses_continuous_motion(motion_controller):
+    if _uses_timed_pattern_motion(motion_controller):
         motion_controller.apply_generated_target(target, source=source)
     else:
         motion_controller.apply_target(target, source=source)
@@ -233,7 +237,7 @@ def _run_scripted_mode(
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
     remember_pattern = callbacks.get("remember_pattern", lambda target: None)
-    planner = MotionScriptPlanner(mode, continuous_patterns=_uses_continuous_motion(motion_controller))
+    planner = MotionScriptPlanner(mode, continuous_patterns=_uses_timed_pattern_motion(motion_controller))
     step_count = 0
     mode_intensity = initial_intensity
 
@@ -476,7 +480,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
     message_queue = callbacks["message_queue"]
     message_event = callbacks.get("message_event")
     pause_event = callbacks.get("pause_event")
-    planner = MotionScriptPlanner("edging", continuous_patterns=_uses_continuous_motion(motion_controller))
+    planner = MotionScriptPlanner("edging", continuous_patterns=_uses_timed_pattern_motion(motion_controller))
     edge_count = 0
     step_count = 0
     max_steps = random.randint(56, 78)

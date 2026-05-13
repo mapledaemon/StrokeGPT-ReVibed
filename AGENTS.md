@@ -232,8 +232,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   intent-relative; do not let a low requested speed saturate every fallback
   XAVA frame at the user maximum, and do not feed derived sample speed back
   into `motion.current_target()`, Freestyle scoring, or LLM context. Continuous
-  HSP should apply saved 0-100 speed limits as semantic speed before sampling,
-  not as physical Handy velocity. Physical mm/s duration caps belong to
+  HSP must not apply saved speed limits by rewriting `MotionTarget.speed`
+  before sampling; that converts physical velocity back into relative intent
+  and compresses `sample_tempo_scale`. Physical mm/s duration caps belong to
   HDSP/Flexible Position direct moves, not HSP timed-point spacing.
   Continuous morphing and step limiting smooth depth/range only; do not
   interpolate or delta-limit the command-speed budget as if it were a spatial
@@ -242,12 +243,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   point-to-point velocity budget because that flattens fast segments into a
   fixed-slope feel. Flexible Position `xpt.t` durations may still be stretched
   when an authored timed move exceeds the configured Handy speed cap.
-  Pattern swaps should start a fresh HSP stream id and rebuffer the replacement
-  plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
-  stream ids with new zero-based point times. Initial/replacement HSP adds
-  should flush the point buffer, and HSP `play` should use server-time metadata
-  with `pause_on_starving: false` unless real-device testing proves another
-  behavior is desired. Active HSP streams should periodically correct firmware
+  Pattern swaps should not repeat HSP setup while an HSP stream is already
+  active. Rebuffer the replacement plan through a flushed `/hsp/add`, update
+  `/hsp/threshold`, then replay with server-time metadata and
+  `pause_on_starving: false` so pattern changes do not stop motion during
+  setup latency. Active HSP streams should periodically correct firmware
   playback time through `/hsp/synctime` and preserve sanitized response state in
   diagnostics so planned point timing can be compared with device-reported
   playback. Sparse built-in HSP streams should keep
@@ -258,11 +258,15 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   toward a stale endpoint. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
   from the active plan clock; do not use the tail of the future HSP buffer as
-  the current device state.
+  the current device state. If an active HSP append fails, treat the stream as
+  failed and fall back to HDSP direct position playback instead of exiting the
+  continuous worker as if playback succeeded.
   Keep direct-position step limiting on HDSP/direct fallback moves instead of
   applying it to every HSP point. Flexible Position fixed-pattern playback
-  must also preserve authored action timing so it does not flatten patterns
-  before they reach HDSP.
+  uses the same `TimedMotionPoint` projection as HSP streaming so `hdsp/xpt`
+  durations, HSP point spacing, and planned point slopes describe the same
+  pattern envelope; HAMP adapts patterns through legacy stroke-window frames
+  only as the fallback backend.
 - `strokegpt/motion_anchors.py` defines soft anchor-loop programs. These let the model choose 2-6 waypoint labels while the backend compiles them into Catmull/minimum-jerk action streams with bounded target deltas. `shaft` is accepted as the user-facing midpoint label, with `middle`/`mid` kept as aliases. Treat anchors as soft waypoints, not hard stops.
 - Spatial cues should treat `tip`, `shaft`, and `base` as regions of emphasis,
   not single lock points. `shaft` is the in-between region; ordinary zone cues
@@ -275,6 +279,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - When Auto, Edge, or Milk mode is active, motion feedback from chat should be
   queued into the active mode planner and wake the mode loop. Do not apply it as
   a one-off command that the next scripted mode step can immediately overwrite.
+- Routine Freestyle selection should not randomly choose `edge-*` hold/reaction
+  patterns. Those are reserved for close-signal handling or explicit edge
+  feedback because their intentionally tiny ranges can look like fixed-speed or
+  paused continuous motion during ordinary Freestyle.
 - Hands-free voice can optionally expose a narrow LLM `mode_action` field.
   Keep it gated by saved Hands-free Voice mode plus the Advanced Flow toggle,
   and route normalized actions through the same preset-mode start/stop and

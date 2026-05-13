@@ -856,7 +856,8 @@ class HandyController:
         if not stream_points:
             self._record_command_result("hsp/play", ok=False, error="empty HSP point stream")
             return False
-        if stream_id is None:
+        replace_active_stream = self._hsp_streaming and self._current_mode == MODE_HSP
+        if stream_id is None and not replace_active_stream:
             stream_id = self._next_hsp_stream_id()
         if not self._ensure_hsp(stream_id=stream_id):
             return False

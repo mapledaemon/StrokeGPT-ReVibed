@@ -1173,23 +1173,6 @@ class MotionController:
     ):
         return sample_continuous_motion(plan, target, elapsed_seconds)
 
-    def _continuous_target_with_speed_limits(self, target: MotionTarget) -> MotionTarget:
-        target = target.clamped()
-        effective_speed = getattr(self.handy, "effective_speed_for_relative", None)
-        if not callable(effective_speed):
-            return target
-        try:
-            speed = _clamp(float(effective_speed(target.speed)))
-        except (TypeError, ValueError):
-            return target
-        return MotionTarget(
-            speed,
-            target.depth,
-            target.stroke_range,
-            label=target.label,
-            motion_program=target.motion_program,
-        ).clamped()
-
     def apply_continuous_target(
         self,
         target: MotionTarget,
@@ -1202,7 +1185,7 @@ class MotionController:
 
         started_at = time.monotonic()
         plan_key = self._continuous_plan_key(plan)
-        clamped_target = self._continuous_target_with_speed_limits(target)
+        clamped_target = target.clamped()
         start_target = self.current_target()
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
@@ -1413,32 +1396,17 @@ class MotionController:
 
     def _hsp_stream_phase_points(
         self,
-        phase_points: tuple[tuple[float, float], ...],
+        plan,
         effective_duration_seconds: float,
     ) -> tuple[dict[str, Any], ...]:
-        """Keep authored HSP endpoints while filling long gaps with curve samples."""
-        if not phase_points:
-            return ()
-        duration = max(0.001, float(effective_duration_seconds or 0.001))
-        target_interval = max(0.001, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
-        dense: list[dict[str, Any]] = [{"phase": float(phase_points[0][0]), "authored": True}]
-        previous_phase = float(phase_points[0][0])
-        for raw_phase, _pos in phase_points[1:]:
-            phase = float(raw_phase)
-            segment_seconds = max(0.0, (phase - previous_phase) * duration)
-            if segment_seconds > target_interval:
-                intermediate_count = max(0, int(round(segment_seconds / target_interval)) - 1)
-                for step in range(1, intermediate_count + 1):
-                    amount = step / (intermediate_count + 1)
-                    dense.append(
-                        {
-                            "phase": previous_phase + (phase - previous_phase) * amount,
-                            "authored": False,
-                        }
-                    )
-            dense.append({"phase": phase, "authored": True})
-            previous_phase = phase
-        return tuple(dense)
+        """Keep HSP and Flexible Position on the same timed point schema."""
+        from .motion_patterns import continuous_plan_timed_phase_points
+
+        return continuous_plan_timed_phase_points(
+            plan,
+            effective_duration_seconds,
+            target_interval_seconds=CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+        )
 
     def _run_continuous_stream_plan(
         self,
@@ -1453,7 +1421,6 @@ class MotionController:
     ) -> bool:
         from .motion_patterns import (
             continuous_plan_depth_range,
-            continuous_plan_phase_points,
             sample_continuous_motion,
         )
 
@@ -1464,9 +1431,6 @@ class MotionController:
             return False
 
         base_interval = self._continuous_sample_interval()
-        phase_points = continuous_plan_phase_points(plan)
-        if not phase_points:
-            return False
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
         initial_sample = self._sample_continuous_motion(
             plan,
@@ -1475,7 +1439,9 @@ class MotionController:
             sample_continuous_motion,
         )
         effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
-        hsp_phase_points = self._hsp_stream_phase_points(phase_points, effective_duration_seconds)
+        hsp_phase_points = self._hsp_stream_phase_points(plan, effective_duration_seconds)
+        if not hsp_phase_points:
+            return False
         stream_duration_seconds = effective_duration_seconds
         play_start_seconds = phase_offset_seconds % effective_duration_seconds
         play_start_stream_seconds = play_start_seconds
@@ -1816,7 +1782,7 @@ class MotionController:
                             send_ended_at=send_ended_at,
                         )
                         if appended is False:
-                            return True
+                            return False
 
                 if (
                     callable(sync_stream)

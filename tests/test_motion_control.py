@@ -2,6 +2,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from strokegpt.motion import (
     CONTINUOUS_MAX_MORPH_SECONDS,
@@ -160,6 +161,29 @@ class StreamingFakeHandy(FakeHandy):
         return dict(self._last_command) if self._last_command else None
 
 
+class AppendFailStreamingFakeHandy(StreamingFakeHandy):
+    def append_continuous_stream(
+        self,
+        points,
+        *,
+        tail_point_stream_index,
+        tail_point_threshold=None,
+    ):
+        super().append_continuous_stream(
+            points,
+            tail_point_stream_index=tail_point_stream_index,
+            tail_point_threshold=tail_point_threshold,
+        )
+        self._last_command = {
+            "path": "hsp/add",
+            "ok": False,
+            "status_code": 503,
+            "elapsed_ms": 5.0,
+            "error": "append failed",
+        }
+        return False
+
+
 class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
     def __init__(self, min_speed, max_speed):
         super().__init__()
@@ -169,8 +193,10 @@ class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
         self.max_user_speed = max_speed
         self.min_absolute_user_speed = min_speed * 4
         self.max_absolute_user_speed = max_speed * 4
+        self.effective_speed_calls = 0
 
     def effective_speed_for_relative(self, speed):
+        self.effective_speed_calls += 1
         return self.min_speed + (self.max_speed - self.min_speed) * (float(speed) / 100.0)
 
     def max_velocity_for_relative_speed(self, speed):
@@ -791,21 +817,31 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_hsp_timing_uses_configured_speed_limits(self):
-        slow_handy = SpeedLimitStreamingFakeHandy(10, 30)
-        fast_handy = SpeedLimitStreamingFakeHandy(70, 90)
+    def test_continuous_hsp_preserves_relative_tempo_span_with_configured_speed_limits(self):
+        slow_handy = SpeedLimitStreamingFakeHandy(50, 80)
+        fast_handy = SpeedLimitStreamingFakeHandy(50, 80)
         slow_controller = MotionController(slow_handy, step_delay=0.16)
         fast_controller = MotionController(fast_handy, step_delay=0.16)
 
         try:
-            slow_controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="unit test")
-            fast_controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="unit test")
+            slow_controller.apply_continuous_target(MotionTarget(0, 50, 80, "stroke"), source="unit test")
+            fast_controller.apply_continuous_target(MotionTarget(100, 50, 80, "stroke"), source="unit test")
             self.assertTrue(self.wait_until(lambda: slow_handy.stream_starts and fast_handy.stream_starts))
 
             slow_points = slow_handy.stream_starts[0]["points"]
             fast_points = fast_handy.stream_starts[0]["points"]
-            self.assertGreater(slow_points[3]["t"], fast_points[3]["t"])
-            self.assertLess(len(slow_points), len(fast_points))
+            slow_tempo = {round(point["tempo_scale"], 3) for point in slow_points}
+            fast_tempo = {round(point["tempo_scale"], 3) for point in fast_points}
+            slow_cycle = {round(point["effective_duration_seconds"], 3) for point in slow_points}
+            fast_cycle = {round(point["effective_duration_seconds"], 3) for point in fast_points}
+
+            self.assertEqual(slow_handy.effective_speed_calls, 0)
+            self.assertEqual(fast_handy.effective_speed_calls, 0)
+            self.assertEqual(slow_tempo, {0.5})
+            self.assertEqual(fast_tempo, {1.5})
+            self.assertGreater(min(slow_cycle), max(fast_cycle) * 2.5)
+            self.assertEqual({round(point["intent_speed"]) for point in slow_points}, {0})
+            self.assertEqual({round(point["intent_speed"]) for point in fast_points}, {100})
         finally:
             slow_controller.stop()
             fast_controller.stop()
@@ -882,6 +918,31 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(append_points)
             self.assertEqual(append_points[-1]["handy_path"], "hsp/add")
             self.assertGreater(append_points[-1]["hsp_stream_index"], len(handy.stream_starts[0]["points"]))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_append_failure_falls_back_to_hdsp(self):
+        handy = AppendFailStreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.08)
+
+        try:
+            with (
+                mock.patch("strokegpt.motion.CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS", 0.24),
+                mock.patch("strokegpt.motion.CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS", 0.24),
+                mock.patch("strokegpt.motion.CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS", 0.08),
+            ):
+                controller.apply_continuous_target(MotionTarget(80, 50, 80, "stroke"), source="unit test")
+                self.assertTrue(self.wait_until(lambda: len(handy.stream_appends) >= 1, timeout=0.5), handy.stream_appends)
+                self.assertTrue(self.wait_until(lambda: len(handy.position_moves) >= 1, timeout=0.5), handy.position_moves)
+
+            failure_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+                and point.get("hsp_batch") == "add"
+                and point.get("handy_ok") is False
+            ]
+            self.assertTrue(failure_points)
         finally:
             controller.stop()
 

@@ -98,6 +98,27 @@ class MotionSample:
         return replace(self, target=target)
 
 
+@dataclass(frozen=True)
+class TimedMotionPoint:
+    """Backend-neutral timed pattern point.
+
+    HSP consumes ``at_seconds`` and ``target.depth`` as a timed point stream.
+    Flexible Position consumes the same timeline as HDSP ``xpt`` durations.
+    HAMP can still adapt the target sequence into legacy stroke-window moves.
+    """
+
+    at_seconds: float
+    target: MotionTarget
+    intent_speed: float
+    phase: float
+    normalized_pos: float
+    position_per_second: float
+    tempo_scale: float
+    effective_duration_seconds: float
+    authored: bool
+    interval_seconds: float
+
+
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
     if not actions:
         return 0
@@ -575,6 +596,43 @@ def continuous_plan_phase_points(plan: ContinuousMotionPlan) -> tuple[tuple[floa
     return tuple(points)
 
 
+def continuous_plan_timed_phase_points(
+    plan: ContinuousMotionPlan,
+    effective_duration_seconds: float,
+    target_interval_seconds: float = 0.12,
+) -> tuple[dict[str, Any], ...]:
+    """Return authored phase points plus interpolated timing points.
+
+    The result is intentionally transport-neutral. HSP needs dense ``t/x``
+    points to preserve the sampled curve; Flexible Position needs the same
+    density so HDSP durations and velocities describe the same motion envelope.
+    """
+
+    phase_points = continuous_plan_phase_points(plan)
+    if not phase_points:
+        return ()
+    duration = max(0.001, float(effective_duration_seconds or 0.001))
+    target_interval = max(0.001, float(target_interval_seconds or 0.001))
+    dense: list[dict[str, Any]] = [{"phase": float(phase_points[0][0]), "authored": True}]
+    previous_phase = float(phase_points[0][0])
+    for raw_phase, _pos in phase_points[1:]:
+        phase = float(raw_phase)
+        segment_seconds = max(0.0, (phase - previous_phase) * duration)
+        if segment_seconds > target_interval:
+            intermediate_count = max(0, int(round(segment_seconds / target_interval)) - 1)
+            for step in range(1, intermediate_count + 1):
+                amount = step / (intermediate_count + 1)
+                dense.append(
+                    {
+                        "phase": previous_phase + (phase - previous_phase) * amount,
+                        "authored": False,
+                    }
+                )
+        dense.append({"phase": phase, "authored": True})
+        previous_phase = phase
+    return tuple(dense)
+
+
 def _sample_action_position(
     actions: tuple[PatternAction, ...],
     phase: float,
@@ -928,6 +986,80 @@ def sample_continuous_motion(
     )
 
 
+def continuous_plan_timed_points(
+    plan: ContinuousMotionPlan,
+    target: MotionTarget,
+    target_interval_seconds: float = 0.12,
+) -> tuple[TimedMotionPoint, ...]:
+    """Project a continuous plan into one cycle of timed transport points."""
+
+    if plan is None:
+        return ()
+    target = target.clamped()
+    initial_sample = sample_continuous_motion(plan, target, 0.0)
+    effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
+    phase_points = continuous_plan_timed_phase_points(
+        plan,
+        effective_duration_seconds,
+        target_interval_seconds=target_interval_seconds,
+    )
+    if not phase_points:
+        return ()
+
+    timed: list[TimedMotionPoint] = []
+    previous_at: Optional[float] = None
+    for point in phase_points:
+        phase = max(0.0, min(1.0, float(point.get("phase", 0.0))))
+        at_seconds = phase * effective_duration_seconds
+        sample = sample_continuous_motion(plan, target, at_seconds)
+        interval_seconds = 0.0 if previous_at is None else max(0.001, at_seconds - previous_at)
+        timed.append(
+            TimedMotionPoint(
+                at_seconds=at_seconds,
+                target=sample.target,
+                intent_speed=sample.intent_speed,
+                phase=phase,
+                normalized_pos=sample.normalized_pos,
+                position_per_second=sample.position_per_second,
+                tempo_scale=sample.tempo_scale,
+                effective_duration_seconds=sample.effective_duration_seconds,
+                authored=bool(point.get("authored")),
+                interval_seconds=interval_seconds,
+            )
+        )
+        previous_at = at_seconds
+    return tuple(timed)
+
+
+def continuous_plan_timed_frames(
+    plan: ContinuousMotionPlan,
+    target: MotionTarget,
+    *,
+    base_step_seconds: float = 0.25,
+    target_interval_seconds: float = 0.12,
+) -> list[PatternFrame]:
+    """Convert the shared timed point schema into Flexible Position frames."""
+
+    timed_points = continuous_plan_timed_points(
+        plan,
+        target,
+        target_interval_seconds=target_interval_seconds,
+    )
+    if not timed_points:
+        return []
+    base_step_seconds = max(0.01, float(base_step_seconds or 0.25))
+    frames: list[PatternFrame] = []
+    for point in timed_points:
+        frames.append(
+            PatternFrame(
+                point.target,
+                delay_factor=point.interval_seconds / base_step_seconds,
+                phase="timed-pattern" if point.authored else "timed-blend",
+            )
+        )
+    return frames
+
+
 def sample_continuous_plan(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
@@ -1127,6 +1259,15 @@ def expand_motion_pattern(
     actions = prepare_pattern_actions(pattern)
     if not actions:
         return []
+    if preserve_timing:
+        plan = continuous_motion_plan_from_pattern(pattern)
+        if plan is None:
+            return []
+        return continuous_plan_timed_frames(
+            plan,
+            target,
+            base_step_seconds=base_step_seconds,
+        )
 
     return _actions_to_frames(
         actions,

@@ -8,6 +8,39 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #191 - Restore Continuous Relative Tempo
+---------------------------------------------------------
+
+Branch: codex-continuous-relative-tempo
+
+- Removed the continuous HSP target-speed premapping that converted relative
+  user/LLM intent into a physical Handy velocity before sampling. The sampler
+  now sees `MotionTarget.speed` as the intended `0..100` relative value again,
+  restoring the full `0.5x..1.5x` tempo span instead of compressing speed
+  variation into the configured velocity-limit band.
+- Added a regression test that constrained saved speed settings do not call
+  `effective_speed_for_relative()` before HSP sampling and that explicit slow
+  versus fast continuous requests keep clearly different point timing.
+- Stopped routine Freestyle selection from randomly choosing edge-only
+  patterns such as Edge Middle Hold unless current feedback explicitly asks
+  for edge behavior. Those tiny-range hold patterns can make continuous motion
+  look fixed or paused even when the transport timing is changing.
+- Treated mid-stream HSP append failure as a streaming failure so the
+  continuous controller falls back to HDSP position playback instead of
+  exiting as "successful" and leaving diagnostics at playback idle.
+- Reused the active HSP setup for replacement streams instead of sending a
+  fresh `hsp/setup` / stream-id reset on every pattern change. Replacement
+  still flushes and replays the point buffer, but avoids the setup step that
+  can interrupt firmware playback during Freestyle swaps.
+- Added a shared timed pattern projection so HSP and Flexible Position now use
+  the same point timing, depth samples, and planned slope envelope instead of
+  separately expanding patterns before transport.
+- Routed scripted Position-mode patterns through generated pattern targets and
+  made Freestyle branch explicitly by backend: Continuous streams one live
+  pattern, Flexible Position plays timed position frames, and HAMP uses legacy
+  stroke-window frame playback.
+
+
 2026-05-13 - PR #190 - Correct Continuous HSP Transport Schema
 ---------------------------------------------------------------
 

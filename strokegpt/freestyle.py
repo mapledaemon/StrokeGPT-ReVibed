@@ -74,8 +74,16 @@ def _freestyle_decision_with_permissions(decision, callbacks):
     return decision
 
 
+def _timed_pattern_backend(motion_controller):
+    return getattr(motion_controller, "backend", "") in {"continuous", "position"}
+
+
 def _edge_reaction_steps(motion_controller, edge_count, intensity=None, rng=None):
-    planner = MotionScriptPlanner("edging", rng=rng)
+    planner = MotionScriptPlanner(
+        "edging",
+        rng=rng,
+        continuous_patterns=_timed_pattern_backend(motion_controller),
+    )
     steps = [planner.next_step(motion_controller.current_target(), edge_count=edge_count)]
     while planner.steps:
         steps.append(planner.steps.popleft())
@@ -87,7 +95,14 @@ def _edge_reaction_steps(motion_controller, edge_count, intensity=None, rng=None
     return adjusted_steps
 
 
-def _freestyle_choice_frames(choices, current, rng):
+def _freestyle_choice_frames(
+    choices,
+    current,
+    rng,
+    *,
+    preserve_timing=False,
+    base_step_seconds=0.25,
+):
     frames = []
     for choice in choices:
         choice_frames = expand_motion_pattern(
@@ -95,6 +110,8 @@ def _freestyle_choice_frames(choices, current, rng):
             current,
             choice.target,
             rng=rng,
+            preserve_timing=preserve_timing,
+            base_step_seconds=base_step_seconds,
         )
         if not choice_frames:
             continue
@@ -121,9 +138,37 @@ def _apply_freestyle_edge_reaction(
         rng or random.Random(),
         length=FREESTYLE_EDGE_RESUME_CHAIN_LENGTH,
     )
-    resume_frames, _current = _freestyle_choice_frames(resume_choices, current, rng or random.Random())
+    backend = getattr(motion_controller, "backend", "")
+    if backend == "continuous":
+        target = edge_steps[0].target if edge_steps else (resume_choices[0].target if resume_choices else None)
+        if target is not None and hasattr(motion_controller, "apply_continuous_target"):
+            return motion_controller.apply_continuous_target(
+                target,
+                source="freestyle edge reaction",
+            ), edge_steps, resume_choices
+        return False, edge_steps, resume_choices
+
+    preserve_timing = backend == "position"
+    resume_frames, _current = _freestyle_choice_frames(
+        resume_choices,
+        current,
+        rng or random.Random(),
+        preserve_timing=preserve_timing,
+        base_step_seconds=getattr(motion_controller, "step_delay", 0.25),
+    )
     frames = [*edge_steps, *resume_frames]
 
+    if preserve_timing and hasattr(motion_controller, "apply_position_frames"):
+        return motion_controller.apply_position_frames(
+            frames,
+            source="freestyle edge reaction",
+            final_stop_on_target=False,
+        ), edge_steps, resume_choices
+    if backend == "hamp" and hasattr(motion_controller, "apply_frames"):
+        return motion_controller.apply_frames(
+            frames,
+            source="freestyle edge reaction",
+        ), edge_steps, resume_choices
     if hasattr(motion_controller, "apply_position_frames"):
         return motion_controller.apply_position_frames(
             frames,
@@ -180,6 +225,16 @@ def _candidate_enabled(candidate, record):
     if _candidate_weight(candidate, record) <= 0:
         return False
     return True
+
+
+def _candidate_allowed_for_routine_freestyle(pattern_id, pattern_name, feedback_target):
+    if not pattern_id.startswith("edge-"):
+        return True
+    if not feedback_target:
+        return False
+    requested = _slug_pattern_id(feedback_target.label)
+    text = _slug_pattern_id(f"{pattern_id} {pattern_name}")
+    return bool("edge" in requested or pattern_id in requested or requested in text)
 
 
 def _freestyle_profile(pattern_id, pattern_name):
@@ -311,6 +366,8 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
         if not hasattr(record, "to_motion_pattern"):
             continue
         pattern_name = _candidate_name(candidate, record, pattern_id)
+        if not _candidate_allowed_for_routine_freestyle(pattern_id, pattern_name, feedback_target):
+            continue
         profile = _freestyle_profile(pattern_id, pattern_name)
         score = _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids)
         target = _freestyle_target(pattern_id, pattern_name, profile, current, feedback_target, rng)
@@ -364,7 +421,8 @@ def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rn
 
 
 def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=None):
-    if getattr(motion_controller, "backend", "") == "continuous":
+    backend = getattr(motion_controller, "backend", "")
+    if backend == "continuous":
         if not choices or not hasattr(motion_controller, "apply_continuous_target"):
             return False
         return motion_controller.apply_continuous_target(
@@ -373,9 +431,27 @@ def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=Non
             trace_metadata=trace_metadata,
         )
 
-    frames, _current = _freestyle_choice_frames(choices, motion_controller.current_target(), rng)
+    preserve_timing = backend == "position"
+    frames, _current = _freestyle_choice_frames(
+        choices,
+        motion_controller.current_target(),
+        rng,
+        preserve_timing=preserve_timing,
+        base_step_seconds=getattr(motion_controller, "step_delay", 0.25),
+    )
     if not frames:
         return False
+    if preserve_timing and hasattr(motion_controller, "apply_position_frames"):
+        return motion_controller.apply_position_frames(
+            frames,
+            source="freestyle planner",
+            final_stop_on_target=False,
+        )
+    if backend == "hamp" and hasattr(motion_controller, "apply_frames"):
+        return motion_controller.apply_frames(
+            frames,
+            source="freestyle planner",
+        )
     if hasattr(motion_controller, "apply_position_frames"):
         return motion_controller.apply_position_frames(
             frames,
