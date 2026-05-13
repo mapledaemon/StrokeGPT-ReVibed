@@ -1,10 +1,13 @@
 param(
     [ValidateSet("Prompt", "Yes", "No")]
+    [string]$InstallPython = "Prompt",
+    [ValidateSet("Prompt", "Yes", "No")]
     [string]$InstallOllama = "Prompt",
     [ValidateSet("Prompt", "Yes", "No")]
     [string]$InstallCudaTorch = "Prompt",
     [ValidateSet("Prompt", "Yes", "No")]
     [string]$InstallParakeet = "Prompt",
+    [string]$PythonWingetId = "Python.Python.3.11",
     [string]$TorchIndexUrl = "https://download.pytorch.org/whl/cu128",
     [switch]$NonInteractive,
     [switch]$PullModel,
@@ -18,48 +21,6 @@ $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $ParakeetInstallScript = Join-Path $PSScriptRoot "install_parakeet.ps1"
 
 Set-Location $ProjectRoot
-
-function Find-Python {
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        & py -3.11 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            return @("py", "-3.11")
-        }
-    }
-
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        & python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            return @("python")
-        }
-    }
-
-    throw "Python 3.10+ was not found. Install Python 3.11 and enable 'Add python.exe to PATH'."
-}
-
-function Invoke-SelectedPython {
-    param([string[]]$Arguments)
-
-    $exe = $script:PythonCommand[0]
-    $prefix = @()
-    if ($script:PythonCommand.Count -gt 1) {
-        $prefix = $script:PythonCommand[1..($script:PythonCommand.Count - 1)]
-    }
-
-    & $exe @prefix @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Python command failed: $($Arguments -join ' ')"
-    }
-}
-
-function Invoke-VenvPython {
-    param([string[]]$Arguments)
-
-    & $VenvPython @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Virtual environment command failed: $($Arguments -join ' ')"
-    }
-}
 
 function Confirm-Step {
     param(
@@ -91,6 +52,122 @@ function Confirm-Step {
             return $false
         }
         Write-Host "Please answer yes or no."
+    }
+}
+
+function Refresh-PathFromRegistry {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = (@($machinePath, $userPath, $env:Path) | Where-Object { $_ }) -join ";"
+}
+
+function Test-PythonCommand {
+    param([string[]]$Command)
+
+    $exe = $Command[0]
+    $prefix = @()
+    if ($Command.Count -gt 1) {
+        $prefix = $Command[1..($Command.Count - 1)]
+    }
+
+    & $exe @prefix -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
+    return $LASTEXITCODE -eq 0
+}
+
+function Find-PythonCandidate {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        if (Test-PythonCommand @("py", "-3.11")) {
+            return @("py", "-3.11")
+        }
+    }
+
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        if (Test-PythonCommand @("python")) {
+            return @("python")
+        }
+    }
+
+    $directPaths = @()
+    if ($env:LocalAppData) {
+        $directPaths += (Join-Path $env:LocalAppData "Programs\Python\Python311\python.exe")
+    }
+    if ($env:ProgramFiles) {
+        $directPaths += (Join-Path $env:ProgramFiles "Python311\python.exe")
+    }
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    if ($programFilesX86) {
+        $directPaths += (Join-Path $programFilesX86 "Python311\python.exe")
+    }
+
+    foreach ($path in $directPaths) {
+        if ((Test-Path $path) -and (Test-PythonCommand @($path))) {
+            return @($path)
+        }
+    }
+
+    return $null
+}
+
+function Install-PythonIfRequested {
+    $shouldInstall = Confirm-Step `
+        -Mode $InstallPython `
+        -Question "Python 3.11 was not found. Install Python 3.11 with winget now?" `
+        -DefaultYes $true
+
+    if (-not $shouldInstall) {
+        throw "Python 3.10+ is required. Install Python 3.11 from https://www.python.org/downloads/windows/, then rerun this script."
+    }
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        throw "winget was not found. Install Python 3.11 from https://www.python.org/downloads/windows/, enable 'Add python.exe to PATH', then rerun this script."
+    }
+
+    Write-Host "Installing Python 3.11 with winget..."
+    & winget install --id $PythonWingetId -e --source winget
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python install failed."
+    }
+
+    Refresh-PathFromRegistry
+}
+
+function Find-Python {
+    $candidate = Find-PythonCandidate
+    if ($candidate) {
+        return $candidate
+    }
+
+    Install-PythonIfRequested
+
+    $candidate = Find-PythonCandidate
+    if ($candidate) {
+        return $candidate
+    }
+
+    throw "Python 3.10+ was not found after install. Restart PowerShell, then rerun this script."
+}
+
+function Invoke-SelectedPython {
+    param([string[]]$Arguments)
+
+    $exe = $script:PythonCommand[0]
+    $prefix = @()
+    if ($script:PythonCommand.Count -gt 1) {
+        $prefix = $script:PythonCommand[1..($script:PythonCommand.Count - 1)]
+    }
+
+    & $exe @prefix @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python command failed: $($Arguments -join ' ')"
+    }
+}
+
+function Invoke-VenvPython {
+    param([string[]]$Arguments)
+
+    & $VenvPython @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Virtual environment command failed: $($Arguments -join ' ')"
     }
 }
 

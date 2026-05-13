@@ -69,8 +69,11 @@ behavior, and route motion changes through the shared controller path.
 - `strokegpt/mode_contracts.py`: typed service/callback contracts shared by
   `web.py`, `background_modes.py`, and `mode_decisions.py`.
 - `strokegpt/audio.py`: ElevenLabs and local Chatterbox TTS providers.
+- `scripts/bootstrap_windows.ps1`: first-run Windows helper that downloads or
+  clones the repo, optionally installs Git, and then runs the installer.
 - `scripts/install_windows.ps1`: Windows install helper with prompts for
-  Ollama, CUDA PyTorch, and optional Parakeet voice-input runtime setup.
+  Python 3.11, Ollama, CUDA PyTorch, and optional Parakeet voice-input runtime
+  setup.
 - `scripts/update_windows.ps1`: Windows user-update helper for Git
   fast-forward, dependency refresh, optional Parakeet runtime refresh, and
   validation.
