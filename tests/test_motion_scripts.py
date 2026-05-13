@@ -13,6 +13,8 @@ from strokegpt.motion_patterns import (
     expand_pattern,
     continuous_plan_depth_range,
     continuous_motion_plan,
+    continuous_motion_plan_from_pattern,
+    continuous_plan_timed_points,
     sample_continuous_motion,
     sample_continuous_plan,
     inject_intermediate_actions,
@@ -597,19 +599,79 @@ class MotionScriptPlannerTests(unittest.TestCase):
             PatternAction(900, 100),
         )
         target = MotionTarget(35, 50, 80, "timed import")
+        pattern = MotionPattern("timed", actions, tempo_scale=1.0)
 
         frames = expand_motion_pattern(
-            MotionPattern("timed", actions, tempo_scale=1.0),
+            pattern,
             MotionTarget(35, 50, 80),
             target,
             rng=random.Random(17),
             preserve_timing=True,
             base_step_seconds=0.25,
         )
-        pattern_frames = [frame for frame in frames if frame.phase == "timed-pattern"]
+        plan = continuous_motion_plan_from_pattern(pattern)
+        timed_points = continuous_plan_timed_points(plan, target)
+        authored_frames = [frame for frame in frames if frame.phase == "timed-pattern"]
+        interpolated_frames = [frame for frame in frames if frame.phase == "timed-blend"]
 
-        self.assertEqual([round(frame.delay_factor, 2) for frame in pattern_frames], [0.0, 0.4, 3.2])
-        self.assertGreater(pattern_frames[1].target.speed, pattern_frames[2].target.speed)
+        self.assertEqual(len(frames), len(timed_points))
+        self.assertEqual(len(authored_frames), 4)
+        self.assertTrue(interpolated_frames)
+        self.assertAlmostEqual(
+            sum(frame.delay_factor for frame in frames) * 0.25,
+            timed_points[-1].at_seconds,
+            places=3,
+        )
+        self.assertEqual(
+            [round(frame.target.depth, 2) for frame in frames],
+            [round(point.target.depth, 2) for point in timed_points],
+        )
+        self.assertGreater(max(frame.target.speed for frame in frames), min(frame.target.speed for frame in frames))
+
+    def test_flexible_position_frames_share_continuous_timed_envelope(self):
+        target = MotionTarget(80, 50, 80, "milk")
+        for pattern_name in ("stroke", "flick", "milk"):
+            with self.subTest(pattern=pattern_name):
+                plan = continuous_motion_plan(pattern_name)
+                timed_points = continuous_plan_timed_points(plan, target)
+                frames = expand_pattern(
+                    pattern_name,
+                    MotionTarget(45, 50, 50),
+                    target,
+                    rng=random.Random(19),
+                    preserve_timing=True,
+                    base_step_seconds=0.16,
+                )
+
+                frame_times = []
+                elapsed = 0.0
+                for frame in frames:
+                    elapsed += frame.delay_factor * 0.16
+                    frame_times.append(elapsed)
+
+                self.assertEqual(len(frames), len(timed_points))
+                self.assertEqual(
+                    [round(frame.target.depth, 2) for frame in frames],
+                    [round(point.target.depth, 2) for point in timed_points],
+                )
+                self.assertEqual(
+                    [round(value, 3) for value in frame_times],
+                    [round(point.at_seconds, 3) for point in timed_points],
+                )
+
+                frame_slopes = []
+                point_slopes = []
+                for index in range(1, len(frames)):
+                    frame_dt = max(0.001, frame_times[index] - frame_times[index - 1])
+                    point_dt = max(0.001, timed_points[index].at_seconds - timed_points[index - 1].at_seconds)
+                    frame_slopes.append(abs(frames[index].target.depth - frames[index - 1].target.depth) / frame_dt)
+                    point_slopes.append(
+                        abs(timed_points[index].target.depth - timed_points[index - 1].target.depth) / point_dt
+                    )
+                self.assertEqual(
+                    [round(value, 1) for value in frame_slopes],
+                    [round(value, 1) for value in point_slopes],
+                )
 
     def test_normal_motion_pattern_keeps_existing_normalized_cadence(self):
         actions = (

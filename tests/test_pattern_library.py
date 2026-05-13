@@ -476,9 +476,16 @@ class MotionPatternRouteTests(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertTrue(calls)
-        pattern_frames = [frame for frame in calls[0]["frames"] if frame.phase == "timed-pattern"]
-        self.assertEqual([round(frame.delay_factor, 2) for frame in pattern_frames], [0.0, 0.4, 3.2])
-        self.assertGreater(pattern_frames[1].target.speed, pattern_frames[2].target.speed)
+        timed_frames = [
+            frame
+            for frame in calls[0]["frames"]
+            if str(getattr(frame, "phase", "")).startswith("timed")
+        ]
+        authored_frames = [frame for frame in timed_frames if frame.phase == "timed-pattern"]
+        self.assertEqual(len(authored_frames), 4)
+        self.assertTrue(any(frame.phase == "timed-blend" for frame in timed_frames))
+        self.assertGreater(sum(frame.delay_factor for frame in timed_frames), 3.0)
+        self.assertGreater(max(frame.target.speed for frame in timed_frames), min(frame.target.speed for frame in timed_frames))
 
     def test_save_generated_pattern_writes_trained_pattern_file(self):
         response = self.client.post("/motion_patterns/save_generated", json={

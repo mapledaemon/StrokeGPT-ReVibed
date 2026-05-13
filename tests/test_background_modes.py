@@ -16,6 +16,8 @@ class FakeMotionController:
     def __init__(self):
         self.stopped = False
         self.applied = []
+        self.generated = []
+        self.hamp_frames = []
         self.position_frames = []
         self.position_sources = []
         self.position_final_stop_on_target = []
@@ -30,6 +32,16 @@ class FakeMotionController:
 
     def apply_target(self, target, source="target"):
         self.applied.append(target)
+
+    def apply_generated_target(self, target, source="generated"):
+        self.generated.append((target, source))
+        self.applied.append(target)
+
+    def apply_frames(self, frames, *, stop_after=False, source="pattern"):
+        self.hamp_frames.extend(frames)
+        if frames:
+            self.applied.append(frames[-1].target)
+        return True
 
     def apply_position_frames(
         self,
@@ -576,6 +588,58 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(metadata["freestyle_planner_sleep_ms"], 1250.0)
         self.assertFalse(metadata["freestyle_feedback"])
 
+    def test_scripted_position_mode_routes_patterns_through_generated_target(self):
+        motion = FakeMotionController()
+        motion.backend = "position"
+        target = MotionTarget(64, 58, 70, label="Milking Pressure Build")
+
+        background_modes._apply_mode_motion(motion, target, source="milking mode")
+
+        self.assertEqual(motion.generated, [(target, "milking mode")])
+        self.assertEqual(motion.position_frames, [])
+
+    def test_freestyle_position_uses_timed_position_frames(self):
+        motion = FakeMotionController()
+        motion.backend = "position"
+        choices = [
+            freestyle.FreestyleChoice(
+                "sway",
+                "Sway",
+                FakePatternRecord("sway", "Sway"),
+                MotionTarget(56, 50, 80, label="Freestyle: Sway"),
+                10.0,
+                "Playful",
+                "Swaying.",
+            )
+        ]
+
+        self.assertTrue(freestyle._apply_freestyle_choices(motion, choices, random.Random(5)))
+
+        self.assertTrue(motion.position_frames)
+        self.assertFalse(motion.hamp_frames)
+        self.assertTrue(all(str(getattr(frame, "phase", "")).startswith("timed") for frame in motion.position_frames))
+        self.assertEqual(motion.position_final_stop_on_target, [False])
+
+    def test_freestyle_hamp_uses_legacy_frame_playback(self):
+        motion = FakeMotionController()
+        motion.backend = "hamp"
+        choices = [
+            freestyle.FreestyleChoice(
+                "sway",
+                "Sway",
+                FakePatternRecord("sway", "Sway"),
+                MotionTarget(56, 50, 80, label="Freestyle: Sway"),
+                10.0,
+                "Playful",
+                "Swaying.",
+            )
+        ]
+
+        self.assertTrue(freestyle._apply_freestyle_choices(motion, choices, random.Random(5)))
+
+        self.assertTrue(motion.hamp_frames)
+        self.assertFalse(motion.position_frames)
+
     def test_freestyle_close_signal_asks_llm_for_milk_style(self):
         motion = FakeMotionController()
         stop_event = threading.Event()
@@ -858,6 +922,42 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(choice.reason, "Following that direction in Freestyle.")
         self.assertIn("Flick", choice.debug_reason)
         self.assertNotIn("weight", choice.reason.lower())
+
+    def test_freestyle_selector_skips_edge_patterns_without_feedback(self):
+        current = MotionTarget(30, 50, 55)
+        edge = FakePatternRecord("edge-middle-hold", "Edge Middle Hold")
+        sway = FakePatternRecord("sway", "Sway")
+
+        choice = freestyle._choose_freestyle_pattern(
+            [
+                {"id": "edge-middle-hold", "name": "Edge Middle Hold", "source": "fixed", "enabled": True, "weight": 100, "record": edge},
+                {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 10, "record": sway},
+            ],
+            current,
+            rng=random.Random(2),
+        )
+
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice.pattern_id, "sway")
+
+    def test_freestyle_selector_allows_edge_patterns_for_edge_feedback(self):
+        current = MotionTarget(30, 50, 55)
+        feedback_target = MotionTarget(35, 50, 25, label="edge middle hold")
+        edge = FakePatternRecord("edge-middle-hold", "Edge Middle Hold")
+        sway = FakePatternRecord("sway", "Sway")
+
+        choice = freestyle._choose_freestyle_pattern(
+            [
+                {"id": "edge-middle-hold", "name": "Edge Middle Hold", "source": "fixed", "enabled": True, "weight": 30, "record": edge},
+                {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 80, "record": sway},
+            ],
+            current,
+            feedback_target=feedback_target,
+            rng=random.Random(2),
+        )
+
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice.pattern_id, "edge-middle-hold")
 
     def test_freestyle_selector_skips_non_dict_and_recordless_candidates(self):
         current = MotionTarget(30, 40, 50)
