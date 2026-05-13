@@ -123,6 +123,24 @@ def _matching_model_detail(model, items):
     return {}
 
 
+def _installed_model_candidates(model_options, installed_models):
+    installed_names = [
+        normalize_ollama_model(item.get("name"))
+        for item in list(installed_models or [])
+        if normalize_ollama_model(item.get("name"))
+    ]
+    candidates = []
+    for model in list(model_options or []) + installed_names:
+        normalized = normalize_ollama_model(model)
+        if not normalized:
+            continue
+        if any(_ollama_model_names_match(normalized, item) for item in candidates):
+            continue
+        if any(_ollama_model_names_match(normalized, installed) for installed in installed_names):
+            candidates.append(normalized)
+    return candidates
+
+
 def ollama_model_details_payload(models, installed_models, running_models, current_model, gpu_status):
     details = {}
     current_model = normalize_ollama_model(current_model)
@@ -281,6 +299,9 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
         "current_model_installed": False,
         "installed_models": [],
         "installed_model_names": [],
+        "model_selection_required": False,
+        "installed_model_candidates": [],
+        "suggested_model": "",
         "download": pull_snapshot(),
         "diagnostics_level": diagnostics_level,
         "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),
@@ -302,20 +323,32 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
             running_error = str(exc)
 
     names = [item["name"] for item in installed]
+    current_model_installed = bool(_matching_model_detail(current_model, installed))
+    installed_model_candidates = (
+        [] if current_model_installed else _installed_model_candidates(model_options, installed)
+    )
+    suggested_model = installed_model_candidates[0] if installed_model_candidates else ""
     gpu_status = ollama_gpu_status_payload(current_model, running, running_error)
     payload.update({
         "available": True,
         "installed_models": installed,
         "installed_model_names": names,
-        "current_model_installed": current_model in names,
+        "current_model_installed": current_model_installed,
+        "model_selection_required": not current_model_installed,
+        "installed_model_candidates": installed_model_candidates,
+        "suggested_model": suggested_model,
         "gpu_status": gpu_status,
         "model_details": ollama_model_details_payload(model_options, installed, running, current_model, gpu_status),
-        "message": (
-            f"Current model is installed: {current_model}"
-            if current_model in names
-            else f"Current model is not installed: {current_model}. Click Download Model before chatting."
-        ),
     })
+    if current_model_installed:
+        payload["message"] = f"Current model is installed: {current_model}"
+    elif suggested_model:
+        payload["message"] = (
+            f"Selected model is not installed: {current_model}. "
+            f"Installed model available: {suggested_model}. Select it or download the selected model before chatting."
+        )
+    else:
+        payload["message"] = f"Current model is not installed: {current_model}. Click Download Model before chatting."
     return payload
 
 
@@ -340,6 +373,9 @@ def ollama_status_pending_payload(*, settings, llm, base_url, pull_snapshot):
         "current_model_installed": None,
         "installed_models": [],
         "installed_model_names": [],
+        "model_selection_required": False,
+        "installed_model_candidates": [],
+        "suggested_model": "",
         "download": pull_snapshot(),
         "diagnostics_level": diagnostics_level,
         "llm_diagnostics": llm.diagnostics(include_raw=diagnostics_level == "debug"),

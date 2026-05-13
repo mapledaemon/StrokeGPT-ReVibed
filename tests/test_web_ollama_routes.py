@@ -112,8 +112,28 @@ class WebOllamaRouteTests(WebTestCase):
         data = response.get_json()
         self.assertTrue(data["available"])
         self.assertFalse(data["current_model_installed"])
-        self.assertIn("Download Model", data["message"])
+        self.assertTrue(data["model_selection_required"])
+        self.assertEqual(data["suggested_model"], "installed/model:tag")
+        self.assertEqual(data["installed_model_candidates"], ["installed/model:tag"])
+        self.assertIn("Installed model available: installed/model:tag", data["message"])
         self.assertEqual(data["installed_models"][0]["size_label"], "2.0 KB")
+
+    def test_ollama_status_missing_current_model_without_installed_models_prompts_download(self):
+        fake_response = mock.Mock()
+        fake_response.raise_for_status.return_value = None
+        fake_response.json.return_value = {"models": []}
+
+        with mock.patch("strokegpt.web.requests.get", return_value=fake_response, create=True):
+            response = self.client.get("/ollama_status")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["available"])
+        self.assertFalse(data["current_model_installed"])
+        self.assertTrue(data["model_selection_required"])
+        self.assertEqual(data["suggested_model"], "")
+        self.assertEqual(data["installed_model_candidates"], [])
+        self.assertIn("Click Download Model", data["message"])
 
     def test_ollama_status_includes_known_default_model_sizes(self):
         from strokegpt.web import llm, settings
