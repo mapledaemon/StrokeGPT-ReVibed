@@ -424,6 +424,16 @@ turning the compact status UI into a setup console.
 - Add a setup verifier command that checks Python, dependencies, Ollama,
   Chatterbox availability, Torch/CUDA, port availability, and writable
   user-data folders.
+- Add a Python 3.12 compatibility lane before changing the Windows installer
+  default away from Python 3.11. Use 3.12 as the first newer-version target
+  because it is far enough ahead to expose 3.11-only assumptions while still
+  being less likely than 3.13/3.14 to trip over fresh ML wheel gaps. The first
+  slice should run the normal unit/compile suite on 3.11 and 3.12, then add a
+  Windows install/import smoke for `chatterbox-tts`, `faster-whisper`, Torch,
+  torchaudio, and the isolated Parakeet runtime path. Keep 3.11 as the main
+  app default until local Chatterbox, faster-whisper, CUDA Torch, and the
+  optional Parakeet worker all install and import cleanly on 3.12. Consider
+  3.13/3.14 only after that baseline is stable.
 - Add cancel/retry behavior for long model downloads where the provider
   supports it.
 - Add startup checks that warn without blocking when optional dependencies

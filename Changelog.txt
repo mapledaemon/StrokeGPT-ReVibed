@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #174 - Python Compatibility Roadmap
+---------------------------------------------------
+
+Branch: codex/python-compat-roadmap
+
+- Added a Runtime and Setup Diagnostics roadmap item for Python 3.12
+  compatibility testing before any installer-default change away from
+  Python 3.11.
+- Documented why 3.12 should be the first newer-version target, with 3.13/3.14
+  deferred until Chatterbox, faster-whisper, CUDA Torch, and Parakeet smoke
+  cleanly on the intermediate baseline.
+
+
 2026-05-13 - PR #173 - Windows Python Probe Fix
 ------------------------------------------------
 
