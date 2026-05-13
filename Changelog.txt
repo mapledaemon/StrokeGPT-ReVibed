@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #196 - Diagnostics Tab Visual Polish
+-----------------------------------------------------
+
+Branch: codex/diagnostics-tab-visual-fix
+
+- Made the sticky settings tab strip opaque so Diagnostics capture output does
+  not show through it when the modal scrolls after rendering transport JSON.
+- Restored chat-footer spacing by letting the motion history panel stretch
+  with the current-status panel and allowing the narrow status row to grow
+  instead of clipping diagnostics text.
+- Replaced the startup splash artwork with a StrokeGPT-ReVibed SVG logo and
+  removed the old `splash.jpg` startup image.
+
+
 2026-05-13 - PR #195 - Stabilize Local Chatterbox Precision
 ------------------------------------------------------------
 

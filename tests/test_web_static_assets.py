@@ -6,7 +6,7 @@ from tests._web_support import WebTestCase
 class WebStaticAssetTests(WebTestCase):
     def test_root_static_assets_are_served(self):
         expected = {
-            "/static/splash.jpg": "image/jpeg",
+            "/static/strokegpt-revibed-logo.svg": "image/svg+xml",
             "/static/default-pfp.png": "image/png",
             "/static/app.css": "text/css",
             "/static/app.js": "text/javascript",
@@ -44,6 +44,8 @@ class WebStaticAssetTests(WebTestCase):
 
             self.assertIn('href="/static/app.css"', page)
             self.assertIn('src="/static/app.js"', page)
+            self.assertIn('src="/static/strokegpt-revibed-logo.svg" alt="StrokeGPT-ReVibed"', page)
+            self.assertNotIn('/static/splash.jpg', page)
             self.assertIn('type="module"', page)
             self.assertIn('id="like-this-move-btn"', page)
             self.assertIn('id="dislike-this-move-btn"', page)
@@ -477,11 +479,11 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-sequence-indicator", css)
             self.assertIn(".motion-sequence-log", css)
             self.assertIn(".motion-sequence-entry", css)
-            self.assertIn(".motion-sequence-log { width: 100%; min-height: var(--motion-strip-height); height: var(--motion-strip-height);", css)
+            self.assertIn(".motion-sequence-log { width: 100%; min-height: var(--motion-strip-height); height: 100%; max-height: 100%;", css)
             self.assertIn("@media (max-width: 1080px)", css)
             self.assertIn("grid-template-rows: minmax(4rem, auto) minmax(3.625rem, auto)", css)
             self.assertIn("#message-input-line { grid-column: 1 / -1; }", css)
-            self.assertIn("grid-template-rows: 4.25rem 3.625rem", css)
+            self.assertIn("grid-template-rows: minmax(4.25rem, auto) minmax(3.625rem, auto)", css)
             self.assertIn("#motion-quick-status-row { grid-template-columns: minmax(9.375rem, 1fr) auto; gap: var(--space-1); min-height: 2.625rem; }", css)
             self.assertIn("#motion-feedback-buttons { grid-template-columns: repeat(2, 2rem); gap: var(--space-1); }", css)
             self.assertIn("#like-this-move-btn, #dislike-this-move-btn { width: 2rem; height: 2rem; min-height: 2rem; font-size: 0.88rem; }", css)
