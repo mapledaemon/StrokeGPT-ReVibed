@@ -181,6 +181,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="settings-tab-device"', page)
             self.assertIn('id="handy-key-input"', page)
             self.assertIn('id="handy-firmware-select"', page)
+            self.assertIn('id="handy-api-v3-key-input"', page)
             self.assertIn('id="save-handy-device-config-btn"', page)
             self.assertIn('id="motion-depth-min-slider"', page)
             self.assertIn('id="motion-depth-max-slider"', page)

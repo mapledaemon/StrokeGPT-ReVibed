@@ -94,6 +94,13 @@ Follow-up work:
   verify on-device that this restores smooth speed variation without disturbing
   dense imported timing. HAMP should be compared as the legacy stroke-window
   adapter rather than as a timed-point transport.
+- Before changing sampler math for fixed-speed Continuous reports, confirm that
+  firmware v4 actually entered HSP. Motion transport captures now include
+  `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`,
+  `api_v3_unavailable_reason`, and `continuous_schema=hdsp_fallback` when the
+  controller is running Continuous through slow HDSP fallback instead of HSP;
+  missing/failed v3 auth here means the public API v3 Application ID path, not
+  the user's Handy connection key field.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,

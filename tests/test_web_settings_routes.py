@@ -81,7 +81,7 @@ class WebSettingsRouteTests(WebTestCase):
             settings.handy_key = original_key
             handy.set_api_key(original_runtime_key)
 
-    def test_set_handy_device_config_saves_firmware_and_uses_connection_key(self):
+    def test_set_handy_device_config_saves_firmware_and_v3_key(self):
         from strokegpt.web import handy, settings
 
         original = settings.to_dict()
@@ -93,12 +93,12 @@ class WebSettingsRouteTests(WebTestCase):
         try:
             settings.handy_key = "saved-key"
             handy.set_api_key("saved-key")
-            settings.handy_api_v3_key = "stale-app-key"
-            handy.set_handy_api_key("stale-app-key")
+            settings.handy_api_v3_key = ""
+            handy.set_handy_api_key("")
             with mock.patch.object(settings, "save") as save:
                 response = self.client.post("/set_handy_device_config", json={
                     "handy_firmware_version": "v4",
-                    "handy_api_v3_key": "app-key",
+                    "handy_api_v3_key": "app-id",
                 })
 
             self.assertEqual(response.status_code, 200)
@@ -106,21 +106,24 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["status"], "success")
             self.assertEqual(data["handy_firmware_version"], "fw4")
             self.assertTrue(data["handy_api_v3_enabled"])
+            self.assertTrue(data["handy_api_v3_key_configured"])
+            self.assertEqual(data["handy_api_v3_key"], "app-id")
             self.assertEqual(settings.handy_firmware_version, "fw4")
-            self.assertEqual(settings.handy_api_v3_key, "")
+            self.assertEqual(settings.handy_api_v3_key, "app-id")
             self.assertEqual(handy.firmware_version, "fw4")
-            self.assertEqual(handy.api_v3_key, "")
+            self.assertEqual(handy.api_v3_key, "app-id")
             self.assertTrue(handy.supports_continuous_streaming())
             save.assert_called_once()
 
             response = self.client.post("/set_handy_device_config", json={
                 "handy_firmware_version": "v3",
-                "handy_api_v3_key": "app-key",
+                "handy_api_v3_key": "legacy-still-saved",
             })
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertEqual(data["handy_firmware_version"], "fw3")
             self.assertFalse(data["continuous_streaming_supported"])
+            self.assertEqual(settings.handy_api_v3_key, "legacy-still-saved")
         finally:
             settings.apply_dict(original)
             handy.set_api_key(original_runtime["handy_key"])

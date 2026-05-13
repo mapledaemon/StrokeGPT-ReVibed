@@ -1891,6 +1891,12 @@ class MotionController:
                 send_ended_at = time.monotonic()
                 extras = {
                     "continuous": True,
+                    "continuous_schema": "hdsp_fallback",
+                    "continuous_fallback_reason": (
+                        self.handy.api_v3_unavailable_reason()
+                        if hasattr(self.handy, "api_v3_unavailable_reason")
+                        else "continuous_streaming_unavailable"
+                    ),
                     "sample_index": sample_index,
                     "cycle_ms": cycle_ms,
                     "phase_offset_ms": phase_offset_ms,

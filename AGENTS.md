@@ -205,24 +205,26 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   one-shot position move.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
-- Handy firmware selection is persisted as `handy_firmware_version`. Firmware
-  v4 plus a configured Handy connection key enables HSP timed point streaming for
-  the continuous backend, v3 HAMP commands for live stroke control, and v3
-  HDSP `xpt` duration moves for position playback. HSP playback should follow
-  the current v3 split of `hsp/add` timed points followed by `hsp/play` with
-  server time metadata; do not rely on speed-only visualizer fields as the
-  transport contract. For v3 HDSP `xpt`, send `xp` as the current REST v3
-  normalized physical position (`0..1`) after applying local stroke-depth
-  calibration; HSP timed points send current HSP/funscript `0..100` position
-  units directly and rely on `/slider/stroke` for the saved physical depth
-  window. Do not multiply HSP `x` values into a `0..1000` range, and do not
-  pre-apply the local stroke-depth calibration to each HSP point unless current
-  upstream Handy documentation and real-device traces prove that the REST v3
-  HSP point schema changed again.
-  Firmware v3 / legacy mode, or v4 without an API v3 app authorized connection,
-  keeps the legacy HDSP direct-position fallback. Do not add a second
-  user-facing Handy API key field unless the upstream API requires a distinct
-  credential again.
+- Handy firmware selection is persisted as `handy_firmware_version`, and REST
+  v3 authentication uses the persisted `handy_api_v3_key` public Application
+  ID plus the normal Handy connection key. Firmware v4 with both values
+  configured enables HSP timed point streaming for the continuous backend, v3
+  HAMP commands for live stroke control, and v3 HDSP `xpt` duration moves for
+  position playback. HSP playback should follow the current v3 split of
+  `hsp/add` timed points followed by `hsp/play` with server time metadata; do
+  not rely on speed-only visualizer fields as the transport contract. For v3
+  HDSP `xpt`, send `xp` as the current REST v3 normalized physical position
+  (`0..1`) after applying local stroke-depth calibration; HSP timed points send
+  current HSP/funscript `0..100` position units directly and rely on
+  `/slider/stroke` for the saved physical depth window. Do not multiply HSP
+  `x` values into a `0..1000` range, and do not pre-apply the local
+  stroke-depth calibration to each HSP point unless current upstream Handy
+  documentation and real-device traces prove that the REST v3 HSP point schema
+  changed again. Firmware v3 / legacy mode, v4 without the Application ID, or
+  v4 after an API v3 401 auth failure keeps the legacy HDSP direct-position
+  fallback. When diagnosing fixed-speed continuous motion, check
+  `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`, and
+  `api_v3_unavailable_reason` before changing sampler math.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
   speed as timed point spacing and position deltas; HDSP fallback derives a

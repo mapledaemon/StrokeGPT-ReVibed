@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Restore Handy API V3 Auth Diagnostics
+----------------------------------------------------------------
+
+Branch: codex-handy-v3-auth-diagnostics
+
+- Restored the dedicated Handy API v3 Application ID path after motion
+  transport capture showed Continuous was silently falling back to slow HDSP
+  `xava` commands instead of entering HSP. Firmware v4 HSP now requires both
+  the normal Handy connection key and a configured API v3 Application ID, with
+  the project-owned public ID provided as the default.
+- Added API v3 auth/fallback diagnostics to Handy status, motion captures, and
+  Continuous HDSP fallback trace rows so fixed-speed reports can distinguish
+  "HSP was unavailable" from sampler or point-timing problems.
+- Reintroduced the Device-tab API v3 Application ID field and updated setup
+  docs so users can override the public ID current REST v3 requires without
+  adding duplicate Handy connection key fields.
+- Migrated existing settings with a blank API v3 credential to the built-in
+  public Application ID on load so already-installed apps pick it up after
+  restart instead of staying on HDSP fallback.
+
+
 2026-05-13 - PR #192 - Motion Transport Capture Diagnostics
 ------------------------------------------------------------
 

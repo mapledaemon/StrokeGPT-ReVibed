@@ -28,6 +28,7 @@ class RecordingV3HandyController(RecordingHandyController):
     def __init__(self):
         super().__init__()
         self.set_firmware_version("fw4")
+        self.set_handy_api_key("app-id")
         self.v3_commands = []
 
     def _send_v3_command(self, path, body=None):
@@ -178,8 +179,8 @@ class HandyControllerTests(unittest.TestCase):
         )
         self.assertNotIn("secret", str(diagnostics["last_command"]))
 
-    def test_send_v3_command_uses_connection_key_for_v3_auth(self):
-        handy = HandyController(handy_key="secret")
+    def test_send_v3_command_uses_app_key_for_v3_auth(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
 
         with mock.patch(
             "strokegpt.handy.requests.put",
@@ -190,9 +191,21 @@ class HandyControllerTests(unittest.TestCase):
 
         _args, kwargs = put.call_args
         self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
-        self.assertEqual(kwargs["headers"]["X-Api-Key"], "secret")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         self.assertNotIn("secret", str(handy.diagnostics()["last_command"]))
+        self.assertNotIn("app-id", str(handy.diagnostics()["last_command"]))
+
+    def test_send_v3_command_requires_app_key(self):
+        handy = HandyController(handy_key="secret")
+
+        self.assertFalse(handy._send_v3_command("mode2", {"mode": 0}))
+
+        diagnostics = handy.diagnostics()
+        self.assertFalse(diagnostics["api_v3_enabled"])
+        self.assertFalse(diagnostics["api_v3_key_configured"])
+        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "missing_api_v3_key")
+        self.assertEqual(diagnostics["last_command"]["error"], "missing Handy API v3 Application ID")
 
     def test_send_command_records_failure_instead_of_raising_name_error(self):
         handy = HandyController(handy_key="secret")
@@ -300,12 +313,15 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
-    def test_supports_continuous_streaming_uses_saved_connection_key(self):
+    def test_supports_continuous_streaming_requires_connection_and_app_key(self):
         handy = RecordingHandyController()
 
         self.assertFalse(handy.supports_continuous_streaming())
         handy.set_firmware_version("fw4")
 
+        self.assertFalse(handy.supports_continuous_streaming())
+        self.assertEqual(handy.api_v3_unavailable_reason(), "missing_api_v3_key")
+        handy.set_handy_api_key("app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         handy.set_firmware_version("v3")
         self.assertFalse(handy.supports_continuous_streaming())
@@ -444,7 +460,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["last_command"]["body"]["filter"], 0.9)
 
     def test_v3_command_records_sanitized_hsp_response_state(self):
-        handy = HandyController(handy_key="secret")
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
         payload = {
             "result": {
                 "play_state": "playing",
