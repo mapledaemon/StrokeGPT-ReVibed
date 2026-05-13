@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - Unreleased - Model Selector Spacing
+------------------------------------------------
+
+Branch: codex/model-selector-spacing
+
+- Loosened the Ollama model selector and startup model prompt action grid so
+  longer button labels wrap into additional columns/rows instead of colliding
+  in the modal.
+- Gave the startup model prompt more width and vertical spacing, with a taller
+  status line for wrapped recovery guidance.
+
+
 2026-05-13 - PR #179 - Startup Model Selection Prompt
 ------------------------------------------------------
 
