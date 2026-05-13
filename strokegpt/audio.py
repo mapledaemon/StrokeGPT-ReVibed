@@ -1,4 +1,5 @@
 import io
+import inspect
 import importlib.util
 import os
 import re
@@ -436,7 +437,9 @@ class AudioService:
                     "[INFO] Loading local Chatterbox model. "
                     "If the model weights are not cached, this may download several GB."
                 )
-                self._local_model = model_class.from_pretrained(device=device)
+                with self._torch_float32_default_dtype():
+                    loaded_model = model_class.from_pretrained(device=device)
+                self._local_model = self._prepare_chatterbox_model_for_inference(loaded_model)
                 self._local_model_engine = self.local_engine
                 self._local_model_device = device
                 print(f"[OK] {self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} loaded on {device}.")
@@ -510,10 +513,147 @@ class AudioService:
 
     def _generate_local_waveform(self, model, text):
         kwargs = self._local_generation_kwargs()
-        if self.local_prompt_path:
-            kwargs["audio_prompt_path"] = self.local_prompt_path
-        with self._torch_inference_mode():
-            return model.generate(text, **kwargs)
+        self._prepare_chatterbox_model_for_inference(model)
+        with self._torch_float32_default_dtype(), self._torch_inference_mode():
+            if self.local_prompt_path:
+                prepared_prompt = self._prepare_chatterbox_prompt_conditionals(model, kwargs)
+                if not prepared_prompt:
+                    kwargs["audio_prompt_path"] = self.local_prompt_path
+            self._coerce_chatterbox_conditionals_to_float32(model)
+            return self._coerce_local_waveform_dtype(model.generate(text, **kwargs))
+
+    def _prepare_chatterbox_model_for_inference(self, model):
+        self._patch_chatterbox_float32_inputs(model)
+        self._coerce_chatterbox_conditionals_to_float32(model)
+        return model
+
+    def _patch_chatterbox_float32_inputs(self, model):
+        if getattr(model, "_strokegpt_float32_inputs_patched", False):
+            return
+        try:
+            import numpy as np
+            import torch
+        except Exception:
+            return
+
+        def coerce_audio(value):
+            if isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.floating):
+                return value.astype(np.float32, copy=False)
+            if torch.is_tensor(value) and value.is_floating_point() and value.dtype != torch.float32:
+                return value.to(dtype=torch.float32)
+            return value
+
+        tokenizer = getattr(getattr(model, "s3gen", None), "tokenizer", None)
+        if tokenizer is not None and not getattr(tokenizer, "_strokegpt_float32_inputs_patched", False):
+            original_prepare_audio = getattr(tokenizer, "_prepare_audio", None)
+            if callable(original_prepare_audio):
+                def prepare_audio_float32(wavs, _original=original_prepare_audio):
+                    return [coerce_audio(wav) for wav in _original([coerce_audio(wav) for wav in wavs])]
+
+                tokenizer._prepare_audio = prepare_audio_float32
+
+            original_pad = getattr(tokenizer, "pad", None)
+            if callable(original_pad):
+                def pad_float32(wavs, sr, _original=original_pad):
+                    return [coerce_audio(wav) for wav in _original([coerce_audio(wav) for wav in wavs], sr)]
+
+                tokenizer.pad = pad_float32
+
+            tokenizer._strokegpt_float32_inputs_patched = True
+
+        voice_encoder = getattr(model, "ve", None)
+        if voice_encoder is not None and not getattr(voice_encoder, "_strokegpt_float32_inputs_patched", False):
+            original_embeds_from_wavs = getattr(voice_encoder, "embeds_from_wavs", None)
+            if callable(original_embeds_from_wavs):
+                def embeds_from_wavs_float32(wavs, *args, _original=original_embeds_from_wavs, **kwargs):
+                    return _original([coerce_audio(wav) for wav in wavs], *args, **kwargs)
+
+                voice_encoder.embeds_from_wavs = embeds_from_wavs_float32
+                voice_encoder._strokegpt_float32_inputs_patched = True
+
+        original_norm_loudness = getattr(model, "norm_loudness", None)
+        if callable(original_norm_loudness) and not getattr(model, "_strokegpt_norm_loudness_patched", False):
+            def norm_loudness_float32(wav, *args, _original=original_norm_loudness, **kwargs):
+                return coerce_audio(_original(coerce_audio(wav), *args, **kwargs))
+
+            model.norm_loudness = norm_loudness_float32
+            model._strokegpt_norm_loudness_patched = True
+
+        model._strokegpt_float32_inputs_patched = True
+
+    def _prepare_chatterbox_prompt_conditionals(self, model, generation_kwargs):
+        prepare = getattr(model, "prepare_conditionals", None)
+        if not callable(prepare):
+            return False
+
+        prepare_kwargs = {}
+        try:
+            parameters = inspect.signature(prepare).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+
+        if not parameters or "exaggeration" in parameters:
+            prepare_kwargs["exaggeration"] = generation_kwargs.get("exaggeration", self.local_exaggeration)
+        if "norm_loudness" in parameters:
+            prepare_kwargs["norm_loudness"] = True
+
+        try:
+            prepare(self.local_prompt_path, **prepare_kwargs)
+        except TypeError:
+            if parameters or not prepare_kwargs:
+                raise
+            prepare(self.local_prompt_path)
+        self._coerce_chatterbox_conditionals_to_float32(model)
+        return True
+
+    def _coerce_chatterbox_conditionals_to_float32(self, model):
+        try:
+            import torch
+        except Exception:
+            return
+
+        conds = getattr(model, "conds", None)
+        if conds is None:
+            return
+
+        device = getattr(model, "device", None) or None
+        t3_cond = getattr(conds, "t3", None)
+        if t3_cond is not None:
+            to_method = getattr(t3_cond, "to", None)
+            if callable(to_method):
+                try:
+                    to_method(device=device, dtype=torch.float32)
+                except TypeError:
+                    to_method(device=device)
+            for name, value in vars(t3_cond).items():
+                coerced = self._coerce_chatterbox_tensor_to_float32(value, torch, device)
+                if coerced is not value:
+                    setattr(t3_cond, name, coerced)
+
+        gen_cond = getattr(conds, "gen", None)
+        if isinstance(gen_cond, dict):
+            for key, value in list(gen_cond.items()):
+                gen_cond[key] = self._coerce_chatterbox_tensor_to_float32(value, torch, device)
+
+    def _coerce_chatterbox_tensor_to_float32(self, value, torch, device):
+        if not torch.is_tensor(value):
+            return value
+        if value.is_floating_point():
+            if device:
+                return value.to(device=device, dtype=torch.float32)
+            return value.to(dtype=torch.float32)
+        if device:
+            return value.to(device=device)
+        return value
+
+    def _coerce_local_waveform_dtype(self, waveform):
+        try:
+            import torch
+        except Exception:
+            return waveform
+        if torch.is_tensor(waveform) and waveform.is_floating_point() and waveform.dtype != torch.float32:
+            return waveform.to(dtype=torch.float32)
+        return waveform
 
     def _local_generation_kwargs(self):
         kwargs = {
@@ -726,6 +866,29 @@ class AudioService:
             return
         with torch.inference_mode():
             yield
+
+    @contextmanager
+    def _torch_float32_default_dtype(self):
+        try:
+            import torch
+        except Exception:
+            yield
+            return
+
+        get_default_dtype = getattr(torch, "get_default_dtype", None)
+        set_default_dtype = getattr(torch, "set_default_dtype", None)
+        if not callable(get_default_dtype) or not callable(set_default_dtype):
+            yield
+            return
+
+        previous_dtype = get_default_dtype()
+        try:
+            if previous_dtype != torch.float32:
+                set_default_dtype(torch.float32)
+            yield
+        finally:
+            if get_default_dtype() != previous_dtype:
+                set_default_dtype(previous_dtype)
 
     @contextmanager
     def _suppress_perth_pkg_resources_warning(self):
