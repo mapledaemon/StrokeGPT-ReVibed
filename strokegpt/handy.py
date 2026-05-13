@@ -669,10 +669,9 @@ class HandyController:
             app_depth = self._safe_percent(point.get("x", point.get("depth", 50)))
         except (TypeError, ValueError):
             return None
-        physical_depth = self._relative_depth_to_physical_percent(app_depth)
         return {
             "t": at_ms,
-            "x": max(0, min(HSP_POINT_MAX, int(round(physical_depth)))),
+            "x": max(0, min(HSP_POINT_MAX, int(round(app_depth)))),
         }
 
     def _stream_points_body(self, points):
@@ -760,7 +759,7 @@ class HandyController:
         tail_index = int(tail_point_stream_index or len(stream_points))
         add = {
             "points": stream_points[:100],
-            "flush": False,
+            "flush": True,
             "tail_point_stream_index": max(1, tail_index),
         }
         if not self._send_v3_command("hsp/add", add):
@@ -771,6 +770,7 @@ class HandyController:
             "start_time": max(0, int(round(start_time_ms))),
             "server_time": self._estimated_server_time_ms(),
             "playback_rate": 1.0,
+            "pause_on_starving": False,
             "loop": False,
         }
         if not self._send_v3_command("hsp/play", body):

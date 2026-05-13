@@ -208,11 +208,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   server time metadata; do not rely on speed-only visualizer fields as the
   transport contract. For v3 HDSP `xpt`, send `xp` as the current REST v3
   normalized physical position (`0..1`) after applying local stroke-depth
-  calibration; HSP timed points keep app positions in `0..100` internally and
-  send calibrated physical wire `x` values in current HSP/funscript `0..100`
-  position units. Do not multiply HSP `x` values into a `0..1000` range unless
-  current upstream Handy documentation and real-device traces prove that the
-  REST v3 HSP point schema changed again.
+  calibration; HSP timed points send current HSP/funscript `0..100` position
+  units directly and rely on `/slider/stroke` for the saved physical depth
+  window. Do not multiply HSP `x` values into a `0..1000` range, and do not
+  pre-apply the local stroke-depth calibration to each HSP point unless current
+  upstream Handy documentation and real-device traces prove that the REST v3
+  HSP point schema changed again.
   Firmware v3 / legacy mode, or v4 without an API v3 app authorized connection,
   keeps the legacy HDSP direct-position fallback. Do not add a second
   user-facing Handy API key field unless the upstream API requires a distinct
@@ -225,29 +226,23 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   interval, and user speed-limit clamping. Derived sample speed must remain
   intent-relative; do not let a low requested speed saturate every fallback
   XAVA frame at the user maximum, and do not feed derived sample speed back
-  into `motion.current_target()`, Freestyle scoring, or LLM context. Do not
-  convert relative intent speed into physical Handy velocity before calling
-  `sample_continuous_motion()`; physical speed limits belong at the HSP/HDSP
-  transport boundary, not inside the pattern sampler.
+  into `motion.current_target()`, Freestyle scoring, or LLM context. Continuous
+  HSP should apply saved 0-100 speed limits as semantic speed before sampling,
+  not as physical Handy velocity. Physical mm/s duration caps belong to
+  HDSP/Flexible Position direct moves, not HSP timed-point spacing.
   Continuous morphing and step limiting smooth depth/range only; do not
   interpolate or delta-limit the command-speed budget as if it were a spatial
   target. HSP timed-point streams must preserve authored phase timing and
-  point-to-point depth deltas, but their transport timestamps may stretch a
-  segment when the requested slope would exceed the configured absolute
-  physical speed budget. The saved speed-limit settings remain 0-100 app/user
-  percentages; convert them to the Handy position transport's absolute mm/s
-  budget through `max_absolute_user_speed` / `max_absolute_velocity_for_relative_speed()`.
-  Do not remap `sample_target.speed` through the relative intent-speed curve
-  when stretching HSP point timing. This keeps firmware from saturating at a
-  fixed device speed while still reporting both `phase_interval_ms` and
-  `transport_interval_ms` in the trace. Flexible Position `xpt.t` durations
-  may similarly be stretched when an authored timed move exceeds the configured
-  Handy speed cap.
+  point-to-point depth deltas; do not stretch HSP timestamps through a
+  point-to-point velocity budget because that flattens fast segments into a
+  fixed-slope feel. Flexible Position `xpt.t` durations may still be stretched
+  when an authored timed move exceeds the configured Handy speed cap.
   Pattern swaps should start a fresh HSP stream id and rebuffer the replacement
   plan through `/hsp/add` plus `/hsp/threshold`; do not reset by reusing old
-  stream ids with new zero-based point times. HSP `play` should use server-time
-  metadata and should not request pause-on-starving unless real-device testing
-  proves that is the desired behavior. Sparse built-in HSP streams should keep
+  stream ids with new zero-based point times. Initial/replacement HSP adds
+  should flush the point buffer, and HSP `play` should use server-time metadata
+  with `pause_on_starving: false` unless real-device testing proves another
+  behavior is desired. Sparse built-in HSP streams should keep
   authored endpoints but insert Catmull-Rom intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
   keyframes. Replacement HSP streams should include an exact point at

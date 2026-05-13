@@ -1148,6 +1148,23 @@ class MotionController:
     ):
         return sample_continuous_motion(plan, target, elapsed_seconds)
 
+    def _continuous_target_with_speed_limits(self, target: MotionTarget) -> MotionTarget:
+        target = target.clamped()
+        effective_speed = getattr(self.handy, "effective_speed_for_relative", None)
+        if not callable(effective_speed):
+            return target
+        try:
+            speed = _clamp(float(effective_speed(target.speed)))
+        except (TypeError, ValueError):
+            return target
+        return MotionTarget(
+            speed,
+            target.depth,
+            target.stroke_range,
+            label=target.label,
+            motion_program=target.motion_program,
+        ).clamped()
+
     def apply_continuous_target(
         self,
         target: MotionTarget,
@@ -1160,7 +1177,7 @@ class MotionController:
 
         started_at = time.monotonic()
         plan_key = self._continuous_plan_key(plan)
-        clamped_target = target.clamped()
+        clamped_target = self._continuous_target_with_speed_limits(target)
         start_target = self.current_target()
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
@@ -1242,32 +1259,6 @@ class MotionController:
             CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
             CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
         )
-
-    def _continuous_transport_interval(
-        self,
-        previous_target: MotionTarget,
-        sample_target: MotionTarget,
-        phase_interval_seconds: float,
-    ) -> float:
-        try:
-            phase_interval = max(0.001, float(phase_interval_seconds))
-        except (TypeError, ValueError):
-            phase_interval = self._continuous_sample_interval()
-
-        duration_for_depth = getattr(self.handy, "duration_ms_for_depth_interval", None)
-        max_user_speed = getattr(
-            self.handy,
-            "max_absolute_user_speed",
-            getattr(self.handy, "max_user_speed", None),
-        )
-        if max_user_speed is not None and callable(duration_for_depth):
-            try:
-                velocity = max(1.0, float(max_user_speed))
-                duration_ms = duration_for_depth(velocity, previous_target.depth, sample_target.depth)
-                return max(phase_interval, max(0.001, float(duration_ms) / 1000.0))
-            except Exception:
-                pass
-        return phase_interval
 
     def _refresh_continuous_phase_state(
         self,
@@ -1471,7 +1462,6 @@ class MotionController:
         previous_recorded_point = None
         previous_point_time_seconds = None
         previous_phase_time_seconds = None
-        previous_output_target = start_target
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
         program_range = continuous_plan_depth_range(plan, target)
@@ -1537,7 +1527,7 @@ class MotionController:
             sample,
             phase_interval: float,
         ) -> None:
-            nonlocal previous_point_time_seconds, previous_phase_time_seconds, previous_output_target
+            nonlocal previous_point_time_seconds, previous_phase_time_seconds
             nonlocal sample_index, stream_index, stream_seconds
             command_interval = (
                 base_interval
@@ -1567,7 +1557,6 @@ class MotionController:
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
             previous_phase_time_seconds = point_seconds
-            previous_output_target = sample.target
             sample_index += 1
             stream_seconds = point_stream_seconds
 
@@ -1625,24 +1614,7 @@ class MotionController:
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + phase_interval
                 sample = sample_stream_point(point_seconds, provisional_stream_seconds)
-                transport_interval = self._continuous_transport_interval(
-                    previous_output_target,
-                    sample.target,
-                    phase_interval,
-                )
-                for _attempt in range(3):
-                    candidate_stream_seconds = (
-                        stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
-                    ) + transport_interval
-                    sample = sample_stream_point(point_seconds, candidate_stream_seconds)
-                    adjusted_interval = self._continuous_transport_interval(
-                        previous_output_target,
-                        sample.target,
-                        phase_interval,
-                    )
-                    if abs(adjusted_interval - transport_interval) <= 0.001:
-                        break
-                    transport_interval = adjusted_interval
+                transport_interval = phase_interval
                 point_stream_seconds = (
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + transport_interval

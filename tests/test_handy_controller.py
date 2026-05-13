@@ -394,22 +394,22 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.v3_commands[1][1], {"min": 0.1, "max": 0.9})
         self.assertEqual(handy.v3_commands[2][1], {"stream_id": 1})
         add = handy.v3_commands[3][1]
-        self.assertFalse(add["flush"])
+        self.assertTrue(add["flush"])
         self.assertEqual(add["tail_point_stream_index"], 3)
         self.assertNotIn("tail_point_threshold", add)
         self.assertEqual(
             add["points"],
             [
-                {"t": 0, "x": 10},
+                {"t": 0, "x": 0},
                 {"t": 160, "x": 50},
-                {"t": 320, "x": 90},
+                {"t": 320, "x": 100},
             ],
         )
         self.assertEqual(handy.v3_commands[4][1], {"tail_point_threshold": 1})
         body = handy.v3_commands[-1][1]
         self.assertEqual(body["start_time"], 0)
         self.assertEqual(body["server_time"], 123456)
-        self.assertNotIn("pause_on_starving", body)
+        self.assertFalse(body["pause_on_starving"])
         self.assertFalse(body["loop"])
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)

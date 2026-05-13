@@ -8,28 +8,25 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-13 - Unreleased - Use Absolute Continuous Transport Cap
----------------------------------------------------------------
+2026-05-13 - Unreleased - Correct Continuous HSP Transport Schema
+-----------------------------------------------------------------
 
 Branch: codex-continuous-absolute-transport-cap
 
-- Fixed continuous HSP transport stretching to use the saved Handy
-  `max_user_speed` as the physical safety ceiling instead of remapping each
-  sampled intent speed back through the relative speed curve. Fast pattern
-  segments should no longer be stretched down to an intent-relative cap that
-  makes device motion feel fixed speed.
-- Corrected that physical ceiling to convert the saved 0-100 speed limit into
-  the Handy position transport's absolute mm/s budget, so HSP and timed
-  position playback are no longer capped as if an 80% user setting meant only
-  80 mm/s.
-- Added a regression test that fails if `_continuous_transport_interval()`
-  consults `max_velocity_for_relative_speed(sample_target.speed)` again, while
-  preserving the configured max-speed stretch guard for physically impossible
-  HSP point slopes.
+- Stopped retiming continuous HSP point streams through a local
+  point-to-point velocity cap. HSP now preserves the sampled timed-point
+  spacing that firmware consumes, while HDSP and Flexible Position keep their
+  absolute mm/s duration caps for direct position moves.
+- Applied saved 0-100 speed limits to the continuous semantic target before
+  sampling, so lowering the Motion max-speed setting still slows HSP cadence
+  without flattening every fast segment into the same capped slope.
 - Corrected continuous HSP point `x` encoding back to current funscript-style
-  `0..100` position units after checking Syncopathy's active web/BLE HSP paths.
-  The previous `0..1000` scaling was validating the wrong schema and could make
-  firmware clamp or misread the timed stream, masking every speed-mapping fix.
+  `0..100` position units after checking Syncopathy's active web/BLE HSP paths,
+  and stopped pre-applying the local stroke-depth calibration to those points
+  because `/slider/stroke` already carries that range to firmware.
+- Made replacement HSP starts flush the new point buffer and explicitly set
+  `pause_on_starving: false`, matching the current API contract more closely
+  and avoiding avoidable stalls during pattern changes.
 
 
 2026-05-13 - PR #189 - Fix Continuous HSP Speed Scaling

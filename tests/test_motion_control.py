@@ -805,39 +805,17 @@ class MotionControllerTests(unittest.TestCase):
         self.assertAlmostEqual(fast.tempo_scale, 1.3, places=3)
         self.assertGreater(fast.tempo_scale - slow.tempo_scale, 0.5)
 
-    def test_continuous_transport_uses_absolute_cap_not_sample_relative_speed(self):
-        class RelativeCapTrapHandy(FakeHandy):
+    def test_continuous_hsp_preserves_point_timing_without_velocity_stretch(self):
+        class HspVelocityTrapHandy(VelocityCappedStreamingFakeHandy):
             def __init__(self):
-                super().__init__()
-                self.max_user_speed = 80
-                self.max_absolute_user_speed = 320
-                self.relative_cap_calls = []
-                self.transport_velocities = []
-
-            def max_velocity_for_relative_speed(self, speed):
-                self.relative_cap_calls.append(speed)
-                return 20
+                super().__init__(max_velocity=45)
+                self.duration_calls = []
 
             def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
-                self.transport_velocities.append(float(velocity))
-                distance = abs(float(end_depth) - float(start_depth))
-                return max(1, int(round((distance / max(1.0, float(velocity))) * 1000.0)))
+                self.duration_calls.append((velocity, start_depth, end_depth))
+                return super().duration_ms_for_depth_interval(velocity, start_depth, end_depth)
 
-        handy = RelativeCapTrapHandy()
-        controller = MotionController(handy, step_delay=0.16)
-
-        interval = controller._continuous_transport_interval(
-            MotionTarget(50, 10, 80, "stroke"),
-            MotionTarget(95, 90, 80, "stroke"),
-            0.1,
-        )
-
-        self.assertEqual(handy.relative_cap_calls, [])
-        self.assertEqual(handy.transport_velocities, [320.0])
-        self.assertAlmostEqual(interval, 0.25)
-
-    def test_continuous_hsp_stretches_impossible_segments_to_velocity_budget(self):
-        handy = VelocityCappedStreamingFakeHandy(max_velocity=45)
+        handy = HspVelocityTrapHandy()
         controller = MotionController(handy, step_delay=0.16)
 
         try:
@@ -852,8 +830,9 @@ class MotionControllerTests(unittest.TestCase):
                 if right["t"] > left["t"] and abs(right["x"] - left["x"]) > 0.01
             ]
             self.assertTrue(rates)
-            self.assertLessEqual(max(rates), handy.max_velocity + 3)
+            self.assertGreater(max(rates), handy.max_velocity * 2)
             self.assertGreater(max(rates) - min(rates), 40.0)
+            self.assertEqual(handy.duration_calls, [])
 
             scales = [
                 point["hsp_transport_time_scale"]
@@ -861,7 +840,7 @@ class MotionControllerTests(unittest.TestCase):
                 if point.get("continuous_schema") == "hsp" and "hsp_transport_time_scale" in point
             ]
             self.assertTrue(scales)
-            self.assertGreater(max(scales), 1.0)
+            self.assertEqual(set(scales), {1.0})
         finally:
             controller.stop()
 
