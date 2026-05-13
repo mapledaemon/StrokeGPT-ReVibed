@@ -12,6 +12,7 @@ sys.modules.setdefault("requests", requests_module)
 
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
+    DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_PERSONA_PROMPTS,
     DEFAULT_VOICE_INPUT_MODEL,
@@ -65,7 +66,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["handy_firmware_version"], "fw4")
-        self.assertEqual(saved["handy_api_v3_key"], "")
+        self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
@@ -310,13 +311,21 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
         self.assertEqual(settings.motion_backend, "continuous")
 
-    def test_legacy_handy_api_v3_key_is_cleared_on_load(self):
+    def test_handy_api_v3_key_is_preserved_on_load(self):
         settings = SettingsManager("settings.json")
 
-        settings.file_path = FakePath(json.dumps({"handy_api_v3_key": "stale-app-key"}))
+        settings.file_path = FakePath(json.dumps({"handy_api_v3_key": "app-id"}))
         settings.load()
 
-        self.assertEqual(settings.handy_api_v3_key, "")
+        self.assertEqual(settings.handy_api_v3_key, "app-id")
+
+    def test_blank_handy_api_v3_key_migrates_to_default_application_id(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"handy_api_v3_key": ""}))
+        settings.load()
+
+        self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
 
     def test_diagnostics_levels_are_normalized(self):
         fake_path = FakePath(json.dumps({

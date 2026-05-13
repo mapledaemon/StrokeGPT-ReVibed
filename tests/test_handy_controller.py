@@ -28,6 +28,7 @@ class RecordingV3HandyController(RecordingHandyController):
     def __init__(self):
         super().__init__()
         self.set_firmware_version("fw4")
+        self.set_handy_api_key("app-id")
         self.v3_commands = []
 
     def _send_v3_command(self, path, body=None):
@@ -46,6 +47,24 @@ class ThresholdFailingV3HandyController(RecordingV3HandyController):
             self._record_command_result(path, body, ok=False, status_code=503, error="threshold unavailable")
             return False
         self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
+        return True
+
+
+class StaleClockV3HandyController(RecordingV3HandyController):
+    def _send_v3_command(self, path, body=None):
+        self.v3_commands.append((path, body or {}))
+        payload = None
+        if path in {"hsp/add", "hsp/threshold"}:
+            payload = {
+                "hsp_state": {
+                    "current_time_ms": 1403836,
+                    "last_point_time_ms": 32160,
+                    "points": 58,
+                    "current_point": 58,
+                    "play_state": 4,
+                }
+            }
+        self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0, response_payload=payload)
         return True
 
 
@@ -178,8 +197,8 @@ class HandyControllerTests(unittest.TestCase):
         )
         self.assertNotIn("secret", str(diagnostics["last_command"]))
 
-    def test_send_v3_command_uses_connection_key_for_v3_auth(self):
-        handy = HandyController(handy_key="secret")
+    def test_send_v3_command_uses_app_key_for_v3_auth(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
 
         with mock.patch(
             "strokegpt.handy.requests.put",
@@ -190,9 +209,21 @@ class HandyControllerTests(unittest.TestCase):
 
         _args, kwargs = put.call_args
         self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
-        self.assertEqual(kwargs["headers"]["X-Api-Key"], "secret")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         self.assertNotIn("secret", str(handy.diagnostics()["last_command"]))
+        self.assertNotIn("app-id", str(handy.diagnostics()["last_command"]))
+
+    def test_send_v3_command_requires_app_key(self):
+        handy = HandyController(handy_key="secret")
+
+        self.assertFalse(handy._send_v3_command("mode2", {"mode": 0}))
+
+        diagnostics = handy.diagnostics()
+        self.assertFalse(diagnostics["api_v3_enabled"])
+        self.assertFalse(diagnostics["api_v3_key_configured"])
+        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "missing_api_v3_key")
+        self.assertEqual(diagnostics["last_command"]["error"], "missing Handy API v3 Application ID")
 
     def test_send_command_records_failure_instead_of_raising_name_error(self):
         handy = HandyController(handy_key="secret")
@@ -300,12 +331,15 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
-    def test_supports_continuous_streaming_uses_saved_connection_key(self):
+    def test_supports_continuous_streaming_requires_connection_and_app_key(self):
         handy = RecordingHandyController()
 
         self.assertFalse(handy.supports_continuous_streaming())
         handy.set_firmware_version("fw4")
 
+        self.assertFalse(handy.supports_continuous_streaming())
+        self.assertEqual(handy.api_v3_unavailable_reason(), "missing_api_v3_key")
+        handy.set_handy_api_key("app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         handy.set_firmware_version("v3")
         self.assertFalse(handy.supports_continuous_streaming())
@@ -444,7 +478,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["last_command"]["body"]["filter"], 0.9)
 
     def test_v3_command_records_sanitized_hsp_response_state(self):
-        handy = HandyController(handy_key="secret")
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
         payload = {
             "result": {
                 "play_state": "playing",
@@ -550,6 +584,25 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
         self.assertTrue(handy.supports_continuous_streaming())
 
+    def test_append_continuous_stream_restarts_when_firmware_clock_is_past_buffer(self):
+        handy = StaleClockV3HandyController()
+
+        result = handy.append_continuous_stream(
+            [
+                {"t": 29500, "x": 79, "intent_speed": 70, "range": 80},
+                {"t": 30742, "x": 70, "intent_speed": 70, "range": 80},
+            ],
+            tail_point_stream_index=42,
+            tail_point_threshold=40,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold", "hsp/play"])
+        play_body = handy.v3_commands[-1][1]
+        self.assertEqual(play_body["start_time"], 29500)
+        self.assertFalse(play_body["pause_on_starving"])
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/play")
+
     def test_start_continuous_stream_reuses_hsp_setup_for_replacement(self):
         handy = RecordingV3HandyController()
 
@@ -570,9 +623,13 @@ class HandyControllerTests(unittest.TestCase):
 
         paths = [path for path, _body in handy.v3_commands]
         self.assertEqual(paths.count("hsp/setup"), 1)
+        self.assertEqual(paths.count("hsp/play"), 1)
         setup_bodies = [body for path, body in handy.v3_commands if path == "hsp/setup"]
         self.assertEqual(setup_bodies, [{"stream_id": 1}])
-        self.assertEqual(paths[-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
+        self.assertEqual(paths[-2:], ["hsp/add", "hsp/threshold"])
+        replacement_adds = [body for path, body in handy.v3_commands if path == "hsp/add"]
+        self.assertEqual(replacement_adds[-1]["flush"], True)
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
 
     def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
         handy = RecordingHandyController()

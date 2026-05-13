@@ -15,6 +15,7 @@ Experimental local app, not a finished release. Expect rough edges in the UI, lo
 - Windows: PowerShell and an internet connection. The bootstrap and installer can install Git, Python 3.11, Ollama, and optional NVIDIA voice dependencies when `winget` is available.
 - macOS / Linux: Python 3.11 and [Ollama](https://docs.ollama.com/) running locally.
 - A Handy connection key (the device API requires internet)
+- For firmware v4 HSP streaming: the app ships a public Handy API v3 Application ID; advanced users can override it in Device settings
 - Optional: ElevenLabs API key for hosted voice
 - Optional: NVIDIA GPU with CUDA-enabled PyTorch for fast local voice
 - Optional: NVIDIA NeMo for the Parakeet voice-input provider
@@ -146,7 +147,7 @@ StrokeGPT tab.
 ## First Run
 
 1. Paste your Handy connection key in **Profile menu > Settings > Device**.
-2. Select your Handy firmware path in **Device**. Firmware v4 can use API v3 HSP continuous streaming with the saved Handy connection key; firmware v3 uses the legacy compatibility path.
+2. Select your Handy firmware path in **Device**. Firmware v4 HSP continuous streaming needs both the Handy connection key and the public Handy API v3 Application ID; firmware v3 uses the legacy compatibility path.
 3. Pick a model in **Profile menu > Settings > Model**. Click **Download Model** if it isn't installed yet (this can pull several GB through Ollama).
 4. Optional: run **Profile menu > Settings > Diagnostics > Run Setup Checks** to verify Ollama, selected-model GPU use, optional voice dependencies, and CUDA visibility.
 5. Optional: enable voice in **Profile menu > Settings > Voice**. See [Local Voice](#local-voice) below if you want low-latency local voice on a GPU.

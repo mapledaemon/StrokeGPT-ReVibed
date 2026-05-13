@@ -76,8 +76,10 @@ function normalizeMotionDepthRange() {
 export function populateDeviceSettings(data = {}) {
     state.myHandyKey = data.handy_key || state.myHandyKey || '';
     state.handyFirmwareVersion = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
+    state.handyApiV3Key = data.handy_api_v3_key ?? state.handyApiV3Key ?? '';
     syncHandyConnectionKey(state.myHandyKey);
     if (el.handyFirmwareSelect) el.handyFirmwareSelect.value = state.handyFirmwareVersion;
+    if (el.handyApiV3KeyInput) el.handyApiV3KeyInput.value = state.handyApiV3Key;
     updateHandyFirmwareStatus(data);
     setHandyConnectionStatus('disconnected');
     setSliderValue(el.motionDepthMinSlider, el.motionDepthMinVal, data.min_depth ?? 5);
@@ -88,11 +90,14 @@ export function populateDeviceSettings(data = {}) {
 function updateHandyFirmwareStatus(data = {}) {
     if (!el.handyFirmwareStatus) return;
     const firmware = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
-    const v4Ready = Boolean(data.handy_api_v3_enabled ?? state.myHandyKey);
+    const apiKeyConfigured = Boolean(data.handy_api_v3_key_configured ?? state.handyApiV3Key);
+    const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured));
     if (firmware === 'fw4') {
         el.handyFirmwareStatus.textContent = v4Ready
-            ? 'Firmware v4 selected. API v3 uses the saved Handy connection key for HSP point streaming.'
-            : 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.';
+            ? 'Firmware v4 selected. API v3 HSP point streaming is enabled.'
+            : apiKeyConfigured
+                ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
+                    : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
     } else {
         el.handyFirmwareStatus.textContent = 'Firmware v3 legacy selected. Continuous backend falls back to HDSP direct position commands.';
     }
@@ -165,15 +170,18 @@ async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
 
 async function saveHandyDeviceConfig() {
     const handyFirmwareVersion = el.handyFirmwareSelect?.value || 'fw4';
+    const handyApiV3Key = (el.handyApiV3KeyInput?.value || '').trim();
     const res = await apiCall('/set_handy_device_config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             handy_firmware_version: handyFirmwareVersion,
+            handy_api_v3_key: handyApiV3Key,
         }),
     });
     if (res && res.status === 'success') {
         state.handyFirmwareVersion = res.handy_firmware_version || handyFirmwareVersion;
+        state.handyApiV3Key = res.handy_api_v3_key ?? handyApiV3Key;
         updateHandyFirmwareStatus(res);
         setStatusMessage(el.statusText, res.message || 'Handy firmware settings saved.', 'success');
     } else {
@@ -209,6 +217,10 @@ export function initDeviceControls() {
     document.getElementById('save-motion-depth-range').addEventListener('click', saveMotionDepthRange);
     el.handyFirmwareSelect?.addEventListener('change', () => {
         state.handyFirmwareVersion = el.handyFirmwareSelect.value || 'fw4';
+        updateHandyFirmwareStatus();
+    });
+    el.handyApiV3KeyInput?.addEventListener('input', () => {
+        state.handyApiV3Key = (el.handyApiV3KeyInput.value || '').trim();
         updateHandyFirmwareStatus();
     });
     el.saveHandyDeviceConfigBtn?.addEventListener('click', saveHandyDeviceConfig);

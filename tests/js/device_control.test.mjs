@@ -44,6 +44,7 @@ describe('Device Handy connection controls', () => {
             'save-handy-key-btn',
             'sidebar-save-handy-key-btn',
             'handy-firmware-select',
+            'handy-api-v3-key-input',
             'save-handy-device-config-btn',
             'handy-firmware-status',
             'motion-depth-min-slider',
@@ -70,11 +71,13 @@ describe('Device Handy connection controls', () => {
             'handy-key-status',
             'sidebar-handy-key-status',
             'handy-firmware-select',
+            'handy-api-v3-key-input',
             'handy-firmware-status',
             'status-text',
         ].forEach(resetStubElement);
         state.myHandyKey = '';
         state.handyFirmwareVersion = 'fw4';
+        state.handyApiV3Key = '';
         state.connectionLost = false;
     });
 
@@ -135,36 +138,40 @@ describe('Device Handy connection controls', () => {
         assert.equal(getStubElement('status-text').textContent, 'Handy connection failed: device offline');
     });
 
-    it('Save firmware posts only the selected firmware version', async () => {
+    it('Save firmware posts selected firmware and API v3 Application ID', async () => {
         const calls = [];
         globalThis.fetch = async (endpoint, options = {}) => {
             calls.push({endpoint, body: JSON.parse(options.body)});
             return jsonResponse(200, {
                 status: 'success',
                 handy_firmware_version: 'fw4',
+                handy_api_v3_key: 'app-id',
                 handy_api_v3_enabled: true,
+                handy_api_v3_key_configured: true,
                 continuous_streaming_supported: true,
-                message: 'Handy firmware set to v4; API v3 uses the saved Handy connection key.',
+                message: 'Handy firmware set to v4; API v3 HSP streaming is enabled.',
             });
         };
 
         state.myHandyKey = 'saved-key';
         getStubElement('handy-firmware-select').value = 'fw4';
+        getStubElement('handy-api-v3-key-input').value = 'app-id';
         getStubElement('save-handy-device-config-btn').click();
         await flushAsyncHandlers();
 
         assert.deepEqual(calls, [{
             endpoint: '/set_handy_device_config',
-            body: {handy_firmware_version: 'fw4'},
+            body: {handy_firmware_version: 'fw4', handy_api_v3_key: 'app-id'},
         }]);
         assert.equal(state.handyFirmwareVersion, 'fw4');
+        assert.equal(state.handyApiV3Key, 'app-id');
         assert.equal(
             getStubElement('handy-firmware-status').textContent,
-            'Firmware v4 selected. API v3 uses the saved Handy connection key for HSP point streaming.',
+            'Firmware v4 selected. API v3 HSP point streaming is enabled.',
         );
         assert.equal(
             getStubElement('status-text').textContent,
-            'Handy firmware set to v4; API v3 uses the saved Handy connection key.',
+            'Handy firmware set to v4; API v3 HSP streaming is enabled.',
         );
     });
 });

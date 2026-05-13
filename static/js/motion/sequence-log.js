@@ -96,6 +96,9 @@ export function formatMotionSequenceText(payload = {}, level = 'compact') {
             const status = point.handy_status !== undefined ? ` ${point.handy_status}` : '';
             parts.push(`Handy ${path}${status} failed`);
         }
+        if (point.continuous_schema === 'hdsp_fallback') {
+            parts.push(`HDSP fallback${point.continuous_fallback_reason ? `: ${point.continuous_fallback_reason}` : ''}`);
+        }
         if (point.is_pass_through_final) parts.push('pass-through final');
         parts.push(payload.playback_active ? 'playback active' : 'playback idle');
     }

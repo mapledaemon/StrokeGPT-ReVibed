@@ -109,6 +109,7 @@ export const el = {
     saveHandyKeyBtn: D.getElementById('save-handy-key-btn'),
     handyKeyStatus: D.getElementById('handy-key-status'),
     handyFirmwareSelect: D.getElementById('handy-firmware-select'),
+    handyApiV3KeyInput: D.getElementById('handy-api-v3-key-input'),
     saveHandyDeviceConfigBtn: D.getElementById('save-handy-device-config-btn'),
     handyFirmwareStatus: D.getElementById('handy-firmware-status'),
     sidebarHandyKeyInput: D.getElementById('sidebar-handy-key-input'),
@@ -258,6 +259,7 @@ export const el = {
 export const state = {
     myHandyKey: '',
     handyFirmwareVersion: 'fw4',
+    handyApiV3Key: '',
     myPersonaDescription: '',
     aiName: 'BOT',
     activeModeName: '',

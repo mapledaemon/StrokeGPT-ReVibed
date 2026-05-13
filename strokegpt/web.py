@@ -140,6 +140,7 @@ settings.load()
 
 handy = HandyController(
     settings.handy_key,
+    api_v3_key=settings.handy_api_v3_key,
     firmware_version=settings.handy_firmware_version,
 )
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
@@ -546,6 +547,7 @@ def _motion_transport_run_settings():
     return {
         "backend": motion.backend,
         "firmware": settings.handy_firmware_version,
+        "api_v3_key_configured": bool(settings.handy_api_v3_key),
         "min_speed": settings.min_speed,
         "max_speed": settings.max_speed,
         "min_depth": settings.min_depth,
@@ -576,7 +578,8 @@ def _motion_transport_snapshot():
     }
 
 
-def _motion_transport_summary(motion_trace, command_history):
+def _motion_transport_summary(motion_trace, command_history, diagnostics=None):
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
     paths = [str(command.get("path") or "") for command in command_history if isinstance(command, dict)]
     path_counts = {}
     for path in paths:
@@ -610,7 +613,17 @@ def _motion_transport_summary(motion_trace, command_history):
         message = "Captured HSP timed-point transport."
     elif hdsp_count:
         status = "warning"
-        message = "Captured HDSP position transport; HSP was not used in this capture."
+        reason = diagnostics.get("api_v3_unavailable_reason")
+        if reason == "missing_api_v3_key":
+            message = "Captured HDSP fallback because no Handy API v3 Application ID is configured."
+        elif reason == "api_v3_auth_failed":
+            auth_path = diagnostics.get("api_v3_auth_failed_path") or "API v3"
+            auth_error = diagnostics.get("api_v3_auth_error") or "authentication failed"
+            message = f"Captured HDSP fallback because {auth_path} failed API v3 auth: {auth_error}."
+        elif reason:
+            message = f"Captured HDSP fallback because HSP is unavailable: {reason}."
+        else:
+            message = "Captured HDSP position transport; HSP was not used in this capture."
     elif hamp_count:
         status = "warning"
         message = "Captured HAMP or mode/slide commands; continuous HSP was not used."
@@ -632,6 +645,10 @@ def _motion_transport_summary(motion_trace, command_history):
         "hamp_or_mode_commands": hamp_count,
         "failed_commands": failed_count,
         "continuous_schemas": schemas,
+        "api_v3_enabled": bool(diagnostics.get("api_v3_enabled")),
+        "api_v3_key_configured": bool(diagnostics.get("api_v3_key_configured")),
+        "api_v3_auth_failed": bool(diagnostics.get("api_v3_auth_failed")),
+        "api_v3_unavailable_reason": diagnostics.get("api_v3_unavailable_reason") or "",
     }
 
 
@@ -709,7 +726,7 @@ def motion_transport_capture_payload(action="snapshot"):
             "motion_trace": motion_trace,
             "handy_command_history": command_history,
         }
-        capture["summary"] = _motion_transport_summary(motion_trace, command_history)
+        capture["summary"] = _motion_transport_summary(motion_trace, command_history, capture["after"])
         return {
             "status": "success",
             "message": capture["summary"]["message"],
@@ -729,6 +746,7 @@ def motion_transport_capture_payload(action="snapshot"):
     capture["summary"] = _motion_transport_summary(
         capture["motion_trace"],
         capture["handy_command_history"],
+        capture["after"],
     )
     return {
         "status": "success",
@@ -741,7 +759,7 @@ def motion_transport_capture_payload(action="snapshot"):
 def apply_settings_to_services():
     handy.set_api_key(settings.handy_key)
     handy.set_firmware_version(settings.handy_firmware_version)
-    handy.set_handy_api_key("")
+    handy.set_handy_api_key(settings.handy_api_v3_key)
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)

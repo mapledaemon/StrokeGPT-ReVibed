@@ -14,6 +14,7 @@ HANDY_COMMAND_POINTS_PREVIEW = 12
 HSP_POINT_MAX = 100
 HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
 HSP_STREAM_ID_MAX = 4294967295
+HSP_STALE_CLOCK_TOLERANCE_MS = 500
 # Handy position transports use absolute velocity/duration math. The app's
 # saved speed limits remain 0-100 percent-style controls, so timed position
 # and HSP guards convert those percentages onto this mm/s device scale.
@@ -32,8 +33,12 @@ class HandyController:
         self.handy_key = handy_key
         self.base_url = self._normalize_base_url(base_url)
         self.firmware_version = self._normalize_firmware_version(firmware_version)
+        env_api_v3_application_id = (
+            os.getenv("STROKEGPT_HANDY_API_V3_APPLICATION_ID", "")
+            or os.getenv("STROKEGPT_HANDY_API_KEY", "")
+        )
         self.api_v3_key = str(
-            api_v3_key if api_v3_key is not None else os.getenv("STROKEGPT_HANDY_API_KEY", "") or ""
+            api_v3_key if api_v3_key is not None else env_api_v3_application_id or ""
         ).strip()
         self.api_v3_base_url = self._normalize_base_url(
             os.getenv("STROKEGPT_HANDY_API_V3_BASE_URL", api_v3_base_url) or HANDY_API_V3_BASE_URL
@@ -56,6 +61,8 @@ class HandyController:
         self._last_command_result = None
         self._command_history = deque(maxlen=HANDY_COMMAND_HISTORY_LIMIT)
         self._api_v3_auth_failed = False
+        self._api_v3_auth_error = ""
+        self._api_v3_auth_failed_path = ""
         self._hsp_stream_id = 0
         self._last_hsp_state = None
         self._server_time_offset_ms = None
@@ -79,6 +86,8 @@ class HandyController:
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._api_v3_auth_error = ""
+            self._api_v3_auth_failed_path = ""
             self._hsp_stream_id = 0
             self._last_hsp_state = None
             self._server_time_offset_ms = None
@@ -87,14 +96,16 @@ class HandyController:
         self.handy_key = key
 
     def set_handy_api_key(self, key):
-        # Compatibility shim - do not extend. API v3 control uses the saved
-        # Handy connection key; this keeps older settings/env plumbing inert.
+        # Compatibility shim - do not extend. The persisted setting name says
+        # "key", but API v3 HSP uses a public Application ID in X-Api-Key.
         cleaned = str(key or "").strip()
         if cleaned != self.api_v3_key or self._api_v3_auth_failed:
             self._current_mode = None
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._api_v3_auth_error = ""
+            self._api_v3_auth_failed_path = ""
             self._hsp_stream_id = 0
             self._last_hsp_state = None
             self._server_time_offset_ms = None
@@ -109,6 +120,8 @@ class HandyController:
             self._hamp_started = False
             self._hsp_streaming = False
             self._api_v3_auth_failed = False
+            self._api_v3_auth_error = ""
+            self._api_v3_auth_failed_path = ""
             self._hsp_stream_id = 0
             self._last_hsp_state = None
             self._server_time_offset_ms = None
@@ -324,6 +337,9 @@ class HandyController:
             self._record_command_result(path, body, ok=False, error="missing Handy key")
             return False
         api_key = self._effective_api_v3_key()
+        if not api_key:
+            self._record_command_result(path, body, ok=False, error="missing Handy API v3 Application ID")
+            return False
         headers = {
             "Content-Type": "application/json",
             "X-Connection-Key": self.handy_key,
@@ -333,14 +349,19 @@ class HandyController:
         if not ok:
             last_command = self.last_command_result() or {}
             if last_command.get("status_code") == 401:
-                self._disable_api_v3_control()
+                self._disable_api_v3_control(
+                    path=path,
+                    error=last_command.get("error") or "Unauthorized",
+                )
         return ok
 
     def _effective_api_v3_key(self):
-        return str(self.handy_key or "").strip()
+        return str(self.api_v3_key or "").strip()
 
-    def _disable_api_v3_control(self):
+    def _disable_api_v3_control(self, *, path="", error=""):
         self._api_v3_auth_failed = True
+        self._api_v3_auth_error = str(error or "API v3 authentication failed")[:180]
+        self._api_v3_auth_failed_path = str(path or "")[:80]
         self._current_mode = None
         self._hamp_started = False
         self._hsp_streaming = False
@@ -351,7 +372,23 @@ class HandyController:
         self._reset_motion_cache()
 
     def supports_api_v3_control(self):
-        return bool(self.firmware_version == "fw4" and self.handy_key and not self._api_v3_auth_failed)
+        return bool(
+            self.firmware_version == "fw4"
+            and self.handy_key
+            and self._effective_api_v3_key()
+            and not self._api_v3_auth_failed
+        )
+
+    def api_v3_unavailable_reason(self):
+        if self.firmware_version != "fw4":
+            return "firmware_v3_legacy"
+        if not self.handy_key:
+            return "missing_connection_key"
+        if not self._effective_api_v3_key():
+            return "missing_api_v3_key"
+        if self._api_v3_auth_failed:
+            return "api_v3_auth_failed"
+        return ""
 
     def _send_put(self, base_url, path, body=None, *, headers):
         started_at = time.monotonic()
@@ -843,6 +880,56 @@ class HandyController:
             return True
         return self._send_v3_command("hsp/threshold", {"tail_point_threshold": threshold})
 
+    def _hsp_point_time_bounds(self, points):
+        times = []
+        for point in points or ():
+            if not isinstance(point, dict):
+                continue
+            try:
+                times.append(int(round(float(point.get("t")))))
+            except (TypeError, ValueError):
+                continue
+        if not times:
+            return None
+        return min(times), max(times)
+
+    def _hsp_state_clock_is_past_points(self, points):
+        state = self._last_hsp_state if isinstance(self._last_hsp_state, dict) else None
+        bounds = self._hsp_point_time_bounds(points)
+        if not state or not bounds:
+            return False
+        try:
+            current_time = int(state.get("current_time_ms"))
+        except (TypeError, ValueError):
+            return False
+        _first_point_time, last_point_time = bounds
+        try:
+            state_last_point_time = int(state.get("last_point_time_ms"))
+        except (TypeError, ValueError):
+            state_last_point_time = last_point_time
+        latest_known_point = max(last_point_time, state_last_point_time)
+        return current_time > latest_known_point + HSP_STALE_CLOCK_TOLERANCE_MS
+
+    def _send_hsp_play(self, start_time_ms):
+        body = {
+            "start_time": max(0, int(round(start_time_ms))),
+            "server_time": self._estimated_server_time_ms(),
+            "playback_rate": 1.0,
+            "pause_on_starving": False,
+            "loop": False,
+        }
+        return self._send_v3_command("hsp/play", body)
+
+    def _restart_hsp_if_clock_is_stale(self, stream_points, start_time_ms=None):
+        if not self._hsp_state_clock_is_past_points(stream_points):
+            return None
+        if start_time_ms is None:
+            bounds = self._hsp_point_time_bounds(stream_points)
+            if not bounds:
+                return None
+            start_time_ms = bounds[0]
+        return bool(self._send_hsp_play(start_time_ms))
+
     def start_continuous_stream(
         self,
         points,
@@ -870,16 +957,20 @@ class HandyController:
         }
         if not self._send_v3_command("hsp/add", add):
             return False
+        add_result = self._last_command_result
         if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
-        body = {
-            "start_time": max(0, int(round(start_time_ms))),
-            "server_time": self._estimated_server_time_ms(),
-            "playback_rate": 1.0,
-            "pause_on_starving": False,
-            "loop": False,
-        }
-        if not self._send_v3_command("hsp/play", body):
+        if replace_active_stream:
+            restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
+            if restarted is False:
+                return False
+            if add_result is not None and restarted is not True:
+                self._last_command_result = add_result
+            self._hsp_streaming = True
+            self._update_stream_state(points[0])
+            return True
+
+        if not self._send_hsp_play(start_time_ms):
             return False
 
         self._hsp_streaming = True
@@ -906,7 +997,10 @@ class HandyController:
         add_result = self._last_command_result
         if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
             return False
-        if add_result is not None:
+        restarted = self._restart_hsp_if_clock_is_stale(stream_points)
+        if restarted is False:
+            return False
+        if add_result is not None and restarted is not True:
             self._last_command_result = add_result
         self._hsp_streaming = True
         return True
@@ -1041,6 +1135,11 @@ class HandyController:
             "hsp_stream_id": self._hsp_stream_id,
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
+            "api_v3_key_configured": bool(self._effective_api_v3_key()),
+            "api_v3_auth_failed": self._api_v3_auth_failed,
+            "api_v3_auth_error": self._api_v3_auth_error,
+            "api_v3_auth_failed_path": self._api_v3_auth_failed_path,
+            "api_v3_unavailable_reason": self.api_v3_unavailable_reason(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),
             "hsp_state": dict(self._last_hsp_state) if isinstance(self._last_hsp_state, dict) else None,
             "last_command": self.last_command_result(),

@@ -61,20 +61,21 @@ Follow-up work:
   continuous backend instead of single-depth position playback, so visible
   speed changes should translate to device velocity changes again.
 - Verify that Continuous position speed changes now affect HSP point timing on
-  firmware v4 and HDSP fallback cadence/command-speed budget on legacy paths.
+  firmware v4. Continuous should no longer silently demote named-pattern
+  playback to HDSP direct-position fallback when HSP is unavailable; use HAMP
+  legacy or fix v3 auth/firmware selection instead.
   The trace separates semantic `intent_speed`, sampled `sample_speed`,
   `sample_tempo_scale`, `effective_cycle_ms`, `sample_interval_ms`, HSP point
-  metadata, final fallback `handy_velocity`, and HSP `hsp_transport_time_scale`;
+  metadata, and HSP `hsp_transport_time_scale`;
   use those fields together when diagnosing fixed-speed feel. HSP should now
   preserve authored sub-sample phase intervals without local point-to-point
   velocity stretching. Flexible Position may still stretch `xpt.t` when an
   authored direct position move would exceed the configured speed cap.
-  Continuous HDSP fallback should show varied `handy_duration_ms` values because
-  its `xpt.t` is derived from the velocity budget again. If speed still feels
-  compressed, compare point-preview intervals, wire HSP `x` values (`0..100`
+  If speed still feels compressed, compare point-preview intervals, wire HSP
+  `x` values (`0..100`
   position units relative to the active `/slider/stroke` window),
-  `hsp_segment_depth_per_second`, fallback `handy_duration_ms`, HSP response
-  state, and physical movement before changing sampler math again. For HSP,
+  `hsp_segment_depth_per_second`, HSP response state, and physical movement
+  before changing sampler math again. For HSP,
   `phase_interval_ms`, `transport_interval_ms`, and `sample_interval_ms` should
   match; if they diverge, software is flattening the timed stream again.
   `physical_speed` and `hsp_segment_mm_per_second` in HSP trace rows are planned
@@ -83,17 +84,33 @@ Follow-up work:
   `hsp_state_play_state`, and `hsp_clock_sync` rows to confirm whether firmware
   is actually advancing through the streamed points at the planned time.
   Pattern swaps should reuse an already-active HSP setup, start with an exact
-  point at `hsp/play.start_time`, flush the replacement buffer through
-  `/hsp/add`, update the tail threshold via `/hsp/threshold`, and play with
-  `pause_on_starving: false`;
+  point at the active stream's replacement time, flush the replacement buffer
+  through `/hsp/add`, update the tail threshold via `/hsp/threshold`, and avoid
+  resending `/hsp/play` while playback is already active;
   if swaps still pause, inspect whether command history shows a repeated
-  `hsp/setup`, stale `server_time`, threshold, or starvation behavior before
-  changing sampler math again. Sparse
+  `hsp/setup`, unnecessary `hsp/play`, threshold failure, starvation behavior,
+  or firmware `current_time_ms` already beyond `last_point_time_ms` before
+  changing sampler math again. The controller should recover a stale HSP clock
+  by restarting `/hsp/play` at the first newly-added point rather than
+  appending more points the firmware treats as expired. The first replacement
+  point should also be scheduled far enough ahead to cover recent HSP command
+  latency; too-small lead times make a healthy firmware clock skip the bridge
+  points before they arrive. Sparse
   built-in patterns now share one timed point projection for HSP and Flexible
-  Position, including inserted intermediate points between authored endpoints;
-  verify on-device that this restores smooth speed variation without disturbing
-  dense imported timing. HAMP should be compared as the legacy stroke-window
-  adapter rather than as a timed-point transport.
+  Position, including inserted intermediate points between authored endpoints
+  and filtering sub-frame prepared points that add transport chatter; verify
+  on-device that this keeps smooth speed variation without disturbing dense
+  imported timing. Same-pattern updates should preserve phase, while
+  new-pattern replacements should start near the current sampled depth/range
+  before morphing instead of always jumping to phase zero. HAMP should be
+  compared as the legacy stroke-window adapter rather than as a timed-point
+  transport.
+- Before changing sampler math for fixed-speed Continuous reports, confirm that
+  firmware v4 actually entered HSP. Motion transport captures now include
+  `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`,
+  `api_v3_unavailable_reason`, and `continuous_schema=hsp_unavailable` when the
+  controller cannot enter HSP; missing/failed v3 auth here means the public API
+  v3 Application ID path, not the user's Handy connection key field.
 - Verify Freestyle runs continuously without regular stop intervals or visible
   speed-limit escapes.
 - Use the normal Freestyle trace metadata (`freestyle_pattern_id`,

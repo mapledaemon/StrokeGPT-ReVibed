@@ -43,6 +43,7 @@ DEFAULT_PERSONA_PROMPTS = [
     "An energetic and passionate partner",
 ]
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
+DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
 DEFAULT_MOTION_BACKEND = "continuous"
 MOTION_BACKENDS = {"continuous", "position", "hamp"}
@@ -148,7 +149,7 @@ def default_settings_dict():
     return {
         "handy_key": "",
         "handy_firmware_version": DEFAULT_HANDY_FIRMWARE_VERSION,
-        "handy_api_v3_key": "",
+        "handy_api_v3_key": DEFAULT_HANDY_API_V3_APPLICATION_ID,
         "ai_name": "BOT",
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
@@ -291,9 +292,13 @@ class SettingsManager:
         self.handy_firmware_version = self._normalize_handy_firmware_version(
             data.get("handy_firmware_version", defaults["handy_firmware_version"])
         )
-        # Compatibility shim - do not extend. Older builds stored a separate
-        # API v3 app key here; current v3 control uses the Handy connection key.
-        self.handy_api_v3_key = defaults["handy_api_v3_key"]
+        # Existing local settings may contain a blank value from earlier
+        # app-key experiments. Blank should migrate to the public Application
+        # ID so firmware v4 HSP works after a normal restart.
+        self.handy_api_v3_key = (
+            str(data.get("handy_api_v3_key", defaults["handy_api_v3_key"]) or "").strip()
+            or defaults["handy_api_v3_key"]
+        )
         self.ai_name = str(data.get("ai_name", defaults["ai_name"]) or defaults["ai_name"])
 
         loaded_model = normalize_ollama_model(data.get("ollama_model", DEFAULT_OLLAMA_MODEL))
