@@ -281,6 +281,89 @@ class MotionScriptPlannerTests(unittest.TestCase):
             (round(same_phase_b.depth, 2), round(same_phase_b.stroke_range, 2)),
         )
 
+    def test_motion_target_for_sample_boosts_speed_from_position_rate(self):
+        # Without a ``position_per_second`` hint the sample target uses
+        # the LLM-supplied base speed verbatim. With a hint, the per-
+        # sample speed is lifted to reflect the pattern's authored rate
+        # of change, mirroring the ``preserve_timing`` segment-speed
+        # boost that ``_actions_to_frames`` applies for imported
+        # patterns. Slow segments fall back to the base speed.
+        target = MotionTarget(40, 50, 80, "stroke")
+        style = FrameStyle(name="stroke")
+
+        base = _motion_target_for_sample(50.0, target, style, label="stroke")
+        slow = _motion_target_for_sample(
+            50.0, target, style, label="stroke", position_per_second=20.0,
+        )
+        fast = _motion_target_for_sample(
+            50.0, target, style, label="stroke", position_per_second=240.0,
+        )
+
+        self.assertEqual(round(base.speed), 40)
+        # A slow rate of change should not lower the LLM base speed.
+        self.assertGreaterEqual(round(slow.speed), 40)
+        # A fast rate of change boosts the per-sample speed above base.
+        self.assertGreater(fast.speed, base.speed)
+        # The segment-speed boost is clamped at the 100% relative ceiling
+        # before clamping to MotionTarget limits, so saturation patterns
+        # stay representable instead of overflowing.
+        self.assertLessEqual(round(fast.speed), 100)
+
+    def test_motion_target_for_sample_speed_scale_applies_to_segment_boost(self):
+        # When the pattern's style declares a non-unit ``speed_scale``,
+        # both the base speed and the per-sample segment boost must
+        # scale together so the boosted speed never crosses the
+        # style's intended ceiling relationship.
+        target = MotionTarget(30, 50, 80, "fast-style")
+        style = FrameStyle(name="fast-style", speed_scale=1.5)
+
+        boosted = _motion_target_for_sample(
+            50.0, target, style, label="fast-style", position_per_second=160.0,
+        )
+
+        # speed_scale=1.5 lifts both the base speed (45) and the segment
+        # speed (100 * 1.5 = 150, clamped to 100 by MotionTarget). The
+        # max() picks the higher one; the MotionTarget clamp keeps it
+        # representable.
+        self.assertGreaterEqual(round(boosted.speed), 45)
+
+    def test_sample_continuous_plan_speed_varies_inside_one_cycle(self):
+        # The whole point of this slice: a pattern with sharp climbs
+        # should produce per-sample speeds that differ across the
+        # cycle, instead of broadcasting a single ``target.speed`` to
+        # every HDSP frame. Sample a known-asymmetric pattern at a
+        # spread of phases and assert the speed track is non-constant.
+        plan = continuous_motion_plan("ramp")
+        target = MotionTarget(40, 50, 80, "ramp")
+
+        speeds = [
+            round(
+                sample_continuous_plan(
+                    plan, target, plan.duration_seconds * index / 16.0
+                ).speed
+            )
+            for index in range(16)
+        ]
+
+        self.assertGreater(max(speeds) - min(speeds), 5)
+
+    def test_sample_continuous_plan_keeps_base_speed_on_flat_segments(self):
+        # A symmetric pattern like ``hold`` spends a meaningful fraction
+        # of its cycle near the flat region. Those samples must keep
+        # at least the LLM-supplied base speed instead of dropping
+        # below it, otherwise quiet segments would feel slower than
+        # the user explicitly asked for.
+        plan = continuous_motion_plan("hold")
+        target = MotionTarget(55, 50, 80, "hold")
+        base = target.speed * plan.style.speed_scale
+
+        for index in range(20):
+            sampled = sample_continuous_plan(
+                plan, target, plan.duration_seconds * index / 20.0
+            )
+            with self.subTest(index=index):
+                self.assertGreaterEqual(round(sampled.speed), round(base))
+
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:
             early_depths = [depth for _pattern_id, _mood, _speed, depth, _stroke_range in arc[:2]]
