@@ -288,7 +288,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .priority-modal { z-index: 10002; }
 .modal-box { width: min(640px, 100%); max-height: 90vh; overflow-y: auto; background: var(--background); border: 1px solid #2d333d; border-radius: 8px; box-shadow: 0 16px 40px var(--shadow); padding: 18px; }
 .settings-box { width: min(860px, 100%); }
-.model-required-box { width: min(34rem, 100%); }
+.model-required-box { width: min(40rem, 100%); display: grid; gap: 12px; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--background-lighter); padding-bottom: 12px; margin-bottom: 14px; }
 .modal-header h3 { margin: 0; color: var(--cyan); font-size: 1.1rem; }
 .modal-close { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #37404c; background: var(--background-lighter); color: var(--foreground); cursor: pointer; font-size: 1.2rem; }
@@ -312,8 +312,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .voice-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .motion-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .motion-pattern-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.model-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
-.model-actions-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.model-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.model-actions-wide { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.model-required-box .model-actions-wide { margin-top: 2px; }
+.model-required-box .settings-status-line { min-height: 2.75rem; align-items: flex-start; padding-block: 9px; }
 .ollama-model-list { display: grid; max-height: 9.5rem; overflow-y: auto; margin-top: 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; scrollbar-color: #3b4450 #101217; scrollbar-width: thin; }
 .ollama-model-list::-webkit-scrollbar { width: 8px; }
 .ollama-model-list::-webkit-scrollbar-track { background: #101217; }
