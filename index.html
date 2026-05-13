@@ -561,14 +561,19 @@
     <div id="motion-training-dialog" class="modal-overlay">
         <div class="modal-box motion-training-box">
             <div class="modal-header">
-                <h3>Motion Training</h3>
-                <button id="close-motion-training-btn" class="modal-close" aria-label="Close motion training">&times;</button>
+                <h3>Motion Pattern Studio</h3>
+                <button id="close-motion-training-btn" class="modal-close" aria-label="Close motion pattern studio">&times;</button>
             </div>
             <div class="motion-training-workspace">
                 <div class="motion-training-list-pane">
                     <div class="motion-training-toolbar">
                         <div id="motion-training-status" class="motion-training-status">Training player idle.</div>
                         <button id="stop-motion-training-btn" class="my-button stop" disabled data-requires-backend>Stop Preview</button>
+                    </div>
+                    <div class="motion-studio-entry-actions" aria-label="Create or import motion patterns">
+                        <button id="motion-studio-new-pattern-btn" class="my-button" type="button">New Pattern</button>
+                        <button id="motion-studio-import-btn" class="my-button" type="button">Import Funscript</button>
+                        <input type="file" id="motion-studio-import-input" accept=".funscript,.json,application/json" hidden>
                     </div>
                     <div id="motion-training-pattern-list" class="motion-pattern-list motion-training-pattern-list"></div>
                 </div>
@@ -581,6 +586,54 @@
                         <div class="motion-backend-stack">
                             <span class="motion-backend-badge">Preview: Flexible position</span>
                             <span id="app-motion-backend-badge" class="motion-backend-badge">App motion: Continuous position</span>
+                        </div>
+                    </div>
+                    <div id="motion-studio-panel" class="motion-studio-panel" hidden>
+                        <div id="motion-studio-draw-controls" class="motion-studio-actions" hidden>
+                            <button id="motion-studio-draw-toggle-btn" class="my-button" type="button" disabled>Draw Off</button>
+                            <button id="motion-studio-clear-drawing-btn" class="my-button" type="button" disabled>Clear Drawing</button>
+                        </div>
+                        <div id="motion-studio-source-status" class="motion-studio-status">Start a new pattern or import a funscript to crop.</div>
+                        <div id="motion-studio-crop-panel" class="motion-studio-crop-panel" hidden>
+                            <div class="motion-studio-crop-header">
+                                <span>Import Crop Timeline</span>
+                                <span id="motion-studio-crop-duration">No source loaded</span>
+                            </div>
+                            <div class="motion-studio-timeline-controls" aria-label="Import crop timeline view controls">
+                                <button id="motion-studio-zoom-out-btn" class="my-button" type="button" disabled aria-label="Zoom timeline out">-</button>
+                                <label class="motion-studio-zoom-field" for="motion-studio-zoom">
+                                    <span>Zoom</span>
+                                    <input type="range" id="motion-studio-zoom" min="1" max="16" step="0.25" value="1" disabled aria-label="Timeline zoom">
+                                    <small id="motion-studio-zoom-value">1.0x</small>
+                                </label>
+                                <button id="motion-studio-zoom-in-btn" class="my-button" type="button" disabled aria-label="Zoom timeline in">+</button>
+                                <button id="motion-studio-fit-btn" class="my-button" type="button" disabled>Fit</button>
+                            </div>
+                            <div id="motion-studio-crop-timeline" class="motion-studio-crop-timeline" role="group" aria-label="Crop imported funscript timeline">
+                                <canvas id="motion-studio-crop-canvas" aria-hidden="true"></canvas>
+                                <div id="motion-studio-crop-selection" class="motion-studio-crop-selection"></div>
+                                <button id="motion-studio-crop-start-handle" class="motion-studio-crop-handle motion-studio-crop-handle-start" type="button" role="slider" aria-orientation="horizontal" disabled aria-label="Crop start"></button>
+                                <button id="motion-studio-crop-end-handle" class="motion-studio-crop-handle motion-studio-crop-handle-end" type="button" role="slider" aria-orientation="horizontal" disabled aria-label="Crop end"></button>
+                            </div>
+                            <label class="motion-studio-pan-field" for="motion-studio-pan">
+                                <span>Window</span>
+                                <input type="range" id="motion-studio-pan" min="0" max="0" step="0.1" value="0" disabled aria-label="Timeline window start">
+                                <small id="motion-studio-window-value">0-0s</small>
+                            </label>
+                            <div class="motion-studio-crop-fields">
+                                <label class="motion-studio-crop-field" for="motion-studio-crop-start">
+                                    <span>Start</span>
+                                    <input type="number" id="motion-studio-crop-start" min="0" step="0.1" value="0" disabled aria-label="Crop start seconds">
+                                    <small>seconds</small>
+                                </label>
+                                <label class="motion-studio-crop-field" for="motion-studio-crop-end">
+                                    <span>End</span>
+                                    <input type="number" id="motion-studio-crop-end" min="0" step="0.1" value="0" disabled aria-label="Crop end seconds">
+                                    <small>seconds</small>
+                                </label>
+                                <button id="motion-studio-play-crop-btn" class="my-button" type="button" disabled data-requires-backend>Play Crop</button>
+                                <button id="motion-studio-apply-crop-btn" class="my-button" type="button" disabled>Use Crop</button>
+                            </div>
                         </div>
                     </div>
                     <div class="motion-training-preview-grid">

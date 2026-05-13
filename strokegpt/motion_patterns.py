@@ -422,6 +422,8 @@ def _actions_to_frames(
     style: FrameStyle,
     *,
     rng: random.Random,
+    preserve_timing: bool = False,
+    base_step_seconds: float = 0.25,
 ) -> list[PatternFrame]:
     if not actions:
         return []
@@ -437,15 +439,21 @@ def _actions_to_frames(
     frames = []
     duration_ms = _duration_ms(actions)
     previous_at = actions[0].at
+    previous_pos = actions[0].pos
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
     for index, action in enumerate(actions):
-        if index == 0:
+        interval_ms = max(0, action.at - previous_at)
+        if preserve_timing:
+            interval_seconds = (interval_ms / 1000.0) / tempo_scale
+            delay_factor = 0.0 if index == 0 else interval_seconds / max(0.01, base_step_seconds)
+        elif index == 0:
             delay_factor = 0.4
         else:
-            interval_ratio = max(0.05, (action.at - previous_at) / duration_ms)
+            interval_ratio = max(0.05, interval_ms / duration_ms)
             delay_factor = _clamp(interval_ratio * 3.0, 0.15, 1.1)
         previous_at = action.at
-        delay_factor = _clamp(delay_factor / tempo_scale, 0.08, 1.8)
+        if not preserve_timing:
+            delay_factor = _clamp(delay_factor / tempo_scale, 0.08, 1.8)
 
         normalized_pos = _clamp(action.pos) / 100.0
         depth = shallow + (deep - shallow) * normalized_pos
@@ -462,16 +470,24 @@ def _actions_to_frames(
         if style_label and _clean_label(style_label) not in _clean_label(base_label):
             base_label = f"{base_label} {style_label}".strip()
 
+        speed = target.speed * style.speed_scale
+        if preserve_timing and index > 0 and interval_ms > 0:
+            position_delta = abs(action.pos - previous_pos)
+            position_per_second = position_delta / max(0.05, interval_ms / 1000.0)
+            segment_speed = _clamp((position_per_second / 160.0) * 100.0, 8.0, 100.0)
+            speed = max(speed, segment_speed * style.speed_scale)
+        previous_pos = action.pos
+
         frames.append(
             PatternFrame(
                 MotionTarget(
-                    speed=target.speed * style.speed_scale,
+                    speed=speed,
                     depth=depth,
                     stroke_range=local_range,
                     label=f"{base_label} {index + 1}",
                 ).clamped(),
                 delay_factor=delay_factor,
-                phase="pattern",
+                phase="timed-pattern" if preserve_timing else "pattern",
             )
         )
     frames = _blend_from_current(current, frames, style.name)
@@ -956,6 +972,9 @@ def expand_motion_pattern(
     current: MotionTarget,
     target: MotionTarget,
     rng: Optional[random.Random] = None,
+    *,
+    preserve_timing: bool = False,
+    base_step_seconds: float = 0.25,
 ) -> list[PatternFrame]:
     actions = prepare_pattern_actions(pattern)
     if not actions:
@@ -974,6 +993,8 @@ def expand_motion_pattern(
             range_jitter=pattern.range_jitter,
         ),
         rng=rng or random.Random(),
+        preserve_timing=preserve_timing,
+        base_step_seconds=base_step_seconds,
     )
 
 

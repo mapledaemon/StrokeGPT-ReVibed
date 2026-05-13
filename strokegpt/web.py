@@ -870,10 +870,19 @@ def _training_target_for_record(record):
         label=f"training {record.pattern_id}",
     ).clamped()
 
+def _training_preserves_pattern_timing(record):
+    return str(getattr(record, "source", "") or "").lower() in {"imported", "trained", "user"}
+
 def _run_motion_training_pattern(record, *, preview=False):
     try:
         target = _training_target_for_record(record)
-        frames = expand_motion_pattern(record.to_motion_pattern(), motion.current_target(), target)
+        frames = expand_motion_pattern(
+            record.to_motion_pattern(),
+            motion.current_target(),
+            target,
+            preserve_timing=_training_preserves_pattern_timing(record),
+            base_step_seconds=getattr(motion, "step_delay", 0.25),
+        )
         if not frames:
             _set_motion_training_state(
                 state="error",

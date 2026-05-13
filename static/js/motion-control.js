@@ -35,6 +35,7 @@ import {
 } from './motion/feedback-controls.js';
 import { updateHandyConnectionStatusFromMotion } from './device-control.js';
 import {
+    bindMotionPatternStudioControls,
     drawMotionTrainingPreview,
     drawOpenMotionTrainingPreview,
     drawPatternPreviewCanvas,
@@ -50,6 +51,7 @@ import {
     setMotionTrainingDetail,
     setMotionTrainingLoadingDetail,
     smoothEditedPattern,
+    studioCropPreviewPayload,
     stepMotionTrainingRangeInput,
     syncRangeInputsFromPattern,
     updateMotionTrainingEditButtons,
@@ -521,6 +523,31 @@ async function playEditedMotionTrainingPreview() {
         el.statusText.textContent = data.motion_training.message || 'Edited preview started.';
     } else {
         reportSaveFailure(el.statusText, data, 'Could not start edited preview.');
+    }
+}
+
+async function playStudioCropPreview() {
+    let pattern;
+    try {
+        pattern = studioCropPreviewPayload();
+    } catch (error) {
+        el.statusText.textContent = error.message || 'Select a valid crop before playing it.';
+        return;
+    }
+    if (!pattern) {
+        el.statusText.textContent = 'Import a funscript before playing a crop preview.';
+        return;
+    }
+    const data = await fetchJsonWithMessage('/motion_training/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pattern}),
+    });
+    if (data && data.motion_training) {
+        updateMotionTrainingStatus(data.motion_training);
+        el.statusText.textContent = data.motion_training.message || 'Crop preview started.';
+    } else {
+        reportSaveFailure(el.statusText, data, 'Could not start crop preview.');
     }
 }
 
@@ -1105,6 +1132,7 @@ export function initMotionControls({sendUserMessage}) {
             if (event.target === el.motionTrainingDialog) closeMotionTrainingWorkspace();
         });
     }
+    bindMotionPatternStudioControls();
     bindMotionPauseControls({
         sendUserMessage,
         updateActiveModeTimer,
@@ -1123,6 +1151,7 @@ export function initMotionControls({sendUserMessage}) {
     el.motionTransformRangeBtn?.addEventListener('click', remapEditedPatternRange);
     el.motionTransformResetBtn?.addEventListener('click', resetEditedPattern);
     el.playMotionTrainingPreviewBtn?.addEventListener('click', playEditedMotionTrainingPreview);
+    el.motionStudioPlayCropBtn?.addEventListener('click', playStudioCropPreview);
     el.saveMotionTrainingPatternBtn?.addEventListener('click', saveEditedMotionPattern);
     el.stopMotionTrainingBtn.addEventListener('click', stopMotionTraining);
     el.motionTrainingFeedbackUp.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_up'));

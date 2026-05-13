@@ -938,12 +938,18 @@ class MotionController:
         target = frame.target
         depth_delta = target.depth - previous.depth
         steps = max(0, math.ceil(abs(depth_delta) / POSITION_MAX_DEPTH_STEP) - 1)
+        preserves_timing = frame.phase == "timed-pattern"
+        split_delay_factor = frame.delay_factor
+        if preserves_timing and steps > 0:
+            split_delay_factor = frame.delay_factor / (steps + 1)
         for step in range(1, steps + 1):
             amount = step / (steps + 1)
-            transition_speed = min(
-                previous.speed + (target.speed - previous.speed) * amount,
-                max(8.0, min(previous.speed, target.speed) * 0.82),
-            )
+            transition_speed = previous.speed + (target.speed - previous.speed) * amount
+            if not preserves_timing:
+                transition_speed = min(
+                    transition_speed,
+                    max(8.0, min(previous.speed, target.speed) * 0.82),
+                )
             result.append(
                 PositionFrame(
                     MotionTarget(
@@ -952,10 +958,12 @@ class MotionController:
                         previous.stroke_range + (target.stroke_range - previous.stroke_range) * amount,
                         label=f"{target.label or 'position'} transition blend {step}",
                     ).clamped(),
-                    delay_factor=POSITION_BLEND_DELAY_FACTOR,
-                    phase="blend",
+                    delay_factor=split_delay_factor if preserves_timing else POSITION_BLEND_DELAY_FACTOR,
+                    phase="timed-blend" if preserves_timing else "blend",
                 )
             )
+        if preserves_timing and steps > 0:
+            frame = PositionFrame(frame.target, delay_factor=split_delay_factor, phase=frame.phase)
         result.append(frame)
 
     def _position_playback_frames(self, frames: list[Any]) -> list[PositionFrame]:
