@@ -43,6 +43,8 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('$ErrorActionPreference = "SilentlyContinue"', script)
         self.assertIn("*> $null", script)
         self.assertIn("return $false", script)
+        self.assertIn("$command = @($script:PythonCommand)", script)
+        self.assertIn("$script:PythonCommand = @(Find-Python)", script)
         self.assertIn("Read-Host", script)
         self.assertIn('$ollamaInstallExitCode = Invoke-WingetInstall', script)
         self.assertIn('"install", "--id", "Ollama.Ollama"', script)
