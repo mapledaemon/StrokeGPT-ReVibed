@@ -50,6 +50,7 @@ function makeStubElement(tag = 'div') {
         title: '',
         value: '',
         hidden: false,
+        open: false,
         checked: false,
         disabled: false,
         files: null,
@@ -314,6 +315,7 @@ export function resetStubElement(id) {
     stub.dataset = {};
     stub.disabled = false;
     stub.hidden = false;
+    stub.open = false;
     stub._clearAttributes?.();
     return stub;
 }

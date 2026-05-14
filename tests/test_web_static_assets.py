@@ -16,6 +16,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/chat.js": "text/javascript",
             "/static/js/audio.js": "text/javascript",
             "/static/js/voice-input.js": "text/javascript",
+            "/static/js/responsive-layout.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
             "/static/js/setup-check.js": "text/javascript",
@@ -90,6 +91,10 @@ class WebStaticAssetTests(WebTestCase):
             self.assertNotIn('id="profile-picture-menu-btn"', page)
             self.assertNotIn('data-settings-target="model"', page)
             self.assertIn('id="toggle-sidebar-btn" title="Toggle settings panel" aria-label="Toggle settings panel"', page)
+            self.assertIn('id="motion-history-panel" class="motion-compact-panel motion-history-panel" open', page)
+            self.assertIn('<summary class="motion-compact-summary">Motion History</summary>', page)
+            self.assertIn('id="motion-current-status-panel" class="motion-compact-panel motion-current-status-panel" open', page)
+            self.assertIn('<summary class="motion-compact-summary">Current Status</summary>', page)
             self.assertIn('id="motion-sequence-indicator"', page)
             self.assertIn('class="motion-sequence-indicator motion-sequence-log"', page)
             self.assertIn('role="log"', page)
@@ -448,6 +453,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("#motion-status-strip { width: min(var(--motion-strip-max-width), 100%); min-width: 0; min-height: var(--motion-strip-height);", css)
             self.assertIn("padding: var(--space-1); border: 1px solid #2d333d; border-radius: 8px; background: rgba(14, 15, 18, 0.44);", css)
             self.assertIn("grid-template-columns: minmax(17.5rem, 1.25fr) minmax(15rem, 0.85fr)", css)
+            self.assertIn(".motion-compact-panel { min-width: 0; min-height: 0; height: 100%;", css)
+            self.assertIn(".motion-compact-summary { display: none; }", css)
             self.assertIn("#visualizer-box { width: 100%; min-height: var(--motion-strip-height);", css)
             self.assertIn("#motion-quick-status-row { display: grid; grid-template-columns: minmax(12rem, 1fr) auto;", css)
             self.assertIn("gap: var(--space-1); min-height: 3rem;", css)
@@ -490,7 +497,9 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("@media (max-width: 1080px)", css)
             self.assertIn("grid-template-rows: minmax(4rem, auto) minmax(3.625rem, auto)", css)
             self.assertIn("#message-input-line { grid-column: 1 / -1; }", css)
-            self.assertIn("grid-template-rows: minmax(4.25rem, auto) minmax(3.625rem, auto)", css)
+            self.assertIn("#motion-status-strip { width: 100%; min-height: 0; grid-template-columns: 1fr; grid-template-rows: none;", css)
+            self.assertIn(".motion-compact-summary { min-height: 2.125rem;", css)
+            self.assertIn(".motion-compact-panel[open] .motion-compact-summary", css)
             self.assertIn("#motion-quick-status-row { grid-template-columns: minmax(9.375rem, 1fr) auto; gap: var(--space-1); min-height: 2.625rem; }", css)
             self.assertIn("#motion-feedback-buttons { grid-template-columns: repeat(2, 2rem); gap: var(--space-1); }", css)
             self.assertIn("#like-this-move-btn, #dislike-this-move-btn { width: 2rem; height: 2rem; min-height: 2rem; font-size: 0.88rem; }", css)
@@ -1162,9 +1171,11 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("./js/audio.js", app_script)
         self.assertIn("./js/device-control.js", app_script)
         self.assertIn("./js/motion-control.js", app_script)
+        self.assertIn("./js/responsive-layout.js", app_script)
         self.assertIn("./js/setup.js", app_script)
         self.assertIn("./js/setup-check.js", app_script)
         self.assertIn("initSingleActiveTabWarning()", app_script)
+        self.assertIn("initCompactMotionPanels()", app_script)
         self.assertIn("initDiagnosticsControls()", app_script)
 
 
