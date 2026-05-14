@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-14 - PR #201 - Windows Installer Python Command
+--------------------------------------------------------
+
+Branch: codex/windows-installer-python-command
+
+- Fixed the Windows installer's Python command handling so a detected plain
+  `python` command stays callable instead of being indexed as the single
+  character `p` during virtual environment creation.
+
+
 2026-05-14 - PR #200 - Windows Bootstrap Paste Safety
 ------------------------------------------------------
 
