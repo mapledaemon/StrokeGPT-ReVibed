@@ -238,6 +238,8 @@ export const el = {
     motionSpeedMeterValue: D.getElementById('motion-speed-meter-value'),
     motionDepthMeterFill: D.getElementById('motion-depth-meter-fill'),
     motionDepthMeterValue: D.getElementById('motion-depth-meter-value'),
+    motionHistoryPanel: D.getElementById('motion-history-panel'),
+    motionCurrentStatusPanel: D.getElementById('motion-current-status-panel'),
     motionSequenceIndicator: D.getElementById('motion-sequence-indicator'),
     motionDiagnosticsPanel: D.getElementById('motion-diagnostics-panel'),
     typingIndicator: D.getElementById('typing-indicator'),

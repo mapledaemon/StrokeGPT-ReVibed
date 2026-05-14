@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #199 - Compact Motion Panels
+---------------------------------------------
+
+Branch: codex/mobile-motion-collapse
+
+- Made the motion history and current-status panels collapsible in compact
+  layouts so mobile browsers can reach the chat composer and voice controls
+  without the motion telemetry consuming most of the screen.
+
+
 2026-05-13 - PR #198 - Voice Input Microphone Menu
 ---------------------------------------------------
 

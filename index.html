@@ -55,28 +55,34 @@
         </div>
         <div id="bottom-input-area">
             <div id="motion-status-strip" role="group" aria-label="Motion status">
-                <div id="motion-sequence-indicator" class="motion-sequence-indicator motion-sequence-log" role="log" aria-live="polite" aria-label="Motion sequence log">Idle</div>
-                <div id="visualizer-box">
-                    <div id="motion-quick-status-row">
-                        <div id="motion-meter-panel">
-                            <div class="motion-meter-row">
-                                <span class="motion-meter-label">Speed</span>
-                                <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
-                                <span id="motion-speed-meter-value" class="motion-meter-value">0%</span>
+                <details id="motion-history-panel" class="motion-compact-panel motion-history-panel" open>
+                    <summary class="motion-compact-summary">Motion History</summary>
+                    <div id="motion-sequence-indicator" class="motion-sequence-indicator motion-sequence-log" role="log" aria-live="polite" aria-label="Motion sequence log">Idle</div>
+                </details>
+                <details id="motion-current-status-panel" class="motion-compact-panel motion-current-status-panel" open>
+                    <summary class="motion-compact-summary">Current Status</summary>
+                    <div id="visualizer-box">
+                        <div id="motion-quick-status-row">
+                            <div id="motion-meter-panel">
+                                <div class="motion-meter-row">
+                                    <span class="motion-meter-label">Speed</span>
+                                    <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
+                                    <span id="motion-speed-meter-value" class="motion-meter-value">0%</span>
+                                </div>
+                                <div class="motion-meter-row">
+                                    <span class="motion-meter-label">Depth</span>
+                                    <div class="motion-meter-track"><div id="motion-depth-meter-fill" class="motion-meter-fill depth"></div></div>
+                                    <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
+                                </div>
                             </div>
-                            <div class="motion-meter-row">
-                                <span class="motion-meter-label">Depth</span>
-                                <div class="motion-meter-track"><div id="motion-depth-meter-fill" class="motion-meter-fill depth"></div></div>
-                                <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
+                            <div id="motion-feedback-buttons">
+                                <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern" data-requires-backend>&#128078;</button>
+                                <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move" data-requires-backend>&#128077;</button>
                             </div>
                         </div>
-                        <div id="motion-feedback-buttons">
-                            <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern" data-requires-backend>&#128078;</button>
-                            <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move" data-requires-backend>&#128077;</button>
-                        </div>
+                        <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                     </div>
-                    <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
-                </div>
+                </details>
             </div>
             <div id="chat-compose-row">
                 <div id="message-input-line">
