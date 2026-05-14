@@ -28,14 +28,11 @@ Default Ollama model: `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b`. Sw
 
 Open **PowerShell** from the Windows Start menu. You do not need to run it as
 administrator; if `winget` installs Git, Python, Ollama, or driver-adjacent
-components, Windows may show a normal UAC prompt. Paste these lines and press
+components, Windows may show a normal UAC prompt. Paste this command and press
 Enter:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-$bootstrap = "$env:TEMP\strokegpt-bootstrap.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1" -OutFile $bootstrap
-powershell -ExecutionPolicy Bypass -File $bootstrap
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1" -OutFile $bootstrap; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap
 ```
 
 The bootstrap script downloads StrokeGPT-ReVibed to
@@ -55,8 +52,7 @@ GitHub with **Code > Download ZIP**, extract it, open PowerShell inside the
 extracted `StrokeGPT-ReVibed` folder, and run:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\install_windows.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; .\scripts\install_windows.ps1
 ```
 
 ### macOS / Linux prerequisites
@@ -90,8 +86,7 @@ This creates `.venv` and installs `requirements.txt`. Model downloads start from
 Close the app, then run the updater from the `StrokeGPT-ReVibed` folder:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\update_windows.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; .\scripts\update_windows.ps1
 ```
 
 The updater fast-forwards the Git checkout, updates `.venv` dependencies, and

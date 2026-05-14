@@ -8,6 +8,17 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-14 - PR #200 - Windows Bootstrap Paste Safety
+------------------------------------------------------
+
+Branch: codex/windows-bootstrap-one-liner
+
+- Changed the Windows bootstrap, manual install, and update README snippets to
+  single pasteable PowerShell commands with explicit separators so line wrapping
+  cannot make `powershell.exe -ExecutionPolicy ...` bind to the previous
+  `Set-ExecutionPolicy` command.
+
+
 2026-05-13 - PR #199 - Compact Motion Panels
 ---------------------------------------------
 
