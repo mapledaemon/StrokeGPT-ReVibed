@@ -8,6 +8,17 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-13 - PR #198 - Voice Input Microphone Menu
+---------------------------------------------------
+
+Branch: codex/voice-input-mic-menu
+
+- Split the chat-shelf voice input control into a cleaner microphone action
+  button plus a caret menu that lists browser microphone inputs, remembers the
+  selected input locally, and applies it to the next recording stream so users
+  can change microphones after the first selection.
+
+
 2026-05-13 - PR #197 - Logo Splash Polish
 ------------------------------------------
 

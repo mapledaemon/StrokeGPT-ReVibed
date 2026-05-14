@@ -84,10 +84,22 @@
                     <button id="send-chat-btn" class="my-button" title="Send message" data-requires-backend>Send</button>
                 </div>
                 <div id="voice-control-buttons" role="group" aria-label="Voice controls">
-                    <button id="voice-input-menu-btn" class="my-button voice-control-menu-button" title="Start voice input" aria-label="Start voice input" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-requires-backend>
+                    <button id="voice-input-menu-btn" class="voice-control-mic-button" title="Start voice input" aria-label="Start voice input" aria-pressed="false" data-requires-backend>
                         <span class="voice-control-mic-icon" aria-hidden="true"></span>
+                    </button>
+                    <button id="voice-input-options-btn" class="voice-control-options-button" type="button" title="Microphone options" aria-label="Microphone options" aria-haspopup="dialog" aria-controls="voice-input-popover" aria-expanded="false">
                         <span class="voice-control-caret" aria-hidden="true"></span>
                     </button>
+                    <div id="voice-input-popover" class="voice-input-popover" role="dialog" aria-label="Microphone options" hidden>
+                        <label class="voice-input-device-field" for="voice-input-device-select">
+                            <span>Microphone</span>
+                            <select id="voice-input-device-select" class="select-box">
+                                <option value="">System default microphone</option>
+                            </select>
+                        </label>
+                        <button id="refresh-microphone-devices-btn" class="my-button voice-input-refresh-devices" type="button">Refresh Devices</button>
+                        <div id="voice-input-device-status" class="voice-input-device-status" aria-live="polite">Using system default microphone.</div>
+                    </div>
                 </div>
                 <div id="status-text" aria-live="polite">Status: Checking for saved settings...</div>
             </div>
