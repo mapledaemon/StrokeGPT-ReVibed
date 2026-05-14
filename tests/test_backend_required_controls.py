@@ -176,8 +176,10 @@ class BackendRequiredControlLockTests(unittest.TestCase):
                 tag = _opening_tag(self.index_html, element_id)
                 self.assertIn("data-requires-backend", tag)
                 self.assertNotIn("disabled", tag)
-        self.assertIn('aria-haspopup="menu"', _opening_tag(self.index_html, "voice-input-menu-btn"))
-        self.assertIn('aria-expanded="false"', _opening_tag(self.index_html, "voice-input-menu-btn"))
+        self.assertIn('aria-pressed="false"', _opening_tag(self.index_html, "voice-input-menu-btn"))
+        self.assertIn('aria-haspopup="dialog"', _opening_tag(self.index_html, "voice-input-options-btn"))
+        self.assertIn('aria-expanded="false"', _opening_tag(self.index_html, "voice-input-options-btn"))
+        self.assertNotIn("data-requires-backend", _opening_tag(self.index_html, "voice-input-options-btn"))
 
     def test_dynamic_backend_controls_are_marked_when_created(self):
         self.assertIn("markRequiresBackend(resetButton)", self.pattern_list_js)

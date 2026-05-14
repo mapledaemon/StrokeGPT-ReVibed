@@ -25,6 +25,7 @@ const CUSTOM_VOICE_INPUT_MODEL = '__custom__';
 const NVIDIA_PARAKEET_PROVIDER = 'local_nvidia_parakeet';
 const DEFAULT_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
 const LARGE_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-1.1b';
+const VOICE_INPUT_DEVICE_STORAGE_KEY = 'strokegpt.voiceInputDeviceId';
 const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
     {id: 'tiny.en', label: 'Fast - tiny.en'},
     {id: 'base.en', label: 'Balanced - base.en'},
@@ -351,6 +352,171 @@ function selectedVoiceInputModel() {
     return (el.voiceInputModelInput?.value || fallback).trim() || fallback;
 }
 
+function storedVoiceInputDeviceId() {
+    try {
+        return window.localStorage?.getItem(VOICE_INPUT_DEVICE_STORAGE_KEY) || '';
+    } catch {
+        return '';
+    }
+}
+
+function storeVoiceInputDeviceId(deviceId) {
+    try {
+        if (deviceId) window.localStorage?.setItem(VOICE_INPUT_DEVICE_STORAGE_KEY, deviceId);
+        else window.localStorage?.removeItem(VOICE_INPUT_DEVICE_STORAGE_KEY);
+    } catch {
+        // Browser storage is optional; the current session selection still works.
+    }
+}
+
+function microphoneDeviceLabel(device, index) {
+    const label = String(device?.label || '').trim();
+    if (label) return label;
+    return `Microphone ${index + 1}`;
+}
+
+function selectedMicrophoneDeviceLabel() {
+    if (!state.voiceInputDeviceId) return 'system default microphone';
+    const match = state.voiceInputDevices.find(device => device.deviceId === state.voiceInputDeviceId);
+    return match ? microphoneDeviceLabel(match, state.voiceInputDevices.indexOf(match)) : 'selected microphone';
+}
+
+function setVoiceInputDeviceStatus(message) {
+    if (el.voiceInputDeviceStatus) el.voiceInputDeviceStatus.textContent = message;
+}
+
+function renderMicrophoneDeviceList() {
+    if (!el.voiceInputDeviceSelect) return;
+    const selected = state.voiceInputDeviceId || '';
+    el.voiceInputDeviceSelect.innerHTML = '';
+
+    const defaultOption = D.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'System default microphone';
+    el.voiceInputDeviceSelect.appendChild(defaultOption);
+
+    const devices = state.voiceInputDevices.filter(device => device.deviceId);
+    devices.forEach((device, index) => {
+        const option = D.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = microphoneDeviceLabel(device, index);
+        el.voiceInputDeviceSelect.appendChild(option);
+    });
+
+    if (selected && !devices.some(device => device.deviceId === selected)) {
+        const option = D.createElement('option');
+        option.value = selected;
+        option.textContent = 'Previously selected microphone';
+        el.voiceInputDeviceSelect.appendChild(option);
+    }
+
+    el.voiceInputDeviceSelect.value = selected;
+    const labelsHidden = devices.length > 0 && devices.every(device => !String(device.label || '').trim());
+    if (labelsHidden) {
+        setVoiceInputDeviceStatus('Microphone names appear after browser permission is granted.');
+    } else {
+        setVoiceInputDeviceStatus(`Using ${selectedMicrophoneDeviceLabel()}.`);
+    }
+}
+
+async function refreshMicrophoneDevices({announce = false} = {}) {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+        state.voiceInputDevices = [];
+        renderMicrophoneDeviceList();
+        setVoiceInputDeviceStatus('This browser cannot list microphone inputs.');
+        return [];
+    }
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        state.voiceInputDevices = devices.filter(device => device.kind === 'audioinput');
+        renderMicrophoneDeviceList();
+        if (announce) {
+            const count = state.voiceInputDevices.length;
+            voiceStatusMessage(count
+                ? `Found ${count} microphone input${count === 1 ? '' : 's'}.`
+                : 'No microphone inputs found.',
+            count ? 'var(--comment)' : 'var(--yellow)', count ? {} : {issue: true});
+        }
+        return state.voiceInputDevices;
+    } catch (error) {
+        state.voiceInputDevices = [];
+        renderMicrophoneDeviceList();
+        const message = `Could not list microphone inputs: ${error.message}`;
+        setVoiceInputDeviceStatus(message);
+        if (announce) voiceStatusMessage(message, 'var(--yellow)', {issue: true});
+        return [];
+    }
+}
+
+function updateMicrophoneMenuControlState() {
+    const recording = Boolean(state.voiceInputRecording);
+    if (el.voiceInputDeviceSelect) el.voiceInputDeviceSelect.disabled = recording;
+    if (el.refreshMicrophoneDevicesBtn) el.refreshMicrophoneDevicesBtn.disabled = recording;
+    if (el.voiceInputOptionsBtn) {
+        el.voiceInputOptionsBtn.disabled = !navigator.mediaDevices?.enumerateDevices;
+        el.voiceInputOptionsBtn.title = recording ? 'Stop recording before changing microphones' : 'Microphone options';
+        el.voiceInputOptionsBtn.setAttribute('aria-label', 'Microphone options');
+    }
+}
+
+function elementContains(root, target) {
+    let node = target;
+    while (node) {
+        if (node === root) return true;
+        node = node.parentNode;
+    }
+    return false;
+}
+
+function setMicrophoneMenuOpen(open) {
+    const nextOpen = Boolean(open);
+    state.voiceInputDeviceMenuOpen = nextOpen;
+    if (el.voiceInputPopover) el.voiceInputPopover.hidden = !nextOpen;
+    if (el.voiceInputOptionsBtn) el.voiceInputOptionsBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+    if (nextOpen) {
+        updateMicrophoneMenuControlState();
+        refreshMicrophoneDevices();
+    }
+}
+
+function toggleMicrophoneMenu(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setMicrophoneMenuOpen(!state.voiceInputDeviceMenuOpen);
+}
+
+function closeMicrophoneMenuFromOutside(event) {
+    if (!state.voiceInputDeviceMenuOpen) return;
+    const target = event?.target;
+    if (
+        elementContains(el.voiceInputPopover, target)
+        || elementContains(el.voiceInputOptionsBtn, target)
+        || elementContains(el.voiceInputMenuBtn, target)
+    ) {
+        return;
+    }
+    setMicrophoneMenuOpen(false);
+}
+
+function handleMicrophoneDeviceChange(event) {
+    const nextDeviceId = event?.target?.value || '';
+    if (state.voiceInputRecording) {
+        if (el.voiceInputDeviceSelect) el.voiceInputDeviceSelect.value = state.voiceInputDeviceId || '';
+        voiceStatusMessage('Stop recording before changing microphones.', 'var(--yellow)', {issue: true});
+        return;
+    }
+    if (nextDeviceId === state.voiceInputDeviceId) return;
+    if (state.voiceInputHandsFreeArmed) {
+        stopHandsFree('Hands-free listening stopped because microphone changed.');
+    } else {
+        stopMicrophoneStream();
+    }
+    state.voiceInputDeviceId = nextDeviceId;
+    storeVoiceInputDeviceId(nextDeviceId);
+    renderMicrophoneDeviceList();
+    voiceStatusMessage(`Microphone set to ${selectedMicrophoneDeviceLabel()}.`, 'var(--cyan)', {clearIssue: true});
+}
+
 async function browseVoiceInputModelPath() {
     if (state.voiceInputHandsFreeArmed || state.voiceInputRecording) {
         stopActiveVoiceInput('Voice input stopped because model selection changed.');
@@ -528,6 +694,7 @@ function setVoiceButtonState() {
         el.voiceInputMenuBtn.title = disabled ? 'Voice input unavailable' : 'Start voice input';
         el.voiceInputMenuBtn.setAttribute('aria-label', 'Start voice input');
     }
+    updateMicrophoneMenuControlState();
 }
 
 function selectVoiceInputMode(value) {
@@ -740,11 +907,15 @@ async function downloadVoiceInputModel() {
 }
 
 function microphoneAudioConstraints() {
-    return {
+    const constraints = {
         noiseSuppression: {ideal: Boolean(state.voiceInputNoiseSuppression)},
         echoCancellation: {ideal: Boolean(state.voiceInputEchoCancellation)},
         autoGainControl: {ideal: Boolean(state.voiceInputAutoGainControl)},
     };
+    if (state.voiceInputDeviceId) {
+        constraints.deviceId = {exact: state.voiceInputDeviceId};
+    }
+    return constraints;
 }
 
 async function ensureMicrophoneStream() {
@@ -753,6 +924,7 @@ async function ensureMicrophoneStream() {
     }
     if (state.voiceInputStream?.active) return state.voiceInputStream;
     state.voiceInputStream = await navigator.mediaDevices.getUserMedia({audio: microphoneAudioConstraints()});
+    refreshMicrophoneDevices().catch(error => console.debug('Microphone device refresh skipped:', error));
     return state.voiceInputStream;
 }
 
@@ -1286,9 +1458,18 @@ async function toggleVoiceInput() {
 
 export function initVoiceInputControls({sendUserMessage}) {
     submitVoiceTranscript = sendUserMessage;
+    state.voiceInputDeviceId = storedVoiceInputDeviceId();
+    renderMicrophoneDeviceList();
+    refreshMicrophoneDevices();
     el.saveVoiceInputBtn?.addEventListener('click', saveVoiceInputSettings);
     el.downloadVoiceInputModelBtn?.addEventListener('click', downloadVoiceInputModel);
-    el.voiceInputMenuBtn?.addEventListener('click', toggleVoiceInput);
+    el.voiceInputMenuBtn?.addEventListener('click', () => {
+        setMicrophoneMenuOpen(false);
+        toggleVoiceInput();
+    });
+    el.voiceInputOptionsBtn?.addEventListener('click', toggleMicrophoneMenu);
+    el.refreshMicrophoneDevicesBtn?.addEventListener('click', () => refreshMicrophoneDevices({announce: true}));
+    el.voiceInputDeviceSelect?.addEventListener('change', handleMicrophoneDeviceChange);
     el.voiceInputModeInputs?.forEach(input => {
         input.addEventListener('click', event => selectVoiceInputMode(event.target.value));
         input.addEventListener('change', event => selectVoiceInputMode(event.target.value));
@@ -1340,6 +1521,10 @@ export function initVoiceInputControls({sendUserMessage}) {
     el.sendVoiceTranscriptBtn?.addEventListener('click', sendPendingTranscript);
     el.retryVoiceTranscriptBtn?.addEventListener('click', retryVoiceInput);
     el.cancelVoiceTranscriptBtn?.addEventListener('click', hideTranscriptPreview);
+    D.addEventListener('click', closeMicrophoneMenuFromOutside);
+    D.addEventListener('keydown', event => {
+        if (event.key === 'Escape') setMicrophoneMenuOpen(false);
+    });
     D.addEventListener('backend-connection-restored', refreshVoiceInputStatus);
     refreshVoiceInputStatus();
 }
