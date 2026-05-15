@@ -620,7 +620,49 @@ editing.
 
 ## Long-Horizon
 
-### 15. Optional Runtime And Packaging Work (XL)
+### 15. Internet-Exposed Remote Control And Multi-User Sessions (XL)
+
+Why later: the app is currently designed for one trusted local operator, one
+active browser session, and one Handy controller. Opening control to the public
+internet changes the threat model, credential handling, device-safety model,
+and runtime/session architecture, so it should wait until the local and LAN
+flows are reliable.
+
+- Add an explicitly enabled internet-exposed remote-control mode with HTTPS,
+  authentication, hardened sessions, rate limiting, CSRF protection, and a
+  clear warning that this is different from trusted LAN access.
+- Support individual user accounts or per-user passcodes so each remote
+  participant has their own login identity instead of sharing one global
+  secret.
+- Define same-device multi-user control semantics before implementing them:
+  active operator ownership, host approval or handoff, command queuing or
+  voting, visible participant state, and conflict resolution when two users
+  request incompatible movement.
+- Keep emergency stop, pause, speed limits, stroke-range limits, and motion
+  smoothing global and authoritative. A stop from the host or any permitted
+  participant should interrupt device motion regardless of who currently owns
+  the session.
+- Add role/permission levels such as host/admin, active controller, invited
+  participant, and view-only observer before exposing remote controls broadly.
+- Keep remote commands routed through the same chat, motion controller, Handy
+  controller, and deterministic safety layers as local commands; do not add a
+  bypass path for remote users.
+- Add audit/debug visibility for remote sessions: connected users, recent
+  commands, active controller, rejected commands, failed login attempts, and
+  current public-exposure status.
+- Treat credential storage, password/passcode hashing, recovery, lockout,
+  session expiry, and token invalidation as first-class requirements. Do not
+  store remote-login secrets in repo files or reuse local Handy/device keys as
+  web-login credentials.
+- Document safe deployment options only after the security model exists:
+  reverse proxy, tunnel, certificate, firewall, and port-forwarding guidance
+  should all explain the risks of exposing a motion-control device to the
+  internet.
+- Preserve the current single-operator local runtime until this work begins as
+  an intentional architecture change; do not let ordinary LAN/mobile fixes
+  accidentally create a partial multi-user control model.
+
+### 16. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
