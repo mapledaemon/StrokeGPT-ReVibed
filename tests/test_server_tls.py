@@ -7,6 +7,7 @@ from unittest import mock
 
 from strokegpt.server_tls import (
     ServerTlsError,
+    build_https_ssl_context,
     ensure_local_https_certificate,
     local_certificate_identities,
     resolve_server_tls,
@@ -28,19 +29,25 @@ class ServerTlsTests(unittest.TestCase):
             key_path = Path(tmp) / "key.pem"
             cert_path.write_text("cert", encoding="utf-8")
             key_path.write_text("key", encoding="utf-8")
+            ssl_context = object()
 
-            config = resolve_server_tls(
-                {
-                    "STROKEGPT_SSL_CERT": str(cert_path),
-                    "STROKEGPT_SSL_KEY": str(key_path),
-                },
-                Path(tmp) / "generated",
-                "0.0.0.0",
-            )
+            with mock.patch(
+                "strokegpt.server_tls.build_https_ssl_context",
+                return_value=ssl_context,
+            ) as build_context:
+                config = resolve_server_tls(
+                    {
+                        "STROKEGPT_SSL_CERT": str(cert_path),
+                        "STROKEGPT_SSL_KEY": str(key_path),
+                    },
+                    Path(tmp) / "generated",
+                    "0.0.0.0",
+                )
 
         self.assertTrue(config.enabled)
         self.assertEqual(config.scheme, "https")
-        self.assertEqual(config.ssl_context, (str(cert_path), str(key_path)))
+        build_context.assert_called_once_with(cert_path, key_path)
+        self.assertIs(config.ssl_context, ssl_context)
         self.assertEqual(config.source, "custom certificate")
 
     def test_custom_certificate_requires_key(self):
@@ -53,10 +60,14 @@ class ServerTlsTests(unittest.TestCase):
             cert_path = Path(tmp) / "cert.pem"
             key_path = Path(tmp) / "key.pem"
             ca_path = Path(tmp) / "ca.crt"
+            ssl_context = object()
             with mock.patch(
                 "strokegpt.server_tls.ensure_local_https_certificate",
                 return_value=(cert_path, key_path, ca_path),
-            ) as ensure_cert:
+            ) as ensure_cert, mock.patch(
+                "strokegpt.server_tls.build_https_ssl_context",
+                return_value=ssl_context,
+            ) as build_context:
                 config = resolve_server_tls(
                     {
                         "STROKEGPT_HTTPS": "1",
@@ -71,9 +82,10 @@ class ServerTlsTests(unittest.TestCase):
             "0.0.0.0",
             extra_candidates=["192.168.0.12", "10.0.0.8"],
         )
+        build_context.assert_called_once_with(cert_path, key_path)
         self.assertTrue(config.enabled)
         self.assertEqual(config.scheme, "https")
-        self.assertEqual(config.ssl_context, (str(cert_path), str(key_path)))
+        self.assertIs(config.ssl_context, ssl_context)
         self.assertEqual(config.source, "generated local certificate")
         self.assertEqual(config.trust_cert_path, ca_path)
 
@@ -90,6 +102,10 @@ class ServerTlsTests(unittest.TestCase):
             self.assertTrue(ca_path.is_file())
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(str(cert_path), str(key_path))
+            generated_context = build_https_ssl_context(cert_path, key_path)
+            self.assertIsInstance(generated_context, ssl.SSLContext)
+            if hasattr(ssl, "TLSVersion"):
+                self.assertGreaterEqual(generated_context.minimum_version, ssl.TLSVersion.TLSv1_2)
             from cryptography import x509
             from cryptography.x509.oid import ExtensionOID
 

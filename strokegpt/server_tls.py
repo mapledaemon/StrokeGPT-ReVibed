@@ -4,6 +4,7 @@ import datetime as _dt
 import ipaddress
 import os
 import socket
+import ssl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -72,10 +73,11 @@ def resolve_server_tls(
             raise ServerTlsError(f"HTTPS certificate file was not found: {cert_path}")
         if not key_path.is_file():
             raise ServerTlsError(f"HTTPS private key file was not found: {key_path}")
+        ssl_context = build_https_ssl_context(cert_path, key_path)
         return ServerTlsConfig(
             enabled=True,
             scheme="https",
-            ssl_context=(str(cert_path), str(key_path)),
+            ssl_context=ssl_context,
             source="custom certificate",
             cert_path=cert_path,
             key_path=key_path,
@@ -99,15 +101,31 @@ def resolve_server_tls(
         bind_host,
         extra_candidates=_env_identity_candidates(env),
     )
+    ssl_context = build_https_ssl_context(cert_path, key_path)
     return ServerTlsConfig(
         enabled=True,
         scheme="https",
-        ssl_context=(str(cert_path), str(key_path)),
+        ssl_context=ssl_context,
         source="generated local certificate",
         cert_path=cert_path,
         key_path=key_path,
         trust_cert_path=trust_cert_path,
     )
+
+
+def build_https_ssl_context(cert_path: Path, key_path: Path) -> ssl.SSLContext:
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        if hasattr(ssl, "TLSVersion"):
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+        try:
+            context.set_alpn_protocols(["http/1.1"])
+        except NotImplementedError:
+            pass
+        context.load_cert_chain(str(cert_path), str(key_path))
+    except (OSError, ssl.SSLError, ValueError) as exc:
+        raise ServerTlsError(f"Could not load HTTPS certificate/key: {exc}") from exc
+    return context
 
 
 def ensure_local_https_certificate(

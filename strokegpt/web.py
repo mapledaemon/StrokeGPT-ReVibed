@@ -8,7 +8,10 @@ import threading
 import time
 import types
 import webbrowser
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 import requests
 from flask import Flask, Response, request, jsonify, render_template_string, send_from_directory, stream_with_context
 from werkzeug.utils import secure_filename
@@ -73,6 +76,15 @@ DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
 
 
+@dataclass(frozen=True)
+class HttpsTrustHelper:
+    server: ThreadingHTTPServer
+    thread: threading.Thread
+    port: int
+    cert_url: str
+    info_url: str
+
+
 def resource_path(*parts):
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else PROJECT_ROOT
     return base_path.joinpath(*parts)
@@ -123,11 +135,77 @@ def _server_url(scheme, host, port):
     return f"{scheme}://{_display_host(host)}:{port}"
 
 
+def _external_url_hint(scheme, host, port):
+    display_host = "<PC-LAN-IP>" if host in {"0.0.0.0", "::"} else _display_host(host)
+    return f"{scheme}://{display_host}:{port}"
+
+
 def _open_browser(url):
     try:
         webbrowser.open(url)
     except Exception as exc:
         print(f"[WARN] Could not open browser automatically: {exc}")
+
+
+def _start_https_trust_helper(host, https_port, trust_cert_path):
+    if not trust_cert_path or not _env_flag("STROKEGPT_HTTPS_CERT_HELPER", default=True):
+        return None
+    trust_cert_path = Path(trust_cert_path)
+    if not trust_cert_path.is_file():
+        return None
+
+    cert_bytes = trust_cert_path.read_bytes()
+    cert_name = trust_cert_path.name
+    requested_port = _env_int("STROKEGPT_HTTPS_CERT_PORT", min(https_port + 1, 65535))
+    helper_port = _select_bind_port(host, requested_port)
+
+    class TrustCertificateHandler(BaseHTTPRequestHandler):
+        server_version = "StrokeGPTTrustHelper/1.0"
+
+        def do_GET(self):
+            path = urlparse(self.path).path
+            if path in {"", "/"}:
+                body = (
+                    "<!doctype html><title>StrokeGPT HTTPS certificate</title>"
+                    "<h1>StrokeGPT HTTPS certificate</h1>"
+                    f"<p>Install this local CA certificate on Android, then open "
+                    f"the StrokeGPT HTTPS LAN URL again.</p>"
+                    f'<p><a href="/{cert_name}">Download {cert_name}</a></p>'
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path in {f"/{cert_name}", "/ca.crt"}:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-x509-ca-cert")
+                self.send_header("Content-Disposition", f'attachment; filename="{cert_name}"')
+                self.send_header("Content-Length", str(len(cert_bytes)))
+                self.end_headers()
+                self.wfile.write(cert_bytes)
+                return
+            self.send_error(404)
+
+        def log_message(self, format, *args):
+            print(f"[CERT-HELPER] {self.address_string()} - {format % args}")
+
+    try:
+        server = ThreadingHTTPServer((host, helper_port), TrustCertificateHandler)
+    except OSError as exc:
+        print(f"[WARN] HTTPS certificate helper could not start: {exc}")
+        return None
+    thread = threading.Thread(target=server.serve_forever, name="https-cert-helper", daemon=True)
+    thread.start()
+    cert_url = f"{_external_url_hint('http', host, helper_port)}/{cert_name}"
+    info_url = _external_url_hint("http", host, helper_port)
+    return HttpsTrustHelper(server=server, thread=thread, port=helper_port, cert_url=cert_url, info_url=info_url)
+
+
+def _stop_https_trust_helper(helper):
+    helper.server.shutdown()
+    helper.server.server_close()
 
 
 def _request_json():
@@ -1476,11 +1554,17 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
 @app.route('/')
 def home_page():
     with open(resource_path('index.html'), 'r', encoding='utf-8') as f:
-        return render_template_string(f.read())
+        response = Response(render_template_string(f.read()), mimetype="text/html; charset=utf-8")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Connection"] = "close"
+    return response
 
 @app.route('/static/<path:path>')
 def send_static(path):
-    return send_from_directory(resource_path('static'), path)
+    response = send_from_directory(resource_path('static'), path)
+    response.headers.setdefault("Cache-Control", "no-cache")
+    response.headers["Connection"] = "close"
+    return response
 
 def _konami_code_action():
     def pattern_thread():
@@ -2174,11 +2258,23 @@ def main():
             print(f"[INFO] HTTPS certificate: {tls_config.cert_path}")
         if getattr(tls_config, "trust_cert_path", None):
             print(f"[INFO] Mobile trust certificate: {tls_config.trust_cert_path}")
+            trust_helper = _start_https_trust_helper(host, port, tls_config.trust_cert_path)
+            if trust_helper:
+                print(f"[INFO] Android Chrome certificate helper: {trust_helper.info_url}")
+                print(f"[INFO] Android Chrome CA download: {trust_helper.cert_url}")
+                atexit.register(_stop_https_trust_helper, trust_helper)
     url = _server_url(tls_config.scheme, host, port)
     print(f"[INFO] Open {url}")
     if _env_flag("STROKEGPT_OPEN_BROWSER"):
         threading.Timer(1.0, _open_browser, args=(url,)).start()
-    app.run(host=host, port=port, debug=False, ssl_context=tls_config.ssl_context)
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        ssl_context=tls_config.ssl_context,
+        threaded=True,
+        use_reloader=False,
+    )
 
 
 if __name__ == '__main__':
