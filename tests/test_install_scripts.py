@@ -20,6 +20,22 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("Run StrokeGPT-ReVibed.cmd", installer)
         self.assertIn("Run StrokeGPT-ReVibed.cmd", readme)
 
+    def test_windows_https_launcher_enables_lan_voice_mode(self):
+        launcher = (PROJECT_ROOT / "Run StrokeGPT-ReVibed HTTPS.bat").read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        installer = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('cd /d "%~dp0"', launcher)
+        self.assertIn('set "PYTHON_EXE=%~dp0.venv\\Scripts\\python.exe"', launcher)
+        self.assertIn('set "STROKEGPT_OPEN_BROWSER=1"', launcher)
+        self.assertIn('set "STROKEGPT_HOST=0.0.0.0"', launcher)
+        self.assertIn('set "STROKEGPT_PORT=5011"', launcher)
+        self.assertIn('set "STROKEGPT_HTTPS=1"', launcher)
+        self.assertIn('"%PYTHON_EXE%" app.py', launcher)
+        self.assertIn("strokegpt-lan-ca.crt", launcher)
+        self.assertIn("Run StrokeGPT-ReVibed HTTPS.bat", installer)
+        self.assertIn("Run StrokeGPT-ReVibed HTTPS.bat", readme)
+
     def test_windows_installer_prompts_for_optional_runtime_dependencies(self):
         script = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
 
@@ -110,6 +126,16 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("STROKEGPT_SSL_KEY", readme)
         self.assertIn("Do not port-forward StrokeGPT", readme)
         self.assertIn("HTTPS is required for mobile browser microphone capture", readme)
+
+    def test_ollama_gpu_docs_explain_windows_vulkan_user_environment(self):
+        doc = (PROJECT_ROOT / "docs" / "ollama_gpu.md").read_text(encoding="utf-8")
+
+        self.assertIn("### Windows Vulkan setup", doc)
+        self.assertIn("user environment variable", doc)
+        self.assertIn("setx OLLAMA_VULKAN 1", doc)
+        self.assertIn("Edit environment variables for your account", doc)
+        self.assertIn("reg delete HKCU\\Environment /v OLLAMA_VULKAN /f", doc)
+        self.assertIn("GGML_VK_VISIBLE_DEVICES", doc)
 
     def test_parakeet_installer_defaults_to_blackwell_capable_pytorch_wheels(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")

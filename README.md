@@ -69,6 +69,10 @@ folder to start the app — it launches the venv and opens the browser once
 the local port is chosen. Leave that launcher window open while using the
 app.
 
+For LAN/mobile voice, double-click **`Run StrokeGPT-ReVibed HTTPS.bat`**
+instead. It starts the app on port 5011 with HTTPS enabled so mobile
+browsers can request microphone permission.
+
 **Prefer to install manually?** Download the repo with **Code > Download
 ZIP**, extract it, open PowerShell inside the extracted folder, and run:
 
@@ -140,6 +144,9 @@ Windows PowerShell:
 ```powershell
 $env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; $env:STROKEGPT_HTTPS="1"; .\.venv\Scripts\python.exe app.py
 ```
+
+Or double-click **`Run StrokeGPT-ReVibed HTTPS.bat`** in the install
+folder.
 
 macOS / Linux:
 
