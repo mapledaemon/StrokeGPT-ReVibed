@@ -99,6 +99,7 @@ class ModeContractTests(unittest.TestCase):
             "freestyle_candidates",
             "allow_llm_edge_in_freestyle",
             "autospeak_enabled",
+            "autospeak_range",
             "set_mode_name",
             "mode_decision",
             "pause_event",
@@ -228,6 +229,52 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertIn("autospeak", decision_events)
         self.assertGreaterEqual(len(chat_messages), 2)
         self.assertEqual(set(chat_messages), {"Still with you."})
+
+    def test_autospeak_enabled_decision_chat_uses_chat_channel(self):
+        status_messages = []
+        chat_messages = []
+        decision = mode_decisions.ModeDecision(
+            chat="Stay with me.",
+            autospeak_seconds=6,
+            source="llm",
+        )
+        callbacks = {
+            "send_chat": chat_messages.append,
+            "autospeak_enabled": lambda: True,
+        }
+
+        sent = background_modes._send_background_decision_message(
+            callbacks,
+            status_messages.append,
+            decision,
+        )
+
+        self.assertTrue(sent)
+        self.assertEqual(chat_messages, ["Stay with me."])
+        self.assertEqual(status_messages, [])
+
+    def test_autospeak_disabled_decision_chat_stays_status_only(self):
+        status_messages = []
+        chat_messages = []
+        decision = mode_decisions.ModeDecision(
+            chat="Status only.",
+            autospeak_seconds=6,
+            source="llm",
+        )
+        callbacks = {
+            "send_chat": chat_messages.append,
+            "autospeak_enabled": lambda: False,
+        }
+
+        sent = background_modes._send_background_decision_message(
+            callbacks,
+            status_messages.append,
+            decision,
+        )
+
+        self.assertTrue(sent)
+        self.assertEqual(status_messages, ["Status only."])
+        self.assertEqual(chat_messages, [])
 
     def test_stop_during_initial_delay_runs_cleanup_without_mode_step(self):
         messages = []

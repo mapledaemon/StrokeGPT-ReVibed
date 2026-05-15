@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #225 - Route Autospeak Decision Chat To Chat
+------------------------------------------------------------
+
+Branch: codex-autospeak-chat-routing
+
+- Routed LLM-authored mode-decision chat through the visible chat/TTS channel
+  while Autospeak is enabled, instead of treating it as transient mode status.
+- Kept deterministic mode narration in the status line when Autospeak is off,
+  preserving the PR #221 cleanup that kept repeated planner phrases out of
+  normal chat.
+- Updated the mode-decision prompt to tell the model that Autospeak-enabled
+  `chat` is shown and spoken as conversation, not an operational status line.
+
+
 2026-05-15 - PR #224 - Add Autospeak Range Settings
 ----------------------------------------------------
 
