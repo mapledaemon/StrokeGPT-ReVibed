@@ -63,6 +63,9 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         resetStubElement('ollama-model-select');
         resetStubElement('ollama-model-input');
         resetStubElement('ollama-model-status');
+        resetStubElement('ollama-thinking-enabled-checkbox');
+        resetStubElement('save-ollama-thinking-btn');
+        resetStubElement('ollama-thinking-status');
         resetStubElement('ollama-model-required-dialog');
         resetStubElement('close-ollama-model-required-btn');
         resetStubElement('ollama-model-required-message');
@@ -79,6 +82,7 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         state.myPersonaDescription = '';
         state.ollamaModels = [];
         state.ollamaCurrentModel = '';
+        state.ollamaThinkingEnabled = false;
         state.ollamaModelDetails = {};
         state.ollamaModelPromptDismissedKey = '';
 
@@ -296,6 +300,36 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
 
         assert.strictEqual(modelStatus.textContent, 'Model name is not available.');
         assert.strictEqual(modelStatus.style.color, 'var(--yellow)');
+    });
+
+    it('setOllamaThinking: saves the selected thinking preference', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                ollama_thinking_enabled: true,
+                ollama_status: {
+                    available: true,
+                    current_model: 'current/model:latest',
+                    current_model_installed: true,
+                    thinking_enabled: true,
+                    download: {},
+                    gpu_status: {},
+                    message: 'Current model is installed: current/model:latest',
+                },
+            });
+        };
+
+        const checkbox = getStubElement('ollama-thinking-enabled-checkbox');
+        const status = getStubElement('ollama-thinking-status');
+        checkbox.checked = true;
+        getStubElement('save-ollama-thinking-btn').click();
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests[0], ['/set_ollama_thinking', { enabled: true }]);
+        assert.strictEqual(state.ollamaThinkingEnabled, true);
+        assert.match(status.textContent, /Saved\. Thinking is on/);
     });
 
     it('populateModelOptions renders model row actions and posts delete/download requests', async () => {

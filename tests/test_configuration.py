@@ -59,6 +59,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("huihui_ai/granite4.1-abliterated:3b", saved["ollama_models"])
         self.assertIn("huihui_ai/granite4.1-abliterated:8b", saved["ollama_models"])
         self.assertEqual(saved["ollama_model_hidden_defaults"], [])
+        self.assertFalse(saved["ollama_thinking_enabled"])
         self.assertEqual(saved["audio_provider"], "elevenlabs")
         self.assertFalse(saved["audio_enabled"])
         self.assertEqual(saved["local_tts_engine"], "chatterbox_turbo")
@@ -132,6 +133,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("huihui_ai/granite4.1-abliterated:3b", settings.ollama_models)
         self.assertIn("huihui_ai/granite4.1-abliterated:8b", settings.ollama_models)
         self.assertEqual(settings.ollama_model_hidden_defaults, [])
+        self.assertFalse(settings.ollama_thinking_enabled)
         self.assertEqual(settings.audio_provider, "elevenlabs")
         self.assertFalse(settings.audio_enabled)
         self.assertEqual(settings.local_tts_engine, "chatterbox_turbo")
@@ -162,6 +164,34 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.voice_input_vad_threshold, 0.5)
         self.assertEqual(settings.voice_input_vad_min_silence_ms, 500)
         self.assertEqual(settings.voice_input_vad_speech_pad_ms, 400)
+
+    def test_ollama_thinking_setting_is_persisted(self):
+        fake_path = FakePath(json.dumps({"ollama_thinking_enabled": "true"}))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertTrue(settings.ollama_thinking_enabled)
+        self.assertTrue(saved["ollama_thinking_enabled"])
+
+    def test_llm_request_payload_uses_thinking_toggle(self):
+        service = LLMService(
+            url="http://localhost:11434/api/chat",
+            model="local/test-model:latest",
+            thinking_enabled=False,
+        )
+
+        payload = service._request_payload([{"role": "user", "content": "hi"}], stream=True)
+        self.assertFalse(payload["think"])
+        self.assertTrue(payload["stream"])
+
+        service.set_thinking_enabled(True)
+        payload = service._request_payload([{"role": "user", "content": "hi"}], stream=False)
+        self.assertTrue(payload["think"])
+        self.assertFalse(payload["stream"])
+        self.assertTrue(service.diagnostics()["thinking_enabled"])
 
     def test_llm_edge_permission_settings_are_persisted(self):
         fake_path = FakePath(json.dumps({

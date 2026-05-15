@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #203 - Ollama Chat Speed And GPU Diagnostics
+------------------------------------------------------------
+
+Branch: codex/ollama-gpu-diagnostics-speed
+
+- Added a Settings > Model thinking toggle that sends Ollama `think: false`
+  by default for faster chat, while preserving an opt-in path for models where
+  thinking is worth the latency.
+- Made Ollama running-model GPU status explicit in the report, including
+  CPU/system-memory loaded models with 0 B VRAM so slow chat caused by
+  CPU-only Ollama inference is visible instead of showing "unknown VRAM."
+
+
 2026-05-14 - PR #202 - Copyable System Diagnostics
 ---------------------------------------------------
 

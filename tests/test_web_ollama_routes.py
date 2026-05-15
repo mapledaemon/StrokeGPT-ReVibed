@@ -27,6 +27,41 @@ class WebOllamaRouteTests(WebTestCase):
             llm.model = original_llm_model
             settings.save()
 
+    def test_ollama_thinking_can_be_toggled_and_saved(self):
+        from strokegpt.web import llm, settings
+
+        original_enabled = settings.ollama_thinking_enabled
+        original_llm_enabled = llm.thinking_enabled
+        try:
+            with mock.patch("strokegpt.web._ollama_status_payload", return_value={
+                "available": True,
+                "thinking_enabled": True,
+            }):
+                response = self.client.post("/set_ollama_thinking", json={"enabled": True})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["ollama_thinking_enabled"])
+            self.assertTrue(settings.ollama_thinking_enabled)
+            self.assertTrue(llm.thinking_enabled)
+            self.assertTrue(settings.to_dict()["ollama_thinking_enabled"])
+
+            with mock.patch("strokegpt.web._ollama_status_payload", return_value={
+                "available": True,
+                "thinking_enabled": False,
+            }):
+                response = self.client.post("/set_ollama_thinking", json={"enabled": False})
+
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.get_json()["ollama_thinking_enabled"])
+            self.assertFalse(settings.ollama_thinking_enabled)
+            self.assertFalse(llm.thinking_enabled)
+        finally:
+            settings.ollama_thinking_enabled = original_enabled
+            llm.thinking_enabled = original_llm_enabled
+            settings.save()
+
     def test_ollama_model_option_can_be_deleted(self):
         from strokegpt.web import llm, settings
 

@@ -54,9 +54,10 @@ def _motion_style_instruction(style):
 
 
 class LLMService:
-    def __init__(self, url, model=DEFAULT_MODEL):
+    def __init__(self, url, model=DEFAULT_MODEL, thinking_enabled=False):
         self.url = url
         self.model = model
+        self.thinking_enabled = bool(thinking_enabled)
         self.last_status_code = None
         self.last_elapsed_ms = None
         self.last_raw_content = ""
@@ -69,6 +70,10 @@ class LLMService:
             self.model = cleaned
             return True
         return False
+
+    def set_thinking_enabled(self, enabled):
+        self.thinking_enabled = bool(enabled)
+        return self.thinking_enabled
 
     def _record_diagnostics(self, *, started_at, response=None, raw_content="", error=""):
         self.last_elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
@@ -85,6 +90,7 @@ class LLMService:
             "last_elapsed_ms": self.last_elapsed_ms,
             "last_error": self.last_error,
             "last_updated_at": self.last_updated_at,
+            "thinking_enabled": bool(self.thinking_enabled),
             "last_response_preview": raw_content[:4000],
             "last_response_truncated": bool(raw_content and len(raw_content) > 4000),
             "last_response_has_thinking": "<think" in raw_content.lower() or '"thinking"' in raw_content.lower(),
@@ -95,6 +101,7 @@ class LLMService:
             "model": self.model,
             "stream": bool(stream),
             "format": "json",
+            "think": bool(self.thinking_enabled),
             "options": {
                 "temperature": temperature,
                 "top_p": 0.95,

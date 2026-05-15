@@ -93,6 +93,21 @@ def set_ollama_model_route():
     })
 
 
+@settings_blueprint.route('/set_ollama_thinking', methods=['POST'])
+def set_ollama_thinking_route():
+    web = _web()
+    data = web._request_json()
+    enabled = web._request_bool_value(data, "enabled", web.settings.ollama_thinking_enabled)
+    web.settings.ollama_thinking_enabled = enabled
+    web.llm.set_thinking_enabled(enabled)
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "ollama_thinking_enabled": enabled,
+        "ollama_status": web._ollama_status_payload(),
+    })
+
+
 @settings_blueprint.route('/delete_ollama_model', methods=['POST'])
 def delete_ollama_model_route():
     web = _web()

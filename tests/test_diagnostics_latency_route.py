@@ -75,6 +75,7 @@ class DiagnosticsLatencyRouteTests(WebTestCase):
         args, kwargs = ollama_post.call_args
         self.assertIn("/api/chat", args[0])
         self.assertFalse(kwargs["json"]["stream"])
+        self.assertIn("think", kwargs["json"])
 
     def test_diagnostics_latency_skips_unloaded_voice_models(self):
         from strokegpt.web import audio, voice_input

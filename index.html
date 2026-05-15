@@ -213,6 +213,15 @@
                         <button id="refresh-ollama-status-btn" class="my-button" data-requires-backend>Refresh</button>
                     </div>
                     <div id="ollama-model-status" class="settings-status-line">Current model not loaded yet.</div>
+                    <label class="settings-checkbox-line">
+                        <input type="checkbox" id="ollama-thinking-enabled-checkbox" data-requires-backend>
+                        Allow model thinking
+                    </label>
+                    <div class="settings-help">Thinking-capable models may answer more deliberately when this is on, but chat can be much slower.</div>
+                    <div class="model-actions model-actions-wide">
+                        <button id="save-ollama-thinking-btn" class="my-button" data-requires-backend>Save Thinking</button>
+                        <span id="ollama-thinking-status" class="settings-status-line">Thinking is off for faster chat.</span>
+                    </div>
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
