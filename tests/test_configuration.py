@@ -13,6 +13,8 @@ sys.modules.setdefault("requests", requests_module)
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
     CUSTOM_LLM_PROMPT_PREFIX,
+    DEFAULT_AUTOSPEAK_MAX_SECONDS,
+    DEFAULT_AUTOSPEAK_MIN_SECONDS,
     DEFAULT_LLM_PROMPT_MODE,
     DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
@@ -89,6 +91,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["allow_llm_edge_in_chat"])
         self.assertFalse(saved["allow_llm_mode_actions_in_chat"])
         self.assertFalse(saved["autospeak_enabled"])
+        self.assertEqual(saved["autospeak_min_seconds"], DEFAULT_AUTOSPEAK_MIN_SECONDS)
+        self.assertEqual(saved["autospeak_max_seconds"], DEFAULT_AUTOSPEAK_MAX_SECONDS)
         self.assertTrue(saved["voice_input_noise_suppression"])
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
@@ -167,6 +171,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.allow_llm_edge_in_chat)
         self.assertFalse(settings.allow_llm_mode_actions_in_chat)
         self.assertFalse(settings.autospeak_enabled)
+        self.assertEqual(settings.autospeak_min_seconds, DEFAULT_AUTOSPEAK_MIN_SECONDS)
+        self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
         self.assertTrue(settings.voice_input_noise_suppression)
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
@@ -237,6 +243,8 @@ class ModelConfigurationTests(unittest.TestCase):
             "allow_llm_edge_in_chat": False,
             "allow_llm_mode_actions_in_chat": True,
             "autospeak_enabled": "yes",
+            "autospeak_min_seconds": 12,
+            "autospeak_max_seconds": 3,
         }))
         settings = SettingsManager("settings.json")
         settings.file_path = fake_path
@@ -248,10 +256,14 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.allow_llm_edge_in_chat)
         self.assertTrue(settings.allow_llm_mode_actions_in_chat)
         self.assertTrue(settings.autospeak_enabled)
+        self.assertEqual(settings.autospeak_min_seconds, 3.0)
+        self.assertEqual(settings.autospeak_max_seconds, 12.0)
         self.assertFalse(saved["allow_llm_edge_in_freestyle"])
         self.assertFalse(saved["allow_llm_edge_in_chat"])
         self.assertTrue(saved["allow_llm_mode_actions_in_chat"])
         self.assertTrue(saved["autospeak_enabled"])
+        self.assertEqual(saved["autospeak_min_seconds"], 3.0)
+        self.assertEqual(saved["autospeak_max_seconds"], 12.0)
 
     def test_motion_style_setting_is_normalized(self):
         fake_path = FakePath(json.dumps({"motion_style": "high-variation"}))
@@ -746,6 +758,8 @@ class ModelConfigurationTests(unittest.TestCase):
                 "current_mood": "Anticipatory",
                 "min_speed": 12,
                 "max_speed": 64,
+                "autospeak_min_seconds": 3,
+                "autospeak_max_seconds": 18,
                 "edging_elapsed_time": "3m 2s",
             },
             mode="edging",
@@ -760,8 +774,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>"', prompt)
         self.assertIn("duration_seconds", prompt)
         self.assertIn("autospeak_seconds", prompt)
-        self.assertIn("<0-300|null>", prompt)
-        self.assertIn("0-5 for nearly continuous talk", prompt)
+        self.assertIn("<3-18|null>", prompt)
+        self.assertIn("autospeak_seconds_range: 3-18", prompt)
+        self.assertIn("return a numeric `autospeak_seconds` every time", prompt)
         self.assertIn("10-180", prompt)
         self.assertIn("Avoid very short durations", prompt)
         self.assertIn("20-90 seconds", prompt)
@@ -792,7 +807,7 @@ class ModelConfigurationTests(unittest.TestCase):
         service._talk_to_llm = fake_talk
         response = service.get_mode_decision(
             [],
-            {"autospeak_enabled": True},
+            {"autospeak_enabled": True, "autospeak_min_seconds": 0, "autospeak_max_seconds": 12},
             mode="freestyle",
             event="autospeak",
         )
@@ -801,8 +816,11 @@ class ModelConfigurationTests(unittest.TestCase):
         user_message = captured["messages"][-1]["content"]
         self.assertEqual(response["autospeak_seconds"], 0)
         self.assertIn("autospeak_enabled: True", prompt)
+        self.assertIn("autospeak_seconds_range: 0-12", prompt)
         self.assertIn("An `autospeak` event is only for keeping the conversation alive", prompt)
         self.assertIn("Autospeak is due", user_message)
+        self.assertIn("between 0 and 12", user_message)
+        self.assertIn("Do not use null for chat or autospeak_seconds", user_message)
 
     def test_freestyle_mode_decision_prompt_honors_edge_permission(self):
         service = LLMService(url="http://localhost:11434/api/chat")

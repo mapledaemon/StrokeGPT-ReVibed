@@ -318,6 +318,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .timing-row label { flex-basis: 50px; font-size: 0.9em; }
 .timing-row input { flex-grow: 1; width: 40px; }
 .timing-row span { padding: 0 5px; }
+.autospeak-timing-row { max-width: 18rem; }
+.autospeak-timing-row label { flex: 0 0 auto; min-width: 5.3rem; color: var(--foreground); }
+.autospeak-timing-row input { flex: 0 1 4.6rem; min-width: 0; }
+.autospeak-timing-row span { color: var(--comment); padding: 0 2px; }
 .modal-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.72); z-index: 9000; padding: 16px; }
 .modal-overlay.open { display: flex; }
 .priority-modal { z-index: 10002; }

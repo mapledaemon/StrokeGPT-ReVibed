@@ -252,6 +252,8 @@ export function populateMotionSettings(data = {}) {
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
     state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
+    state.autospeakMinSeconds = data.autospeak_min_seconds ?? state.autospeakMinSeconds ?? 0;
+    state.autospeakMaxSeconds = data.autospeak_max_seconds ?? state.autospeakMaxSeconds ?? 45;
     updateAutospeakToggleUi(data.autospeak_enabled ?? state.autospeakEnabled ?? false);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
@@ -265,8 +267,11 @@ export function populateMotionSettings(data = {}) {
     if (el.allowLlmModeActionsChatCheckbox) {
         el.allowLlmModeActionsChatCheckbox.checked = Boolean(state.allowLlmModeActionsInChat);
     }
+    if (el.autospeakMinSecondsInput) el.autospeakMinSecondsInput.value = state.autospeakMinSeconds;
+    if (el.autospeakMaxSecondsInput) el.autospeakMaxSecondsInput.value = state.autospeakMaxSeconds;
+    readAutospeakTimingPair();
     if (el.llmEdgePermissionsStatus) {
-        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'}.`;
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'} (${state.autospeakMinSeconds}-${state.autospeakMaxSeconds}s).`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -360,6 +365,16 @@ function readTimingPair(minInput, maxInput) {
     minInput.value = Math.min(a, b);
     maxInput.value = Math.max(a, b);
     return [Number(minInput.value), Number(maxInput.value)];
+}
+
+function readAutospeakTimingPair() {
+    const a = clampNumber(el.autospeakMinSecondsInput?.value, 0, 300, state.autospeakMinSeconds ?? 0);
+    const b = clampNumber(el.autospeakMaxSecondsInput?.value, 0, 300, state.autospeakMaxSeconds ?? 45);
+    state.autospeakMinSeconds = Math.min(a, b);
+    state.autospeakMaxSeconds = Math.max(a, b);
+    if (el.autospeakMinSecondsInput) el.autospeakMinSecondsInput.value = state.autospeakMinSeconds;
+    if (el.autospeakMaxSecondsInput) el.autospeakMaxSecondsInput.value = state.autospeakMaxSeconds;
+    return [state.autospeakMinSeconds, state.autospeakMaxSeconds];
 }
 
 async function saveModeTimings() {
@@ -1109,6 +1124,7 @@ async function startMilkingMode() {
 }
 
 async function saveLlmEdgePermissions() {
+    const [autospeakMin, autospeakMax] = readAutospeakTimingPair();
     const data = await apiCall('/set_llm_edge_permissions', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1117,6 +1133,8 @@ async function saveLlmEdgePermissions() {
             allow_llm_edge_in_chat: Boolean(el.allowLlmEdgeChatCheckbox?.checked),
             allow_llm_mode_actions_in_chat: Boolean(el.allowLlmModeActionsChatCheckbox?.checked),
             autospeak_enabled: Boolean(state.autospeakEnabled),
+            autospeak_min_seconds: autospeakMin,
+            autospeak_max_seconds: autospeakMax,
         }),
     });
     if (data && data.status === 'success') {
@@ -1176,6 +1194,8 @@ export function initMotionControls({sendUserMessage}) {
     el.motionReverseDirectionCheckbox?.addEventListener('change', () => updateMotionReverseDirectionUi(el.motionReverseDirectionCheckbox.checked));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
+    el.autospeakMinSecondsInput?.addEventListener('change', readAutospeakTimingPair);
+    el.autospeakMaxSecondsInput?.addEventListener('change', readAutospeakTimingPair);
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);
     el.topBarAutospeakToggleBtn?.addEventListener('click', async () => {
         await saveAutospeakToggle(!state.autospeakEnabled);

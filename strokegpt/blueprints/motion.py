@@ -418,6 +418,12 @@ def set_llm_edge_permissions_route():
         "autospeak_enabled",
         web.settings.autospeak_enabled,
     )
+    web.settings.autospeak_min_seconds, web.settings.autospeak_max_seconds = (
+        web.settings._autospeak_timing_pair(
+            data.get("autospeak_min_seconds", web.settings.autospeak_min_seconds),
+            data.get("autospeak_max_seconds", web.settings.autospeak_max_seconds),
+        )
+    )
     web.settings.save()
     return jsonify({
         "status": "success",
@@ -425,6 +431,8 @@ def set_llm_edge_permissions_route():
         "allow_llm_edge_in_chat": web.settings.allow_llm_edge_in_chat,
         "allow_llm_mode_actions_in_chat": web.settings.allow_llm_mode_actions_in_chat,
         "autospeak_enabled": web.settings.autospeak_enabled,
+        "autospeak_min_seconds": web.settings.autospeak_min_seconds,
+        "autospeak_max_seconds": web.settings.autospeak_max_seconds,
         "motion_preferences": web._motion_preference_payload(),
     })
 

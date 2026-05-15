@@ -657,6 +657,8 @@ class WebChatRouteTests(WebTestCase):
             settings.allow_llm_edge_in_chat,
             settings.allow_llm_mode_actions_in_chat,
             settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
             settings.save,
         )
         try:
@@ -666,6 +668,8 @@ class WebChatRouteTests(WebTestCase):
                 "allow_llm_edge_in_chat": False,
                 "allow_llm_mode_actions_in_chat": True,
                 "autospeak_enabled": True,
+                "autospeak_min_seconds": 4,
+                "autospeak_max_seconds": 9,
             })
 
             self.assertEqual(response.status_code, 200)
@@ -675,16 +679,22 @@ class WebChatRouteTests(WebTestCase):
             self.assertFalse(settings.allow_llm_edge_in_chat)
             self.assertTrue(settings.allow_llm_mode_actions_in_chat)
             self.assertTrue(settings.autospeak_enabled)
+            self.assertEqual(settings.autospeak_min_seconds, 4.0)
+            self.assertEqual(settings.autospeak_max_seconds, 9.0)
             self.assertFalse(data["allow_llm_edge_in_freestyle"])
             self.assertFalse(data["allow_llm_edge_in_chat"])
             self.assertTrue(data["allow_llm_mode_actions_in_chat"])
             self.assertTrue(data["autospeak_enabled"])
+            self.assertEqual(data["autospeak_min_seconds"], 4.0)
+            self.assertEqual(data["autospeak_max_seconds"], 9.0)
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,
                 settings.allow_llm_edge_in_chat,
                 settings.allow_llm_mode_actions_in_chat,
                 settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
                 settings.save,
             ) = original
 

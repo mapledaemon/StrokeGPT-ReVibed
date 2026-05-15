@@ -33,6 +33,24 @@ def _context_speed_range(context):
     return min(speed_min, speed_max), max(speed_min, speed_max)
 
 
+def _safe_autospeak_limit(value, default):
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        numeric_value = default
+    return max(0.0, min(300.0, numeric_value))
+
+
+def _context_autospeak_range(context):
+    autospeak_min = _safe_autospeak_limit(context.get("autospeak_min_seconds"), 0.0)
+    autospeak_max = _safe_autospeak_limit(context.get("autospeak_max_seconds"), 45.0)
+    return min(autospeak_min, autospeak_max), max(autospeak_min, autospeak_max)
+
+
+def _format_seconds(value):
+    return f"{float(value):g}"
+
+
 def _speed_in_range(speed_min, speed_max, ratio):
     width = max(0, speed_max - speed_min)
     return max(speed_min, min(speed_max, int(round(speed_min + (width * ratio)))))
@@ -462,6 +480,9 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
 
     def get_mode_decision(self, chat_history, context, *, mode, event, edge_count=0, current_target=None):
         speed_min, speed_max = _context_speed_range(context)
+        autospeak_min, autospeak_max = _context_autospeak_range(context)
+        autospeak_min_text = _format_seconds(autospeak_min)
+        autospeak_max_text = _format_seconds(autospeak_max)
         current_target = current_target or {}
         freestyle_edge_rule = ""
         if mode == "freestyle":
@@ -472,15 +493,17 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
         prompt = f"""
 Choose the next StrokeGPT-ReVibed background-mode action.
 Return JSON only:
-{{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <10-180>, "intensity": <0-100>, "autospeak_seconds": <0-300|null>, "chat": "<short line|null>"}}
+{{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <10-180>, "intensity": <0-100>, "autospeak_seconds": <{autospeak_min_text}-{autospeak_max_text}|null>, "chat": "<short line|null>"}}
 
 Rules:
 - A `start` event begins or continues the mode. Never return `stop` on `start`.
-- An `autospeak` event is only for keeping the conversation alive. Usually return `action: "continue"`, no motion change, and one short in-character `chat` line if you have something worth saying.
+- An `autospeak` event is only for keeping the conversation alive. Return `action: "continue"`, no motion change, one short in-character `chat` line, and a numeric `autospeak_seconds`.
 - Mode starts should most often begin base-through-mid or mid-base, then extend toward tip/full travel later. Avoid tip-only starts unless the user requested tip focus.
 - `milking` and `freestyle` are continuous; they run until the user stops them, changes mode, or a later non-start decision deliberately returns `stop`.
 - `duration_seconds` times temporary holds, pullbacks, intensity changes, and edge reactions. It is not a countdown to finish a continuous mode.
-- When Autospeak is enabled, choose `autospeak_seconds` as the number of seconds before the app asks you for another background chat line. Use 0-5 for nearly continuous talk, 5-20 for very active, 20-45 for talkative, 45-120 for normal, and 120-300 for quiet. Use null to keep the current cadence. When Autospeak is off, this field is ignored.
+- When Autospeak is enabled, return a numeric `autospeak_seconds` every time. Choose only within the configured range `{autospeak_min_text}-{autospeak_max_text}` seconds; do not use null while Autospeak is enabled.
+- Choose lower values for more constant talk and higher values for longer silence. If `{autospeak_min_text}` is 0, 0 means ask again almost continuously.
+- When Autospeak is off, `autospeak_seconds` is ignored and may be null.
 - Avoid very short durations. Use 20-90 seconds for normal holds/reactions and 10-20 seconds only for deliberately brief reactions.
 - Choose `intensity` 0-100 while respecting configured speed range `{speed_min}-{speed_max}`; the app clamps output.
 - Use `switch_to_milk` only from `edging`, or from `freestyle` when an I'm Close signal should become milk-style motion.
@@ -499,12 +522,14 @@ State:
 - current_mood: {context.get("current_mood")}
 - motion_style: {_motion_style_instruction(context.get("motion_style"))}
 - autospeak_enabled: {bool(context.get("autospeak_enabled"))}
+- autospeak_seconds_range: {autospeak_min_text}-{autospeak_max_text}
 - edging_elapsed_time: {context.get("edging_elapsed_time")}
 """
         if event == "autospeak":
             request_text = (
-                "Autospeak is due. Return one short in-character line if useful, "
-                "choose the next autospeak_seconds cadence, and return only the JSON object."
+                "Autospeak is due. Return one short in-character chat line, "
+                f"choose the next autospeak_seconds between {autospeak_min_text} and {autospeak_max_text}, "
+                "and return only the JSON object. Do not use null for chat or autospeak_seconds."
             )
         else:
             request_text = (
