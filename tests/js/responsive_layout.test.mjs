@@ -8,6 +8,8 @@ import {
     keepSingleCompactMotionPanelOpen,
     syncAppViewportHeight,
     syncCompactMotionPanels,
+    syncKeyboardOpenState,
+    syncViewportInsetAndKeyboardState,
 } from '../../static/js/responsive-layout.js';
 
 function makeMediaQuery(matches) {
@@ -95,6 +97,8 @@ describe('compact motion panels', () => {
 describe('app viewport height sync', () => {
     beforeEach(() => {
         globalThis.document.documentElement.style = {};
+        globalThis.document.activeElement = null;
+        globalThis.document.body.className = '';
     });
 
     it('uses the visual viewport height for the app shell CSS variable', () => {
@@ -106,6 +110,22 @@ describe('app viewport height sync', () => {
             syncAppViewportHeight();
 
             assert.equal(globalThis.document.documentElement.style['--app-viewport-height'], '431px');
+        } finally {
+            globalThis.window.visualViewport = originalVisualViewport;
+            globalThis.window.innerHeight = originalInnerHeight;
+        }
+    });
+
+    it('sets a bottom inset when mobile browser chrome overlays the visual viewport', () => {
+        const originalVisualViewport = globalThis.window.visualViewport;
+        const originalInnerHeight = globalThis.window.innerHeight;
+        globalThis.window.visualViewport = {height: 680, offsetTop: 0};
+        globalThis.window.innerHeight = 720;
+        try {
+            syncViewportInsetAndKeyboardState();
+
+            assert.equal(globalThis.document.documentElement.style['--visual-viewport-bottom-inset'], '40px');
+            assert.equal(globalThis.document.body.classList.contains('visual-keyboard-open'), false);
         } finally {
             globalThis.window.visualViewport = originalVisualViewport;
             globalThis.window.innerHeight = originalInnerHeight;
@@ -131,6 +151,42 @@ describe('app viewport height sync', () => {
             assert.equal(globalThis.document.documentElement.style['--app-viewport-height'], '388px');
         } finally {
             globalThis.window.visualViewport = originalVisualViewport;
+        }
+    });
+
+    it('marks keyboard-open state when a text input shrinks the visual viewport', () => {
+        const originalVisualViewport = globalThis.window.visualViewport;
+        const originalInnerHeight = globalThis.window.innerHeight;
+        globalThis.window.visualViewport = {height: 430};
+        globalThis.window.innerHeight = 720;
+        globalThis.document.activeElement = {tagName: 'INPUT', type: 'text'};
+        try {
+            syncKeyboardOpenState();
+
+            assert.equal(globalThis.document.body.classList.contains('visual-keyboard-open'), true);
+            assert.equal(globalThis.document.documentElement.style['--visual-viewport-bottom-inset'], '0px');
+        } finally {
+            globalThis.window.visualViewport = originalVisualViewport;
+            globalThis.window.innerHeight = originalInnerHeight;
+            globalThis.document.activeElement = null;
+        }
+    });
+
+    it('clears keyboard-open state when focus leaves text entry', () => {
+        const originalVisualViewport = globalThis.window.visualViewport;
+        const originalInnerHeight = globalThis.window.innerHeight;
+        globalThis.document.body.classList.add('visual-keyboard-open');
+        globalThis.window.visualViewport = {height: 430};
+        globalThis.window.innerHeight = 720;
+        globalThis.document.activeElement = {tagName: 'BUTTON', type: 'button'};
+        try {
+            syncKeyboardOpenState();
+
+            assert.equal(globalThis.document.body.classList.contains('visual-keyboard-open'), false);
+        } finally {
+            globalThis.window.visualViewport = originalVisualViewport;
+            globalThis.window.innerHeight = originalInnerHeight;
+            globalThis.document.activeElement = null;
         }
     });
 });
