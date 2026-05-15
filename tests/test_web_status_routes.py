@@ -64,6 +64,34 @@ class WebStatusRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_audio_warning = ""
 
+    def test_updates_surface_and_consume_mode_status_message(self):
+        from strokegpt.web import add_mode_status_message, app_state
+
+        app_state.messages_for_ui.clear()
+        app_state.mode_status_message = ""
+        try:
+            add_mode_status_message("<b>Adding slower pressure in Freestyle.</b>")
+
+            response = self.client.get("/get_updates")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["messages"], [])
+            self.assertEqual(payload["mode_status_message"], "Adding slower pressure in Freestyle.")
+
+            response = self.client.get("/get_updates")
+            try:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["mode_status_message"], "")
+            finally:
+                response.close()
+        finally:
+            app_state.messages_for_ui.clear()
+            app_state.mode_status_message = ""
+
     def test_status_payload_includes_motion_observability(self):
         from strokegpt.motion import MotionTarget
         from strokegpt.web import handy, motion, settings

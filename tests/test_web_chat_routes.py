@@ -342,6 +342,44 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_stop_command_uses_status_instead_of_bot_chat_bubble(self):
+        from strokegpt.web import app_state, handy, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        app_state.mode_status_message = ""
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+
+            with mock.patch("strokegpt.web.motion.stop", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "stop",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["status"], "stopped")
+            self.assertEqual(list(app_state.messages_for_ui), [])
+            self.assertEqual(list(app_state.chat_history), [{"role": "user", "content": "stop"}])
+
+            updates = self.client.get("/get_updates")
+            try:
+                payload = updates.get_json()
+            finally:
+                updates.close()
+            self.assertEqual(payload["messages"], [])
+            self.assertEqual(payload["mode_status_message"], "Stopping.")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+            app_state.mode_status_message = ""
+
     def test_im_close_chat_signals_active_mode_instead_of_restarting_milk(self):
         from strokegpt.web import app_state, handy, settings
 
@@ -682,6 +720,49 @@ class WebChatRouteTests(WebTestCase):
             "Starting adaptive Freestyle.",
             mode_name='freestyle',
         )
+
+    def test_background_mode_narration_stays_out_of_chat_history(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state
+
+        original_task = app_state.auto_mode_active_task
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        app_state.mode_status_message = ""
+
+        def mode_logic(stop_event, _services, callbacks):
+            callbacks["send_message"]("Adding slower pressure in Freestyle.")
+            stop_event.set()
+
+        try:
+            with mock.patch.object(web.motion, "stop", return_value=None):
+                web.start_background_mode(
+                    mode_logic,
+                    "Starting adaptive Freestyle.",
+                    mode_name="freestyle",
+                )
+                task = app_state.auto_mode_active_task
+                self.assertIsNotNone(task)
+                task.join(timeout=1)
+                self.assertFalse(task.is_alive())
+
+            self.assertEqual(list(app_state.messages_for_ui), [])
+            self.assertEqual(list(app_state.chat_history), [])
+
+            response = self.client.get("/get_updates")
+            try:
+                payload = response.get_json()
+            finally:
+                response.close()
+            self.assertEqual(payload["messages"], [])
+            self.assertEqual(payload["mode_status_message"], "Okay, you're in control now.")
+        finally:
+            app_state.auto_mode_active_task = original_task
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+            app_state.mode_status_message = ""
+            app_state.mode_message_queue.clear()
+            app_state.mode_message_event.clear()
 
     def test_start_auto_route_uses_auto_mode(self):
         import strokegpt.web as web

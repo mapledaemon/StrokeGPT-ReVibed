@@ -1362,6 +1362,7 @@ def reset_runtime_state():
     with app_state.lock:
         app_state.chat_history.clear()
         app_state.messages_for_ui.clear()
+        app_state.mode_status_message = ""
         app_state.mode_message_queue.clear()
         app_state.user_signal_event.clear()
         app_state.mode_message_event.clear()
@@ -1489,6 +1490,13 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
                 app_state.chat_audio_warning = warning_for_ui
         threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
+def add_mode_status_message(text):
+    clean_text = re.sub(r'<[^>]+>', '', str(text or "")).strip()
+    if not clean_text:
+        return
+    with app_state.lock:
+        app_state.mode_status_message = clean_text
+
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
     with app_state.lock:
         active_task = app_state.auto_mode_active_task
@@ -1539,7 +1547,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
 
     services: ModeServices = {'llm': llm, 'handy': handy, 'motion': motion}
     callbacks: ModeCallbacks = {
-        'send_message': add_message_to_queue, 'get_context': get_current_context,
+        'send_message': add_mode_status_message, 'get_context': get_current_context,
         'get_timings': get_timings, 'on_stop': on_stop, 'update_mood': update_mood,
         'user_signal_event': app_state.user_signal_event,
         'message_event': app_state.mode_message_event,
@@ -1588,7 +1596,7 @@ def _handle_chat_commands(text, allow_motion=True):
         if app_state.auto_mode_active_task:
             app_state.auto_mode_active_task.stop()
         _stop_motion_training()
-        add_message_to_queue("Stopping.", add_to_history=False)
+        add_mode_status_message("Stopping.")
         return True, jsonify({"status": "stopped"})
     if "up up down down left right left right b a" in text:
         _konami_code_action()
@@ -1622,7 +1630,7 @@ def _handle_chat_commands(text, allow_motion=True):
             return False, None
         motion.apply_generated_target(intent.target, source=f"chat command: {intent.matched or 'move'}")
         _remember_motion_pattern_from_target(intent.target)
-        add_message_to_queue("Adjusting.", add_to_history=False)
+        add_mode_status_message("Adjusting.")
         return True, jsonify({"status": "move_applied", "matched": intent.matched})
     return False, None
 
@@ -2185,12 +2193,15 @@ def persist_local_voice_settings():
 def get_ui_updates_route():
     messages = [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
     with app_state.lock:
+        mode_status_message = app_state.mode_status_message
+        app_state.mode_status_message = ""
         chat_audio_warning = app_state.chat_audio_warning
         app_state.chat_audio_warning = ""
     return jsonify({
         "messages": messages,
         "audio_ready": audio.has_audio(),
         "audio_error": audio.consume_last_error(),
+        "mode_status_message": mode_status_message,
         "chat_audio_warning": chat_audio_warning,
     })
 

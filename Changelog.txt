@@ -8,6 +8,17 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #221 - Route Mode Narration Out Of Chat
+-------------------------------------------------------
+
+Branch: codex-mode-narration-chat-fix
+
+- Routed deterministic mode and command narration through the transient status
+  line instead of BOT chat bubbles, keeping repeated Freestyle planner phrases
+  and stop/adjustment notices out of the visible conversation, TTS queue, and
+  LLM chat history.
+
+
 2026-05-15 - PR #220 - Smooth Routine Continuous Pattern Playback
 ------------------------------------------------------------------
 

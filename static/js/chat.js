@@ -455,6 +455,9 @@ export async function pollChatUpdates() {
         el.localTtsStatus.textContent = data.audio_error;
         el.localTtsStatus.style.color = 'var(--yellow)';
     }
+    if (data.mode_status_message) {
+        setStatusMessage(el.statusText, data.mode_status_message);
+    }
     if (data.chat_audio_warning) {
         setStatusMessage(el.statusText, data.chat_audio_warning, 'warning');
     }
