@@ -10,6 +10,7 @@ import {
     populateModelOptions,
     populateOllamaThinkingSetting,
     populatePersonaPromptOptions,
+    populatePromptModeSetting,
     refreshOllamaStatus,
     setPersonaPrompt,
     updateOllamaStatus,
@@ -193,6 +194,7 @@ export async function startupCheck() {
         }
         populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         populateOllamaThinkingSetting(data.ollama_thinking_enabled);
+        populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
         populateDiagnosticsSettings(data);
         updateOllamaStatus(data.ollama_status);
         populateDeviceSettings(data);
@@ -214,6 +216,7 @@ export async function startupCheck() {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
         populateOllamaThinkingSetting(data && data.ollama_thinking_enabled);
+        populatePromptModeSetting(data && data.llm_prompt_mode, data && data.llm_prompt_mode_options);
         populateDiagnosticsSettings(data || {});
         updateOllamaStatus(data && data.ollama_status);
         populateDeviceSettings(data || {});

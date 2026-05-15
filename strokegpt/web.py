@@ -242,6 +242,7 @@ llm = LLMService(
     model=ollama_model,
     thinking_enabled=settings.ollama_thinking_enabled,
 )
+llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 audio = AudioService()
 voice_input = VoiceInputService(model_cache_dir=VOICE_INPUT_MODEL_DIR)
 audio.set_provider(settings.audio_provider, settings.audio_enabled)
@@ -893,6 +894,7 @@ def apply_settings_to_services():
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)
     llm.set_thinking_enabled(settings.ollama_thinking_enabled)
+    llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
     voice_input.configure(
@@ -1409,6 +1411,7 @@ def get_current_context():
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
+        'llm_prompt_mode': settings.llm_prompt_mode,
         'motion_preferences': _motion_preference_payload()["prompt"],
         'motion_style': settings.motion_style,
         'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,
