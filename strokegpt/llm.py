@@ -510,6 +510,7 @@ Rules:
 - In `milking`, continue and optionally adjust intensity unless stopping is explicitly right on a non-start event.
 - In `edging`, an I'm Close signal can hold-then-resume, pull back, switch to Milk, or stop. Use edge count and recent chat. On progress checks with low edge counts, prefer `continue`, `hold_then_resume`, or `pull_back`; do not stop abruptly just because a timing window ended.
 {freestyle_edge_rule}
+- If Autospeak is enabled and you include `chat`, the app shows and speaks it as conversation. Keep it in character, not an operational status line.
 - Keep `chat` short and in character. Do not mention intensity, duration, settings, parameters, or device adjustments. Use null when no narration is needed.
 
 State:

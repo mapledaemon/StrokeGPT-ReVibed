@@ -222,6 +222,15 @@ def _default_autospeak_interval(callbacks: ModeCallbacks):
     return _autospeak_interval_from_decision(callbacks, ModeDecision(), None)
 
 
+def _send_background_decision_message(callbacks: ModeCallbacks, send_message, decision):
+    if not decision.chat or decision.source != "llm":
+        return False
+    if _autospeak_enabled(callbacks) and mode_decision_helpers._send_autospeak_message(callbacks, decision):
+        return True
+    mode_decision_helpers._send_mode_decision_message(send_message, decision)
+    return True
+
+
 def _next_autospeak_at(interval_seconds):
     interval = max(0.0, float(interval_seconds or 0.0))
     return time.monotonic() + max(AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS, interval)
@@ -365,7 +374,7 @@ def _run_scripted_mode(
             "start",
             current_target=motion_controller.current_target(),
         )
-        mode_decision_helpers._send_mode_decision_message(send_message, decision)
+        _send_background_decision_message(callbacks, send_message, decision)
         autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
         next_autospeak_at = _next_autospeak_at(autospeak_interval)
         if decision.intensity is not None:
@@ -395,7 +404,7 @@ def _run_scripted_mode(
                 "close_signal",
                 current_target=motion_controller.current_target(),
             )
-            mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            _send_background_decision_message(callbacks, send_message, decision)
             autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
             next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.action == "stop":
@@ -516,7 +525,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             if decision is None:
                 decision = mode_decision_helpers._poll_mode_decision_request(decision_thread, decision_result) or ModeDecision()
             decision = freestyle_helpers._freestyle_decision_with_permissions(decision, callbacks)
-            mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            _send_background_decision_message(callbacks, send_message, decision)
             autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
             next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.action == "stop":
@@ -658,7 +667,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         edge_count=edge_count,
         current_target=motion_controller.current_target(),
     )
-    mode_decision_helpers._send_mode_decision_message(send_message, start_decision)
+    _send_background_decision_message(callbacks, send_message, start_decision)
     autospeak_interval = _autospeak_interval_from_decision(callbacks, start_decision, autospeak_interval)
     next_autospeak_at = _next_autospeak_at(autospeak_interval)
     if start_decision.intensity is not None:
@@ -704,7 +713,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                 edge_count=edge_count,
                 current_target=motion_controller.current_target(),
             )
-            mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            _send_background_decision_message(callbacks, send_message, decision)
             autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
             next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.intensity is not None:
@@ -757,7 +766,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                     edge_count=edge_count,
                     current_target=motion_controller.current_target(),
                 )
-                mode_decision_helpers._send_mode_decision_message(send_message, decision)
+                _send_background_decision_message(callbacks, send_message, decision)
                 autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
                 next_autospeak_at = _next_autospeak_at(autospeak_interval)
                 if decision.intensity is not None:

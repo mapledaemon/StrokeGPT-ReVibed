@@ -1,5 +1,6 @@
 import json
 import unittest
+import time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -773,6 +774,65 @@ class WebChatRouteTests(WebTestCase):
             self.assertEqual(payload["mode_status_message"], "Okay, you're in control now.")
         finally:
             app_state.auto_mode_active_task = original_task
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+            app_state.mode_status_message = ""
+            app_state.mode_message_queue.clear()
+            app_state.mode_message_event.clear()
+
+    def test_autospeak_enabled_mode_decision_chat_queues_visible_spoken_chat(self):
+        import strokegpt.web as web
+        from strokegpt import background_modes
+        from strokegpt.mode_decisions import ModeDecision
+        from strokegpt.web import app_state, audio, settings
+
+        original_task = app_state.auto_mode_active_task
+        original_autospeak = settings.autospeak_enabled
+        spoken = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        app_state.mode_status_message = ""
+        try:
+            settings.autospeak_enabled = True
+
+            def mode_logic(stop_event, _services, callbacks):
+                background_modes._send_background_decision_message(
+                    callbacks,
+                    callbacks["send_message"],
+                    ModeDecision(chat="Stay with me.", autospeak_seconds=7, source="llm"),
+                )
+                stop_event.set()
+
+            with mock.patch.object(web.motion, "stop", return_value=None), \
+                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+                web.start_background_mode(
+                    mode_logic,
+                    "Starting adaptive Freestyle.",
+                    mode_name="freestyle",
+                )
+                task = app_state.auto_mode_active_task
+                self.assertIsNotNone(task)
+                task.join(timeout=1)
+                self.assertFalse(task.is_alive())
+
+            deadline = time.time() + 1.0
+            while not spoken and time.time() < deadline:
+                time.sleep(0.01)
+
+            self.assertEqual(list(app_state.messages_for_ui), ["Stay with me."])
+            self.assertIn({"role": "assistant", "content": "Stay with me."}, list(app_state.chat_history))
+            self.assertEqual(spoken, ["Stay with me."])
+
+            response = self.client.get("/get_updates")
+            try:
+                payload = response.get_json()
+            finally:
+                response.close()
+            self.assertEqual(payload["messages"], ["Stay with me."])
+            self.assertNotEqual(payload["mode_status_message"], "Stay with me.")
+        finally:
+            app_state.auto_mode_active_task = original_task
+            settings.autospeak_enabled = original_autospeak
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
             app_state.mode_status_message = ""
