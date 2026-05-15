@@ -22,6 +22,13 @@ behavior, and route motion changes through the shared controller path.
   Long-Horizon tiers.
 - `KNOWN_PROBLEMS.md`: visible rough edges and open regressions that should
   survive between branches until fixed.
+- `docs/local_voice_setup.md`: manual CUDA PyTorch install paths for fast
+  local Chatterbox voice on non-Windows or custom NVIDIA setups.
+- `docs/voice_input.md`: voice-input provider details (NVIDIA Parakeet vs
+  faster-whisper), Parakeet runtime install, and the hands-free /
+  typed-chat mode-action toggles.
+- `docs/ollama_gpu.md`: GPU acceleration notes for AMD/Intel/non-default
+  hardware paths and VRAM detection caveats.
 - `docs/motion_training_prompts.md`: archived staged prompts for the motion
   training workstream. Keep these pointing at `AGENTS.md`.
 
