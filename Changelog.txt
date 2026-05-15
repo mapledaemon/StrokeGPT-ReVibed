@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #207 - Motion Status Panel Scroll Fix
+-----------------------------------------------------
+
+Branch: codex/motion-status-no-scroll
+
+- Increased the fixed motion status panel height and let the speed/depth
+  current-status text wrap visibly without adding nested scrolling, while
+  keeping the motion history log bounded and scrollable.
+
+
 2026-05-15 - PR #206 - Fixed Motion Panel Heights
 -------------------------------------------------
 
