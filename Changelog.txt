@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #211 - HTTPS LAN Voice Support
+-----------------------------------------------
+
+Branch: codex/https-lan-voice
+
+- Added opt-in HTTPS startup via `STROKEGPT_HTTPS=1`, with a generated local
+  certificate authority and LAN server certificate stored under ignored
+  `user_data/https/`, so mobile browsers can allow microphone capture from LAN
+  URLs after the local certificate is trusted.
+- Added custom certificate/key environment variables for users who want to
+  provide a trusted local certificate instead of the generated one.
+- Updated README LAN instructions and regression tests to use `https://` when
+  mobile voice input is needed.
+- Added `cryptography` to the lightweight CI dependency install so HTTPS
+  certificate-generation tests run in GitHub Actions.
+
+
 2026-05-15 - PR #210 - README LAN And Compaction
 ------------------------------------------------
 

@@ -1,3 +1,4 @@
+import types
 import unittest
 from unittest import mock
 
@@ -58,6 +59,40 @@ class WebRuntimeStateTests(WebTestCase):
         )
 
         self.assertEqual(selected, 5001)
+
+    def test_startup_url_uses_https_scheme_when_enabled(self):
+        from strokegpt.web import _server_url
+
+        self.assertEqual(_server_url("http", "127.0.0.1", 5000), "http://127.0.0.1:5000")
+        self.assertEqual(_server_url("https", "0.0.0.0", 5011), "https://127.0.0.1:5011")
+
+    def test_main_passes_https_context_to_flask(self):
+        import strokegpt.web as web
+
+        tls_config = types.SimpleNamespace(
+            enabled=True,
+            scheme="https",
+            ssl_context=("cert.pem", "key.pem"),
+            source="generated local certificate",
+            cert_path=None,
+        )
+        with mock.patch.object(web.atexit, "register"), \
+             mock.patch.object(web, "resolve_server_tls", return_value=tls_config), \
+             mock.patch.object(web, "_select_bind_port", return_value=5011), \
+             mock.patch.object(web.app, "run") as run, \
+             mock.patch.dict(
+                 "os.environ",
+                 {"STROKEGPT_HOST": "0.0.0.0", "STROKEGPT_PORT": "5011"},
+                 clear=True,
+             ):
+            web.main()
+
+        run.assert_called_once_with(
+            host="0.0.0.0",
+            port=5011,
+            debug=False,
+            ssl_context=("cert.pem", "key.pem"),
+        )
 
     def test_startup_browser_flag_is_opt_in(self):
         from strokegpt.web import _env_flag

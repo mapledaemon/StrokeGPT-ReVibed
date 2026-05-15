@@ -130,39 +130,47 @@ it sees another recent tab.
 
 ## Use from another device on LAN
 
-StrokeGPT binds to localhost by default. To open it from a phone, tablet,
-or another computer on the same trusted home LAN, start the app on the host
-PC with an all-interfaces host and a known port.
+StrokeGPT binds to localhost over HTTP by default. To open it from a phone,
+tablet, or another computer on the same trusted home LAN, start the app on
+the host PC with an all-interfaces host, a known port, and HTTPS enabled.
+HTTPS is required for mobile browser microphone capture.
 
 Windows PowerShell:
 
 ```powershell
-$env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; .\.venv\Scripts\python.exe app.py
+$env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; $env:STROKEGPT_HTTPS="1"; .\.venv\Scripts\python.exe app.py
 ```
 
 macOS / Linux:
 
 ```bash
-STROKEGPT_HOST=0.0.0.0 STROKEGPT_PORT=5011 python app.py
+STROKEGPT_HOST=0.0.0.0 STROKEGPT_PORT=5011 STROKEGPT_HTTPS=1 python app.py
 ```
 
-Then open `http://<PC-LAN-IP>:5011` on the other device. Find the host
+Then open `https://<PC-LAN-IP>:5011` on the other device. Find the host
 PC's address with `ipconfig` on Windows or `ip addr` / `ifconfig` on
 macOS and Linux. If the page does not load, allow Python through the OS
 firewall for private/local networks and make sure both devices are on the
 same LAN.
 
-The terminal may still print a local `127.0.0.1` URL; that URL is only for
-the host PC. Other devices need the host PC's LAN IP address.
+The app generates a local certificate authority and server certificate in
+`user_data/https/`. Your browser may show a certificate warning the first
+time; proceed only on your trusted LAN, then allow microphone access. If a
+mobile browser still blocks the microphone, install and trust
+`user_data/https/strokegpt-lan-ca.crt` on that device, then reopen the
+`https://` LAN URL. For your own trusted certificate, set both
+`STROKEGPT_SSL_CERT` and `STROKEGPT_SSL_KEY` to your certificate and key
+paths before starting the app.
+
+The terminal may still print a local `https://127.0.0.1` URL; that URL is
+only for the host PC. Other devices need the host PC's LAN IP address.
 
 Do not port-forward StrokeGPT or expose it to the public internet. The app
 has no login wall or per-user session isolation and is built for one
 trusted active operator.
 
-Mobile browser microphone input requires HTTPS or `localhost`. Chat,
-buttons, and Handy controls can work over plain HTTP on LAN, but mobile
-voice recording may be blocked unless you use HTTPS through a local
-reverse proxy/tunnel or run the browser on the same machine as Flask.
+Omit `STROKEGPT_HTTPS=1` only when you deliberately want plain HTTP for
+non-voice LAN testing.
 
 ## Settings tour
 
@@ -234,7 +242,11 @@ CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
   the host PC's IPv4 address, allow Python through the firewall for
   private networks, and keep both devices on the same LAN.
 - **Voice input fails on mobile LAN** - mobile browsers usually require
-  HTTPS or `localhost` before allowing microphone capture.
+  HTTPS or `localhost` before allowing microphone capture. Start with
+  `STROKEGPT_HTTPS=1`, open the `https://` LAN URL, accept the local
+  certificate warning, and then allow microphone permission. If the browser
+  still blocks recording, install and trust
+  `user_data/https/strokegpt-lan-ca.crt` on the mobile device.
 - **Ollama download fails inside the app** — make sure Ollama is running,
   then pull manually:
 

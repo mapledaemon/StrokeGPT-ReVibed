@@ -10,6 +10,14 @@ Voice input supports two local stacks:
 
 Push-to-talk and hands-free voice input work with either provider.
 
+## Mobile / LAN browser access
+
+Mobile browsers usually require HTTPS before allowing microphone capture on
+LAN addresses. Start StrokeGPT with `STROKEGPT_HOST=0.0.0.0` and
+`STROKEGPT_HTTPS=1`, then open the `https://` LAN URL from the mobile
+browser. See the README LAN section for the full command and local
+certificate trust notes.
+
 ## Install (Windows)
 
 `.\scripts\install_windows.ps1` asks whether to install the isolated NVIDIA

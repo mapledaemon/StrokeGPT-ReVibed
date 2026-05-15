@@ -51,6 +51,8 @@ behavior, and route motion changes through the shared controller path.
   and preset/mode controls.
 - `strokegpt/payloads.py`: settings, Ollama status, and motion-pattern payload
   builders for browser routes.
+- `strokegpt/server_tls.py`: optional local HTTPS certificate handling for
+  LAN browser voice input.
 - `strokegpt/settings.py`: JSON-backed user/app settings.
 - `strokegpt/handy.py`: The Handy API wrapper.
 - `strokegpt/llm.py`: Ollama API integration and prompt construction.

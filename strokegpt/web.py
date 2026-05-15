@@ -23,6 +23,7 @@ from .diagnostics import (
     diagnostics_latency_payload as build_diagnostics_latency_payload,
     diagnostics_system_status_payload as build_diagnostics_system_status_payload,
 )
+from .server_tls import ServerTlsError, resolve_server_tls
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
@@ -51,6 +52,7 @@ VOICE_INPUT_UPLOAD_DIR = USER_DATA_DIR / "voice_input"
 VOICE_INPUT_MODEL_DIR = USER_DATA_DIR / "voice_input_hf_cache"
 DIAGNOSTICS_DIR = USER_DATA_DIR / "diagnostics"
 MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
+HTTPS_CERT_DIR = USER_DATA_DIR / "https"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
 ALLOWED_VOICE_INPUT_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"}
 ALLOWED_VOICE_INPUT_MIMETYPES = {
@@ -115,6 +117,10 @@ def _select_bind_port(host, start_port, fallback_count=10, can_bind=_can_bind):
 
 def _display_host(host):
     return "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+
+
+def _server_url(scheme, host, port):
+    return f"{scheme}://{_display_host(host)}:{port}"
 
 
 def _open_browser(url):
@@ -2147,6 +2153,11 @@ def main():
     host = os.getenv("STROKEGPT_HOST", DEFAULT_HOST).strip() or DEFAULT_HOST
     requested_port = _env_int("STROKEGPT_PORT", DEFAULT_PORT)
     try:
+        tls_config = resolve_server_tls(os.environ, HTTPS_CERT_DIR, host)
+    except ServerTlsError as exc:
+        print(f"[ERROR] {exc}")
+        raise SystemExit(1)
+    try:
         port = _select_bind_port(host, requested_port)
     except OSError as exc:
         print(f"[ERROR] {exc}")
@@ -2154,11 +2165,17 @@ def main():
     if port != requested_port:
         print(f"[WARN] Port {requested_port} is unavailable; using {port} instead.")
     print(f"[INFO] Starting Handy AI app at {time.strftime('%Y-%m-%d %H:%M:%S')}...")
-    url = f"http://{_display_host(host)}:{port}"
+    if tls_config.enabled:
+        print(f"[INFO] HTTPS enabled using {tls_config.source}.")
+        if tls_config.cert_path:
+            print(f"[INFO] HTTPS certificate: {tls_config.cert_path}")
+        if getattr(tls_config, "trust_cert_path", None):
+            print(f"[INFO] Mobile trust certificate: {tls_config.trust_cert_path}")
+    url = _server_url(tls_config.scheme, host, port)
     print(f"[INFO] Open {url}")
     if _env_flag("STROKEGPT_OPEN_BROWSER"):
         threading.Timer(1.0, _open_browser, args=(url,)).start()
-    app.run(host=host, port=port, debug=False)
+    app.run(host=host, port=port, debug=False, ssl_context=tls_config.ssl_context)
 
 
 if __name__ == '__main__':
