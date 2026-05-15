@@ -242,6 +242,7 @@ llm = LLMService(
     model=ollama_model,
     thinking_enabled=settings.ollama_thinking_enabled,
 )
+llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 audio = AudioService()
 voice_input = VoiceInputService(model_cache_dir=VOICE_INPUT_MODEL_DIR)
 audio.set_provider(settings.audio_provider, settings.audio_enabled)
@@ -893,6 +894,7 @@ def apply_settings_to_services():
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)
     llm.set_thinking_enabled(settings.ollama_thinking_enabled)
+    llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
     voice_input.configure(

@@ -1,5 +1,6 @@
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .settings import (
+    CUSTOM_LLM_PROMPT_PREFIX,
     DIAGNOSTICS_LEVELS,
     LLM_PROMPT_MODES,
     MOTION_STYLES,
@@ -98,7 +99,7 @@ def motion_style_options():
     ]
 
 
-def llm_prompt_mode_options():
+def llm_prompt_mode_options(settings=None):
     labels = {
         "revibed": "ReVibed",
         "legacy": "Legacy",
@@ -107,7 +108,7 @@ def llm_prompt_mode_options():
         "revibed": "Less clinical default voice with the same motion-control contract.",
         "legacy": "Previous technical prompt shape for comparison or fallback.",
     }
-    return [
+    options = [
         {
             "id": mode,
             "label": labels[mode],
@@ -116,6 +117,18 @@ def llm_prompt_mode_options():
         for mode in ("revibed", "legacy")
         if mode in LLM_PROMPT_MODES
     ]
+    if settings is not None:
+        for prompt_set in getattr(settings, "llm_custom_prompt_sets", []) or []:
+            prompt_id = prompt_set.get("id")
+            if not prompt_id:
+                continue
+            options.append({
+                "id": f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}",
+                "label": prompt_set.get("label") or prompt_id,
+                "description": prompt_set.get("description") or "Custom prompt style.",
+                "custom": True,
+            })
+    return options
 
 
 def ollama_models_for_ui(settings, llm):
@@ -765,7 +778,7 @@ def settings_payload(
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
         "llm_prompt_mode": settings.llm_prompt_mode,
-        "llm_prompt_mode_options": llm_prompt_mode_options(),
+        "llm_prompt_mode_options": llm_prompt_mode_options(settings),
         "handy_key": settings.handy_key,
         "handy_firmware_version": settings.handy_firmware_version,
         "handy_api_v3_key": settings.handy_api_v3_key,

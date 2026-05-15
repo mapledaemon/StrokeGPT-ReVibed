@@ -83,10 +83,37 @@ def set_llm_prompt_mode_route():
     )
     web.settings.llm_prompt_mode = mode
     web.settings.save()
+    web.llm.set_custom_prompt_set(web.settings.selected_llm_custom_prompt_set())
     return jsonify({
         "status": "success",
         "llm_prompt_mode": mode,
-        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(),
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
+    })
+
+
+@settings_blueprint.route('/save_llm_prompt_set', methods=['POST'])
+def save_llm_prompt_set_route():
+    web = _web()
+    data = web._request_json()
+    prompt_set, message = web.settings.set_llm_custom_prompt_set(
+        data.get("name", ""),
+        data.get("prompts", {}),
+        data.get("prompt_set_id"),
+    )
+    if not prompt_set:
+        return jsonify({"status": "error", "message": message or "Prompt style could not be saved."}), 400
+    web.settings.save()
+    web.llm.set_custom_prompt_set(web.settings.selected_llm_custom_prompt_set())
+    return jsonify({
+        "status": "success",
+        "llm_prompt_mode": web.settings.llm_prompt_mode,
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
+        "prompt_set": {
+            "id": prompt_set.get("id"),
+            "label": prompt_set.get("label"),
+            "description": prompt_set.get("description"),
+            "custom": True,
+        },
     })
 
 
@@ -265,10 +292,11 @@ def system_prompts_route():
     strings and are not part of the snapshot.
     """
     web = _web()
+    web.llm.set_custom_prompt_set(web.settings.selected_llm_custom_prompt_set())
     context = web.get_current_context()
     return jsonify({
         "llm_prompt_mode": web.settings.llm_prompt_mode,
-        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(),
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
         "chat": web.llm.system_prompt(context),
         "repair": web.llm.repair_prompt(context),
         "name_this_move": web.llm.name_this_move_prompt(**_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),

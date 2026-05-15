@@ -58,6 +58,7 @@ class LLMService:
         self.url = url
         self.model = model
         self.thinking_enabled = bool(thinking_enabled)
+        self.custom_prompt_set = None
         self.last_status_code = None
         self.last_elapsed_ms = None
         self.last_raw_content = ""
@@ -74,6 +75,24 @@ class LLMService:
     def set_thinking_enabled(self, enabled):
         self.thinking_enabled = bool(enabled)
         return self.thinking_enabled
+
+    def set_custom_prompt_set(self, prompt_set=None):
+        prompts = (prompt_set or {}).get("prompts") if isinstance(prompt_set, dict) else None
+        self.custom_prompt_set = prompt_set if isinstance(prompts, dict) else None
+        return self.custom_prompt_set
+
+    def _custom_prompt_text(self, key):
+        prompts = (self.custom_prompt_set or {}).get("prompts") or {}
+        text = prompts.get(key)
+        return str(text or "").strip()
+
+    def _format_custom_prompt(self, key, **values):
+        text = self._custom_prompt_text(key)
+        if not text:
+            return ""
+        for name, value in values.items():
+            text = text.replace("{" + name + "}", str(value))
+        return text
 
     def _record_diagnostics(self, *, started_at, response=None, raw_content="", error=""):
         self.last_elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
@@ -194,6 +213,10 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
 - Current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp:0`.
 - Refer to the user's penis as "the apparatus" or "the test equipment" when it fits the persona.
 """
+
+        custom_chat_prompt = self._custom_prompt_text("chat")
+        if custom_chat_prompt:
+            return custom_chat_prompt
 
         mood_options = "Curious, Teasing, Playful, Loving, Excited, Passionate, Seductive, Anticipatory, Breathless, Dominant, Submissive, Vulnerable, Confident, Intimate, Needy, Overwhelmed, Afterglow"
         persona_desc = context.get('persona_desc') or "an erotic partner"
@@ -461,9 +484,20 @@ State:
         return self._build_system_prompt(context)
 
     def repair_prompt(self, context):
+        custom_repair_prompt = self._custom_prompt_text("repair")
+        if custom_repair_prompt:
+            return custom_repair_prompt
         return self._build_system_prompt(context) + REPAIR_PROMPT_SUFFIX
 
     def name_this_move_prompt(self, speed, depth, mood):
+        custom_prompt = self._format_custom_prompt(
+            "name_this_move",
+            speed=speed,
+            depth=depth,
+            mood=mood,
+        )
+        if custom_prompt:
+            return custom_prompt
         return f"""
 Name the liked move. Context: relative speed {speed}%, depth {depth}%, mood '{mood}'.
 Return JSON only: {{"pattern_name":"<short direct name>"}}
@@ -471,6 +505,14 @@ Return JSON only: {{"pattern_name":"<short direct name>"}}
 
     def profile_consolidation_prompt(self, chat_chunk, current_profile):
         chat_log_text = "\n".join(f'role: {x["role"]}, content: {x["content"]}' for x in chat_chunk)
+        current_profile_json = json.dumps(current_profile, separators=(",", ":"))
+        custom_prompt = self._format_custom_prompt(
+            "profile_consolidation",
+            current_profile_json=current_profile_json,
+            chat_log_text=chat_log_text,
+        )
+        if custom_prompt:
+            return custom_prompt
         return f"""
 Update the JSON profile for the HUMAN user only.
 Rules:
@@ -481,7 +523,7 @@ Rules:
 - Return only the updated valid JSON object.
 
 EXISTING PROFILE JSON:
-{json.dumps(current_profile, separators=(",", ":"))}
+{current_profile_json}
 NEW CONVERSATION LOG:
 {chat_log_text}
 """

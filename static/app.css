@@ -377,12 +377,15 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-help { color: var(--comment); font-size: 0.85rem; line-height: 1.35; overflow-wrap: anywhere; }
 .settings-field-label, .voice-input-choice-group legend, .voice-input-tuning-group legend { color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
 .prompt-mode-panel { display: grid; gap: 7px; min-width: 0; }
-.prompt-mode-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; min-width: 0; }
+.prompt-mode-controls { display: grid; grid-template-columns: minmax(12rem, 1fr) repeat(3, auto); gap: 8px; align-items: stretch; min-width: 0; }
 .prompt-mode-controls select { min-width: 0; }
-.prompt-mode-controls .my-button { width: auto; min-width: 7.5rem; white-space: nowrap; }
+.prompt-mode-controls .my-button { width: auto; min-width: 5.75rem; white-space: nowrap; }
 .prompt-refresh-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; min-width: 0; margin-top: 2px; }
 .prompt-refresh-row .my-button { width: auto; min-width: 7.5rem; }
 .prompt-refresh-status { min-width: 0; }
+.prompt-textarea { width: 100%; min-height: 8rem; resize: vertical; font-family: Consolas, 'Courier New', monospace; }
+.prompt-textarea[readonly] { cursor: default; }
+.prompt-textarea:not([readonly]) { color: var(--foreground); border-color: rgba(189, 147, 249, 0.82); background: #151922; box-shadow: inset 0 0 0 1px rgba(189, 147, 249, 0.18); }
 .voice-input-choice-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .voice-input-tuning-group { margin: 0; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: #151922; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .voice-input-tuning-group .slider-container { margin: 0; }

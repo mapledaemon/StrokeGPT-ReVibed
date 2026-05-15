@@ -44,6 +44,10 @@ DEFAULT_PERSONA_PROMPTS = [
 ]
 DEFAULT_LLM_PROMPT_MODE = "revibed"
 LLM_PROMPT_MODES = {"revibed", "legacy"}
+CUSTOM_LLM_PROMPT_PREFIX = "custom:"
+LLM_PROMPT_SET_KEYS = ("chat", "repair", "name_this_move", "profile_consolidation")
+MAX_CUSTOM_LLM_PROMPT_SETS = 20
+MAX_CUSTOM_LLM_PROMPT_CHARS = 30000
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
@@ -160,6 +164,7 @@ def default_settings_dict():
         "persona_desc": DEFAULT_PERSONA_PROMPT,
         "persona_prompts": list(DEFAULT_PERSONA_PROMPTS),
         "llm_prompt_mode": DEFAULT_LLM_PROMPT_MODE,
+        "llm_custom_prompt_sets": [],
         "profile_picture_b64": "",
         "audio_provider": "elevenlabs",
         "audio_enabled": False,
@@ -325,6 +330,9 @@ class SettingsManager:
         self.persona_prompts = self._normalize_persona_prompt_list(
             data.get("persona_prompts", []),
             include_current=True,
+        )
+        self.llm_custom_prompt_sets = self._normalize_llm_custom_prompt_sets(
+            data.get("llm_custom_prompt_sets", defaults["llm_custom_prompt_sets"])
         )
         self.llm_prompt_mode = self._normalize_llm_prompt_mode(
             data.get("llm_prompt_mode", defaults["llm_prompt_mode"])
@@ -523,6 +531,7 @@ class SettingsManager:
             "persona_desc": self.persona_desc,
             "persona_prompts": self.persona_prompt_options(),
             "llm_prompt_mode": self._normalize_llm_prompt_mode(self.llm_prompt_mode),
+            "llm_custom_prompt_sets": self._normalize_llm_custom_prompt_sets(self.llm_custom_prompt_sets),
             "profile_picture_b64": self.profile_picture_b64,
             "audio_provider": self.audio_provider,
             "audio_enabled": self.audio_enabled,
@@ -650,13 +659,107 @@ class SettingsManager:
                 ordered.insert(0, current)
         return ordered
 
+    def _normalize_llm_custom_prompt_id(self, value):
+        cleaned = re.sub(r"[^a-z0-9_-]+", "-", str(value or "").strip().lower()).strip("-_")
+        return cleaned[:64]
+
+    def _llm_custom_prompt_set_by_id(self, prompt_id):
+        prompt_id = self._normalize_llm_custom_prompt_id(prompt_id)
+        for prompt_set in getattr(self, "llm_custom_prompt_sets", []) or []:
+            if prompt_set.get("id") == prompt_id:
+                return prompt_set
+        return None
+
+    def _normalize_llm_prompt_text(self, value):
+        text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        return text[:MAX_CUSTOM_LLM_PROMPT_CHARS]
+
+    def _normalize_llm_custom_prompt_sets(self, values):
+        if not isinstance(values, list):
+            return []
+        normalized = []
+        seen = set()
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            label = " ".join(str(item.get("label") or item.get("name") or "").split())[:80]
+            prompt_id = self._normalize_llm_custom_prompt_id(item.get("id") or label)
+            prompts = item.get("prompts") if isinstance(item.get("prompts"), dict) else item
+            prompt_map = {
+                key: self._normalize_llm_prompt_text((prompts or {}).get(key))
+                for key in LLM_PROMPT_SET_KEYS
+            }
+            if not prompt_id or not label or not prompt_map.get("chat"):
+                continue
+            if prompt_id in seen:
+                continue
+            seen.add(prompt_id)
+            normalized.append({
+                "id": prompt_id,
+                "label": label,
+                "description": f"Custom prompt style: {label}",
+                "custom": True,
+                "prompts": prompt_map,
+            })
+            if len(normalized) >= MAX_CUSTOM_LLM_PROMPT_SETS:
+                break
+        return normalized
+
     def _normalize_llm_prompt_mode(self, value):
-        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        raw = str(value or "").strip()
+        custom_prefix = CUSTOM_LLM_PROMPT_PREFIX
+        if raw.lower().startswith(custom_prefix):
+            prompt_id = self._normalize_llm_custom_prompt_id(raw[len(custom_prefix):])
+            if self._llm_custom_prompt_set_by_id(prompt_id):
+                return f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}"
+        cleaned = raw.lower().replace("-", "_").replace(" ", "_")
         if cleaned in {"old", "classic", "technical"}:
             return "legacy"
         if cleaned in LLM_PROMPT_MODES:
             return cleaned
         return DEFAULT_LLM_PROMPT_MODE
+
+    def selected_llm_custom_prompt_set(self):
+        mode = self._normalize_llm_prompt_mode(getattr(self, "llm_prompt_mode", DEFAULT_LLM_PROMPT_MODE))
+        if not mode.startswith(CUSTOM_LLM_PROMPT_PREFIX):
+            return None
+        return self._llm_custom_prompt_set_by_id(mode[len(CUSTOM_LLM_PROMPT_PREFIX):])
+
+    def set_llm_custom_prompt_set(self, name, prompts, prompt_set_id=None):
+        label = " ".join(str(name or "").split())[:80]
+        if not label:
+            return None, "Prompt style name is required."
+        if not isinstance(prompts, dict):
+            return None, "Prompt text is required."
+        prompt_map = {
+            key: self._normalize_llm_prompt_text(prompts.get(key))
+            for key in LLM_PROMPT_SET_KEYS
+        }
+        if not prompt_map.get("chat"):
+            return None, "Chat prompt text is required."
+        prompt_id = self._normalize_llm_custom_prompt_id(prompt_set_id) or self._normalize_llm_custom_prompt_id(label)
+        if not prompt_id:
+            return None, "Prompt style name is required."
+        prompt_set = {
+            "id": prompt_id,
+            "label": label,
+            "description": f"Custom prompt style: {label}",
+            "custom": True,
+            "prompts": prompt_map,
+        }
+        existing = list(getattr(self, "llm_custom_prompt_sets", []) or [])
+        for index, item in enumerate(existing):
+            if item.get("id") == prompt_id:
+                existing[index] = prompt_set
+                break
+        else:
+            existing.append(prompt_set)
+        self.llm_custom_prompt_sets = self._normalize_llm_custom_prompt_sets(existing)
+        saved_prompt_set = self._llm_custom_prompt_set_by_id(prompt_id)
+        if not saved_prompt_set:
+            return None, f"Custom prompt style limit is {MAX_CUSTOM_LLM_PROMPT_SETS}."
+        self.llm_prompt_mode = f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}"
+        return saved_prompt_set, ""
 
     def _normalize_bool_map(self, values):
         if not isinstance(values, dict):

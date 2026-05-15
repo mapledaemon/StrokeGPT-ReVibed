@@ -14,6 +14,10 @@ export function setSettingsTab(tabName) {
 }
 
 export async function refreshSystemPrompts() {
+    if (state.llmPromptEditActive) {
+        if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Finish or cancel the custom prompt edit before refreshing.';
+        return null;
+    }
     if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Loading...';
     const data = await apiCall('/system_prompts');
     if (!data) {
@@ -21,10 +25,10 @@ export async function refreshSystemPrompts() {
         return;
     }
     populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
-    if (el.systemPromptChat) el.systemPromptChat.textContent = data.chat || '';
-    if (el.systemPromptRepair) el.systemPromptRepair.textContent = data.repair || '';
-    if (el.systemPromptNameThisMove) el.systemPromptNameThisMove.textContent = data.name_this_move || '';
-    if (el.systemPromptProfileConsolidation) el.systemPromptProfileConsolidation.textContent = data.profile_consolidation || '';
+    setPromptBoxText(el.systemPromptChat, data.chat || '');
+    setPromptBoxText(el.systemPromptRepair, data.repair || '');
+    setPromptBoxText(el.systemPromptNameThisMove, data.name_this_move || '');
+    setPromptBoxText(el.systemPromptProfileConsolidation, data.profile_consolidation || '');
     if (el.systemPromptNameThisMoveSample) {
         const sample = data.name_this_move_sample_inputs || {};
         const speed = sample.speed ?? 0;
@@ -33,13 +37,15 @@ export async function refreshSystemPrompts() {
         el.systemPromptNameThisMoveSample.textContent = `(sample inputs: speed ${speed}%, depth ${depth}%, mood '${mood}')`;
     }
     state.systemPromptsLoadedOnce = true;
+    setPromptEditMode(false);
     if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = `Loaded at ${new Date().toLocaleTimeString()}.`;
+    return data;
 }
 
 function promptModeStatusText(mode) {
-    return mode === 'legacy'
-        ? 'Legacy prompt style selected.'
-        : 'ReVibed prompt style selected.';
+    if (mode === 'legacy') return 'Legacy prompt style selected.';
+    if (String(mode || '').startsWith('custom:')) return 'Custom prompt style selected.';
+    return 'ReVibed prompt style selected.';
 }
 
 export function populatePromptModeSetting(mode = 'revibed', options = []) {
@@ -68,6 +74,61 @@ export function populatePromptModeSetting(mode = 'revibed', options = []) {
         el.llmPromptModeStatus.textContent = current.description || promptModeStatusText(normalizedMode);
         el.llmPromptModeStatus.style.color = 'var(--comment)';
     }
+}
+
+function promptBoxes() {
+    return [
+        el.systemPromptChat,
+        el.systemPromptRepair,
+        el.systemPromptNameThisMove,
+        el.systemPromptProfileConsolidation,
+    ].filter(Boolean);
+}
+
+function setPromptBoxText(box, text) {
+    if (!box) return;
+    if ('value' in box) box.value = text || '';
+    else box.textContent = text || '';
+}
+
+function promptBoxText(box) {
+    if (!box) return '';
+    return 'value' in box ? box.value : box.textContent;
+}
+
+function setPromptEditMode(active, name = '') {
+    state.llmPromptEditActive = Boolean(active);
+    state.llmPromptEditName = active ? name : '';
+    promptBoxes().forEach(box => {
+        if (active) {
+            box.removeAttribute('readonly');
+            box.classList.add('prompt-editing');
+        } else {
+            box.setAttribute('readonly', '');
+            box.classList.remove('prompt-editing');
+        }
+    });
+    if (el.saveLlmPromptModeBtn) {
+        el.saveLlmPromptModeBtn.textContent = active ? 'Save Custom' : 'Save';
+    }
+    if (el.editLlmPromptStyleBtn) {
+        el.editLlmPromptStyleBtn.disabled = active;
+    }
+    if (el.refreshSystemPromptsBtn) {
+        el.refreshSystemPromptsBtn.disabled = active;
+    }
+    if (el.cancelLlmPromptEditBtn) {
+        el.cancelLlmPromptEditBtn.hidden = !active;
+    }
+}
+
+function promptSetPayload() {
+    return {
+        chat: promptBoxText(el.systemPromptChat),
+        repair: promptBoxText(el.systemPromptRepair),
+        name_this_move: promptBoxText(el.systemPromptNameThisMove),
+        profile_consolidation: promptBoxText(el.systemPromptProfileConsolidation),
+    };
 }
 
 function setProfileMenuOpen(isOpen) {
@@ -646,6 +707,36 @@ async function saveDiagnosticsLevels() {
 }
 
 async function savePromptModeSetting() {
+    if (state.llmPromptEditActive) {
+        const name = (state.llmPromptEditName || '').trim();
+        const prompts = promptSetPayload();
+        if (!name || !prompts.chat.trim()) {
+            if (el.llmPromptModeStatus) {
+                el.llmPromptModeStatus.textContent = 'Custom style needs a name and chat prompt text.';
+                el.llmPromptModeStatus.style.color = 'var(--yellow)';
+            }
+            return null;
+        }
+        if (el.llmPromptModeStatus) {
+            el.llmPromptModeStatus.textContent = `Saving custom style "${name}"...`;
+            el.llmPromptModeStatus.style.color = 'var(--comment)';
+        }
+        const data = await apiCall('/save_llm_prompt_set', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, prompts}),
+        });
+        if (data && data.status === 'success') {
+            setPromptEditMode(false);
+            populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
+            state.systemPromptsLoadedOnce = false;
+            await refreshSystemPrompts();
+            if (el.statusText) el.statusText.textContent = 'Custom prompt style saved.';
+        } else {
+            reportSaveFailure(el.llmPromptModeStatus || el.statusText, data, 'Custom prompt style save failed.');
+        }
+        return data;
+    }
     const mode = el.llmPromptModeSelect?.value || state.llmPromptMode || 'revibed';
     if (el.llmPromptModeStatus) {
         el.llmPromptModeStatus.textContent = 'Saving prompt style...';
@@ -665,6 +756,40 @@ async function savePromptModeSetting() {
         reportSaveFailure(el.llmPromptModeStatus || el.statusText, data, 'Prompt style save failed.');
     }
     return data;
+}
+
+async function beginPromptStyleEdit() {
+    if (state.llmPromptEditActive) return;
+    if (!state.systemPromptsLoadedOnce) {
+        const loaded = await refreshSystemPrompts();
+        if (!loaded) return;
+    }
+    const selected = state.llmPromptModeOptions.find(option => option.id === (el.llmPromptModeSelect?.value || state.llmPromptMode)) || {};
+    const baseLabel = selected.label || 'Custom';
+    const defaultName = selected.custom ? `${baseLabel} copy` : `${baseLabel} custom`;
+    const name = window.prompt('Name this custom prompt style', defaultName);
+    if (name === null) return;
+    const cleaned = name.trim();
+    if (!cleaned) {
+        if (el.llmPromptModeStatus) {
+            el.llmPromptModeStatus.textContent = 'Custom style name is required.';
+            el.llmPromptModeStatus.style.color = 'var(--yellow)';
+        }
+        return;
+    }
+    setPromptEditMode(true, cleaned);
+    if (el.llmPromptModeStatus) {
+        el.llmPromptModeStatus.textContent = `Editing "${cleaned}". The current prompt text is copied into editable boxes; click Save Custom when done.`;
+        el.llmPromptModeStatus.style.color = 'var(--comment)';
+    }
+    el.systemPromptChat?.focus?.();
+}
+
+async function cancelPromptStyleEdit() {
+    if (!state.llmPromptEditActive) return;
+    setPromptEditMode(false);
+    state.systemPromptsLoadedOnce = false;
+    await refreshSystemPrompts();
 }
 
 async function setOllamaModel(model) {
@@ -902,6 +1027,12 @@ export function initSettingsControls({addChatMessage}) {
     if (el.llmPromptModeSelect) {
         el.llmPromptModeSelect.addEventListener('change', () => {
             if (!el.llmPromptModeStatus) return;
+            if (state.llmPromptEditActive) {
+                el.llmPromptModeSelect.value = state.llmPromptMode;
+                el.llmPromptModeStatus.textContent = 'Finish or cancel the custom prompt edit before changing styles.';
+                el.llmPromptModeStatus.style.color = 'var(--yellow)';
+                return;
+            }
             const mode = el.llmPromptModeSelect.value || 'revibed';
             if (mode === state.llmPromptMode) {
                 populatePromptModeSetting(state.llmPromptMode, state.llmPromptModeOptions);
@@ -913,6 +1044,12 @@ export function initSettingsControls({addChatMessage}) {
     }
     if (el.saveLlmPromptModeBtn) {
         el.saveLlmPromptModeBtn.addEventListener('click', savePromptModeSetting);
+    }
+    if (el.editLlmPromptStyleBtn) {
+        el.editLlmPromptStyleBtn.addEventListener('click', beginPromptStyleEdit);
+    }
+    if (el.cancelLlmPromptEditBtn) {
+        el.cancelLlmPromptEditBtn.addEventListener('click', cancelPromptStyleEdit);
     }
     D.getElementById('use-selected-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelSelect.value));
     D.getElementById('refresh-model-field-btn').addEventListener('click', () => {

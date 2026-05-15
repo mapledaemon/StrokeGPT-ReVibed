@@ -36,9 +36,10 @@ class WebSettingsRouteTests(WebTestCase):
             response.close()
 
     def test_llm_prompt_mode_can_be_selected_and_saved(self):
-        from strokegpt.web import settings
+        from strokegpt.web import llm, settings
 
         original_mode = settings.llm_prompt_mode
+        original_prompt_sets = list(getattr(settings, "llm_custom_prompt_sets", []))
         try:
             with mock.patch.object(settings, "save") as save:
                 response = self.client.post("/set_llm_prompt_mode", json={
@@ -51,9 +52,41 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["llm_prompt_mode"], "legacy")
             self.assertTrue(any(option["id"] == "revibed" for option in data["llm_prompt_mode_options"]))
             self.assertEqual(settings.llm_prompt_mode, "legacy")
+            self.assertIsNone(llm.custom_prompt_set)
             save.assert_called_once()
         finally:
             settings.llm_prompt_mode = original_mode
+            settings.llm_custom_prompt_sets = original_prompt_sets
+            llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
+
+    def test_custom_llm_prompt_set_can_be_saved_and_selected(self):
+        from strokegpt.web import llm, settings
+
+        original_mode = settings.llm_prompt_mode
+        original_prompt_sets = list(getattr(settings, "llm_custom_prompt_sets", []))
+        try:
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/save_llm_prompt_set", json={
+                    "name": "My Custom",
+                    "prompts": {
+                        "chat": "CUSTOM CHAT",
+                        "repair": "CUSTOM REPAIR",
+                        "name_this_move": "Name {speed} {depth} {mood}",
+                        "profile_consolidation": "Profile {current_profile_json} {chat_log_text}",
+                    },
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["llm_prompt_mode"], "custom:my-custom")
+            self.assertTrue(any(option["id"] == "custom:my-custom" for option in data["llm_prompt_mode_options"]))
+            self.assertEqual(llm.system_prompt({}), "CUSTOM CHAT")
+            save.assert_called_once()
+        finally:
+            settings.llm_prompt_mode = original_mode
+            settings.llm_custom_prompt_sets = original_prompt_sets
+            llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
     def test_json_routes_handle_missing_or_invalid_payloads_without_500(self):
         invalid_posts = [
@@ -483,6 +516,37 @@ class WebSettingsRouteTests(WebTestCase):
             settings.min_speed = original_min
             settings.max_speed = original_max
             settings.llm_prompt_mode = original_mode
+
+    def test_system_prompts_route_returns_selected_custom_prompt_set(self):
+        from strokegpt.web import llm, settings
+
+        original_mode = settings.llm_prompt_mode
+        original_prompt_sets = list(getattr(settings, "llm_custom_prompt_sets", []))
+        try:
+            prompt_set, _ = settings.set_llm_custom_prompt_set(
+                "Route Custom",
+                {
+                    "chat": "ROUTE CUSTOM CHAT",
+                    "repair": "ROUTE CUSTOM REPAIR",
+                    "name_this_move": "Route name {speed} {depth} {mood}",
+                    "profile_consolidation": "Route profile {current_profile_json} {chat_log_text}",
+                },
+            )
+            llm.set_custom_prompt_set(prompt_set)
+
+            response = self.client.get("/system_prompts")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["llm_prompt_mode"], "custom:route-custom")
+            self.assertEqual(data["chat"], "ROUTE CUSTOM CHAT")
+            self.assertEqual(data["repair"], "ROUTE CUSTOM REPAIR")
+            self.assertIn("Route name 60 40 Teasing", data["name_this_move"])
+            self.assertIn("Route profile", data["profile_consolidation"])
+        finally:
+            settings.llm_prompt_mode = original_mode
+            settings.llm_custom_prompt_sets = original_prompt_sets
+            llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
     def test_system_prompts_route_does_not_leak_proper_noun_handles_in_default_branch(self):
         # Persona Naming And Prompt Audit follow-up: the Prompts tab is

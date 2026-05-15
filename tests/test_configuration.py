@@ -12,6 +12,7 @@ sys.modules.setdefault("requests", requests_module)
 
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
+    CUSTOM_LLM_PROMPT_PREFIX,
     DEFAULT_LLM_PROMPT_MODE,
     DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
@@ -68,6 +69,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["llm_prompt_mode"], DEFAULT_LLM_PROMPT_MODE)
+        self.assertEqual(saved["llm_custom_prompt_sets"], [])
         self.assertEqual(saved["handy_firmware_version"], "fw4")
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         self.assertEqual(saved["motion_pattern_enabled"], {})
@@ -143,6 +145,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.local_tts_top_p, 1.0)
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
+        self.assertEqual(settings.llm_custom_prompt_sets, [])
         self.assertEqual(settings.motion_pattern_enabled, {})
         self.assertEqual(settings.motion_pattern_feedback, {})
         self.assertEqual(settings.motion_pattern_feedback_history, [])
@@ -196,6 +199,29 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(payload["stream"])
         self.assertTrue(service.diagnostics()["thinking_enabled"])
 
+    def test_llm_service_uses_selected_custom_prompt_set(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+        service.set_custom_prompt_set({
+            "id": "custom-test",
+            "label": "Custom Test",
+            "prompts": {
+                "chat": "CUSTOM CHAT PROMPT",
+                "repair": "CUSTOM REPAIR PROMPT",
+                "name_this_move": "Name speed {speed} depth {depth} mood {mood}",
+                "profile_consolidation": "Profile {current_profile_json}\nLog {chat_log_text}",
+            },
+        })
+
+        self.assertEqual(service.system_prompt({}), "CUSTOM CHAT PROMPT")
+        self.assertEqual(service.repair_prompt({}), "CUSTOM REPAIR PROMPT")
+        self.assertIn("speed 60 depth 40 mood Teasing", service.name_this_move_prompt(60, 40, "Teasing"))
+        profile_prompt = service.profile_consolidation_prompt(
+            [{"role": "user", "content": "likes slow"}],
+            {"likes": []},
+        )
+        self.assertIn('{"likes":[]}', profile_prompt)
+        self.assertIn("likes slow", profile_prompt)
+
     def test_llm_edge_permission_settings_are_persisted(self):
         fake_path = FakePath(json.dumps({
             "allow_llm_edge_in_freestyle": False,
@@ -241,6 +267,42 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.apply_dict({"llm_prompt_mode": "bad"})
         self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
+
+    def test_llm_custom_prompt_set_is_persisted_and_selectable(self):
+        settings = SettingsManager("settings.json")
+        prompt_set, message = settings.set_llm_custom_prompt_set(
+            "My Style",
+            {
+                "chat": "CUSTOM CHAT",
+                "repair": "CUSTOM REPAIR",
+                "name_this_move": "Name {speed} {depth} {mood}",
+                "profile_consolidation": "Profile {current_profile_json} {chat_log_text}",
+            },
+        )
+
+        self.assertEqual(message, "")
+        self.assertEqual(prompt_set["id"], "my-style")
+        self.assertEqual(settings.llm_prompt_mode, f"{CUSTOM_LLM_PROMPT_PREFIX}my-style")
+        self.assertEqual(settings.selected_llm_custom_prompt_set()["prompts"]["chat"], "CUSTOM CHAT")
+
+        saved = settings.to_dict()
+        self.assertEqual(saved["llm_prompt_mode"], f"{CUSTOM_LLM_PROMPT_PREFIX}my-style")
+        self.assertEqual(saved["llm_custom_prompt_sets"][0]["label"], "My Style")
+
+    def test_llm_custom_prompt_set_loads_from_settings(self):
+        settings = SettingsManager("settings.json")
+
+        settings.apply_dict({
+            "llm_prompt_mode": "custom:loaded-style",
+            "llm_custom_prompt_sets": [{
+                "id": "Loaded Style",
+                "label": "Loaded Style",
+                "prompts": {"chat": "Loaded chat prompt"},
+            }],
+        })
+
+        self.assertEqual(settings.llm_prompt_mode, "custom:loaded-style")
+        self.assertEqual(settings.selected_llm_custom_prompt_set()["label"], "Loaded Style")
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({

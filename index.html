@@ -458,7 +458,7 @@
                 <div class="settings-subsection">
                     <h4>System Prompts</h4>
                     <p class="settings-help">
-                        Read-only snapshot of every system prompt the local model can receive.
+                        Snapshot of every system prompt the local model can receive.
                         The Chat and Repair prompts are rendered against your current persona,
                         speed limits, edge permissions, and special-persona mode; Name Move and
                         Profile Consolidation use representative sample inputs because they only
@@ -469,7 +469,9 @@
                         <label class="settings-field-label" for="llm-prompt-mode-select">Chat prompt style</label>
                         <div class="prompt-mode-controls">
                             <select id="llm-prompt-mode-select" class="input-text" data-requires-backend></select>
-                            <button id="save-llm-prompt-mode-btn" class="my-button" data-requires-backend>Save Style</button>
+                            <button id="save-llm-prompt-mode-btn" class="my-button" data-requires-backend>Save</button>
+                            <button id="edit-llm-prompt-style-btn" class="my-button" data-requires-backend>Edit Style</button>
+                            <button id="cancel-llm-prompt-edit-btn" class="my-button" hidden>Cancel</button>
                         </div>
                         <div id="llm-prompt-mode-status" class="settings-help">ReVibed is the less clinical default; Legacy keeps the previous prompt shape.</div>
                     </div>
@@ -478,13 +480,13 @@
                         <span id="system-prompts-status" class="settings-help prompt-refresh-status"></span>
                     </div>
                     <h5>Chat</h5>
-                    <pre id="system-prompt-chat" class="diagnostics-output">Open this tab to load the current chat prompt.</pre>
+                    <textarea id="system-prompt-chat" class="diagnostics-output prompt-textarea" rows="9" readonly aria-label="Chat system prompt">Open this tab to load the current chat prompt.</textarea>
                     <h5>Motion Repair</h5>
-                    <pre id="system-prompt-repair" class="diagnostics-output">Open this tab to load the motion repair prompt.</pre>
+                    <textarea id="system-prompt-repair" class="diagnostics-output prompt-textarea" rows="9" readonly aria-label="Motion repair prompt">Open this tab to load the motion repair prompt.</textarea>
                     <h5>Name This Move <span id="system-prompt-name-this-move-sample" style="font-size: 0.8em; color: var(--comment);"></span></h5>
-                    <pre id="system-prompt-name-this-move" class="diagnostics-output">Open this tab to load the name-this-move prompt.</pre>
+                    <textarea id="system-prompt-name-this-move" class="diagnostics-output prompt-textarea" rows="5" readonly aria-label="Name-this-move prompt">Open this tab to load the name-this-move prompt.</textarea>
                     <h5>Profile Consolidation</h5>
-                    <pre id="system-prompt-profile-consolidation" class="diagnostics-output">Open this tab to load the profile consolidation prompt.</pre>
+                    <textarea id="system-prompt-profile-consolidation" class="diagnostics-output prompt-textarea" rows="8" readonly aria-label="Profile consolidation prompt">Open this tab to load the profile consolidation prompt.</textarea>
                 </div>
             </div>
             <div id="settings-tab-diagnostics" class="settings-panel">
