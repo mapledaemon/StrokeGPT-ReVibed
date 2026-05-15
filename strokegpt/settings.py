@@ -217,6 +217,7 @@ def default_settings_dict():
         "allow_llm_edge_in_freestyle": True,
         "allow_llm_edge_in_chat": True,
         "allow_llm_mode_actions_in_chat": False,
+        "autospeak_enabled": False,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -372,6 +373,10 @@ class SettingsManager:
         self.allow_llm_mode_actions_in_chat = _as_bool(
             data.get("allow_llm_mode_actions_in_chat", defaults["allow_llm_mode_actions_in_chat"]),
             defaults["allow_llm_mode_actions_in_chat"],
+        )
+        self.autospeak_enabled = _as_bool(
+            data.get("autospeak_enabled", defaults["autospeak_enabled"]),
+            defaults["autospeak_enabled"],
         )
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
@@ -591,6 +596,7 @@ class SettingsManager:
             "allow_llm_edge_in_freestyle": bool(self.allow_llm_edge_in_freestyle),
             "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
             "allow_llm_mode_actions_in_chat": bool(self.allow_llm_mode_actions_in_chat),
+            "autospeak_enabled": bool(self.autospeak_enabled),
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,

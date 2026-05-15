@@ -1424,6 +1424,7 @@ def get_current_context():
         'use_long_term_memory': use_long_term_memory,
         'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,
         'allow_llm_edge_in_freestyle': settings.allow_llm_edge_in_freestyle,
+        'autospeak_enabled': settings.autospeak_enabled,
         'active_mode': active_mode_name,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
@@ -1556,8 +1557,10 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'remember_pattern_id': _remember_live_motion_pattern_id,
         'freestyle_candidates': _freestyle_candidate_patterns,
         'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
+        'autospeak_enabled': lambda: settings.autospeak_enabled,
         'set_mode_name': set_mode_name,
         'mode_decision': mode_decision,
+        'send_chat': add_message_to_queue,
     }
     task = AutoModeThread(mode_logic, initial_message, services, callbacks, mode_name=mode_name)
     with app_state.lock:

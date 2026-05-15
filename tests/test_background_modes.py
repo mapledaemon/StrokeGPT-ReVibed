@@ -86,6 +86,7 @@ class ModeContractTests(unittest.TestCase):
         callback_keys = set(ModeCallbacks.__annotations__)
         self.assertTrue({
             "send_message",
+            "send_chat",
             "get_context",
             "get_timings",
             "on_stop",
@@ -97,6 +98,7 @@ class ModeContractTests(unittest.TestCase):
             "remember_pattern_id",
             "freestyle_candidates",
             "allow_llm_edge_in_freestyle",
+            "autospeak_enabled",
             "set_mode_name",
             "mode_decision",
             "pause_event",
@@ -186,6 +188,46 @@ class AutoModeThreadTests(unittest.TestCase):
         _sleep_with_stop(threading.Event(), 0)
 
         self.assertLess(time.monotonic() - started, 0.05)
+
+    def test_autospeak_zero_cadence_talks_during_wait_without_cutting_it_short(self):
+        chat_messages = []
+        decision_events = []
+
+        def mode_decision(**kwargs):
+            decision_events.append(kwargs["event"])
+            if kwargs["event"] == "start":
+                return {
+                    "action": "continue",
+                    "autospeak_seconds": 0,
+                }
+            return {
+                "action": "continue",
+                "autospeak_seconds": 0,
+                "chat": "Still with you.",
+            }
+
+        callbacks = {
+            "send_chat": chat_messages.append,
+            "autospeak_enabled": lambda: True,
+            "mode_decision": mode_decision,
+        }
+
+        started = time.monotonic()
+        background_modes._sleep_with_autospeak(
+            threading.Event(),
+            0.55,
+            callbacks,
+            "freestyle",
+            0,
+            time.monotonic(),
+            current_target=lambda: MotionTarget(20, 30, 40),
+        )
+        elapsed = time.monotonic() - started
+
+        self.assertGreaterEqual(elapsed, 0.5)
+        self.assertIn("autospeak", decision_events)
+        self.assertGreaterEqual(len(chat_messages), 2)
+        self.assertEqual(set(chat_messages), {"Still with you."})
 
     def test_stop_during_initial_delay_runs_cleanup_without_mode_step(self):
         messages = []
@@ -1058,6 +1100,23 @@ class CoerceModeDecisionTests(unittest.TestCase):
             event="close_signal",
         )
         self.assertEqual(decision.duration_seconds, 10.0)
+
+    def test_autospeak_seconds_can_be_zero(self):
+        decision = mode_decisions._coerce_mode_decision(
+            {"action": "continue", "autospeak_seconds": 0, "chat": "Still here."},
+            mode="freestyle",
+            event="autospeak",
+        )
+        self.assertEqual(decision.autospeak_seconds, 0.0)
+        self.assertEqual(decision.chat, "Still here.")
+
+    def test_autospeak_seconds_clamps_high_values(self):
+        decision = mode_decisions._coerce_mode_decision(
+            {"action": "continue", "autospeak_seconds": 999},
+            mode="freestyle",
+            event="autospeak",
+        )
+        self.assertEqual(decision.autospeak_seconds, 300.0)
 
 
 if __name__ == "__main__":

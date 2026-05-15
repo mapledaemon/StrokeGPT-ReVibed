@@ -67,6 +67,7 @@ class ModeDecisionProvider(Protocol):
 
 class ModeCallbacks(TypedDict, total=False):
     send_message: Callable[[str], None]
+    send_chat: Callable[[str], None]
     get_context: Callable[[], dict[str, Any]]
     get_timings: Callable[[str], tuple[float, float]]
     on_stop: Callable[[], None]
@@ -78,6 +79,7 @@ class ModeCallbacks(TypedDict, total=False):
     remember_pattern_id: Callable[[str], object]
     freestyle_candidates: Callable[[], Iterable[FreestyleCandidate]]
     allow_llm_edge_in_freestyle: Callable[[], bool]
+    autospeak_enabled: Callable[[], bool]
     set_mode_name: Callable[[str], None]
     mode_decision: ModeDecisionProvider
     pause_event: threading.Event

@@ -15,6 +15,9 @@ from .motion import MotionTarget
 
 
 MODE_DECISION_ACTIONS = {"continue", "hold_then_resume", "pull_back", "switch_to_milk", "stop"}
+DEFAULT_AUTOSPEAK_SECONDS = 45.0
+MIN_AUTOSPEAK_SECONDS = 0.0
+MAX_AUTOSPEAK_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,7 @@ class ModeDecision:
     action: str = "continue"
     duration_seconds: float | None = None
     intensity: int | None = None
+    autospeak_seconds: float | None = None
     chat: str = ""
     source: str = "fallback"
 
@@ -29,7 +33,22 @@ class ModeDecision:
 def _coerce_mode_decision(raw, *, mode, event):
     if not isinstance(raw, dict):
         return ModeDecision()
-    if not any(key in raw for key in ("action", "duration_seconds", "duration", "seconds", "intensity")):
+    if not any(
+        key in raw
+        for key in (
+            "action",
+            "duration_seconds",
+            "duration",
+            "seconds",
+            "intensity",
+            "autospeak_seconds",
+            "autospeak_interval_seconds",
+            "next_autospeak_seconds",
+            "speak_again_seconds",
+            "chat",
+            "message",
+        )
+    ):
         return ModeDecision()
 
     action = str(raw.get("action") or "").strip().lower().replace("-", "_").replace(" ", "_")
@@ -74,13 +93,38 @@ def _coerce_mode_decision(raw, *, mode, event):
     if intensity is not None:
         intensity = max(0, min(100, intensity))
 
+    autospeak_seconds = None
+    for key in (
+        "autospeak_seconds",
+        "autospeak_interval_seconds",
+        "next_autospeak_seconds",
+        "speak_again_seconds",
+    ):
+        try:
+            autospeak_seconds = float(raw.get(key))
+            break
+        except (TypeError, ValueError):
+            autospeak_seconds = None
+    if autospeak_seconds is not None:
+        autospeak_seconds = max(
+            MIN_AUTOSPEAK_SECONDS,
+            min(MAX_AUTOSPEAK_SECONDS, autospeak_seconds),
+        )
+
     chat = str(raw.get("chat") or raw.get("message") or "").strip()
     if chat.lower().startswith("llm connection error"):
         chat = ""
     if len(chat) > 240:
         chat = chat[:237].rstrip() + "..."
 
-    return ModeDecision(action=action, duration_seconds=duration, intensity=intensity, chat=chat, source="llm")
+    return ModeDecision(
+        action=action,
+        duration_seconds=duration,
+        intensity=intensity,
+        autospeak_seconds=autospeak_seconds,
+        chat=chat,
+        source="llm",
+    )
 
 
 def _request_mode_decision(
@@ -167,3 +211,22 @@ def _target_with_intensity(target, intensity):
 def _send_mode_decision_message(send_message, decision):
     if decision.chat and decision.source == "llm":
         send_message(decision.chat)
+
+
+def _autospeak_interval_from_decision(decision, current_interval=None):
+    if decision.autospeak_seconds is None:
+        return float(current_interval or DEFAULT_AUTOSPEAK_SECONDS)
+    return max(
+        MIN_AUTOSPEAK_SECONDS,
+        min(MAX_AUTOSPEAK_SECONDS, float(decision.autospeak_seconds)),
+    )
+
+
+def _send_autospeak_message(callbacks: ModeCallbacks, decision):
+    if not decision.chat or decision.source != "llm":
+        return False
+    send_chat = callbacks.get("send_chat")
+    if not send_chat:
+        return False
+    send_chat(decision.chat)
+    return True

@@ -859,6 +859,7 @@ def settings_payload(
         "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
         "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
         "allow_llm_mode_actions_in_chat": settings.allow_llm_mode_actions_in_chat,
+        "autospeak_enabled": settings.autospeak_enabled,
         "use_long_term_memory": use_long_term_memory,
         "diagnostics_levels": diagnostics_levels,
         "motion_backends": motion_backends_payload(),

@@ -425,30 +425,36 @@ class WebSettingsRouteTests(WebTestCase):
         original = (
             settings.allow_llm_edge_in_freestyle,
             settings.allow_llm_edge_in_chat,
+            settings.autospeak_enabled,
         )
         try:
             with mock.patch.object(settings, "save"):
                 response = self.client.post("/set_llm_edge_permissions", json={
                     "allow_llm_edge_in_freestyle": False,
                     "allow_llm_edge_in_chat": False,
+                    "autospeak_enabled": True,
                 })
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertFalse(data["allow_llm_edge_in_freestyle"])
             self.assertFalse(data["allow_llm_edge_in_chat"])
+            self.assertTrue(data["autospeak_enabled"])
             self.assertFalse(settings.allow_llm_edge_in_freestyle)
             self.assertFalse(settings.allow_llm_edge_in_chat)
+            self.assertTrue(settings.autospeak_enabled)
             self.assertIn("motion_preferences", data)
 
             response = self.client.get("/check_settings")
             payload = response.get_json()
             self.assertFalse(payload["allow_llm_edge_in_freestyle"])
             self.assertFalse(payload["allow_llm_edge_in_chat"])
+            self.assertTrue(payload["autospeak_enabled"])
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,
                 settings.allow_llm_edge_in_chat,
+                settings.autospeak_enabled,
             ) = original
 
     def test_diagnostics_levels_can_be_selected_and_saved(self):

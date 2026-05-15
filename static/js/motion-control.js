@@ -234,6 +234,17 @@ function updateMemoryToggleUi(enabled) {
     el.toggleMemoryBtn.setAttribute('aria-pressed', state.useLongTermMemory ? 'true' : 'false');
 }
 
+function updateAutospeakToggleUi(enabled) {
+    state.autospeakEnabled = Boolean(enabled);
+    if (!el.topBarAutospeakToggleBtn) return;
+    el.topBarAutospeakToggleBtn.textContent = state.autospeakEnabled ? 'Auto On' : 'Auto Off';
+    el.topBarAutospeakToggleBtn.title = state.autospeakEnabled ? 'Turn Autospeak off' : 'Turn Autospeak on';
+    el.topBarAutospeakToggleBtn.setAttribute('aria-label', state.autospeakEnabled ? 'Autospeak on' : 'Autospeak off');
+    el.topBarAutospeakToggleBtn.setAttribute('aria-pressed', state.autospeakEnabled ? 'true' : 'false');
+    if (state.autospeakEnabled) el.topBarAutospeakToggleBtn.classList.add('is-on');
+    else el.topBarAutospeakToggleBtn.classList.remove('is-on');
+}
+
 export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
     state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
@@ -241,6 +252,7 @@ export function populateMotionSettings(data = {}) {
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
     state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
+    updateAutospeakToggleUi(data.autospeak_enabled ?? state.autospeakEnabled ?? false);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
     }
@@ -254,7 +266,7 @@ export function populateMotionSettings(data = {}) {
         el.allowLlmModeActionsChatCheckbox.checked = Boolean(state.allowLlmModeActionsInChat);
     }
     if (el.llmEdgePermissionsStatus) {
-        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}.`;
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'}.`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -1104,6 +1116,7 @@ async function saveLlmEdgePermissions() {
             allow_llm_edge_in_freestyle: Boolean(el.allowLlmEdgeFreestyleCheckbox?.checked),
             allow_llm_edge_in_chat: Boolean(el.allowLlmEdgeChatCheckbox?.checked),
             allow_llm_mode_actions_in_chat: Boolean(el.allowLlmModeActionsChatCheckbox?.checked),
+            autospeak_enabled: Boolean(state.autospeakEnabled),
         }),
     });
     if (data && data.status === 'success') {
@@ -1112,6 +1125,23 @@ async function saveLlmEdgePermissions() {
         el.statusText.textContent = 'LLM permissions saved.';
     } else {
         reportSaveFailure(el.llmEdgePermissionsStatus || el.statusText, data, 'Could not save LLM permissions.');
+    }
+}
+
+async function saveAutospeakToggle(enabled) {
+    const previousEnabled = state.autospeakEnabled;
+    updateAutospeakToggleUi(enabled);
+    const data = await apiCall('/set_llm_edge_permissions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({autospeak_enabled: Boolean(enabled)}),
+    });
+    if (data && data.status === 'success') {
+        populateMotionSettings(data);
+        el.statusText.textContent = state.autospeakEnabled ? 'Autospeak enabled.' : 'Autospeak disabled.';
+    } else {
+        updateAutospeakToggleUi(previousEnabled);
+        reportSaveFailure(el.statusText, data, 'Could not save Autospeak setting.');
     }
 }
 
@@ -1147,6 +1177,9 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);
+    el.topBarAutospeakToggleBtn?.addEventListener('click', async () => {
+        await saveAutospeakToggle(!state.autospeakEnabled);
+    });
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.addEventListener('change', saveMotionFeedbackOptions);

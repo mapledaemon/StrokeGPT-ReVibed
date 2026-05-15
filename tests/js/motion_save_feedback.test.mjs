@@ -8,7 +8,7 @@ import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
 import { initAudioControls, updateLocalTtsStatus } from '../../static/js/audio.js';
-import { initMotionControls } from '../../static/js/motion-control.js';
+import { initMotionControls, populateMotionSettings } from '../../static/js/motion-control.js';
 import {
     resetMotionPatternFeedback,
     setMotionPatternEnabled,
@@ -76,6 +76,7 @@ describe('motion/audio save feedback', () => {
         resetStubElement('local-tts-status');
         resetStubElement('download-local-tts-model-button');
         resetStubElement('llm-edge-permissions-status');
+        resetStubElement('top-bar-autospeak-toggle-btn');
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
@@ -88,6 +89,7 @@ describe('motion/audio save feedback', () => {
         getStubElement('llm-edge-permissions-status').textContent = 'baseline';
         state.connectionLost = false;
         state.activeModeName = '';
+        state.autospeakEnabled = false;
         state.motionTraining = {state: 'idle', pattern_id: 'seed', pattern_name: 'Seed', preview: false};
         state.motionTrainingOriginalPattern = null;
         state.motionTrainingEditedPattern = null;
@@ -355,9 +357,11 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_freestyle: true,
                 allow_llm_edge_in_chat: false,
                 allow_llm_mode_actions_in_chat: true,
+                autospeak_enabled: true,
                 motion_preferences: {prompt: '', summary: ''},
             });
         };
+        populateMotionSettings({autospeak_enabled: true});
         getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
         getStubElement('allow-llm-edge-chat-checkbox').checked = false;
         getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
@@ -371,10 +375,38 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_freestyle: true,
                 allow_llm_edge_in_chat: false,
                 allow_llm_mode_actions_in_chat: true,
+                autospeak_enabled: true,
             },
         ]]);
         assert.strictEqual(state.allowLlmModeActionsInChat, true);
+        assert.strictEqual(state.autospeakEnabled, true);
         assert.strictEqual(getStubElement('llm-edge-permissions-status').textContent, 'LLM permissions saved.');
+    });
+
+    it('top-bar Autospeak toggle saves only Autospeak and mirrors the pressed state', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                allow_llm_edge_in_freestyle: true,
+                allow_llm_edge_in_chat: true,
+                allow_llm_mode_actions_in_chat: false,
+                autospeak_enabled: true,
+                motion_preferences: {prompt: '', summary: ''},
+            });
+        };
+        populateMotionSettings({autospeak_enabled: false});
+
+        getStubElement('top-bar-autospeak-toggle-btn').click();
+        await flushAsyncHandlers();
+
+        assert.deepStrictEqual(requests, [['/set_llm_edge_permissions', {autospeak_enabled: true}]]);
+        assert.strictEqual(state.autospeakEnabled, true);
+        assert.strictEqual(getStubElement('top-bar-autospeak-toggle-btn').textContent, 'Auto On');
+        assert.strictEqual(getStubElement('top-bar-autospeak-toggle-btn').getAttribute('aria-pressed'), 'true');
+        assert.strictEqual(getStubElement('top-bar-autospeak-toggle-btn').classList.contains('is-on'), true);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Autospeak enabled.');
     });
 
     it('toggleMotionPause surfaces the backend message on global status', async () => {

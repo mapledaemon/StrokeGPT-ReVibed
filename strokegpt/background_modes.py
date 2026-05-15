@@ -38,6 +38,7 @@ INTENT_MATCHER = IntentMatcher()
 
 EDGE_START_MIN_STEPS = 12
 EDGE_PROGRESS_MIN_STEPS = 10
+AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS = 0.25
 
 
 __all__ = [
@@ -193,6 +194,103 @@ def _sleep_with_stop(stop_event, seconds, wake_event=None, pause_event=None):
             return
 
 
+def _autospeak_enabled(callbacks: ModeCallbacks):
+    enabled = callbacks.get("autospeak_enabled")
+    if not enabled:
+        return False
+    try:
+        return bool(enabled())
+    except Exception:
+        return False
+
+
+def _next_autospeak_at(interval_seconds):
+    interval = max(0.0, float(interval_seconds or 0.0))
+    return time.monotonic() + max(AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS, interval)
+
+
+def _maybe_send_autospeak(
+    callbacks: ModeCallbacks,
+    mode,
+    autospeak_interval,
+    next_autospeak_at,
+    *,
+    edge_count=0,
+    current_target=None,
+):
+    autospeak_interval = max(0.0, float(autospeak_interval or 0.0))
+    next_autospeak_at = float(next_autospeak_at or 0.0)
+    if not _autospeak_enabled(callbacks):
+        return autospeak_interval, _next_autospeak_at(autospeak_interval)
+    if time.monotonic() < next_autospeak_at:
+        return autospeak_interval, next_autospeak_at
+
+    decision = mode_decision_helpers._request_mode_decision(
+        callbacks,
+        mode,
+        "autospeak",
+        edge_count=edge_count,
+        current_target=current_target,
+    )
+    mode_decision_helpers._send_autospeak_message(callbacks, decision)
+    autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+        decision,
+        autospeak_interval,
+    )
+    return autospeak_interval, _next_autospeak_at(autospeak_interval)
+
+
+def _sleep_with_autospeak(
+    stop_event,
+    seconds,
+    callbacks: ModeCallbacks,
+    mode,
+    autospeak_interval,
+    next_autospeak_at,
+    *,
+    wake_event=None,
+    pause_event=None,
+    edge_count=0,
+    current_target=None,
+):
+    if not _autospeak_enabled(callbacks):
+        _sleep_with_stop(stop_event, seconds, wake_event, pause_event)
+        return autospeak_interval, next_autospeak_at
+
+    seconds = max(0.0, float(seconds or 0.0))
+    deadline = time.monotonic() + seconds
+    while not stop_event.is_set():
+        if pause_event and pause_event.is_set():
+            paused_at = time.monotonic()
+            if _wait_while_paused(stop_event, pause_event):
+                break
+            deadline += time.monotonic() - paused_at
+            if wake_event and wake_event.is_set():
+                break
+
+        autospeak_interval, next_autospeak_at = _maybe_send_autospeak(
+            callbacks,
+            mode,
+            autospeak_interval,
+            next_autospeak_at,
+            edge_count=edge_count,
+            current_target=current_target() if callable(current_target) else current_target,
+        )
+        if wake_event and wake_event.is_set():
+            break
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        next_wait = max(0.0, next_autospeak_at - time.monotonic())
+        wait_time = min(0.1, remaining, next_wait)
+        if wait_time <= 0:
+            continue
+        if stop_event.wait(wait_time):
+            break
+    return autospeak_interval, next_autospeak_at
+
+
 def _set_active_mode(callbacks: ModeCallbacks, mode_name):
     setter = callbacks.get("set_mode_name")
     if setter:
@@ -240,6 +338,8 @@ def _run_scripted_mode(
     planner = MotionScriptPlanner(mode, continuous_patterns=_uses_timed_pattern_motion(motion_controller))
     step_count = 0
     mode_intensity = initial_intensity
+    autospeak_interval = mode_decision_helpers.DEFAULT_AUTOSPEAK_SECONDS
+    next_autospeak_at = _next_autospeak_at(autospeak_interval)
 
     if allow_mode_decisions:
         min_time, max_time = get_timings(mode)
@@ -250,6 +350,11 @@ def _run_scripted_mode(
             current_target=motion_controller.current_target(),
         )
         mode_decision_helpers._send_mode_decision_message(send_message, decision)
+        autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+            decision,
+            autospeak_interval,
+        )
+        next_autospeak_at = _next_autospeak_at(autospeak_interval)
         if decision.intensity is not None:
             mode_intensity = decision.intensity
         if max_steps is not None:
@@ -262,6 +367,13 @@ def _run_scripted_mode(
         if _wait_while_paused(stop_event, pause_event):
             break
         min_time, max_time = get_timings(mode)
+        autospeak_interval, next_autospeak_at = _maybe_send_autospeak(
+            callbacks,
+            mode,
+            autospeak_interval,
+            next_autospeak_at,
+            current_target=motion_controller.current_target(),
+        )
         if mode == "milking" and user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
             decision = mode_decision_helpers._request_mode_decision(
@@ -271,6 +383,11 @@ def _run_scripted_mode(
                 current_target=motion_controller.current_target(),
             )
             mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+                decision,
+                autospeak_interval,
+            )
+            next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.action == "stop":
                 stop_event.set()
                 break
@@ -294,7 +411,18 @@ def _run_scripted_mode(
         _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
         remember_pattern(target)
         step_count += 1
-        _sleep_with_stop(stop_event, random.uniform(min_time, max_time) * step.delay_factor, message_event, pause_event)
+        sleep_seconds = random.uniform(min_time, max_time) * step.delay_factor
+        autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+            stop_event,
+            sleep_seconds,
+            callbacks,
+            mode,
+            autospeak_interval,
+            next_autospeak_at,
+            wake_event=message_event,
+            pause_event=pause_event,
+            current_target=motion_controller.current_target,
+        )
 
 
 def auto_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
@@ -319,11 +447,21 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     close_count = 0
     close_style_target = None
     close_style_until = 0.0
+    autospeak_interval = mode_decision_helpers.DEFAULT_AUTOSPEAK_SECONDS
+    next_autospeak_at = _next_autospeak_at(autospeak_interval)
 
     while not stop_event.is_set():
         if _wait_while_paused(stop_event, pause_event):
             break
         min_time, max_time = get_timings("freestyle")
+        autospeak_interval, next_autospeak_at = _maybe_send_autospeak(
+            callbacks,
+            "freestyle",
+            autospeak_interval,
+            next_autospeak_at,
+            edge_count=close_count,
+            current_target=motion_controller.current_target(),
+        )
         if user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
             close_count += 1
@@ -369,6 +507,11 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 decision = mode_decision_helpers._poll_mode_decision_request(decision_thread, decision_result) or ModeDecision()
             decision = freestyle_helpers._freestyle_decision_with_permissions(decision, callbacks)
             mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+                decision,
+                autospeak_interval,
+            )
+            next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.action == "stop":
                 stop_event.set()
                 break
@@ -456,7 +599,18 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             recent_ids[:] = recent_ids[-8:]
 
         step_count += 1 if continuous_freestyle else len(choices)
-        _sleep_with_stop(stop_event, sleep_seconds, message_event, pause_event)
+        autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+            stop_event,
+            sleep_seconds,
+            callbacks,
+            "freestyle",
+            autospeak_interval,
+            next_autospeak_at,
+            wake_event=message_event,
+            pause_event=pause_event,
+            edge_count=close_count,
+            current_target=motion_controller.current_target,
+        )
 
 
 def milking_mode_logic(stop_event: threading.Event, services: ModeServices, callbacks: ModeCallbacks):
@@ -486,6 +640,8 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
     max_steps = random.randint(56, 78)
     mode_intensity = None
     reaction_steps_remaining = None
+    autospeak_interval = mode_decision_helpers.DEFAULT_AUTOSPEAK_SECONDS
+    next_autospeak_at = _next_autospeak_at(autospeak_interval)
 
     edging_min, edging_max = get_timings("edging")
     start_decision = mode_decision_helpers._request_mode_decision(
@@ -496,6 +652,11 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         current_target=motion_controller.current_target(),
     )
     mode_decision_helpers._send_mode_decision_message(send_message, start_decision)
+    autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+        start_decision,
+        autospeak_interval,
+    )
+    next_autospeak_at = _next_autospeak_at(autospeak_interval)
     if start_decision.intensity is not None:
         mode_intensity = start_decision.intensity
     max_steps = max(
@@ -521,6 +682,14 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         if _wait_while_paused(stop_event, pause_event):
             break
         edging_min, edging_max = get_timings("edging")
+        autospeak_interval, next_autospeak_at = _maybe_send_autospeak(
+            callbacks,
+            "edging",
+            autospeak_interval,
+            next_autospeak_at,
+            edge_count=edge_count,
+            current_target=motion_controller.current_target(),
+        )
         step = None
 
         if step_count >= max_steps:
@@ -532,6 +701,11 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                 current_target=motion_controller.current_target(),
             )
             mode_decision_helpers._send_mode_decision_message(send_message, decision)
+            autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+                decision,
+                autospeak_interval,
+            )
+            next_autospeak_at = _next_autospeak_at(autospeak_interval)
             if decision.intensity is not None:
                 mode_intensity = decision.intensity
             if decision.action == "stop":
@@ -583,6 +757,11 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                     current_target=motion_controller.current_target(),
                 )
                 mode_decision_helpers._send_mode_decision_message(send_message, decision)
+                autospeak_interval = mode_decision_helpers._autospeak_interval_from_decision(
+                    decision,
+                    autospeak_interval,
+                )
+                next_autospeak_at = _next_autospeak_at(autospeak_interval)
                 if decision.intensity is not None:
                     mode_intensity = decision.intensity
                 if decision.action == "stop":
@@ -615,7 +794,19 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         _apply_mode_motion(motion_controller, target, source="edging mode")
         remember_pattern(target)
         step_count += 1
-        _sleep_with_stop(stop_event, random.uniform(edging_min, edging_max) * step.delay_factor, message_event, pause_event)
+        sleep_seconds = random.uniform(edging_min, edging_max) * step.delay_factor
+        autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+            stop_event,
+            sleep_seconds,
+            callbacks,
+            "edging",
+            autospeak_interval,
+            next_autospeak_at,
+            wake_event=message_event,
+            pause_event=pause_event,
+            edge_count=edge_count,
+            current_target=motion_controller.current_target,
+        )
         if reaction_steps_remaining is not None:
             reaction_steps_remaining -= 1
             if reaction_steps_remaining < 0:
