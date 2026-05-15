@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #226 - Fix Autospeak Wake Scheduling
+-----------------------------------------------------
+
+Branch: codex-fix-autospeak-scheduler
+
+- Made enabled Autospeak request an LLM line promptly when a background mode
+  starts instead of waiting for the default fallback interval first.
+- Woke active background modes when Autospeak is enabled or its seconds range
+  changes, so the top-bar toggle takes effect during the current mode.
+- Clarified the mode-decision prompt so Autospeak can be chat-only with
+  `action: "continue"` and does not require a motion change on every line.
+
+
 2026-05-15 - PR #225 - Route Autospeak Decision Chat To Chat
 ------------------------------------------------------------
 

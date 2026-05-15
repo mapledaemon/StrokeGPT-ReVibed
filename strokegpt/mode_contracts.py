@@ -81,6 +81,7 @@ class ModeCallbacks(TypedDict, total=False):
     allow_llm_edge_in_freestyle: Callable[[], bool]
     autospeak_enabled: Callable[[], bool]
     autospeak_range: Callable[[], tuple[float, float]]
+    consume_autospeak_wake: Callable[[], bool]
     set_mode_name: Callable[[str], None]
     mode_decision: ModeDecisionProvider
     pause_event: threading.Event

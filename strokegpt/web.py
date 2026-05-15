@@ -1533,6 +1533,11 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         }.get(n, (3, 5))
     def set_mode_name(n: str) -> None:
         _set_runtime_active_mode(n)
+    def consume_autospeak_wake() -> bool:
+        with app_state.lock:
+            requested = bool(app_state.autospeak_wake_requested)
+            app_state.autospeak_wake_requested = False
+        return requested
     def mode_decision(**kwargs) -> object:
         context = get_current_context()
         target = kwargs.get("current_target")
@@ -1563,6 +1568,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
         'autospeak_enabled': lambda: settings.autospeak_enabled,
         'autospeak_range': lambda: (settings.autospeak_min_seconds, settings.autospeak_max_seconds),
+        'consume_autospeak_wake': consume_autospeak_wake,
         'set_mode_name': set_mode_name,
         'mode_decision': mode_decision,
         'send_chat': add_message_to_queue,

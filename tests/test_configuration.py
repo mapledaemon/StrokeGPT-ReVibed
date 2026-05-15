@@ -817,8 +817,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(response["autospeak_seconds"], 0)
         self.assertIn("autospeak_enabled: True", prompt)
         self.assertIn("autospeak_seconds_range: 0-12", prompt)
-        self.assertIn("An `autospeak` event is only for keeping the conversation alive", prompt)
+        self.assertIn("An `autospeak` event is a real background-mode LLM turn", prompt)
+        self.assertIn('use `action: "continue"` when you only want to talk', prompt)
         self.assertIn("Autospeak is due", user_message)
+        self.assertIn("Use action continue when no motion change is needed", user_message)
         self.assertIn("between 0 and 12", user_message)
         self.assertIn("Do not use null for chat or autospeak_seconds", user_message)
 

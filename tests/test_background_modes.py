@@ -100,6 +100,7 @@ class ModeContractTests(unittest.TestCase):
             "allow_llm_edge_in_freestyle",
             "autospeak_enabled",
             "autospeak_range",
+            "consume_autospeak_wake",
             "set_mode_name",
             "mode_decision",
             "pause_event",
@@ -229,6 +230,69 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertIn("autospeak", decision_events)
         self.assertGreaterEqual(len(chat_messages), 2)
         self.assertEqual(set(chat_messages), {"Still with you."})
+
+    def test_initial_autospeak_schedule_is_due_soon_when_enabled(self):
+        interval, next_due = background_modes._initial_autospeak_schedule({
+            "autospeak_enabled": lambda: True,
+            "autospeak_range": lambda: (20, 45),
+        })
+
+        self.assertEqual(interval, 45.0)
+        self.assertLessEqual(next_due - time.monotonic(), 0.3)
+
+    def test_autospeak_wake_forces_due_event_before_existing_deadline(self):
+        chat_messages = []
+        decision_events = []
+        wake_consumed = []
+
+        def consume_wake():
+            if wake_consumed:
+                return False
+            wake_consumed.append(True)
+            return True
+
+        callbacks = {
+            "send_chat": chat_messages.append,
+            "autospeak_enabled": lambda: True,
+            "consume_autospeak_wake": consume_wake,
+            "mode_decision": lambda **kwargs: (
+                decision_events.append(kwargs["event"]) or {
+                    "action": "continue",
+                    "autospeak_seconds": 30,
+                    "chat": "Still here.",
+                }
+            ),
+        }
+
+        interval, next_due = background_modes._maybe_send_autospeak(
+            callbacks,
+            "freestyle",
+            45,
+            time.monotonic() + 45,
+            current_target=MotionTarget(20, 30, 40),
+        )
+
+        self.assertEqual(decision_events, ["autospeak"])
+        self.assertEqual(chat_messages, ["Still here."])
+        self.assertEqual(interval, 30.0)
+        self.assertGreater(next_due, time.monotonic())
+
+    def test_autospeak_future_deadline_does_not_poll_without_wake(self):
+        decision_events = []
+        callbacks = {
+            "autospeak_enabled": lambda: True,
+            "mode_decision": lambda **kwargs: decision_events.append(kwargs["event"]),
+        }
+
+        background_modes._maybe_send_autospeak(
+            callbacks,
+            "freestyle",
+            45,
+            time.monotonic() + 45,
+            current_target=MotionTarget(20, 30, 40),
+        )
+
+        self.assertEqual(decision_events, [])
 
     def test_autospeak_enabled_decision_chat_uses_chat_channel(self):
         status_messages = []

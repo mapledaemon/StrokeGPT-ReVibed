@@ -651,7 +651,7 @@ class WebChatRouteTests(WebTestCase):
             app_state.mode_message_event.clear()
 
     def test_set_llm_permissions_saves_chat_mode_action_toggle(self):
-        from strokegpt.web import settings
+        from strokegpt.web import app_state, settings
 
         original = (
             settings.allow_llm_edge_in_freestyle,
@@ -661,9 +661,13 @@ class WebChatRouteTests(WebTestCase):
             settings.autospeak_min_seconds,
             settings.autospeak_max_seconds,
             settings.save,
+            app_state.autospeak_wake_requested,
         )
         try:
             settings.save = lambda *args, **kwargs: None
+            settings.autospeak_enabled = False
+            app_state.autospeak_wake_requested = False
+            app_state.mode_message_event.clear()
             response = self.client.post("/set_llm_edge_permissions", json={
                 "allow_llm_edge_in_freestyle": False,
                 "allow_llm_edge_in_chat": False,
@@ -688,6 +692,8 @@ class WebChatRouteTests(WebTestCase):
             self.assertTrue(data["autospeak_enabled"])
             self.assertEqual(data["autospeak_min_seconds"], 4.0)
             self.assertEqual(data["autospeak_max_seconds"], 9.0)
+            self.assertTrue(app_state.autospeak_wake_requested)
+            self.assertTrue(app_state.mode_message_event.is_set())
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,
@@ -697,7 +703,9 @@ class WebChatRouteTests(WebTestCase):
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
                 settings.save,
+                app_state.autospeak_wake_requested,
             ) = original
+            app_state.mode_message_event.clear()
 
     def test_memory_toggle_route_updates_runtime_state(self):
         import strokegpt.web as web

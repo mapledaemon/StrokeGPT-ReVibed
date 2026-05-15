@@ -497,7 +497,8 @@ Return JSON only:
 
 Rules:
 - A `start` event begins or continues the mode. Never return `stop` on `start`.
-- An `autospeak` event is only for keeping the conversation alive. Return `action: "continue"`, no motion change, one short in-character `chat` line, and a numeric `autospeak_seconds`.
+- An `autospeak` event is a real background-mode LLM turn. Always return one short in-character `chat` line and a numeric `autospeak_seconds`.
+- In `autospeak`, use `action: "continue"` when you only want to talk. Choose a bounded action or intensity only when the mode should actually change.
 - Mode starts should most often begin base-through-mid or mid-base, then extend toward tip/full travel later. Avoid tip-only starts unless the user requested tip focus.
 - `milking` and `freestyle` are continuous; they run until the user stops them, changes mode, or a later non-start decision deliberately returns `stop`.
 - `duration_seconds` times temporary holds, pullbacks, intensity changes, and edge reactions. It is not a countdown to finish a continuous mode.
@@ -528,7 +529,8 @@ State:
 """
         if event == "autospeak":
             request_text = (
-                "Autospeak is due. Return one short in-character chat line, "
+                "Autospeak is due. Return one short in-character chat line. "
+                "Use action continue when no motion change is needed, or choose a bounded mode action when the mode should change. "
                 f"choose the next autospeak_seconds between {autospeak_min_text} and {autospeak_max_text}, "
                 "and return only the JSON object. Do not use null for chat or autospeak_seconds."
             )

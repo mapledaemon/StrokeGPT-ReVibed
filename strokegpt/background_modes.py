@@ -222,6 +222,22 @@ def _default_autospeak_interval(callbacks: ModeCallbacks):
     return _autospeak_interval_from_decision(callbacks, ModeDecision(), None)
 
 
+def _initial_autospeak_schedule(callbacks: ModeCallbacks):
+    interval = _default_autospeak_interval(callbacks)
+    first_interval = 0.0 if _autospeak_enabled(callbacks) else interval
+    return interval, _next_autospeak_at(first_interval)
+
+
+def _consume_autospeak_wake(callbacks: ModeCallbacks):
+    consumer = callbacks.get("consume_autospeak_wake")
+    if not consumer:
+        return False
+    try:
+        return bool(consumer())
+    except Exception:
+        return False
+
+
 def _send_background_decision_message(callbacks: ModeCallbacks, send_message, decision):
     if not decision.chat or decision.source != "llm":
         return False
@@ -247,9 +263,12 @@ def _maybe_send_autospeak(
 ):
     autospeak_interval = max(0.0, float(autospeak_interval or 0.0))
     next_autospeak_at = float(next_autospeak_at or 0.0)
+    force_due = _consume_autospeak_wake(callbacks)
     if not _autospeak_enabled(callbacks):
         autospeak_interval = _autospeak_interval_from_decision(callbacks, ModeDecision(), autospeak_interval)
         return autospeak_interval, _next_autospeak_at(autospeak_interval)
+    if force_due:
+        next_autospeak_at = 0.0
     if time.monotonic() < next_autospeak_at:
         return autospeak_interval, next_autospeak_at
 
@@ -363,8 +382,7 @@ def _run_scripted_mode(
     planner = MotionScriptPlanner(mode, continuous_patterns=_uses_timed_pattern_motion(motion_controller))
     step_count = 0
     mode_intensity = initial_intensity
-    autospeak_interval = _default_autospeak_interval(callbacks)
-    next_autospeak_at = _next_autospeak_at(autospeak_interval)
+    autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     if allow_mode_decisions:
         min_time, max_time = get_timings(mode)
@@ -466,8 +484,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     close_count = 0
     close_style_target = None
     close_style_until = 0.0
-    autospeak_interval = _default_autospeak_interval(callbacks)
-    next_autospeak_at = _next_autospeak_at(autospeak_interval)
+    autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     while not stop_event.is_set():
         if _wait_while_paused(stop_event, pause_event):
@@ -656,8 +673,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
     max_steps = random.randint(56, 78)
     mode_intensity = None
     reaction_steps_remaining = None
-    autospeak_interval = _default_autospeak_interval(callbacks)
-    next_autospeak_at = _next_autospeak_at(autospeak_interval)
+    autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     edging_min, edging_max = get_timings("edging")
     start_decision = mode_decision_helpers._request_mode_decision(
