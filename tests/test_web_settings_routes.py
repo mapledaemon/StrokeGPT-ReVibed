@@ -468,7 +468,8 @@ class WebSettingsRouteTests(WebTestCase):
             settings.autospeak_enabled = False
             app_state.autospeak_wake_requested = False
             app_state.mode_message_event.clear()
-            with mock.patch.object(settings, "save"):
+            with mock.patch.object(settings, "save"), \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
                 response = self.client.post("/set_llm_edge_permissions", json={
                     "allow_llm_edge_in_freestyle": False,
                     "allow_llm_edge_in_chat": False,
@@ -490,8 +491,9 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(settings.autospeak_min_seconds, 2.0)
             self.assertEqual(settings.autospeak_max_seconds, 8.0)
             self.assertIn("motion_preferences", data)
-            self.assertTrue(app_state.autospeak_wake_requested)
-            self.assertTrue(app_state.mode_message_event.is_set())
+            schedule_autospeak.assert_called_once_with(0)
+            self.assertFalse(app_state.autospeak_wake_requested)
+            self.assertFalse(app_state.mode_message_event.is_set())
 
             response = self.client.get("/check_settings")
             payload = response.get_json()
@@ -607,7 +609,9 @@ class WebSettingsRouteTests(WebTestCase):
 
         original_mode = settings.llm_prompt_mode
         original_prompt_sets = list(getattr(settings, "llm_custom_prompt_sets", []))
+        original_autospeak = settings.autospeak_enabled
         try:
+            settings.autospeak_enabled = False
             prompt_set, _ = settings.set_llm_custom_prompt_set(
                 "Route Custom",
                 {
@@ -631,6 +635,7 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.llm_prompt_mode = original_mode
             settings.llm_custom_prompt_sets = original_prompt_sets
+            settings.autospeak_enabled = original_autospeak
             llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
     def test_system_prompts_route_does_not_leak_proper_noun_handles_in_default_branch(self):

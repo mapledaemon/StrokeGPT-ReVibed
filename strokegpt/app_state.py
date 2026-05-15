@@ -40,6 +40,8 @@ class AppState:
     mode_message_event: threading.Event = field(default_factory=threading.Event)
     mode_message_queue: deque = field(default_factory=lambda: deque(maxlen=5))
     autospeak_wake_requested: bool = False
+    autospeak_generation: int = 0
+    autospeak_thread: threading.Thread | None = None
     active_mode_name: str = ""
     active_mode_started_at: float | None = None
     active_mode_paused_at: float | None = None

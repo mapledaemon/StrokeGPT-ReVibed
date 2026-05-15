@@ -51,6 +51,29 @@ def _format_seconds(value):
     return f"{float(value):g}"
 
 
+def _autospeak_prompt_suffix(context):
+    if not context.get("autospeak_enabled"):
+        return ""
+    autospeak_min, autospeak_max = _context_autospeak_range(context)
+    autospeak_min_text = _format_seconds(autospeak_min)
+    autospeak_max_text = _format_seconds(autospeak_max)
+    event_line = ""
+    if context.get("autospeak_event"):
+        event_line = (
+            "- This request is an Autospeak follow-up. Keep talking without "
+            "waiting for the user; use `move:null` unless you deliberately "
+            "want a motion change.\n"
+        )
+    zero_rule = "- If the minimum is 0, choosing 0 means ask again almost continuously.\n"
+    return f"""
+### AUTOSPEAK
+- Autospeak is enabled. Include top-level `autospeak_seconds` in every JSON response, choosing a number from `{autospeak_min_text}-{autospeak_max_text}` seconds.
+- Choose lower values for frequent talk and higher values for longer silence.
+{zero_rule if autospeak_min == 0 else ""}\
+- Autospeak can be chat-only: use `move:null` when you only want to speak. Include `move` only when you deliberately want the app to change motion.
+{event_line}"""
+
+
 def _speed_in_range(speed_min, speed_max, ratio):
     width = max(0, speed_max - speed_min)
     return max(speed_min, min(speed_max, int(round(speed_min + (width * ratio)))))
@@ -275,6 +298,7 @@ class LLMService:
     def _build_system_prompt(self, context):
         speed_min, speed_max = _context_speed_range(context)
         user_genitalia_rule = _user_genitalia_prompt_rule(context)
+        autospeak_suffix = _autospeak_prompt_suffix(context)
         if context.get('special_persona_mode') == 'snarky_scientist':
             # Persona Naming And Prompt Audit (ROADMAP Up Next #4): the
             # voice is described entirely in the prompt body so the local
@@ -291,7 +315,7 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
 - Current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp:0`.
 - User anatomy: {user_genitalia_rule}
 - Nickname that anatomy "the apparatus" or "the test equipment" when it fits the persona.
-"""
+""" + autospeak_suffix
 
         custom_chat_prompt = self._custom_prompt_text("chat")
         if custom_chat_prompt:
@@ -299,7 +323,7 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
                 custom_chat_prompt,
                 user_genitalia_rule=user_genitalia_rule,
                 user_anatomy_rule=user_genitalia_rule,
-            )
+            ) + autospeak_suffix
 
         mood_options = "Curious, Teasing, Playful, Loving, Excited, Passionate, Seductive, Anticipatory, Breathless, Dominant, Submissive, Vulnerable, Confident, Intimate, Needy, Overwhelmed, Afterglow"
         persona_desc = context.get('persona_desc') or "an erotic partner"
@@ -327,6 +351,13 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
                 ',"mode_action":"<null|continue_mode|close_signal|start_freestyle|'
                 'start_edging|start_milking|start_legacy_auto|stop_mode>"'
             )
+        autospeak_schema = ""
+        if context.get("autospeak_enabled"):
+            autospeak_min, autospeak_max = _context_autospeak_range(context)
+            autospeak_schema = (
+                f',"autospeak_seconds":<{_format_seconds(autospeak_min)}-'
+                f'{_format_seconds(autospeak_max)}>'
+            )
 
         prompt_mode = str(context.get("llm_prompt_mode") or "revibed").strip().lower()
         if prompt_mode in {"classic", "old", "technical"}:
@@ -338,7 +369,7 @@ You are my erotic partner, not an assistant. Identity: '{persona_desc}'. Speak i
 {anatomical_gender_rule}
 User anatomy: {user_genitalia_rule}
 
-Return one JSON object only: {{"chat":"<reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"}}.
+Return one JSON object only: {{"chat":"<reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"{autospeak_schema}}}.
 Valid moods: {mood_options}.
 
 ### MOTION RULES
@@ -377,7 +408,7 @@ Speak in first person, answer in character, and make the `chat` line sound intim
 {anatomical_gender_rule}
 User anatomy: {user_genitalia_rule}
 
-Return one JSON object only: {{"chat":"<in-character reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"}}.
+Return one JSON object only: {{"chat":"<in-character reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"{autospeak_schema}}}.
 Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
 
 ### MOTION CONTRACT
@@ -433,6 +464,7 @@ Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
         prompt_text += "\n### MOTION STYLE PREFERENCE:\n"
         prompt_text += _motion_style_instruction(context.get("motion_style"))
         prompt_text += "\nTreat this as a bounded bias, not permission to ignore explicit user wording or speed/depth limits.\n"
+        prompt_text += autospeak_suffix
 
         if context.get('edging_elapsed_time'):
             prompt_text += f"""

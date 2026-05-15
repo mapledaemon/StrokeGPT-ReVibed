@@ -74,6 +74,7 @@ MAX_PATTERN_IMPORT_BYTES = 1_000_000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
+STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -1126,6 +1127,8 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
     ):
         return response, False
     target = _target_from_llm_response_move(response, current)
+    if context.get("autospeak_event") and not _chat_claims_motion_change(response.get("chat")):
+        return response, False
     needs_repair = (
         (_looks_like_motion_request(user_input) or _chat_claims_motion_change(response.get("chat")))
         and not _target_has_motion_effect(current, target)
@@ -1502,7 +1505,120 @@ def add_mode_status_message(text):
     with app_state.lock:
         app_state.mode_status_message = clean_text
 
+
+def _autospeak_timing_pair():
+    return settings._autospeak_timing_pair(
+        settings.autospeak_min_seconds,
+        settings.autospeak_max_seconds,
+    )
+
+
+def _coerce_autospeak_delay(value=None):
+    min_seconds, max_seconds = _autospeak_timing_pair()
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        seconds = max_seconds
+    return max(min_seconds, min(max_seconds, seconds))
+
+
+def _cancel_standalone_autospeak():
+    with app_state.lock:
+        app_state.autospeak_generation += 1
+        app_state.autospeak_thread = None
+
+
+def _standalone_autospeak_current(token):
+    with app_state.lock:
+        return (
+            token == app_state.autospeak_generation
+            and bool(settings.autospeak_enabled)
+            and app_state.auto_mode_active_task is None
+        )
+
+
+def _standalone_autospeak_user_message():
+    min_seconds, max_seconds = _autospeak_timing_pair()
+    return (
+        "Autospeak is due. Keep the conversation going with one short "
+        "in-character chat line. Use move:null when no motion change is "
+        "needed, or include move only if you deliberately want to change "
+        "motion. Choose autospeak_seconds between "
+        f"{min_seconds:g} and {max_seconds:g}."
+    )
+
+
+def _run_standalone_autospeak_turn(token):
+    if not _standalone_autospeak_current(token):
+        return False
+    with app_state.lock:
+        history_snapshot = list(app_state.chat_history)
+    if not history_snapshot or not handy.handy_key:
+        return False
+
+    context = get_current_context()
+    context["autospeak_event"] = True
+    current_before_llm = motion.current_target()
+    autospeak_user_input = _standalone_autospeak_user_message()
+    messages = history_snapshot + [{"role": "user", "content": autospeak_user_input}]
+    request_started = time.perf_counter()
+    timings = {}
+    try:
+        llm_started = time.perf_counter()
+        llm_response = llm.get_chat_response(messages, context, temperature=0.35)
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000)
+    except Exception as exc:
+        timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000) if "llm_started" in locals() else 0
+        print(f"[ERROR] Autospeak LLM request failed: {exc}")
+        llm_response = {
+            "chat": f"LLM request failed: {exc}",
+            "move": None,
+            "new_mood": None,
+        }
+
+    if not _standalone_autospeak_current(token):
+        return False
+
+    _finalize_llm_chat_response(
+        user_input=autospeak_user_input,
+        llm_response=llm_response,
+        context=context,
+        current_before_llm=current_before_llm,
+        request_started=request_started,
+        timings=timings,
+    )
+    return True
+
+
+def _standalone_autospeak_worker(token, wait_seconds):
+    wait_seconds = max(STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS, float(wait_seconds or 0.0))
+    time.sleep(wait_seconds)
+    _run_standalone_autospeak_turn(token)
+
+
+def _schedule_standalone_autospeak(delay_seconds=None):
+    if not settings.autospeak_enabled or app_state.auto_mode_active_task or not handy.handy_key:
+        return False
+    delay_seconds = _coerce_autospeak_delay(delay_seconds)
+    with app_state.lock:
+        if not app_state.chat_history:
+            return False
+        app_state.autospeak_generation += 1
+        token = app_state.autospeak_generation
+    thread = threading.Thread(
+        target=_standalone_autospeak_worker,
+        args=(token, delay_seconds),
+        daemon=True,
+        name="autospeak-chat-loop",
+    )
+    with app_state.lock:
+        app_state.autospeak_thread = thread
+    thread.start()
+    return True
+
+
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
+    _cancel_standalone_autospeak()
     with app_state.lock:
         active_task = app_state.auto_mode_active_task
     if active_task:
@@ -2009,6 +2125,9 @@ def _finalize_llm_chat_response(
         motion_applied = target is not None
         _remember_motion_pattern_from_target(target)
         timings["motion_apply_ms"] = int((time.perf_counter() - motion_started) * 1000)
+    autospeak_scheduled = False
+    if settings.autospeak_enabled and not app_state.auto_mode_active_task:
+        autospeak_scheduled = _schedule_standalone_autospeak(llm_response.get("autospeak_seconds"))
     timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
     return {
         "status": "ok",
@@ -2021,6 +2140,7 @@ def _finalize_llm_chat_response(
         "mode_action_applied": mode_action_applied,
         "mode_action_message": mode_action_message,
         "active_mode_message_relayed": active_mode_message_relayed,
+        "autospeak_scheduled": autospeak_scheduled,
         "timings": timings,
     }
 
@@ -2041,6 +2161,7 @@ def handle_user_message():
     if not handy.handy_key: return jsonify({"status": "no_key_set"})
     if not user_input: return jsonify({"status": "empty_message"})
 
+    _cancel_standalone_autospeak()
     app_state.chat_history.append({"role": "user", "content": user_input})
 
     handled, response = _handle_chat_commands(
@@ -2104,6 +2225,7 @@ def handle_user_message_stream():
             yield _chat_stream_event("final", data={"status": "empty_message"})
             return
 
+        _cancel_standalone_autospeak()
         app_state.chat_history.append({"role": "user", "content": user_input})
 
         handled, response = _handle_chat_commands(

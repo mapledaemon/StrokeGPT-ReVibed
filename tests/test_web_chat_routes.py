@@ -91,6 +91,113 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_send_message_schedules_standalone_autospeak_followup(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 2
+            settings.autospeak_max_seconds = 30
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I will keep talking.",
+                "move": None,
+                "new_mood": None,
+                "autospeak_seconds": 7,
+            }), mock.patch.object(audio, "generate_audio_for_text", return_value=None), \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                response = self.client.post("/send_message", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertTrue(data["autospeak_scheduled"])
+            schedule_autospeak.assert_called_once_with(7)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_standalone_autospeak_turn_emits_chat_and_reschedules(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        spoken = []
+        captured = {}
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 0
+            settings.autospeak_max_seconds = 12
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            def fake_chat_response(messages, context, temperature=0.3):
+                captured["messages"] = messages
+                captured["context"] = context
+                captured["temperature"] = temperature
+                return {
+                    "chat": "Still right here.",
+                    "move": None,
+                    "new_mood": "Playful",
+                    "autospeak_seconds": 6,
+                }
+
+            with mock.patch.object(llm, "get_chat_response", side_effect=fake_chat_response), \
+                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)), \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            self.assertTrue(captured["context"]["autospeak_event"])
+            self.assertEqual(captured["temperature"], 0.35)
+            self.assertIn("Autospeak is due", captured["messages"][-1]["content"])
+            self.assertEqual(list(app_state.messages_for_ui), ["Still right here."])
+            self.assertIn({"role": "assistant", "content": "Still right here."}, list(app_state.chat_history))
+            self.assertEqual(spoken, ["Still right here."])
+            schedule_autospeak.assert_called_once_with(6)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_send_message_stream_renders_deltas_without_queue_duplicate(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -668,14 +775,15 @@ class WebChatRouteTests(WebTestCase):
             settings.autospeak_enabled = False
             app_state.autospeak_wake_requested = False
             app_state.mode_message_event.clear()
-            response = self.client.post("/set_llm_edge_permissions", json={
-                "allow_llm_edge_in_freestyle": False,
-                "allow_llm_edge_in_chat": False,
-                "allow_llm_mode_actions_in_chat": True,
-                "autospeak_enabled": True,
-                "autospeak_min_seconds": 4,
-                "autospeak_max_seconds": 9,
-            })
+            with mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                response = self.client.post("/set_llm_edge_permissions", json={
+                    "allow_llm_edge_in_freestyle": False,
+                    "allow_llm_edge_in_chat": False,
+                    "allow_llm_mode_actions_in_chat": True,
+                    "autospeak_enabled": True,
+                    "autospeak_min_seconds": 4,
+                    "autospeak_max_seconds": 9,
+                })
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
@@ -692,8 +800,9 @@ class WebChatRouteTests(WebTestCase):
             self.assertTrue(data["autospeak_enabled"])
             self.assertEqual(data["autospeak_min_seconds"], 4.0)
             self.assertEqual(data["autospeak_max_seconds"], 9.0)
-            self.assertTrue(app_state.autospeak_wake_requested)
-            self.assertTrue(app_state.mode_message_event.is_set())
+            schedule_autospeak.assert_called_once_with(0)
+            self.assertFalse(app_state.autospeak_wake_requested)
+            self.assertFalse(app_state.mode_message_event.is_set())
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,

@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #227 - Add Standalone Autospeak Chat Loop
+---------------------------------------------------------
+
+Branch: codex-autospeak-chat-loop
+
+- Added a standalone Autospeak scheduler for normal chat so enabled
+  Autospeak can keep prompting the LLM to speak again even when no preset
+  background mode is running.
+- Routed standalone Autospeak turns through the normal chat/TTS/motion
+  finalizer, allowing chat-only `move:null` replies while still permitting
+  deliberate motion changes.
+- Updated chat prompts to include the top-level `autospeak_seconds` contract
+  whenever Autospeak is enabled, including custom prompt sets.
+
+
 2026-05-15 - PR #226 - Fix Autospeak Wake Scheduling
 -----------------------------------------------------
 
