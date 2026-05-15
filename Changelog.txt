@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #213 - Mobile Chrome HTTPS Certificate Fixes
+---------------------------------------------------------------
+
+Branch: codex/mobile-chrome-https-cert
+
+- Made generated HTTPS server certificates more mobile-Chrome-friendly by
+  adding routed LAN IPs to the certificate subject-alt-name list, allowing
+  explicit `STROKEGPT_HTTPS_IPS` / `STROKEGPT_HTTPS_HOSTS` overrides, and
+  shortening the generated server certificate lifetime.
+- Added certificate authority/subject key identifiers and served the local CA
+  chain with the LAN certificate to improve mobile certificate validation.
+- Added no-transform/no-buffering headers to the streamed chat response so
+  browser or proxy buffering is less likely to make mobile chat feel slower.
+- Updated LAN voice docs and the HTTPS launcher note for Chrome's exact-IP
+  certificate requirement.
+- Moved the detailed README LAN/HTTPS guidance into `docs/lan_https.md` and
+  moved the default Ollama model-sizing table into `docs/ollama_gpu.md`, leaving
+  the README as a shorter entry point that links to the detailed docs.
+
+
 2026-05-15 - PR #212 - HTTPS Launcher And Vulkan Docs
 -----------------------------------------------------
 

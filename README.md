@@ -134,50 +134,11 @@ it sees another recent tab.
 
 ## Use from another device on LAN
 
-StrokeGPT binds to localhost over HTTP by default. To open it from a phone,
-tablet, or another computer on the same trusted home LAN, start the app on
-the host PC with an all-interfaces host, a known port, and HTTPS enabled.
-HTTPS is required for mobile browser microphone capture.
-
-Windows PowerShell:
-
-```powershell
-$env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; $env:STROKEGPT_HTTPS="1"; .\.venv\Scripts\python.exe app.py
-```
-
-Or double-click **`Run StrokeGPT-ReVibed HTTPS.bat`** in the install
-folder.
-
-macOS / Linux:
-
-```bash
-STROKEGPT_HOST=0.0.0.0 STROKEGPT_PORT=5011 STROKEGPT_HTTPS=1 python app.py
-```
-
-Then open `https://<PC-LAN-IP>:5011` on the other device. Find the host
-PC's address with `ipconfig` on Windows or `ip addr` / `ifconfig` on
-macOS and Linux. If the page does not load, allow Python through the OS
-firewall for private/local networks and make sure both devices are on the
-same LAN.
-
-The app generates a local certificate authority and server certificate in
-`user_data/https/`. Your browser may show a certificate warning the first
-time; proceed only on your trusted LAN, then allow microphone access. If a
-mobile browser still blocks the microphone, install and trust
-`user_data/https/strokegpt-lan-ca.crt` on that device, then reopen the
-`https://` LAN URL. For your own trusted certificate, set both
-`STROKEGPT_SSL_CERT` and `STROKEGPT_SSL_KEY` to your certificate and key
-paths before starting the app.
-
-The terminal may still print a local `https://127.0.0.1` URL; that URL is
-only for the host PC. Other devices need the host PC's LAN IP address.
-
-Do not port-forward StrokeGPT or expose it to the public internet. The app
-has no login wall or per-user session isolation and is built for one
-trusted active operator.
-
-Omit `STROKEGPT_HTTPS=1` only when you deliberately want plain HTTP for
-non-voice LAN testing.
+For LAN/mobile voice, double-click **`Run StrokeGPT-ReVibed HTTPS.bat`**
+on Windows, then open `https://<PC-LAN-IP>:5011` from the other device.
+Mobile browser microphone capture needs HTTPS. Full setup, certificate
+trust, mobile Chrome, and slow-chat checks live in
+[docs/lan_https.md](docs/lan_https.md).
 
 ## Settings tour
 
@@ -220,22 +181,10 @@ On macOS / Linux, from inside the `.venv`: `git pull` and then
 
 ## GPU and model sizing
 
-The Windows installer offers four default Ollama models:
-
-| Model | Size |
-| --- | ---: |
-| `huihui_ai/granite4.1-abliterated:3b` | 2.1 GB |
-| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b` | 4.4 GB |
-| `huihui_ai/granite4.1-abliterated:8b` | 5.3 GB |
-| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` | 6.3 GB |
-
-Model size is only the file size; context and runtime overhead need more.
-If a model is close to or above GPU VRAM, Ollama may spill to system
-memory and chat slows down.
-
-Apple Silicon and NVIDIA use their usual Ollama GPU backends. See
-[docs/ollama_gpu.md](docs/ollama_gpu.md) for AMD/Intel/Vulkan,
-multi-GPU, and VRAM detection notes.
+Model file size is not the whole runtime memory cost. If chat is slow or
+Ollama reports CPU-only execution, see
+[docs/ollama_gpu.md](docs/ollama_gpu.md) for model sizing, GPU/VRAM checks,
+AMD/Intel/Vulkan setup, and multi-GPU notes.
 
 For fast local Chatterbox TTS on NVIDIA, the Windows installer can install
 CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
@@ -247,13 +196,13 @@ CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
   automatically. Watch the terminal for the actual URL.
 - **LAN page does not load** - start with `STROKEGPT_HOST=0.0.0.0`, use
   the host PC's IPv4 address, allow Python through the firewall for
-  private networks, and keep both devices on the same LAN.
+  private networks, and see [docs/lan_https.md](docs/lan_https.md).
 - **Voice input fails on mobile LAN** - mobile browsers usually require
-  HTTPS or `localhost` before allowing microphone capture. Start with
-  `STROKEGPT_HTTPS=1`, open the `https://` LAN URL, accept the local
-  certificate warning, and then allow microphone permission. If the browser
-  still blocks recording, install and trust
-  `user_data/https/strokegpt-lan-ca.crt` on the mobile device.
+  HTTPS or `localhost` before allowing microphone capture. Use the HTTPS
+  launcher and see [docs/lan_https.md](docs/lan_https.md).
+- **Mobile Chrome refuses the HTTPS LAN page** - make sure the URL uses the
+  exact PC IPv4 address; Chrome-specific certificate steps are in
+  [docs/lan_https.md](docs/lan_https.md).
 - **Ollama download fails inside the app** — make sure Ollama is running,
   then pull manually:
 

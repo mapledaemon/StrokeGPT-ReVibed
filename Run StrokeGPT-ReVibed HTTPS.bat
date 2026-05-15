@@ -25,6 +25,7 @@ echo Leave this window open while using the app.
 echo.
 echo Open https://YOUR-PC-LAN-IP:5011 from your mobile device.
 echo If voice input is blocked, trust user_data\https\strokegpt-lan-ca.crt on that device.
+echo If mobile Chrome refuses to load, set STROKEGPT_HTTPS_IPS to this PC's LAN IP and rerun.
 echo.
 
 "%PYTHON_EXE%" app.py
