@@ -102,9 +102,14 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("## Use from another device on LAN", readme)
         self.assertIn("STROKEGPT_HOST=\"0.0.0.0\"", readme)
         self.assertIn("STROKEGPT_PORT=\"5011\"", readme)
-        self.assertIn("http://<PC-LAN-IP>:5011", readme)
+        self.assertIn("STROKEGPT_HTTPS=\"1\"", readme)
+        self.assertIn("https://<PC-LAN-IP>:5011", readme)
+        self.assertIn("user_data/https/", readme)
+        self.assertIn("strokegpt-lan-ca.crt", readme)
+        self.assertIn("STROKEGPT_SSL_CERT", readme)
+        self.assertIn("STROKEGPT_SSL_KEY", readme)
         self.assertIn("Do not port-forward StrokeGPT", readme)
-        self.assertIn("Mobile browser microphone input requires HTTPS or `localhost`", readme)
+        self.assertIn("HTTPS is required for mobile browser microphone capture", readme)
 
     def test_parakeet_installer_defaults_to_blackwell_capable_pytorch_wheels(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")

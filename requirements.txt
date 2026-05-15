@@ -1,5 +1,6 @@
 Flask
 requests
+cryptography
 elevenlabs
 chatterbox-tts
 faster-whisper
