@@ -214,4 +214,34 @@ describe('voice input microphone menu', () => {
         assert.equal(getUserMediaCalls.length, 1);
         assert.deepEqual(getUserMediaCalls[0].audio.deviceId, {exact: 'mic-two'});
     });
+
+    it('explains mobile LAN microphone blocking before requesting a stream', async () => {
+        const previousSecureContext = globalThis.window.isSecureContext;
+        const previousWindowHost = globalThis.window.location.hostname;
+        const previousGlobalHost = globalThis.location?.hostname;
+        Object.defineProperty(globalThis.window, 'isSecureContext', {
+            configurable: true,
+            writable: true,
+            value: false,
+        });
+        globalThis.window.location.hostname = '192.168.1.55';
+        if (globalThis.location) globalThis.location.hostname = '192.168.1.55';
+
+        try {
+            getStubElement('voice-input-menu-btn').click();
+            await flushAsyncHandlers();
+
+            assert.equal(getUserMediaCalls.length, 0);
+            assert.match(getStubElement('voice-input-status').textContent, /HTTPS or localhost/i);
+            assert.match(getStubElement('voice-input-options-btn').title, /HTTPS or localhost/i);
+        } finally {
+            Object.defineProperty(globalThis.window, 'isSecureContext', {
+                configurable: true,
+                writable: true,
+                value: previousSecureContext,
+            });
+            globalThis.window.location.hostname = previousWindowHost;
+            if (globalThis.location) globalThis.location.hostname = previousGlobalHost;
+        }
+    });
 });

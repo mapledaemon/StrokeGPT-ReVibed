@@ -235,6 +235,10 @@ function voiceInputModelStateKey(status = state.voiceInputStatusSnapshot || {}) 
 
 function microphoneErrorMessage(error) {
     const name = error?.name || '';
+    const message = error?.message || '';
+    if (message.startsWith('Microphone input needs HTTPS') || message.startsWith('This browser does not support microphone recording')) {
+        return message;
+    }
     if (name === 'NotAllowedError' || name === 'SecurityError') {
         return 'Microphone permission is blocked. Allow microphone access for this site, then try voice input again.';
     }
@@ -247,7 +251,35 @@ function microphoneErrorMessage(error) {
     if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
         return 'The selected microphone settings are not available. Check your browser audio input settings.';
     }
-    return `Microphone unavailable: ${error?.message || 'unknown browser error'}`;
+    return `Microphone unavailable: ${message || 'unknown browser error'}`;
+}
+
+function browserLocationHost() {
+    const rawHost = window.location?.hostname
+        || globalThis.location?.hostname
+        || (() => {
+            try {
+                return new URL(window.location?.href || globalThis.location?.href || '').hostname;
+            } catch {
+                return '';
+            }
+        })();
+    return String(rawHost || '').toLowerCase();
+}
+
+function isLocalBrowserHost() {
+    const host = browserLocationHost();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+function voiceInputBrowserSupportMessage() {
+    if (window.isSecureContext === false && !isLocalBrowserHost()) {
+        return 'Microphone input needs HTTPS or localhost. Mobile browsers block microphone access on plain LAN HTTP.';
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        return 'This browser does not support microphone recording.';
+    }
+    return '';
 }
 
 function voicePayloadFailureMessage(payload, fallback) {
@@ -423,7 +455,7 @@ async function refreshMicrophoneDevices({announce = false} = {}) {
     if (!navigator.mediaDevices?.enumerateDevices) {
         state.voiceInputDevices = [];
         renderMicrophoneDeviceList();
-        setVoiceInputDeviceStatus('This browser cannot list microphone inputs.');
+        setVoiceInputDeviceStatus(voiceInputBrowserSupportMessage() || 'This browser cannot list microphone inputs.');
         return [];
     }
     try {
@@ -454,7 +486,8 @@ function updateMicrophoneMenuControlState() {
     if (el.refreshMicrophoneDevicesBtn) el.refreshMicrophoneDevicesBtn.disabled = recording;
     if (el.voiceInputOptionsBtn) {
         el.voiceInputOptionsBtn.disabled = !navigator.mediaDevices?.enumerateDevices;
-        el.voiceInputOptionsBtn.title = recording ? 'Stop recording before changing microphones' : 'Microphone options';
+        const supportMessage = voiceInputBrowserSupportMessage();
+        el.voiceInputOptionsBtn.title = recording ? 'Stop recording before changing microphones' : (supportMessage || 'Microphone options');
         el.voiceInputOptionsBtn.setAttribute('aria-label', 'Microphone options');
     }
 }
@@ -919,9 +952,8 @@ function microphoneAudioConstraints() {
 }
 
 async function ensureMicrophoneStream() {
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-        throw new Error('This browser does not support microphone recording.');
-    }
+    const supportMessage = voiceInputBrowserSupportMessage();
+    if (supportMessage) throw new Error(supportMessage);
     if (state.voiceInputStream?.active) return state.voiceInputStream;
     state.voiceInputStream = await navigator.mediaDevices.getUserMedia({audio: microphoneAudioConstraints()});
     refreshMicrophoneDevices().catch(error => console.debug('Microphone device refresh skipped:', error));

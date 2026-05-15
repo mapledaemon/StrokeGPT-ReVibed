@@ -561,12 +561,12 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-meter-row { grid-template-columns: 36px minmax(40px, 1fr) 34px; gap: 5px; }
     #motion-feedback-buttons { grid-template-columns: repeat(2, 2rem); gap: var(--space-1); }
     #like-this-move-btn, #dislike-this-move-btn { width: 2rem; height: 2rem; min-height: 2rem; font-size: 0.88rem; }
-    #chat-compose-row { grid-template-columns: var(--voice-control-width) minmax(0, 1fr); }
-    #message-input-line { grid-column: 1 / -1; grid-template-columns: 1fr; align-items: stretch; }
-    #message-input-line .my-button { width: 100%; }
+    #chat-compose-row { grid-template-columns: var(--voice-control-width) minmax(0, 1fr); grid-template-areas: "voice message" "status status"; }
+    #message-input-line { grid-area: message; grid-template-columns: minmax(0, 1fr) minmax(4.25rem, auto); align-items: stretch; gap: var(--space-1); }
+    #message-input-line .my-button { width: auto; min-width: 4.25rem; padding-left: 0.7rem; padding-right: 0.7rem; }
     #message-input-line .input-text { min-width: 0; }
-    #voice-control-buttons { grid-column: 1; width: var(--voice-control-width); }
-    #status-text { grid-column: 2; min-width: 0; justify-content: flex-start; text-align: left; }
+    #voice-control-buttons { grid-area: voice; width: var(--voice-control-width); }
+    #status-text { grid-area: status; min-width: 0; justify-content: flex-start; text-align: left; }
     .chat-message-container { max-width: 100%; }
     .slider-container, .motion-panel .slider-container, .device-panel .slider-container { grid-template-columns: 1fr auto; }
     .slider-container label { grid-column: 1 / -1; }
