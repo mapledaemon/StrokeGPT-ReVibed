@@ -381,6 +381,30 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.motion_style = original_style
 
+    def test_motion_reverse_direction_can_be_selected_and_reported(self):
+        from strokegpt.web import get_current_context, motion, settings
+
+        original_setting = settings.motion_reverse_direction
+        original_controller = motion.reverse_direction
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_motion_reverse_direction", json={"motion_reverse_direction": True})
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["motion_reverse_direction"])
+            self.assertTrue(settings.motion_reverse_direction)
+            self.assertTrue(motion.reverse_direction)
+            self.assertTrue(get_current_context()["motion_reverse_direction"])
+
+            response = self.client.get("/check_settings")
+            payload = response.get_json()
+            self.assertTrue(payload["motion_reverse_direction"])
+        finally:
+            settings.motion_reverse_direction = original_setting
+            motion.set_reverse_direction(original_controller)
+
     def test_check_settings_uses_fast_startup_payload(self):
         with mock.patch("strokegpt.web._ollama_installed_models", side_effect=AssertionError("live Ollama probe")), \
                 mock.patch("strokegpt.web._ollama_running_models", side_effect=AssertionError("live Ollama probe")):

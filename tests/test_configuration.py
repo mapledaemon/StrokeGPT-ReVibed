@@ -78,6 +78,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_pattern_weights"], {})
         self.assertEqual(saved["motion_backend"], "continuous")
         self.assertEqual(saved["motion_style"], "balanced")
+        self.assertFalse(saved["motion_reverse_direction"])
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
         self.assertEqual(saved["ollama_diagnostics_level"], "compact")
         self.assertFalse(saved["motion_feedback_auto_disable"])
@@ -152,6 +153,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_pattern_weights, {})
         self.assertEqual(settings.motion_backend, "continuous")
         self.assertEqual(settings.motion_style, "balanced")
+        self.assertFalse(settings.motion_reverse_direction)
         self.assertEqual(settings.motion_diagnostics_level, "compact")
         self.assertEqual(settings.ollama_diagnostics_level, "compact")
         self.assertFalse(settings.motion_feedback_auto_disable)
@@ -254,6 +256,17 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.apply_dict({"motion_style": "bad"})
         self.assertEqual(settings.motion_style, "balanced")
+
+    def test_motion_reverse_direction_setting_is_persisted(self):
+        fake_path = FakePath(json.dumps({"motion_reverse_direction": "yes"}))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertTrue(settings.motion_reverse_direction)
+        self.assertTrue(saved["motion_reverse_direction"])
 
     def test_llm_prompt_mode_setting_is_normalized(self):
         settings = SettingsManager("settings.json")
@@ -483,15 +496,19 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("your cock", prompt)
         self.assertIn("do not sanitize or euphemize", prompt)
         self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
+        self.assertIn("prefer `rng` 70-95 with a center inside the region", prompt)
+        self.assertIn("Reserve `flick`, `flutter`, `hold`, `pulse`, and `tease`", prompt)
         self.assertIn("SPEED WORDS SET `sp`", prompt)
         self.assertIn("favor base-through-mid or mid-base first", prompt)
         self.assertIn("current range `10-80`", prompt)
         self.assertIn('"slowly focus on the tip"', prompt)
-        self.assertIn('"slowly focus on the tip": `{"sp": 24', prompt)
+        self.assertIn('"slowly focus on the tip": `{"sp": 24, "dp": 34, "rng": 82', prompt)
         self.assertIn('"quickly use the shaft"', prompt)
         self.assertIn('"quickly use the shaft": `{"sp": 62', prompt)
         self.assertIn('"as fast as you can on the base"', prompt)
-        self.assertIn('"as fast as you can on the base": `{"sp": 80', prompt)
+        self.assertIn('"as fast as you can on the base": `{"sp": 80, "dp": 66, "rng": 82', prompt)
+        self.assertIn("touch, pace, pressure", prompt)
+        self.assertIn("adjust the motion", prompt)
 
     def test_llm_prompt_legacy_mode_keeps_previous_prompt_shape(self):
         service = LLMService(url="http://localhost:11434/api/chat")
@@ -511,6 +528,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("ACTION TO MOVEMENT MAPPING", prompt)
         self.assertIn("The current configured speed range is `10-80`", prompt)
         self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
+        self.assertIn("prefer `rng` 70-95 with a center inside the region", prompt)
         self.assertNotIn("FINAL CHAT VOICE CHECK", prompt)
 
     def test_llm_prompt_can_disallow_edge_patterns_in_chat(self):
@@ -673,6 +691,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("Never return `stop` on `start`", prompt)
         self.assertIn("do not stop abruptly just because a timing window ended", prompt)
         self.assertIn("configured speed range", prompt)
+        self.assertIn("Do not mention intensity, duration, settings, parameters, or device adjustments", prompt)
         self.assertIn("`12-64`", prompt)
         self.assertIn("mode: edging", prompt)
         self.assertIn("event: close_signal", prompt)

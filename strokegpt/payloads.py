@@ -851,6 +851,7 @@ def settings_payload(
         "max_speed": settings.max_speed,
         "motion_backend": settings.motion_backend,
         "motion_style": settings.motion_style,
+        "motion_reverse_direction": settings.motion_reverse_direction,
         "motion_style_options": motion_style_options(),
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "ollama_diagnostics_level": settings.ollama_diagnostics_level,

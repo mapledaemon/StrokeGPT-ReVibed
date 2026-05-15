@@ -217,6 +217,16 @@ function renderMotionStyleOptions(options = [], currentStyle = 'balanced') {
     updateMotionStyleUi(currentStyle);
 }
 
+function updateMotionReverseDirectionUi(enabled) {
+    state.motionReverseDirection = Boolean(enabled);
+    if (el.motionReverseDirectionCheckbox) {
+        el.motionReverseDirectionCheckbox.checked = state.motionReverseDirection;
+    }
+    if (el.motionReverseDirectionStatus) {
+        el.motionReverseDirectionStatus.textContent = `Current direction: ${state.motionReverseDirection ? 'Reverse phase' : 'Forward'}.`;
+    }
+}
+
 function updateMemoryToggleUi(enabled) {
     state.useLongTermMemory = Boolean(enabled);
     if (!el.toggleMemoryBtn) return;
@@ -249,6 +259,7 @@ export function populateMotionSettings(data = {}) {
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
     renderMotionStyleOptions(data.motion_style_options || state.motionStyleOptions, data.motion_style || state.motionStyle);
+    updateMotionReverseDirectionUi(data.motion_reverse_direction ?? state.motionReverseDirection);
     setSliderValue(el.motionSpeedMinSlider, el.motionSpeedMinVal, data.min_speed ?? state.motionMinSpeed);
     setSliderValue(el.motionSpeedMaxSlider, el.motionSpeedMaxVal, data.max_speed ?? state.motionMaxSpeed);
     normalizeMotionSpeedLimits();
@@ -288,6 +299,21 @@ async function saveMotionStyle() {
         el.statusText.textContent = `Motion style saved: ${motionStyleDetails(data.motion_style).label}.`;
     } else {
         reportSaveFailure(el.motionStyleStatus || el.statusText, data, 'Could not save motion style.');
+    }
+}
+
+async function saveMotionReverseDirection() {
+    const motionReverseDirection = Boolean(el.motionReverseDirectionCheckbox?.checked);
+    const data = await apiCall('/set_motion_reverse_direction', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({motion_reverse_direction: motionReverseDirection}),
+    });
+    if (data && data.status === 'success') {
+        updateMotionReverseDirectionUi(data.motion_reverse_direction);
+        el.statusText.textContent = `Motion direction saved: ${state.motionReverseDirection ? 'reverse phase' : 'forward'}.`;
+    } else {
+        reportSaveFailure(el.motionReverseDirectionStatus || el.statusText, data, 'Could not save motion direction.');
     }
 }
 
@@ -1116,6 +1142,8 @@ export function initMotionControls({sendUserMessage}) {
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);
     el.motionStyleSelect?.addEventListener('change', () => updateMotionStyleUi(el.motionStyleSelect.value));
+    el.saveMotionReverseDirectionBtn?.addEventListener('click', saveMotionReverseDirection);
+    el.motionReverseDirectionCheckbox?.addEventListener('change', () => updateMotionReverseDirectionUi(el.motionReverseDirectionCheckbox.checked));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);

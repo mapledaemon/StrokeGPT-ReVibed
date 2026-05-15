@@ -377,6 +377,23 @@ def set_motion_style_route():
     })
 
 
+@motion_blueprint.route('/set_motion_reverse_direction', methods=['POST'])
+def set_motion_reverse_direction_route():
+    web = _web()
+    data = web._request_json()
+    web.settings.motion_reverse_direction = web._request_bool_value(
+        data,
+        "motion_reverse_direction",
+        web.settings.motion_reverse_direction,
+    )
+    web.motion.set_reverse_direction(web.settings.motion_reverse_direction)
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "motion_reverse_direction": web.settings.motion_reverse_direction,
+    })
+
+
 @motion_blueprint.route('/set_llm_edge_permissions', methods=['POST'])
 def set_llm_edge_permissions_route():
     web = _web()

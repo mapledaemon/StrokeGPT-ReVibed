@@ -36,14 +36,14 @@ CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 3.4
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 3.4
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 1.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
-CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.16
-CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.09
+CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.12
+CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.06
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
 CONTINUOUS_HSP_MIN_DEPTH_DELTA = 2.0
 CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS = 0.28
-CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.0
+CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.12
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.2
-CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 0.0
+CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 0.65
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -149,11 +149,19 @@ class MotionCues:
 
 
 ZONE_DEFAULTS = {
-    "tip": {"depth": 10.0, "range": 36.0, "speed": 30.0},
-    "upper": {"depth": 25.0, "range": 48.0, "speed": 34.0},
-    "middle": {"depth": 50.0, "range": 62.0, "speed": 38.0},
-    "base": {"depth": 88.0, "range": 40.0, "speed": 42.0},
+    "tip": {"depth": 34.0, "range": 82.0, "speed": 30.0},
+    "upper": {"depth": 40.0, "range": 76.0, "speed": 34.0},
+    "middle": {"depth": 50.0, "range": 86.0, "speed": 38.0},
+    "base": {"depth": 66.0, "range": 82.0, "speed": 42.0},
     "full": {"depth": 50.0, "range": 95.0, "speed": 46.0},
+}
+
+TIGHT_ZONE_DEPTHS = {
+    "tip": 10.0,
+    "upper": 20.0,
+    "middle": 50.0,
+    "base": 88.0,
+    "full": 50.0,
 }
 
 LENGTH_DEFAULTS = {
@@ -281,6 +289,12 @@ def _depth_for_zone_and_length(zone: str, length: Optional[str]) -> float:
     return ZONE_DEFAULTS[zone]["depth"]
 
 
+def _tight_depth_for_zone(zone: Optional[str]) -> Optional[float]:
+    if not zone:
+        return None
+    return TIGHT_ZONE_DEPTHS.get(zone)
+
+
 def _is_endpoint_depth(depth: float) -> bool:
     return depth <= 18.0 or depth >= 82.0
 
@@ -295,9 +309,9 @@ def _range_with_broad_default(current: MotionTarget, depth: float, stroke_range:
     if cues.length in {"half", "long", "full"} or cues.zone == "full":
         return stroke_range
     if _is_endpoint_depth(depth):
-        floor = 48.0 if current.stroke_range <= 30.0 and _is_endpoint_depth(current.depth) else 36.0
+        floor = 58.0 if current.stroke_range <= 30.0 and _is_endpoint_depth(current.depth) else 70.0
         return max(stroke_range, floor)
-    return max(stroke_range, 50.0)
+    return max(stroke_range, 65.0)
 
 
 def _regional_motion_program(cues: MotionCues, existing_program: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
@@ -356,6 +370,11 @@ def _target_from_cues(
         elif cues.zone:
             next_depth = _depth_for_zone_and_length(cues.zone, cues.length)
 
+    if cues.zone and _explicit_tight_request(cues):
+        tight_depth = _tight_depth_for_zone(cues.zone)
+        if tight_depth is not None:
+            next_depth = tight_depth
+
     if cues.pattern == "flutter":
         next_speed = max(next_speed, 58.0)
         next_range = min(next_range, 16.0)
@@ -370,7 +389,10 @@ def _target_from_cues(
             next_range = max(next_range, 92.0)
     elif cues.pattern == "pulse":
         next_speed = max(next_speed, 44.0)
-        next_range = min(next_range, 34.0)
+        if cues.length in {"tiny", "short"}:
+            next_range = min(next_range, 34.0)
+        else:
+            next_range = max(next_range, 65.0)
     elif cues.pattern == "hold":
         next_speed = min(max(next_speed, 16.0), 30.0)
         next_range = min(next_range, 12.0)
@@ -387,13 +409,16 @@ def _target_from_cues(
         next_range = max(next_range, 60.0)
     elif cues.pattern == "sway":
         next_speed = max(next_speed, 34.0)
-        next_range = max(next_range, 55.0)
+        next_range = max(next_range, 70.0)
     elif cues.pattern == "anchor_loop":
         next_speed = max(next_speed, 36.0)
-        next_range = max(next_range, 55.0)
+        next_range = max(next_range, 70.0)
     elif cues.pattern == "tease":
         next_speed = min(max(next_speed, 22.0), 38.0)
-        next_range = min(next_range, 34.0)
+        if cues.length in {"tiny", "short"}:
+            next_range = min(next_range, 34.0)
+        else:
+            next_range = max(next_range, 65.0)
 
     if motion_program and cues.pattern != "anchor_loop":
         next_speed = max(next_speed, 36.0)
@@ -668,6 +693,7 @@ class MotionController:
         self.sanitizer = sanitizer or MotionSanitizer()
         self.step_delay = step_delay
         self.backend = "continuous"
+        self.reverse_direction = False
         self._lock = threading.Lock()
         self._generation = 0
         self._observability_lock = threading.Lock()
@@ -693,6 +719,15 @@ class MotionController:
             self._record_current_state(source="settings", label=f"{self.backend} backend")
         else:
             self.backend = normalized
+
+    def set_reverse_direction(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled != self.reverse_direction:
+            self.reverse_direction = enabled
+            label = "reverse phase" if enabled else "forward phase"
+            self._record_current_state(source="settings", label=label)
+        else:
+            self.reverse_direction = enabled
 
     def _normalize_backend(self, backend: str) -> str:
         cleaned = str(backend or "").strip().lower().replace("-", "_")
@@ -1182,7 +1217,12 @@ class MotionController:
         elapsed_seconds: float,
         sample_continuous_motion,
     ):
-        return sample_continuous_motion(plan, target, elapsed_seconds)
+        return sample_continuous_motion(
+            plan,
+            target,
+            elapsed_seconds,
+            reverse_phase=self.reverse_direction,
+        )
 
     def apply_continuous_target(
         self,
@@ -1747,7 +1787,8 @@ class MotionController:
                 "x": sample.target.depth,
                 "speed": sample.target.speed,
                 "intent_speed": sample.intent_speed,
-                "range": sample.target.stroke_range,
+                "range": target.stroke_range,
+                "sample_range": sample.target.stroke_range,
                 "label": sample.target.label or plan_name,
                 "sample_index": sample_index,
                 "stream_index": stream_index,
@@ -1757,6 +1798,7 @@ class MotionController:
                 "effective_duration_seconds": sample.effective_duration_seconds,
                 "phase_interval_seconds": phase_interval,
                 "sample_interval_seconds": command_interval,
+                "reverse_direction": self.reverse_direction,
                 "authored_point": authored_point,
             }
             if hsp_interval_limited_points:
@@ -1918,7 +1960,9 @@ class MotionController:
                     "morph_ms": morph_ms,
                     "intent_speed": int(round(point["intent_speed"])),
                     "sample_speed": int(round(point["speed"])),
+                    "sample_range": int(round(point["sample_range"])),
                     "sample_phase": round(point["phase"], 4),
+                    "reverse_direction": bool(point.get("reverse_direction")),
                     "sample_position_per_second": round(point["position_per_second"], 1),
                     "sample_tempo_scale": round(point["tempo_scale"], 3),
                     "effective_cycle_ms": round(point["effective_duration_seconds"] * 1000.0, 1),
@@ -2150,6 +2194,7 @@ class MotionController:
                     "intent_speed": int(round(sample.intent_speed)),
                     "sample_speed": int(round(sample.target.speed)),
                     "sample_phase": round(sample.phase, 4),
+                    "reverse_direction": self.reverse_direction,
                     "sample_position_per_second": round(sample.position_per_second, 1),
                     "sample_tempo_scale": round(sample.tempo_scale, 3),
                     "effective_cycle_ms": round(sample.effective_duration_seconds * 1000.0, 1),

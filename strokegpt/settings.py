@@ -210,6 +210,7 @@ def default_settings_dict():
         "motion_pattern_weights": {},
         "motion_backend": DEFAULT_MOTION_BACKEND,
         "motion_style": DEFAULT_MOTION_STYLE,
+        "motion_reverse_direction": False,
         "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "ollama_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "motion_feedback_auto_disable": False,
@@ -349,6 +350,10 @@ class SettingsManager:
         self.motion_pattern_weights = self._normalize_weight_map(data.get("motion_pattern_weights", {}))
         self.motion_backend = self._normalize_motion_backend(data.get("motion_backend", defaults["motion_backend"]))
         self.motion_style = self._normalize_motion_style(data.get("motion_style", defaults["motion_style"]))
+        self.motion_reverse_direction = _as_bool(
+            data.get("motion_reverse_direction", defaults["motion_reverse_direction"]),
+            defaults["motion_reverse_direction"],
+        )
         self.motion_diagnostics_level = self._normalize_diagnostics_level(
             data.get("motion_diagnostics_level", defaults["motion_diagnostics_level"])
         )
@@ -579,6 +584,7 @@ class SettingsManager:
             "motion_pattern_weights": self._normalize_weight_map(self.motion_pattern_weights),
             "motion_backend": self._normalize_motion_backend(self.motion_backend),
             "motion_style": self._normalize_motion_style(self.motion_style),
+            "motion_reverse_direction": bool(self.motion_reverse_direction),
             "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
             "ollama_diagnostics_level": self._normalize_diagnostics_level(self.ollama_diagnostics_level),
             "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
