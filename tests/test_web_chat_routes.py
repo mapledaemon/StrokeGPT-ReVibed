@@ -198,6 +198,16 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_standalone_autospeak_zero_delay_uses_natural_floor(self):
+        import strokegpt.web as web
+
+        with mock.patch("strokegpt.web.time.sleep") as sleep, \
+                mock.patch("strokegpt.web._run_standalone_autospeak_turn", return_value=True) as run_turn:
+            web._standalone_autospeak_worker(123, 0)
+
+        sleep.assert_called_once_with(web.STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS)
+        run_turn.assert_called_once_with(123)
+
     def test_send_message_stream_renders_deltas_without_queue_duplicate(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 

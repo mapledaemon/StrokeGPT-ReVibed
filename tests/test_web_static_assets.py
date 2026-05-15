@@ -265,7 +265,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('aria-label="Autospeak seconds range"', page)
             self.assertIn('id="save-llm-edge-permissions-btn"', page)
             self.assertIn('Allow typed chat to request mode actions', page)
-            self.assertIn('Autospeak seconds constrain the next background chat delay', page)
+            self.assertIn('Autospeak seconds constrain the next background chat delay; 0 means the shortest natural pause', page)
             self.assertIn('top-bar Autospeak button', page)
             self.assertIn('id="motion-pattern-list"', page)
             self.assertIn('id="motion-feedback-history"', page)

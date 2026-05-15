@@ -252,7 +252,7 @@ export function populateMotionSettings(data = {}) {
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
     state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
-    state.autospeakMinSeconds = data.autospeak_min_seconds ?? state.autospeakMinSeconds ?? 0;
+    state.autospeakMinSeconds = data.autospeak_min_seconds ?? state.autospeakMinSeconds ?? 12;
     state.autospeakMaxSeconds = data.autospeak_max_seconds ?? state.autospeakMaxSeconds ?? 45;
     updateAutospeakToggleUi(data.autospeak_enabled ?? state.autospeakEnabled ?? false);
     if (el.motionFeedbackAutoDisableCheckbox) {
@@ -368,7 +368,7 @@ function readTimingPair(minInput, maxInput) {
 }
 
 function readAutospeakTimingPair() {
-    const a = clampNumber(el.autospeakMinSecondsInput?.value, 0, 300, state.autospeakMinSeconds ?? 0);
+    const a = clampNumber(el.autospeakMinSecondsInput?.value, 0, 300, state.autospeakMinSeconds ?? 12);
     const b = clampNumber(el.autospeakMaxSecondsInput?.value, 0, 300, state.autospeakMaxSeconds ?? 45);
     state.autospeakMinSeconds = Math.min(a, b);
     state.autospeakMaxSeconds = Math.max(a, b);

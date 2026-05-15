@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #228 - Tune Autospeak Natural Cadence
+------------------------------------------------------
+
+Branch: codex-autospeak-natural-cadence
+
+- Raised the default Autospeak minimum delay to a natural 12 second pause
+  instead of using the previous zero-second default.
+- Treated zero-second Autospeak choices as the shortest natural pause at
+  runtime, preventing immediate re-prompt loops while still allowing users to
+  configure very frequent background talk.
+- Delayed initial and settings-wake Autospeak turns by the configured minimum
+  pause, and migrated the old untouched `0-45` default range to `12-45` on
+  load while preserving explicit zero-second custom ranges.
+- Clarified the chat and mode-decision prompt guidance so the LLM paces
+  Autospeak like natural conversation instead of answering as fast as Ollama
+  can produce text.
+
+
 2026-05-15 - PR #227 - Add Standalone Autospeak Chat Loop
 ---------------------------------------------------------
 

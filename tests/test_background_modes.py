@@ -191,7 +191,7 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertLess(time.monotonic() - started, 0.05)
 
-    def test_autospeak_zero_cadence_talks_during_wait_without_cutting_it_short(self):
+    def test_autospeak_zero_cadence_uses_natural_floor_without_cutting_wait_short(self):
         chat_messages = []
         decision_events = []
 
@@ -228,19 +228,28 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertGreaterEqual(elapsed, 0.5)
         self.assertIn("autospeak", decision_events)
-        self.assertGreaterEqual(len(chat_messages), 2)
+        self.assertEqual(len(chat_messages), 1)
         self.assertEqual(set(chat_messages), {"Still with you."})
 
-    def test_initial_autospeak_schedule_is_due_soon_when_enabled(self):
+    def test_initial_autospeak_schedule_respects_minimum_when_enabled(self):
         interval, next_due = background_modes._initial_autospeak_schedule({
             "autospeak_enabled": lambda: True,
             "autospeak_range": lambda: (20, 45),
         })
 
         self.assertEqual(interval, 45.0)
-        self.assertLessEqual(next_due - time.monotonic(), 0.3)
+        self.assertGreaterEqual(next_due - time.monotonic(), 19.5)
 
-    def test_autospeak_wake_forces_due_event_before_existing_deadline(self):
+    def test_zero_initial_autospeak_schedule_uses_natural_floor(self):
+        interval, next_due = background_modes._initial_autospeak_schedule({
+            "autospeak_enabled": lambda: True,
+            "autospeak_range": lambda: (0, 45),
+        })
+
+        self.assertEqual(interval, 45.0)
+        self.assertGreaterEqual(next_due - time.monotonic(), 7.5)
+
+    def test_autospeak_wake_moves_deadline_to_natural_pause_before_existing_deadline(self):
         chat_messages = []
         decision_events = []
         wake_consumed = []
@@ -272,10 +281,11 @@ class AutoModeThreadTests(unittest.TestCase):
             current_target=MotionTarget(20, 30, 40),
         )
 
-        self.assertEqual(decision_events, ["autospeak"])
-        self.assertEqual(chat_messages, ["Still here."])
-        self.assertEqual(interval, 30.0)
+        self.assertEqual(decision_events, [])
+        self.assertEqual(chat_messages, [])
+        self.assertEqual(interval, 45.0)
         self.assertGreater(next_due, time.monotonic())
+        self.assertLess(next_due - time.monotonic(), 9.0)
 
     def test_autospeak_future_deadline_does_not_poll_without_wake(self):
         decision_events = []
