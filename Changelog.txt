@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #209 - Mobile Chrome Composer Cutoff
+----------------------------------------------------
+
+Branch: codex/mobile-chrome-composer-cutoff
+
+- Synced the app shell height to the browser visual viewport so mobile Chrome
+  URL/tool bars and keyboard viewport changes do not leave the composer behind
+  browser chrome.
+- Added an explicit mobile bottom reserve for Chrome/Android browser controls
+  when safe-area insets are zero, keeping the message input, Send button, and
+  voice controls above the bottom gesture area.
+- Made compact mobile motion panels behave as a one-open-panel accordion and
+  tightened very short viewport panel heights so expanded status details cannot
+  push the composer off screen.
+
+
 2026-05-15 - PR #208 - Mobile Composer And Voice Input Layout
 --------------------------------------------------------------
 

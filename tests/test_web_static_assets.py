@@ -624,6 +624,15 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".sidebar-stop-section", css)
             self.assertIn("#chat-view, #bottom-input-area { padding: var(--space-2); }", css)
             self.assertIn("@media (max-width: 760px)", css)
+            self.assertIn("--app-viewport-height: 100dvh;", css)
+            self.assertIn("height: var(--app-viewport-height, 100dvh);", css)
+            self.assertIn("--mobile-browser-bottom-reserve: 0px;", css)
+            self.assertIn(":root { --mobile-browser-bottom-reserve: 2.75rem; }", css)
+            self.assertIn("#bottom-input-area { padding-bottom: max(var(--space-2), env(safe-area-inset-bottom), var(--mobile-browser-bottom-reserve)); }", css)
+            self.assertIn("@media (max-width: 760px) and (max-height: 430px)", css)
+            self.assertIn("--mobile-browser-bottom-reserve: 2.25rem;", css)
+            self.assertIn("--motion-compact-status-height: 4.5rem;", css)
+            self.assertIn(".motion-diagnostics-panel { display: none; }", css)
         finally:
             response.close()
 
@@ -650,6 +659,11 @@ class WebStaticAssetTests(WebTestCase):
         script = self.frontend_scripts()
 
         self.assertIn("initVoiceInputControls({sendUserMessage})", script)
+        self.assertIn("initAppViewportHeightSync()", script)
+        self.assertIn("export function syncAppViewportHeight", script)
+        self.assertIn("window.visualViewport?.addEventListener?.('resize', syncAppViewportHeight)", script)
+        self.assertIn("export function keepSingleCompactMotionPanelOpen", script)
+        self.assertIn("panel.addEventListener('toggle', () => keepSingleCompactMotionPanelOpen(panel, query.matches))", script)
         self.assertIn("export function populateVoiceInputSettings", script)
         self.assertIn("export async function refreshVoiceInputStatus", script)
         self.assertIn("/set_voice_input", script)

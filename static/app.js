@@ -8,7 +8,7 @@ import { startupCheck } from './js/setup.js';
 import { initDiagnosticsControls } from './js/setup-check.js';
 import { initVoiceInputControls } from './js/voice-input.js';
 import { initSingleActiveTabWarning } from './js/browser-session.js';
-import { initCompactMotionPanels } from './js/responsive-layout.js';
+import { initAppViewportHeightSync, initCompactMotionPanels } from './js/responsive-layout.js';
 
 function startPollingLoops() {
     startGuardedPoll(pollChatUpdates, 1500);
@@ -33,6 +33,7 @@ function startGuardedPoll(callback, intervalMs) {
 }
 
 function initApp() {
+    initAppViewportHeightSync();
     initBackendRequiredControlGuard();
     initSingleActiveTabWarning();
     initCompactMotionPanels();
