@@ -194,6 +194,7 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
         "current_model_size_label": "",
         "current_model_size_vram": 0,
         "current_model_size_vram_label": "",
+        "current_model_size_vram_reported": False,
         "running_models": running,
     }
     if error:
@@ -236,6 +237,7 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
         "current_model_size_label": format_bytes(size),
         "current_model_size_vram": size_vram,
         "current_model_size_vram_label": format_bytes(size_vram),
+        "current_model_size_vram_reported": bool(size_vram_reported),
     })
     if not size_vram_reported:
         payload.update({
@@ -292,10 +294,12 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
     diagnostics_level = settings.ollama_diagnostics_level
     model_options = ollama_models_for_ui(settings, llm)
     gpu_status = ollama_gpu_status_payload(current_model, [])
+    thinking_enabled = bool(getattr(llm, "thinking_enabled", False))
     payload = {
         "available": False,
         "base_url": base_url,
         "current_model": current_model,
+        "thinking_enabled": thinking_enabled,
         "current_model_installed": False,
         "installed_models": [],
         "installed_model_names": [],
@@ -357,6 +361,7 @@ def ollama_status_pending_payload(*, settings, llm, base_url, pull_snapshot):
     diagnostics_level = settings.ollama_diagnostics_level
     model_options = ollama_models_for_ui(settings, llm)
     gpu_status = ollama_gpu_status_payload(current_model, [])
+    thinking_enabled = bool(getattr(llm, "thinking_enabled", False))
     gpu_status.update({
         "state": "unchecked",
         "message": "Ollama GPU status will refresh after startup.",
@@ -370,6 +375,7 @@ def ollama_status_pending_payload(*, settings, llm, base_url, pull_snapshot):
         "unchecked": True,
         "base_url": base_url,
         "current_model": current_model,
+        "thinking_enabled": thinking_enabled,
         "current_model_installed": None,
         "installed_models": [],
         "installed_model_names": [],
@@ -731,6 +737,7 @@ def settings_payload(
         "elevenlabs_key": settings.elevenlabs_api_key,
         "ollama_model": llm.model,
         "ollama_models": ollama_models,
+        "ollama_thinking_enabled": bool(settings.ollama_thinking_enabled),
         "ollama_status": ollama_status,
         "audio_provider": settings.audio_provider,
         "audio_enabled": settings.audio_enabled,

@@ -401,12 +401,32 @@ function selectedOllamaModelForAction() {
     return normalizeModelName(el.ollamaModelInput.value || el.ollamaModelSelect.value);
 }
 
+function ollamaThinkingStatusText(enabled) {
+    return enabled
+        ? 'Thinking is on. Supported models may be slower.'
+        : 'Thinking is off for faster chat.';
+}
+
+export function populateOllamaThinkingSetting(enabled = false) {
+    state.ollamaThinkingEnabled = Boolean(enabled);
+    if (el.ollamaThinkingEnabledCheckbox) {
+        el.ollamaThinkingEnabledCheckbox.checked = state.ollamaThinkingEnabled;
+    }
+    if (el.ollamaThinkingStatus) {
+        el.ollamaThinkingStatus.textContent = ollamaThinkingStatusText(state.ollamaThinkingEnabled);
+        el.ollamaThinkingStatus.style.color = state.ollamaThinkingEnabled ? 'var(--yellow)' : 'var(--cyan)';
+    }
+}
+
 export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
     const gpuStatus = status.gpu_status || {};
     const downloadPercent = formatPercent(download.percent);
     state.ollamaStatus = status;
+    if (Object.prototype.hasOwnProperty.call(status, 'thinking_enabled')) {
+        populateOllamaThinkingSetting(status.thinking_enabled);
+    }
     state.ollamaDownloadPolling = download.state === 'downloading';
     state.ollamaModelDetails = modelDetailsFromStatus(status);
     if (state.ollamaModels.length) {
@@ -535,6 +555,7 @@ export function updateOllamaDiagnostics(status = {}) {
     const lines = [
         `Provider: ${status.available ? 'Ollama reachable' : 'Ollama unavailable'}`,
         `Model: ${status.current_model || diagnostics.model || 'unknown'}`,
+        `Thinking: ${(status.thinking_enabled ?? diagnostics.thinking_enabled) ? 'enabled' : 'disabled'}`,
         `GPU: ${gpuStatus.message || 'not checked'}`,
     ];
     if (gpuStatus.current_model_size_vram_label || gpuStatus.current_model_size_label) {
@@ -608,6 +629,40 @@ async function setOllamaModel(model) {
         reportSaveFailure(el.ollamaModelStatus, data, `Could not set model to ${normalized}.`);
     }
     return data;
+}
+
+async function saveOllamaThinkingSetting() {
+    const enabled = Boolean(el.ollamaThinkingEnabledCheckbox?.checked);
+    if (el.ollamaThinkingStatus) {
+        el.ollamaThinkingStatus.textContent = 'Saving thinking preference...';
+        el.ollamaThinkingStatus.style.color = 'var(--comment)';
+    }
+    const data = await apiCall('/set_ollama_thinking', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled}),
+    });
+    if (data && data.status === 'success') {
+        populateOllamaThinkingSetting(data.ollama_thinking_enabled);
+        updateOllamaStatus(data.ollama_status);
+        if (el.ollamaThinkingStatus) {
+            el.ollamaThinkingStatus.textContent = `Saved. ${ollamaThinkingStatusText(data.ollama_thinking_enabled)}`;
+        }
+    } else {
+        reportSaveFailure(el.ollamaThinkingStatus || el.ollamaModelStatus, data, 'Could not save Ollama thinking preference.');
+    }
+    return data;
+}
+
+function markOllamaThinkingUnsaved() {
+    if (!el.ollamaThinkingStatus) return;
+    const enabled = Boolean(el.ollamaThinkingEnabledCheckbox?.checked);
+    if (enabled === state.ollamaThinkingEnabled) {
+        populateOllamaThinkingSetting(state.ollamaThinkingEnabled);
+        return;
+    }
+    el.ollamaThinkingStatus.textContent = `Unsaved. ${ollamaThinkingStatusText(enabled)}`;
+    el.ollamaThinkingStatus.style.color = 'var(--comment)';
 }
 
 async function deleteOllamaModel(model) {
@@ -793,6 +848,8 @@ export function initSettingsControls({addChatMessage}) {
         el.ollamaModelInput.focus();
     });
     D.getElementById('save-ollama-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelInput.value));
+    el.ollamaThinkingEnabledCheckbox?.addEventListener('change', markOllamaThinkingUnsaved);
+    el.saveOllamaThinkingBtn?.addEventListener('click', saveOllamaThinkingSetting);
     el.downloadOllamaModelBtn.addEventListener('click', downloadOllamaModel);
     el.refreshOllamaStatusBtn.addEventListener('click', refreshOllamaStatus);
     if (el.ollamaModelRequiredSelect) {

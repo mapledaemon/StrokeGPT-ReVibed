@@ -111,21 +111,17 @@ def _ollama_generation_latency_test(llm_url, llm, ollama_status):
         }
 
     started_at = time.perf_counter()
+    messages = [
+        {
+            "role": "system",
+            "content": 'Return compact JSON only: {"chat":"ok","move":null,"new_mood":null}',
+        },
+        {"role": "user", "content": "diagnostics latency ping"},
+    ]
     try:
         response = requests.post(
             llm_url,
-            json={
-                "model": llm.model,
-                "stream": False,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": 'Return compact JSON only: {"chat":"ok","move":null,"new_mood":null}',
-                    },
-                    {"role": "user", "content": "diagnostics latency ping"},
-                ],
-                "options": {"temperature": 0},
-            },
+            json=llm._request_payload(messages, temperature=0, stream=False),
             timeout=60,
         )
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
@@ -394,6 +390,81 @@ def _torch_summary(torch_status):
     }
 
 
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _vram_label(value, reported):
+    value = _safe_int(value)
+    if not reported:
+        return "not reported"
+    return format_bytes(value) or "0 B"
+
+
+def _ollama_model_gpu_summary(model):
+    model = dict(model or {})
+    reported = bool(model.get("size_vram_reported"))
+    size_vram = _safe_int(model.get("size_vram"))
+    accelerated = True if reported and size_vram > 0 else False if reported else None
+    state = "gpu" if accelerated is True else "cpu" if accelerated is False else "unknown"
+    return {
+        "name": model.get("name") or "",
+        "size": _safe_int(model.get("size")),
+        "size_label": model.get("size_label") or format_bytes(model.get("size")),
+        "size_vram": size_vram,
+        "size_vram_reported": reported,
+        "size_vram_label": _vram_label(size_vram, reported),
+        "processor": str(model.get("processor") or model.get("processor_label") or "").strip(),
+        "gpu_accelerated": accelerated,
+        "gpu_state": state,
+        "gpu_label": (
+            "GPU"
+            if accelerated is True
+            else "CPU/system memory"
+            if accelerated is False
+            else "VRAM not reported"
+        ),
+    }
+
+
+def _ollama_running_gpu_summary(running_models):
+    models = [_ollama_model_gpu_summary(model) for model in list(running_models or [])]
+    gpu_count = sum(1 for model in models if model["gpu_accelerated"] is True)
+    cpu_count = sum(1 for model in models if model["gpu_accelerated"] is False)
+    unknown_count = sum(1 for model in models if model["gpu_accelerated"] is None)
+    if not models:
+        state = "not_loaded"
+        message = "No Ollama models are loaded right now."
+    elif gpu_count:
+        state = "gpu"
+        message = f"Ollama reports GPU VRAM use for {gpu_count} loaded model(s)."
+    elif cpu_count and not unknown_count:
+        state = "cpu"
+        message = "Ollama reports loaded model(s) are using system memory only; chat may be slow."
+    else:
+        state = "unknown"
+        message = "Ollama has loaded model(s), but at least one did not report VRAM use."
+    return {
+        "state": state,
+        "message": message,
+        "models": models,
+        "loaded_model_count": len(models),
+        "gpu_model_count": gpu_count,
+        "cpu_model_count": cpu_count,
+        "unknown_model_count": unknown_count,
+    }
+
+
+def _torch_runtime_line(torch_status):
+    version = _safe_text(torch_status.get("torch_version"))
+    cuda = _yes_no(torch_status.get("cuda_available"))
+    device = _safe_text(torch_status.get("device_name") or torch_status.get("device"))
+    return f"{version}; CUDA {cuda}; device {device}"
+
+
 def _format_system_status_report(payload):
     system = payload.get("system") or {}
     app = payload.get("app") or {}
@@ -438,18 +509,22 @@ def _format_system_status_report(payload):
         f"- Selected model: {_safe_text(ollama.get('current_model'))}",
         f"- Selected model installed: {_yes_no(ollama.get('current_model_installed'))}",
         f"- Selected model loaded: {_yes_no(ollama.get('current_model_running'))}",
+        f"- Thinking enabled: {_yes_no(ollama.get('thinking_enabled'))}",
         f"- GPU state: {_safe_text(ollama.get('gpu_state'))}",
         f"- GPU detail: {_safe_text(ollama.get('gpu_message'))}",
         f"- Loaded VRAM: {_safe_text(ollama.get('current_model_size_vram_label'))}",
         f"- Loaded total size: {_safe_text(ollama.get('current_model_size_label'))}",
+        f"- Running model GPU summary: {_safe_text((ollama.get('running_gpu_summary') or {}).get('message'))}",
     ])
-    running_models = ollama.get("running_models") or []
+    running_models = (ollama.get("running_gpu_summary") or {}).get("models") or []
     if running_models:
         lines.append("- Running models:")
         for model in running_models:
-            vram = model.get("size_vram_label") or "unknown VRAM"
-            processor = model.get("processor") or "processor unknown"
-            lines.append(f"  - {model.get('name') or 'unknown'}; {vram}; {processor}")
+            processor = model.get("processor") or "processor not reported"
+            lines.append(
+                f"  - {model.get('name') or 'unknown'}; {model.get('gpu_label') or 'unknown'}; "
+                f"VRAM {model.get('size_vram_label') or 'not reported'}; {processor}"
+            )
 
     lines.extend([
         "",
@@ -458,12 +533,12 @@ def _format_system_status_report(payload):
         f"- Voice input enabled: {_yes_no(voice_input.get('enabled'))}",
         f"- Voice input model: {_safe_text(voice_input.get('model'))}",
         f"- Voice input model loaded: {_yes_no(voice_input.get('model_loaded'))}",
-        f"- Voice input PyTorch: {_safe_text(voice_input_torch.get('torch_version'))}; CUDA {_yes_no(voice_input_torch.get('cuda_available'))}; device {_safe_text(voice_input_torch.get('device_name') or voice_input_torch.get('device'))}",
+        f"- Voice input PyTorch: {_torch_runtime_line(voice_input_torch)}",
         f"- Voice input CTranslate2 CUDA devices: {_safe_text(voice_input.get('ctranslate2_cuda_devices'))}",
         f"- Voice output provider: {_safe_text(voice_output.get('provider'))}",
         f"- Voice output enabled: {_yes_no(voice_output.get('enabled'))}",
         f"- Local voice model loaded: {_yes_no(voice_output.get('model_loaded'))}",
-        f"- Local voice PyTorch: {_safe_text(voice_output_torch.get('torch_version'))}; CUDA {_yes_no(voice_output_torch.get('cuda_available'))}; device {_safe_text(voice_output_torch.get('device_name') or voice_output_torch.get('device'))}",
+        f"- Local voice PyTorch: {_torch_runtime_line(voice_output_torch)}",
     ])
     return "\n".join(lines)
 
@@ -471,10 +546,19 @@ def _format_system_status_report(payload):
 def diagnostics_system_status_payload(*, settings, llm, audio, voice_input, ollama_status, app_state, motion):
     ollama = ollama_status()
     gpu_status = ollama.get("gpu_status") or {}
+    running_summary = _ollama_running_gpu_summary(gpu_status.get("running_models") or [])
     local_tts_status = audio.local_status()
     voice_input_status = voice_input.status()
     voice_input_setup = voice_input.setup_status()
     generated_at = int(time.time())
+    current_vram_reported = bool(
+        gpu_status.get("current_model_size_vram_reported")
+        or gpu_status.get("current_model_size_vram_label")
+    )
+    current_vram_label = (
+        gpu_status.get("current_model_size_vram_label")
+        or _vram_label(gpu_status.get("current_model_size_vram"), current_vram_reported)
+    )
     payload = {
         "status": "success",
         "generated_at": generated_at,
@@ -499,13 +583,17 @@ def diagnostics_system_status_payload(*, settings, llm, audio, voice_input, olla
                 "current_model": ollama.get("current_model") or getattr(llm, "model", ""),
                 "current_model_installed": ollama.get("current_model_installed"),
                 "current_model_running": gpu_status.get("current_model_running"),
+                "thinking_enabled": bool(getattr(llm, "thinking_enabled", False)),
                 "gpu_state": gpu_status.get("state") or "unknown",
                 "gpu_accelerated": gpu_status.get("accelerated"),
                 "gpu_message": gpu_status.get("message") or "",
                 "gpu_warning": gpu_status.get("warning") or "",
                 "current_model_size_label": gpu_status.get("current_model_size_label") or "",
-                "current_model_size_vram_label": gpu_status.get("current_model_size_vram_label") or "",
+                "current_model_size_vram": _safe_int(gpu_status.get("current_model_size_vram")),
+                "current_model_size_vram_reported": current_vram_reported,
+                "current_model_size_vram_label": current_vram_label if gpu_status.get("current_model_running") else "",
                 "running_models": gpu_status.get("running_models") or [],
+                "running_gpu_summary": running_summary,
                 "installed_model_count": len(ollama.get("installed_model_names") or []),
                 "download": ollama.get("download") or {},
                 "message": ollama.get("message") or "",

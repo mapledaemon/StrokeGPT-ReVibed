@@ -337,6 +337,8 @@ class WebSettingsRouteTests(WebTestCase):
         data = response.get_json()
         self.assertTrue(data["ollama_status"]["unchecked"])
         self.assertIsNone(data["ollama_status"]["available"])
+        self.assertIn("ollama_thinking_enabled", data)
+        self.assertIn("thinking_enabled", data["ollama_status"])
         self.assertNotIn("motion_preferences", data)
         self.assertIn("motion_patterns", data)
 

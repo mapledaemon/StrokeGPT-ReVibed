@@ -153,7 +153,11 @@ motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
 motion_transport_capture_session = None
 
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
-llm = LLMService(url=LLM_URL, model=ollama_model)
+llm = LLMService(
+    url=LLM_URL,
+    model=ollama_model,
+    thinking_enabled=settings.ollama_thinking_enabled,
+)
 audio = AudioService()
 voice_input = VoiceInputService(model_cache_dir=VOICE_INPUT_MODEL_DIR)
 audio.set_provider(settings.audio_provider, settings.audio_enabled)
@@ -778,6 +782,7 @@ def apply_settings_to_services():
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     motion.set_backend(settings.motion_backend)
     llm.set_model(settings.ollama_model)
+    llm.set_thinking_enabled(settings.ollama_thinking_enabled)
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
     voice_input.configure(

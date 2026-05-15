@@ -154,6 +154,7 @@ def default_settings_dict():
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
         "ollama_model_hidden_defaults": [],
+        "ollama_thinking_enabled": False,
         "persona_desc": DEFAULT_PERSONA_PROMPT,
         "persona_prompts": list(DEFAULT_PERSONA_PROMPTS),
         "profile_picture_b64": "",
@@ -309,6 +310,10 @@ class SettingsManager:
             data.get("ollama_model_hidden_defaults", defaults["ollama_model_hidden_defaults"])
         )
         self.ollama_models = self._normalize_model_list(data.get("ollama_models", []), include_current=True)
+        self.ollama_thinking_enabled = _as_bool(
+            data.get("ollama_thinking_enabled", defaults["ollama_thinking_enabled"]),
+            defaults["ollama_thinking_enabled"],
+        )
 
         self.persona_desc = (
             self._normalize_persona_prompt(data.get("persona_desc", DEFAULT_PERSONA_PROMPT))
@@ -508,6 +513,7 @@ class SettingsManager:
             "ollama_model": self.ollama_model,
             "ollama_models": self._normalize_model_list(self.ollama_models, include_current=True),
             "ollama_model_hidden_defaults": list(self.ollama_model_hidden_defaults),
+            "ollama_thinking_enabled": bool(self.ollama_thinking_enabled),
             "persona_desc": self.persona_desc,
             "persona_prompts": self.persona_prompt_options(),
             "profile_picture_b64": self.profile_picture_b64,
