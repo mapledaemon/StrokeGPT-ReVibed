@@ -37,13 +37,22 @@ If mobile voice input is still blocked, install and trust
 `user_data/https/strokegpt-lan-ca.crt` on the mobile device, then reopen the
 `https://` LAN URL.
 
+When HTTPS mode generates a local certificate, StrokeGPT also prints an
+Android Chrome certificate helper URL like `http://<PC-LAN-IP>:5012`. Open
+that HTTP URL from the Android device, download the CA certificate, and install
+it as a trusted certificate before opening the HTTPS app URL. Set
+`STROKEGPT_HTTPS_CERT_HELPER=0` to disable this helper, or
+`STROKEGPT_HTTPS_CERT_PORT=5020` to choose a different helper port.
+
 For your own trusted certificate, set both `STROKEGPT_SSL_CERT` and
 `STROKEGPT_SSL_KEY` to your certificate and key paths before starting the app.
 
 ## Mobile Chrome
 
-Mobile Chrome is stricter than Firefox about certificates. The generated
-certificate must include the exact LAN IP typed in Chrome's address bar.
+Mobile Chrome is stricter than Firefox about certificates. Do not rely on
+Chrome's "proceed anyway" interstitial for voice use; install the local CA
+certificate first so Chrome can load the app without the warning. The generated
+certificate must also include the exact LAN IP typed in Chrome's address bar.
 StrokeGPT tries to discover routed LAN IPs automatically. If Chrome still
 refuses to load the page, set `STROKEGPT_HTTPS_IPS` to the host PC's LAN IP
 before starting:
@@ -55,6 +64,14 @@ $env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; $env:STROKEGPT_HTTPS=
 Use the actual IPv4 address from `ipconfig`, not the example address. The
 server certificate is regenerated at startup, so restarting StrokeGPT with the
 correct `STROKEGPT_HTTPS_IPS` value is enough.
+
+If Firefox loads on the same Android device but Chrome times out, watch the
+StrokeGPT terminal while loading the page in Chrome. A successful request
+prints a `GET /` line. If Chrome produces no request log lines, the failure is
+before the Flask app handles the page; recheck the exact IPv4 URL, clear
+Chrome site data for that IP address, and temporarily disable Android VPN,
+Private DNS, or browser secure-DNS/proxy features that can treat local HTTPS
+traffic differently than Firefox.
 
 ## Security
 

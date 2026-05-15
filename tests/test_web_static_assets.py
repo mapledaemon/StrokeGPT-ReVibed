@@ -43,6 +43,8 @@ class WebStaticAssetTests(WebTestCase):
         try:
             page = response.get_data(as_text=True)
 
+            self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+            self.assertEqual(response.headers.get("Connection"), "close")
             self.assertIn('href="/static/app.css"', page)
             self.assertIn('src="/static/app.js"', page)
             self.assertIn('src="/static/strokegpt-revibed-logo.svg" alt="StrokeGPT-ReVibed"', page)
@@ -142,6 +144,16 @@ class WebStaticAssetTests(WebTestCase):
             self.assertNotIn("<script>", page)
         finally:
             response.close()
+
+    def test_frontend_bootstrap_static_assets_close_connections(self):
+        for path in ("/static/app.css", "/static/app.js"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                try:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.headers.get("Connection"), "close")
+                finally:
+                    response.close()
 
     def test_settings_dialog_contains_system_prompts_visibility_tab(self):
         response = self.client.get("/")

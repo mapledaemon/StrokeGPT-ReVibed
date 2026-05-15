@@ -1,5 +1,9 @@
+import socket
+import tempfile
 import types
 import unittest
+import urllib.request
+from pathlib import Path
 from unittest import mock
 
 from tests._web_support import WebTestCase
@@ -92,7 +96,40 @@ class WebRuntimeStateTests(WebTestCase):
             port=5011,
             debug=False,
             ssl_context=("cert.pem", "key.pem"),
+            threaded=True,
+            use_reloader=False,
         )
+
+    def test_https_trust_helper_serves_public_ca_certificate(self):
+        import strokegpt.web as web
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = Path(tmp) / "strokegpt-lan-ca.crt"
+            cert_path.write_bytes(b"test certificate")
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.bind(("127.0.0.1", 0))
+                helper_port = probe.getsockname()[1]
+
+            with mock.patch.dict("os.environ", {"STROKEGPT_HTTPS_CERT_PORT": str(helper_port)}):
+                helper = web._start_https_trust_helper("127.0.0.1", 5011, cert_path)
+            self.assertIsNotNone(helper)
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{helper.port}/ca.crt", timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.read(), b"test certificate")
+                self.assertEqual(helper.info_url, f"http://127.0.0.1:{helper.port}")
+                self.assertEqual(helper.cert_url, f"http://127.0.0.1:{helper.port}/strokegpt-lan-ca.crt")
+            finally:
+                web._stop_https_trust_helper(helper)
+
+    def test_https_trust_helper_can_be_disabled(self):
+        import strokegpt.web as web
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = Path(tmp) / "strokegpt-lan-ca.crt"
+            cert_path.write_bytes(b"test certificate")
+            with mock.patch.dict("os.environ", {"STROKEGPT_HTTPS_CERT_HELPER": "0"}):
+                self.assertIsNone(web._start_https_trust_helper("127.0.0.1", 5011, cert_path))
 
     def test_startup_browser_flag_is_opt_in(self):
         from strokegpt.web import _env_flag

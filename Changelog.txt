@@ -8,6 +8,26 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #214 - Chrome HTTPS Timeout Follow-Up
+--------------------------------------------------------
+
+Branch: codex/chrome-timeout-https-host
+
+- Built an explicit HTTPS `SSLContext` for generated and custom certificates,
+  advertising HTTP/1.1 over ALPN and requiring at least TLS 1.2 for local LAN
+  browser compatibility.
+- Made Flask startup pass `threaded=True` and `use_reloader=False` explicitly
+  so Chromium's parallel LAN connections cannot depend on Flask defaults.
+- Added Chrome-timeout triage guidance to the LAN HTTPS doc so users can tell
+  whether Chrome reached Flask at all.
+- Added an opt-out HTTP certificate helper alongside generated HTTPS mode so
+  Android Chrome users can download and trust the local CA before opening the
+  HTTPS app URL.
+- Simplified the root and frontend static responses with explicit no-store /
+  connection-close headers so Chrome does not depend on persistent bootstrap
+  connections after a certificate warning path.
+
+
 2026-05-15 - PR #213 - Mobile Chrome HTTPS Certificate Fixes
 ---------------------------------------------------------------
 
