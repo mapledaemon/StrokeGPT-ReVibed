@@ -19,7 +19,10 @@ from .handy import HandyController
 from .llm import LLMService
 from .audio import AudioService
 from .asr import VoiceInputService
-from .diagnostics import diagnostics_latency_payload as build_diagnostics_latency_payload
+from .diagnostics import (
+    diagnostics_latency_payload as build_diagnostics_latency_payload,
+    diagnostics_system_status_payload as build_diagnostics_system_status_payload,
+)
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
@@ -540,6 +543,18 @@ def diagnostics_latency_payload():
         audio=audio,
         diagnostics_dir=DIAGNOSTICS_DIR,
         ollama_status=_ollama_status_payload,
+    )
+
+
+def diagnostics_system_status_payload():
+    return build_diagnostics_system_status_payload(
+        settings=settings,
+        llm=llm,
+        audio=audio,
+        voice_input=voice_input,
+        ollama_status=_ollama_status_payload,
+        app_state=app_state,
+        motion=motion,
     )
 
 

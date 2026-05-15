@@ -196,6 +196,89 @@ export function renderLatencyResults(payload = {}) {
 }
 
 
+export function renderSystemStatus(payload = {}) {
+    const text = payload.text || JSON.stringify(payload, null, 2);
+    state.systemStatusPayload = payload;
+    state.systemStatusText = text;
+    if (el.systemStatusOutput) {
+        el.systemStatusOutput.textContent = text || 'No system status captured.';
+    }
+}
+
+
+export async function copySystemStatusToClipboard() {
+    if (!state.systemStatusText) {
+        await refreshSystemStatus({copyAfter: true});
+        return;
+    }
+    const clipboard = globalThis.navigator?.clipboard;
+    try {
+        if (clipboard && typeof clipboard.writeText === 'function') {
+            await clipboard.writeText(state.systemStatusText);
+        } else if (!legacyCopyText(state.systemStatusText)) {
+            throw new Error('Clipboard copy unavailable');
+        }
+        setStatusMessage(el.systemStatusCopyStatus, 'System status copied to clipboard.', 'success');
+    } catch (error) {
+        if (legacyCopyText(state.systemStatusText)) {
+            setStatusMessage(el.systemStatusCopyStatus, 'System status copied to clipboard.', 'success');
+            return;
+        }
+        setStatusMessage(el.systemStatusCopyStatus, 'System status copy failed. Select the report text and copy it manually.', 'error');
+    }
+}
+
+
+function legacyCopyText(text) {
+    if (typeof D.execCommand !== 'function') return false;
+    const textarea = D.createElement('textarea');
+    textarea.value = String(text ?? '');
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.left = '-1000px';
+    D.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select?.();
+    textarea.setSelectionRange?.(0, textarea.value.length);
+    let copied = false;
+    try {
+        copied = D.execCommand('copy') === true;
+    } catch (error) {
+        copied = false;
+    }
+    if (typeof textarea.remove === 'function') textarea.remove();
+    else if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
+    return copied;
+}
+
+
+export async function refreshSystemStatus({copyAfter = false} = {}) {
+    if (state.systemStatusLoading) return;
+    state.systemStatusLoading = true;
+    setStatusMessage(el.systemStatusCopyStatus, 'Refreshing system status...', 'info');
+    if (el.refreshSystemStatusBtn) el.refreshSystemStatusBtn.disabled = true;
+    if (el.copySystemStatusBtn) el.copySystemStatusBtn.disabled = true;
+    const payload = await apiCall('/diagnostics_system_status');
+    if (!payload) {
+        setStatusMessage(el.systemStatusCopyStatus, 'System status refresh failed.', 'error');
+        if (el.refreshSystemStatusBtn) el.refreshSystemStatusBtn.disabled = false;
+        if (el.copySystemStatusBtn) el.copySystemStatusBtn.disabled = false;
+        state.systemStatusLoading = false;
+        return;
+    }
+    renderSystemStatus(payload);
+    if (el.refreshSystemStatusBtn) el.refreshSystemStatusBtn.disabled = false;
+    if (el.copySystemStatusBtn) el.copySystemStatusBtn.disabled = false;
+    state.systemStatusLoading = false;
+    if (copyAfter) {
+        await copySystemStatusToClipboard();
+        return;
+    }
+    setStatusMessage(el.systemStatusCopyStatus, 'System status refreshed.', 'success');
+}
+
+
 function motionCaptureDownloadName(capture = {}) {
     const run = capture.run || {};
     const pattern = String(run.active_mode || run.backend || 'motion').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -298,6 +381,8 @@ export async function runLatencyDiagnostics() {
 
 
 export function initDiagnosticsControls() {
+    el.refreshSystemStatusBtn?.addEventListener('click', () => refreshSystemStatus());
+    el.copySystemStatusBtn?.addEventListener('click', copySystemStatusToClipboard);
     el.runSetupCheckBtn?.addEventListener('click', runSetupCheck);
     el.runLatencyTestsBtn?.addEventListener('click', runLatencyDiagnostics);
     el.startMotionCaptureBtn?.addEventListener('click', () => runMotionTransportCapture('start'));
