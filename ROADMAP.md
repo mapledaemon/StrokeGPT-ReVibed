@@ -25,13 +25,29 @@ Complexity key (orthogonal to tier):
 - **L**: multiple subsystems or meaningful device testing.
 - **XL**: broad workflow or runtime change; split into staged PRs.
 
+Latest cleanup note:
+
+- The 2026-05-15 audit cleared items that were plainly shipped in
+  `Changelog.txt`, especially placeholder voice-input UI, first streaming chat
+  rendering, fenced-code rendering, copyable diagnostics, Handy connection
+  visibility, and LAN/HTTPS setup docs.
+- Items marked with a Status note are intentionally retained because the
+  changelog or current code shows partial implementation, but real-device,
+  real-microphone, real-mobile-browser, or product-direction confirmation is
+  still missing.
+
 ## Up Next
 
 ### 1. Freestyle Diagnostics And Mode Control Reliability (S/M)
 
-Why next: the diagnostics surface from PR #43 is now in place but the
-on-device Freestyle stop has not been confirmed fixed, and the surrounding
+Why next: the Freestyle and motion diagnostics surfaces are now in place, but
+the on-device Freestyle stop has not been confirmed fixed, and the surrounding
 mode controls still have rough edges that block daily use.
+
+Status note: Partial. Trace/status diagnostics, continuous-motion metadata,
+motion transport capture, sanitized Handy command history, and HSP/HDSP/HAMP
+summary reporting have landed. The remaining work is real-device verification
+and planner/control fixes, not more basic instrumentation.
 
 - Use the PR #42 trace fields and the expanded status/debug diagnostics UI
   during manual Freestyle testing to identify whether stops are planner-side,
@@ -68,6 +84,12 @@ from direct `strokegpt.web` runtime-state bridge writes. The remaining work is
 smaller: preserve the real schema/safety adapters, prevent new compatibility
 bridge usage from creeping back in, and audit any remaining hand-written
 translation layers before the next motion-backend changes.
+
+Status note: Mostly complete as guardrails. The module splits, bridge tests,
+payload guardrails, and adapter documentation have landed. This item remains
+because the external-consumer need for the `strokegpt.web` AppState bridge is
+unclear and future schema translations still need review before they are
+flattened or removed.
 
 Adapter audit findings:
 
@@ -186,19 +208,23 @@ persona prompts stay separable.
 
 ### 5. Chat And Responsive UI Refactor (M)
 
-Why next: the chat panel and its surrounding toolbars/indicators are
-largely unchanged from the pre-fork code, and the recent diagnostics work
-(PR #43) keeps adding compact indicators around a chat surface that was
-not designed for them. The `static/js/motion-control.js` split is now done,
-so chat-shell work can proceed without sharing one oversized frontend module.
-The first slice should keep behavior stable while making the visible app
-scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
+Why next: the chat shell has gained responsive foundations, scrollback
+affordances, top-bar controls, compact motion panels, voice input controls,
+streamed rendering, fenced-code rendering, and several mobile-browser fixes.
+The remaining work is follow-through: keep the visible app stable across
+laptop, desktop, high-DPI, and real phone browsers while preserving
+chat-driven motion behavior.
 
-- Continue the behavior-preserving responsive foundation started in PR #84:
-  shared spacing, control-height, chat-width, and
-  motion-strip tokens; dynamic viewport height; centered chat/input/status
-  surfaces; and a medium-width breakpoint that stacks the motion strip
-  before it crowds the chat input.
+Status note: Partial. The first responsive/chat slices have landed, so this
+entry no longer tracks placeholder voice-input controls, first streaming
+rendering, or first fenced-code rendering as future work. Real Android Chrome
+keyboard/no-keyboard behavior and compact motion/status ergonomics remain
+watch items after recent regressions.
+
+- Continue hardening the behavior-preserving responsive foundation started in
+  PR #84: shared spacing, control-height, chat-width, motion-strip tokens,
+  dynamic viewport height, centered chat/input/status surfaces, and breakpoints
+  that stack controls before they crowd the chat input.
 - Prefer rem/token-based dimensions and explicit min/max constraints over
   fixed-pixel layout assumptions. Do not scale font size with viewport
   width; text should remain readable and controls should remain stable on
@@ -220,14 +246,10 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   should not yank the user away from older content, the local "Latest" jump
   affordance should stay visible and keyboard reachable, and later streaming
   work should reuse the same near-bottom stickiness contract.
-- Reserve visible UI slots for future voice input during the chat refactor:
-  a disabled multi-purpose microphone menu button and a disabled Settings >
-  Voice input provider selector can land before the backend, but they must
-  stay inert, clearly blocked, and visually separated from the existing Voice
-  Output settings until push-to-talk/transcription routes exist.
-- Continue app-shell top-bar work as new controls are added: title,
-  timer/mood chips, profile menu, sidebar toggle, and future voice controls
-  should keep stable grid areas and predictable wrapping.
+- Continue app-shell top-bar work only where real visual review shows
+  regressions. The title, timer/mood chips, profile menu, sidebar toggle, and
+  top-bar voice controls now have stable grid areas, but compact/mobile
+  wrapping still needs watch as controls evolve.
 - Refactor the visible app shell in small stages: top bar, chat scrollback,
   bottom composer, motion/status strip, and right-side controls should each
   have clear layout responsibilities before deeper visual restyling.
@@ -240,20 +262,18 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
   motion sequence log, feedback buttons, mode/timer indicators, and
   Pause/Resume/Stop controls share one consistent layout grammar instead
   of being individually retrofitted around the legacy chat panel.
-- Make message rendering robust to streamed and non-streamed Ollama
-  responses, so the chat-emit path stays in lockstep with the TTS-enqueue
-  path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes Missing While
-  Voice Plays"). The first real-time rendering slice streams the `chat`
-  field out of Ollama's JSON response and keeps motion/TTS side effects
-  behind final JSON validation; continue validating repair-path replacement,
-  slow-model behavior, and browser fallback behavior before changing the
-  chat/motion contract further.
+- Validate streamed and non-streamed Ollama rendering now that the first
+  streaming slice exists. The chat-emit path still needs to stay in lockstep
+  with the TTS-enqueue path (see KNOWN_PROBLEMS "Local LLM Chat Text Sometimes
+  Missing While Voice Plays"), especially when motion repair replaces streamed
+  draft text, slow models delay final JSON validation, or a browser falls back
+  to the non-streaming path.
 - Continue investigating provider-specific or rapid-mode TTS cutoffs after the
   local Chatterbox WAV encoder's trailing silence cushion has been validated
   during real playback.
-- Keep markdown/code rendering opt-in and predictable after the first fenced
-  code-block slice; do not regress copy/paste, scrollback, or screen-reader
-  behavior while restyling.
+- Preserve the fenced-code rendering and copy action while restyling; do not
+  regress literal markdown text, copy/paste, scrollback, or screen-reader
+  behavior.
 - Preserve the existing chat-driven motion contract (chat-driven
   Pause/Resume, chat edge-blocking, motion-target language) while moving
   the visible surface into the new layout.
@@ -265,6 +285,11 @@ scale cleanly across laptop, desktop, high-DPI, and phone-sized screens.
 Why later: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable, but should follow the code reorg so it
 can land cleanly inside the new motion blueprints/modules.
+
+Status note: Partial. Backend soft-anchor programs landed earlier, including
+LLM-facing waypoint semantics and compiler behavior. This item is specifically
+for visible authoring, preview, saved soft-anchor patterns, and editing
+controls that do not exist yet.
 
 - Add a soft-anchor editor where users can arrange 2-6 targets such as
   tip, upper, shaft/middle, lower, and base.
@@ -364,6 +389,12 @@ a clean tree first.
 Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
 
+Status note: Partial. Motion Pattern Studio, funscript import/crop preview,
+freehand drawing, smoothing/harshening, tempo/duration controls, range remap,
+and Save As New Pattern have landed. Remaining work is deeper editing:
+direct point manipulation, undo/redo history, unimplemented transforms, and
+multi-pattern sequencing.
+
 - Add point dragging on the motion graph with snap/undo and validation
   before playback.
 - Add transform history with per-step undo/redo.
@@ -402,17 +433,18 @@ cleanup, and the persona naming audit.
 ### 10. Runtime And Setup Diagnostics (M)
 
 Why later: the Settings > Diagnostics tab now covers setup checks and basic
-latency probes, but the remaining runtime diagnostics should still avoid
-turning the compact status UI into a setup console.
+latency probes, copyable system/app status, motion transport capture, Ollama
+GPU preflight, and a visible Handy connection panel. The remaining runtime
+diagnostics should still avoid turning the compact status UI into a setup
+console.
 
-- Extend the diagnostics tab only where the information changes user action:
-  selected-model install/GPU state, local voice model state, Torch/CUDA status,
-  Handy key presence, active port, current motion backend, and measured
-  Ollama/voice latency should stay grouped there instead of spreading into
-  Model, Voice, or the sidebar.
-- Add a visible Handy connection indicator and reconnect button below the
-  sidebar visualizer, using the same connection state as diagnostics
-  rather than a separate hidden device path.
+Status note: Partial. The broad Diagnostics tab/status/reporting work is
+mostly shipped. Retained items below are either not implemented, still need
+manual browser/device smoke, or are guardrails for future diagnostics changes.
+
+- Keep future diagnostics additions in Settings > Diagnostics when the
+  information changes user action; avoid spreading setup/debug reports back
+  into Model, Voice, Motion, or the sidebar unless they are primary controls.
 - Add device-profile controls for Handy 1 versus Handy 2 speed-limit behavior,
   and only expose Handy 2 Pro overclock options if current documentation
   supports a clear warning, limit, and fallback path.
@@ -425,9 +457,10 @@ turning the compact status UI into a setup console.
   chat, or toast feedback. Extend the shared status-tone helper if the failure
   model needs new severity states; do not mechanically add handler-specific
   color writes if they produce duplicate or conflicting messages.
-- Tighten spacing in the right-side/collapsible UI, settings panels, and
-  compact control rows so new diagnostics, reconnect, pause/resume, and
-  mode buttons fit without adding unnecessary boundaries or dead space.
+- Continue tightening spacing in the right-side/collapsible UI, settings
+  panels, and compact control rows only when visual review or user reports show
+  a regression; several spacing fixes have landed, but compact layouts remain
+  easy to break.
 - Add a test button beside initial-setup and Settings min/max speed sliders
   that moves the device at the selected speed over the configured safe range
   for a short, bounded duration.
@@ -458,8 +491,6 @@ turning the compact status UI into a setup console.
 - Track noisy third-party deprecation warnings, such as the diffusers LoRA to
   PEFT warning, only when they are user-visible or indicate a future breakage
   risk. Do not add new dependencies just to silence a warning.
-- Keep optional model downloads as explicit UI actions with visible
-  status.
 
 ## Backlog
 
@@ -545,6 +576,12 @@ work is reliability and ergonomics: validate real defaults, simplify the
 routine UI, and keep voice control flowing through the existing chat, motion,
 and stop safety paths.
 
+Status note: Partial. Flexible voice input, faster-whisper, optional NVIDIA
+Parakeet, microphone selection, LAN/HTTPS microphone guidance, diagnostics,
+confidence gates, and collapsed advanced controls have landed. Real microphone
+testing is still unclear, so this item stays focused on proving defaults and
+pruning routine controls rather than adding more knobs.
+
 - Verify push-to-talk and hands-free recognition with real microphones on a
   slow Windows laptop and a faster desktop, including empty/noisy clips,
   short commands, and longer natural-language movement requests.
@@ -586,18 +623,17 @@ and stop safety paths.
   language, and submit-mode controls directly or keep those in Settings >
   Voice once real hands-free testing shows which controls users need during
   operation.
-- Keep ASR provider work in this order:
-  1. Measure the tuned faster-whisper baseline and the optional NVIDIA
-     Parakeet provider with the same real microphone clips. Faster-whisper
-     remains the default CPU/portable path; Parakeet is the GPU-focused
-     comparison path behind the provider toggle and optional NeMo install.
-  2. Use those measurements to decide whether routine users need a simpler
-     provider recommendation, not more visible ASR knobs.
-  3. Defer whisperX to long-form audio import or funscript-alignment work.
-     Its word alignment, diarization, and batching strengths do not pay for
-     short live voice commands.
-  4. Defer whisper.cpp to packaged Windows launcher work, where a small
-     external runtime may matter more than Python ML dependency reuse.
+- Compare the tuned faster-whisper baseline and the optional NVIDIA Parakeet
+  provider with the same real microphone clips. Faster-whisper remains the
+  CPU/portable path; Parakeet is the GPU-focused comparison path behind the
+  provider toggle and optional isolated NeMo install. Use those measurements
+  to decide whether routine users need a simpler provider recommendation, not
+  more visible ASR knobs.
+- Defer whisperX to long-form audio import or funscript-alignment work. Its
+  word alignment, diarization, and batching strengths do not pay for short
+  live voice commands.
+- Defer whisper.cpp to packaged Windows launcher work, where a small external
+  runtime may matter more than Python ML dependency reuse.
 - Keep streaming/chunked upload as a later phase after the tuned baseline and
   provider abstraction decisions land.
   It has a larger state/concurrency surface than the quick latency wins and
@@ -676,8 +712,10 @@ runtime shows a clear app-level benefit.
   and recovery after failed requests.
 - Consider a packaged Windows launcher only after runtime diagnostics,
   model downloads, voice setup, and device state handling are stable.
-- Rework phone-scale control only after the local app is stable, either
-  as a LAN-hosted mobile layout or a native Android application.
+- Continue phone-scale control only after the local/LAN mobile layout is
+  stable in real mobile browsers. The LAN-hosted mobile layout is partial; a
+  native Android application remains a later alternative if browser ergonomics
+  keep blocking normal use.
 - Review Android-side local ML options, such as XTTS-v2, Gemini Nano on
   Pixel devices, and open-source PAIOS-style apps, only after the desktop
   voice and motion flows are reliable enough to port.
