@@ -28,7 +28,8 @@
                 <div id="mood-display">Mood: ...</div>
             </div>
             <div class="top-bar-actions">
-                <button id="top-bar-voice-toggle-btn" class="my-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>
+                <button id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>
+                <button id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>
                 <div id="profile-menu" class="profile-menu">
                     <button id="profile-menu-btn" class="profile-menu-button" type="button" title="Open profile menu" aria-label="Open profile menu" aria-haspopup="menu" aria-expanded="false">
                         <img id="profile-menu-pfp" src="/static/default-pfp.png" alt="">
@@ -414,7 +415,7 @@
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-freestyle-checkbox" checked> Allow LLM to edge in freestyle</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-mode-actions-chat-checkbox" data-requires-backend> Allow typed chat to request mode actions</label>
-                    <div class="settings-help">Mode actions let the model request Freestyle, Edge, Milk, Legacy Auto, Stop, or I'm Close through guarded controls.</div>
+                    <div class="settings-help">Mode actions let the model request Freestyle, Edge, Milk, Legacy Auto, Stop, or I'm Close through guarded controls. Use the top-bar Autospeak button to let the model choose how soon it should be prompted to talk again while a mode is running.</div>
                     <button id="save-llm-edge-permissions-btn" class="my-button" data-requires-backend>Save LLM Permissions</button>
                     <div id="llm-edge-permissions-status" class="settings-help">LLM permissions not saved yet.</div>
                 </div>

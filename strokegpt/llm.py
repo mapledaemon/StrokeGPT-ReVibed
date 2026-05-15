@@ -408,13 +408,15 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
         prompt = f"""
 Choose the next StrokeGPT-ReVibed background-mode action.
 Return JSON only:
-{{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <10-180>, "intensity": <0-100>, "chat": "<short line|null>"}}
+{{"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>", "duration_seconds": <10-180>, "intensity": <0-100>, "autospeak_seconds": <0-300|null>, "chat": "<short line|null>"}}
 
 Rules:
 - A `start` event begins or continues the mode. Never return `stop` on `start`.
+- An `autospeak` event is only for keeping the conversation alive. Usually return `action: "continue"`, no motion change, and one short in-character `chat` line if you have something worth saying.
 - Mode starts should most often begin base-through-mid or mid-base, then extend toward tip/full travel later. Avoid tip-only starts unless the user requested tip focus.
 - `milking` and `freestyle` are continuous; they run until the user stops them, changes mode, or a later non-start decision deliberately returns `stop`.
 - `duration_seconds` times temporary holds, pullbacks, intensity changes, and edge reactions. It is not a countdown to finish a continuous mode.
+- When Autospeak is enabled, choose `autospeak_seconds` as the number of seconds before the app asks you for another background chat line. Use 0-5 for nearly continuous talk, 5-20 for very active, 20-45 for talkative, 45-120 for normal, and 120-300 for quiet. Use null to keep the current cadence. When Autospeak is off, this field is ignored.
 - Avoid very short durations. Use 20-90 seconds for normal holds/reactions and 10-20 seconds only for deliberately brief reactions.
 - Choose `intensity` 0-100 while respecting configured speed range `{speed_min}-{speed_max}`; the app clamps output.
 - Use `switch_to_milk` only from `edging`, or from `freestyle` when an I'm Close signal should become milk-style motion.
@@ -432,17 +434,25 @@ State:
 - current_range: {current_target.get("stroke_range")}
 - current_mood: {context.get("current_mood")}
 - motion_style: {_motion_style_instruction(context.get("motion_style"))}
+- autospeak_enabled: {bool(context.get("autospeak_enabled"))}
 - edging_elapsed_time: {context.get("edging_elapsed_time")}
 """
+        if event == "autospeak":
+            request_text = (
+                "Autospeak is due. Return one short in-character line if useful, "
+                "choose the next autospeak_seconds cadence, and return only the JSON object."
+            )
+        else:
+            request_text = (
+                "Choose the next bounded mode decision now. "
+                "Return only the JSON object."
+            )
         messages = [
             {"role": "system", "content": prompt},
             *list(chat_history)[-8:],
             {
                 "role": "user",
-                "content": (
-                    "Choose the next bounded mode decision now. "
-                    "Return only the JSON object."
-                ),
+                "content": request_text,
             },
         ]
         return self._talk_to_llm(messages, temperature=0.2)

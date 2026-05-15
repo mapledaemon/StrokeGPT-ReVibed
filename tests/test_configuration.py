@@ -85,6 +85,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["allow_llm_edge_in_freestyle"])
         self.assertTrue(saved["allow_llm_edge_in_chat"])
         self.assertFalse(saved["allow_llm_mode_actions_in_chat"])
+        self.assertFalse(saved["autospeak_enabled"])
         self.assertTrue(saved["voice_input_noise_suppression"])
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
@@ -160,6 +161,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.allow_llm_edge_in_freestyle)
         self.assertTrue(settings.allow_llm_edge_in_chat)
         self.assertFalse(settings.allow_llm_mode_actions_in_chat)
+        self.assertFalse(settings.autospeak_enabled)
         self.assertTrue(settings.voice_input_noise_suppression)
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
@@ -229,6 +231,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "allow_llm_edge_in_freestyle": False,
             "allow_llm_edge_in_chat": False,
             "allow_llm_mode_actions_in_chat": True,
+            "autospeak_enabled": "yes",
         }))
         settings = SettingsManager("settings.json")
         settings.file_path = fake_path
@@ -239,9 +242,11 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.allow_llm_edge_in_freestyle)
         self.assertFalse(settings.allow_llm_edge_in_chat)
         self.assertTrue(settings.allow_llm_mode_actions_in_chat)
+        self.assertTrue(settings.autospeak_enabled)
         self.assertFalse(saved["allow_llm_edge_in_freestyle"])
         self.assertFalse(saved["allow_llm_edge_in_chat"])
         self.assertTrue(saved["allow_llm_mode_actions_in_chat"])
+        self.assertTrue(saved["autospeak_enabled"])
 
     def test_motion_style_setting_is_normalized(self):
         fake_path = FakePath(json.dumps({"motion_style": "high-variation"}))
@@ -682,6 +687,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(captured["temperature"], 0.2)
         self.assertIn('"action": "<continue|hold_then_resume|pull_back|switch_to_milk|stop>"', prompt)
         self.assertIn("duration_seconds", prompt)
+        self.assertIn("autospeak_seconds", prompt)
+        self.assertIn("<0-300|null>", prompt)
+        self.assertIn("0-5 for nearly continuous talk", prompt)
         self.assertIn("10-180", prompt)
         self.assertIn("Avoid very short durations", prompt)
         self.assertIn("20-90 seconds", prompt)
@@ -696,6 +704,33 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("mode: edging", prompt)
         self.assertIn("event: close_signal", prompt)
         self.assertIn("edge_count: 2", prompt)
+
+    def test_mode_decision_prompt_includes_autospeak_event_guidance(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+        captured = {}
+
+        def fake_talk(messages, temperature=0.3):
+            captured["messages"] = messages
+            return {
+                "action": "continue",
+                "autospeak_seconds": 0,
+                "chat": "Still with you.",
+            }
+
+        service._talk_to_llm = fake_talk
+        response = service.get_mode_decision(
+            [],
+            {"autospeak_enabled": True},
+            mode="freestyle",
+            event="autospeak",
+        )
+
+        prompt = captured["messages"][0]["content"]
+        user_message = captured["messages"][-1]["content"]
+        self.assertEqual(response["autospeak_seconds"], 0)
+        self.assertIn("autospeak_enabled: True", prompt)
+        self.assertIn("An `autospeak` event is only for keeping the conversation alive", prompt)
+        self.assertIn("Autospeak is due", user_message)
 
     def test_freestyle_mode_decision_prompt_honors_edge_permission(self):
         service = LLMService(url="http://localhost:11434/api/chat")

@@ -81,6 +81,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "freestyle-mode-btn",
             "emergency-stop-all-btn",
             "top-bar-voice-toggle-btn",
+            "top-bar-autospeak-toggle-btn",
             "audio-provider-select",
             "enable-audio-checkbox",
             "set-elevenlabs-key-button",
