@@ -454,7 +454,7 @@ class WebSettingsRouteTests(WebTestCase):
         self.assertIn("motion_patterns", data)
 
     def test_llm_edge_permissions_can_be_selected_and_saved(self):
-        from strokegpt.web import settings
+        from strokegpt.web import app_state, settings
 
         original = (
             settings.allow_llm_edge_in_freestyle,
@@ -462,8 +462,12 @@ class WebSettingsRouteTests(WebTestCase):
             settings.autospeak_enabled,
             settings.autospeak_min_seconds,
             settings.autospeak_max_seconds,
+            app_state.autospeak_wake_requested,
         )
         try:
+            settings.autospeak_enabled = False
+            app_state.autospeak_wake_requested = False
+            app_state.mode_message_event.clear()
             with mock.patch.object(settings, "save"):
                 response = self.client.post("/set_llm_edge_permissions", json={
                     "allow_llm_edge_in_freestyle": False,
@@ -486,6 +490,8 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(settings.autospeak_min_seconds, 2.0)
             self.assertEqual(settings.autospeak_max_seconds, 8.0)
             self.assertIn("motion_preferences", data)
+            self.assertTrue(app_state.autospeak_wake_requested)
+            self.assertTrue(app_state.mode_message_event.is_set())
 
             response = self.client.get("/check_settings")
             payload = response.get_json()
@@ -501,7 +507,9 @@ class WebSettingsRouteTests(WebTestCase):
                 settings.autospeak_enabled,
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
+                app_state.autospeak_wake_requested,
             ) = original
+            app_state.mode_message_event.clear()
 
     def test_diagnostics_levels_can_be_selected_and_saved(self):
         from strokegpt.web import settings

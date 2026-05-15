@@ -398,6 +398,11 @@ def set_motion_reverse_direction_route():
 def set_llm_edge_permissions_route():
     web = _web()
     data = web._request_json()
+    previous_autospeak_enabled = web.settings.autospeak_enabled
+    previous_autospeak_range = (
+        web.settings.autospeak_min_seconds,
+        web.settings.autospeak_max_seconds,
+    )
     web.settings.allow_llm_edge_in_freestyle = web._request_bool_value(
         data,
         "allow_llm_edge_in_freestyle",
@@ -424,6 +429,16 @@ def set_llm_edge_permissions_route():
             data.get("autospeak_max_seconds", web.settings.autospeak_max_seconds),
         )
     )
+    autospeak_range_changed = previous_autospeak_range != (
+        web.settings.autospeak_min_seconds,
+        web.settings.autospeak_max_seconds,
+    )
+    if web.settings.autospeak_enabled and (
+        not previous_autospeak_enabled or autospeak_range_changed
+    ):
+        with web.app_state.lock:
+            web.app_state.autospeak_wake_requested = True
+        web.app_state.mode_message_event.set()
     web.settings.save()
     return jsonify({
         "status": "success",
