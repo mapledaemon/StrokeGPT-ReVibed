@@ -931,6 +931,8 @@ def sample_continuous_motion(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
     elapsed_seconds: float,
+    *,
+    reverse_phase: bool = False,
 ) -> MotionSample:
     """Sample the plan at ``elapsed_seconds`` into controller output.
 
@@ -958,9 +960,15 @@ def sample_continuous_motion(
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
     effective_duration_seconds = duration_seconds / tempo_scale
-    phase = (elapsed / effective_duration_seconds) % 1.0
+    raw_phase = (elapsed / effective_duration_seconds) % 1.0
+    phase = (1.0 - raw_phase) % 1.0 if reverse_phase else raw_phase
     pos = _sample_action_position(plan.actions, phase)
-    next_phase = (phase + SAMPLE_DERIVATIVE_DT_SECONDS / effective_duration_seconds) % 1.0
+    derivative_phase_delta = SAMPLE_DERIVATIVE_DT_SECONDS / effective_duration_seconds
+    next_phase = (
+        (phase - derivative_phase_delta) % 1.0
+        if reverse_phase
+        else (phase + derivative_phase_delta) % 1.0
+    )
     next_pos = _sample_action_position(plan.actions, next_phase)
     position_per_second = abs(next_pos - pos) / SAMPLE_DERIVATIVE_DT_SECONDS
     base_label = str(target.label or plan.name or "pattern").strip()
@@ -990,13 +998,15 @@ def continuous_plan_timed_points(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
     target_interval_seconds: float = 0.12,
+    *,
+    reverse_phase: bool = False,
 ) -> tuple[TimedMotionPoint, ...]:
     """Project a continuous plan into one cycle of timed transport points."""
 
     if plan is None:
         return ()
     target = target.clamped()
-    initial_sample = sample_continuous_motion(plan, target, 0.0)
+    initial_sample = sample_continuous_motion(plan, target, 0.0, reverse_phase=reverse_phase)
     effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
     phase_points = continuous_plan_timed_phase_points(
         plan,
@@ -1011,7 +1021,7 @@ def continuous_plan_timed_points(
     for point in phase_points:
         phase = max(0.0, min(1.0, float(point.get("phase", 0.0))))
         at_seconds = phase * effective_duration_seconds
-        sample = sample_continuous_motion(plan, target, at_seconds)
+        sample = sample_continuous_motion(plan, target, at_seconds, reverse_phase=reverse_phase)
         interval_seconds = 0.0 if previous_at is None else max(0.001, at_seconds - previous_at)
         timed.append(
             TimedMotionPoint(
@@ -1037,6 +1047,7 @@ def continuous_plan_timed_frames(
     *,
     base_step_seconds: float = 0.25,
     target_interval_seconds: float = 0.12,
+    reverse_phase: bool = False,
 ) -> list[PatternFrame]:
     """Convert the shared timed point schema into Flexible Position frames."""
 
@@ -1044,6 +1055,7 @@ def continuous_plan_timed_frames(
         plan,
         target,
         target_interval_seconds=target_interval_seconds,
+        reverse_phase=reverse_phase,
     )
     if not timed_points:
         return []
@@ -1064,10 +1076,12 @@ def sample_continuous_plan(
     plan: ContinuousMotionPlan,
     target: MotionTarget,
     elapsed_seconds: float,
+    *,
+    reverse_phase: bool = False,
 ) -> MotionTarget:
     """Compatibility projection for callers that only need a target."""
 
-    return sample_continuous_motion(plan, target, elapsed_seconds).target
+    return sample_continuous_motion(plan, target, elapsed_seconds, reverse_phase=reverse_phase).target
 
 
 def _blend_from_current(

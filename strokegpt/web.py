@@ -683,6 +683,7 @@ def _motion_transport_run_settings():
         "min_depth": settings.min_depth,
         "max_depth": settings.max_depth,
         "motion_style": settings.motion_style,
+        "motion_reverse_direction": settings.motion_reverse_direction,
         "active_mode": app_state.active_mode_name,
     }
 
@@ -892,6 +893,7 @@ def apply_settings_to_services():
     handy.set_handy_api_key(settings.handy_api_v3_key)
     handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
     motion.set_backend(settings.motion_backend)
+    motion.set_reverse_direction(settings.motion_reverse_direction)
     llm.set_model(settings.ollama_model)
     llm.set_thinking_enabled(settings.ollama_thinking_enabled)
     llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
@@ -1414,6 +1416,7 @@ def get_current_context():
         'llm_prompt_mode': settings.llm_prompt_mode,
         'motion_preferences': _motion_preference_payload()["prompt"],
         'motion_style': settings.motion_style,
+        'motion_reverse_direction': settings.motion_reverse_direction,
         'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,
         'last_depth_pos': handy.last_depth_pos, 'last_stroke_range': handy.last_stroke_range,
         'min_speed': settings.min_speed, 'max_speed': settings.max_speed,

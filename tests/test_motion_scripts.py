@@ -362,6 +362,18 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(round(slow.intent_speed), 20)
         self.assertEqual(round(fast.intent_speed), 80)
 
+    def test_sample_continuous_motion_can_reverse_phase(self):
+        plan = continuous_motion_plan("ramp")
+        target = MotionTarget(50, 50, 80, "ramp")
+        elapsed = plan.duration_seconds * 0.22
+        duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
+
+        reversed_sample = sample_continuous_motion(plan, target, elapsed, reverse_phase=True)
+        expected = sample_continuous_motion(plan, target, duration - elapsed)
+
+        self.assertAlmostEqual(reversed_sample.phase, expected.phase, places=4)
+        self.assertAlmostEqual(reversed_sample.target.depth, expected.target.depth, places=3)
+
     def test_sample_continuous_plan_keeps_base_speed_on_flat_segments(self):
         # A symmetric pattern like ``hold`` spends a meaningful fraction
         # of its cycle near the flat region. Those samples must keep

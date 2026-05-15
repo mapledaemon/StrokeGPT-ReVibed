@@ -131,13 +131,13 @@ def anchors_from_text(text: str, *, max_anchors: int = 6) -> tuple[MotionAnchor,
 
 def default_anchor_items(zone: Optional[str] = None, length: Optional[str] = None) -> tuple[str, ...]:
     if zone == "tip":
-        return ("tip", "upper", "tip", "middle")
+        return ("tip", "upper", "lower", "upper")
     if zone == "base":
-        return ("middle", "base", "lower", "base")
+        return ("upper", "base", "lower", "base")
     if zone == "upper":
-        return ("tip", "upper", "middle", "upper")
+        return ("tip", "upper", "lower", "upper")
     if zone == "middle":
-        return ("upper", "shaft", "lower", "shaft")
+        return ("tip", "shaft", "base", "shaft")
     if zone == "full" or length == "full":
         return ("tip", "shaft", "base", "shaft")
     return ("upper", "shaft", "lower", "shaft")

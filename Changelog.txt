@@ -8,6 +8,29 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #219 - Improve Continuous HSP Pattern Reliability
+------------------------------------------------------------------
+
+Branch: codex-motion-stop-pattern-review
+
+- Lowered Continuous HSP point spacing so fast built-in patterns preserve more
+  of their authored shape instead of being over-thinned before transport.
+- Restored a bounded active-stream replacement lead based on recent HSP command
+  latency so flushed pattern swaps are not scheduled exactly at the estimated
+  current device clock.
+- Broadened default regional motion targets and anchor-loop waypoints so
+  ordinary tip, shaft, and base requests use more of the calibrated range
+  unless the request explicitly asks for tight, tiny, flick, flutter, or hold
+  behavior.
+- Updated the default and legacy motion prompts to prefer broad regional
+  `anchor_loop` movement over narrow `tease` / `pulse` examples, and tightened
+  the chat-voice guidance so motion adjustments are not narrated as settings,
+  parameters, or device behavior.
+- Added a persisted Motion Direction setting that flips the continuous pattern
+  phase so sampled pattern motion can run in reverse without changing speed,
+  range, or stop handling.
+
+
 2026-05-15 - PR #217 - Roadmap Completion Audit
 ------------------------------------------------
 
