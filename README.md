@@ -1,26 +1,21 @@
 # StrokeGPT-ReVibed
 
-Local Flask web app for controlling The Handy with a local LLM (Ollama) and
-optional voice. Natural-language motion is filtered through a deterministic
-safety layer before it reaches the device, so configured speed limits and
-the explicit Stop button always interrupt motion regardless of what the
-model said.
+Local Flask web app for controlling The Handy with a local Ollama model,
+deterministic motion guardrails, and optional voice input/output.
 
 ## What it does
 
-- **Natural-language control.** Type "slow tip teasing" or "milk me" and
-  the local LLM picks a pattern and parameters within your saved limits.
-- **Adaptive Freestyle** plus named motion patterns (`flick`, `flutter`,
-  `pulse`, `wave`, `ramp`, `ladder`, `surge`, `sway`, `tease`) and
-  soft-anchor loops between *tip*, *shaft*, and *base*.
-- **Deterministic safety layer.** Configured speed limits and the explicit
-  Stop button always interrupt motion regardless of what the model said.
-- **Motion Pattern Studio.** Import funscript files, draw patterns, crop,
-  edit, preview, and save.
-- **Optional voice.** ElevenLabs or local Chatterbox for TTS; Parakeet or
-  faster-whisper for voice input.
-- **Single-operator local app.** One trusted local browser session, one
-  Handy. No cloud, no account.
+- **Natural-language Handy control** through a local Ollama model.
+- **Adaptive Freestyle, preset modes, named patterns, and soft-anchor loops**
+  between *tip*, *shaft*, and *base*.
+- **Deterministic motion safety** for speed limits, smoothing, and stop
+  behavior before commands reach hardware.
+- **Motion Pattern Studio** for funscript import, drawing, crop/edit,
+  preview, and save.
+- **Optional voice** with ElevenLabs or local Chatterbox for output, plus
+  Parakeet or faster-whisper for input.
+- **Single-operator local app:** one trusted browser session, one Handy, no
+  hosted account.
 
 ## Status
 
@@ -64,12 +59,10 @@ is restored.
 The bootstrap script:
 
 - Downloads StrokeGPT-ReVibed to `Documents\StrokeGPT-ReVibed`.
-- Installs Git for Windows when missing so future updates work.
-- Runs `scripts\install_windows.ps1`, which creates `.venv`, installs
-  Python 3.11 when missing, installs app dependencies, optionally installs
-  Ollama, offers to pull one of the default Ollama models with live
-  progress, and optionally installs CUDA-enabled PyTorch and the isolated
-  NVIDIA Parakeet runtime.
+- Installs Git for Windows when missing.
+- Creates `.venv` and installs app dependencies.
+- Offers Python 3.11, Ollama, a default Ollama model, CUDA-enabled
+  PyTorch, and the isolated NVIDIA Parakeet runtime when useful.
 
 After install, double-click **`Run StrokeGPT-ReVibed.cmd`** in the install
 folder to start the app — it launches the venv and opens the browser once
@@ -135,39 +128,62 @@ one Flask process, one Handy. Multiple tabs share queues and device state,
 so keep one active tab while controlling hardware. The browser warns when
 it sees another recent tab.
 
+## Use from another device on LAN
+
+StrokeGPT binds to localhost by default. To open it from a phone, tablet,
+or another computer on the same trusted home LAN, start the app on the host
+PC with an all-interfaces host and a known port.
+
+Windows PowerShell:
+
+```powershell
+$env:STROKEGPT_HOST="0.0.0.0"; $env:STROKEGPT_PORT="5011"; .\.venv\Scripts\python.exe app.py
+```
+
+macOS / Linux:
+
+```bash
+STROKEGPT_HOST=0.0.0.0 STROKEGPT_PORT=5011 python app.py
+```
+
+Then open `http://<PC-LAN-IP>:5011` on the other device. Find the host
+PC's address with `ipconfig` on Windows or `ip addr` / `ifconfig` on
+macOS and Linux. If the page does not load, allow Python through the OS
+firewall for private/local networks and make sure both devices are on the
+same LAN.
+
+The terminal may still print a local `127.0.0.1` URL; that URL is only for
+the host PC. Other devices need the host PC's LAN IP address.
+
+Do not port-forward StrokeGPT or expose it to the public internet. The app
+has no login wall or per-user session isolation and is built for one
+trusted active operator.
+
+Mobile browser microphone input requires HTTPS or `localhost`. Chat,
+buttons, and Handy controls can work over plain HTTP on LAN, but mobile
+voice recording may be blocked unless you use HTTPS through a local
+reverse proxy/tunnel or run the browser on the same machine as Flask.
+
 ## Settings tour
 
 Everything is in **Profile menu > Settings**. Tabs:
 
-- **Persona** — AI persona prompt and display name.
-- **Model** — pick, download, add, or delete Ollama model options; switch
-  the active model; see install state, sizes, and GPU/VRAM status.
-- **Voice** — ElevenLabs or local Chatterbox TTS, voice samples,
-  Torch/CUDA status, and voice-input provider selection. See
-  [docs/voice_input.md](docs/voice_input.md) for Parakeet vs
-  faster-whisper details and the optional hands-free / typed-chat
-  mode-action toggles.
-- **Device** — Handy key, firmware v3/v4 path, stroke range, range test.
-  Firmware v4 HSP continuous streaming uses the public Handy API v3
-  Application ID the app ships; advanced users can override it here.
-- **Motion** — speed limits, motion backend (Continuous position is the
-  default; HAMP remains a legacy fallback), Auto/Edge/Milk timings, motion
-  pattern enable/disable, weights, import/export, thumbs feedback.
-- **Diagnostics** — setup checks, runtime latency tests, diagnostics
-  verbosity, and motion transport capture for real-device sessions.
-- **Advanced** — **Reset All Settings** clears the saved settings file,
-  stops motion, and returns to setup.
-
-The motion connector accepts direct numeric moves, named cues (`tip`,
-`shaft`, `base`, `full`, `flick`, `flutter`, `pulse`, `wave`, `ramp`,
-`ladder`, `surge`, `sway`, `tease`), any enabled fixed pattern id, and
-soft-anchor loops with 2–6 anchors. All cues route through the
-deterministic motion layer so configured speed limits, smoothing, and
-stop behavior are preserved.
-
-Thumbs up raises a fixed pattern's weight, thumbs down lowers it; three
-thumbs down auto-disables it. Disabled or zero-weight patterns stay
-visible in Motion settings so you can re-enable them.
+- **Persona** - AI persona prompt and display name.
+- **Model** - active Ollama model, editable model list, install state,
+  sizes, thinking toggle, and GPU/VRAM status.
+- **Voice** - TTS provider, voice samples, Torch/CUDA status, microphone
+  selection, and ASR provider. See [docs/voice_input.md](docs/voice_input.md)
+  for Parakeet/faster-whisper setup and mode-action toggles.
+- **Device** - Handy key, firmware v3/v4 path, stroke range, and range
+  test.
+- **Motion** - speed limits, backend, preset timing, pattern weights,
+  import/export, and thumbs feedback.
+- **Prompts** - read-only view of the system prompts sent to the local
+  model.
+- **Diagnostics** - setup checks, runtime latency tests, system/app status,
+  and motion transport capture for real-device sessions.
+- **Advanced** - **Reset All Settings** stops motion, clears saved settings,
+  and returns to setup.
 
 ## Update an existing install
 
@@ -198,14 +214,13 @@ The Windows installer offers four default Ollama models:
 | `huihui_ai/granite4.1-abliterated:8b` | 5.3 GB |
 | `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` | 6.3 GB |
 
-Model size is only the model file size; context and runtime overhead need
-more. If a model is close to or above GPU VRAM, Ollama may partially run
-it in system memory and chat slows down.
+Model size is only the file size; context and runtime overhead need more.
+If a model is close to or above GPU VRAM, Ollama may spill to system
+memory and chat slows down.
 
-Apple Silicon and NVIDIA use their usual Ollama GPU backends. **AMD,
-Intel, or other non-default GPU paths:** see
-[docs/ollama_gpu.md](docs/ollama_gpu.md) for Vulkan flags, multi-GPU
-selection, and VRAM detection notes.
+Apple Silicon and NVIDIA use their usual Ollama GPU backends. See
+[docs/ollama_gpu.md](docs/ollama_gpu.md) for AMD/Intel/Vulkan,
+multi-GPU, and VRAM detection notes.
 
 For fast local Chatterbox TTS on NVIDIA, the Windows installer can install
 CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
@@ -215,6 +230,11 @@ CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
 
 - **Port 5000 in use** — the app picks the next free local port
   automatically. Watch the terminal for the actual URL.
+- **LAN page does not load** - start with `STROKEGPT_HOST=0.0.0.0`, use
+  the host PC's IPv4 address, allow Python through the firewall for
+  private networks, and keep both devices on the same LAN.
+- **Voice input fails on mobile LAN** - mobile browsers usually require
+  HTTPS or `localhost` before allowing microphone capture.
 - **Ollama download fails inside the app** — make sure Ollama is running,
   then pull manually:
 

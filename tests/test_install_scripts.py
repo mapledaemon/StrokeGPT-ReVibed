@@ -96,6 +96,16 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap', readme)
         self.assertIn('no admin needed', readme)
 
+    def test_readme_documents_lan_access(self):
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("## Use from another device on LAN", readme)
+        self.assertIn("STROKEGPT_HOST=\"0.0.0.0\"", readme)
+        self.assertIn("STROKEGPT_PORT=\"5011\"", readme)
+        self.assertIn("http://<PC-LAN-IP>:5011", readme)
+        self.assertIn("Do not port-forward StrokeGPT", readme)
+        self.assertIn("Mobile browser microphone input requires HTTPS or `localhost`", readme)
+
     def test_parakeet_installer_defaults_to_blackwell_capable_pytorch_wheels(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")
 
