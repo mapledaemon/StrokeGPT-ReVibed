@@ -472,6 +472,15 @@
             </div>
             <div id="settings-tab-diagnostics" class="settings-panel">
                 <div class="settings-subsection diagnostics-panel">
+                    <h4>System Specifications</h4>
+                    <div class="diagnostics-actions">
+                        <button id="refresh-system-status-btn" class="my-button" data-requires-backend>Refresh Status</button>
+                        <button id="copy-system-status-btn" class="my-button" data-requires-backend>Copy to Clipboard</button>
+                    </div>
+                    <span id="system-status-copy-status" class="settings-help">Copies system specs and app runtime status without saved keys.</span>
+                    <pre id="system-status-output" class="diagnostics-output system-status-output">No system status captured.</pre>
+                </div>
+                <div class="settings-subsection diagnostics-panel">
                     <h4>Setup Checks</h4>
                     <div class="diagnostics-action-row">
                         <button id="run-setup-check-btn" class="my-button" data-requires-backend>Run Setup Checks</button>

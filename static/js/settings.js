@@ -1,11 +1,15 @@
 import { D, apiCall, el, formatPercent, reportSaveFailure, setStatusMessage, state } from './context.js';
 import { updateAudioProviderUi } from './audio.js';
+import { refreshSystemStatus } from './setup-check.js';
 
 export function setSettingsTab(tabName) {
     el.settingsTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.settingsTab === tabName));
     el.settingsPanels.forEach(panel => panel.classList.toggle('active', panel.id === `settings-tab-${tabName}`));
     if (tabName === 'prompts' && !state.systemPromptsLoadedOnce) {
         refreshSystemPrompts();
+    }
+    if (tabName === 'diagnostics' && !state.systemStatusText) {
+        refreshSystemStatus();
     }
 }
 

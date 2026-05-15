@@ -393,6 +393,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .segmented-control input:focus-visible + span { outline: 2px solid var(--purple); outline-offset: 2px; }
 .segmented-control input:disabled + span { cursor: not-allowed; opacity: 0.55; }
 .voice-input-diagnostics { max-height: 7rem; }
+.system-status-output { max-height: 16rem; }
 .voice-input-settings .select-box:disabled { cursor: not-allowed; opacity: 0.62; }
 .settings-checkbox-line { display: flex; align-items: center; gap: 8px; color: var(--foreground); font-size: 0.9rem; }
 .settings-checkbox-line input { flex: 0 0 auto; }

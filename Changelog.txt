@@ -8,6 +8,17 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-14 - PR #202 - Copyable System Diagnostics
+---------------------------------------------------
+
+Branch: codex/diagnostics-system-status-copy
+
+- Added a Diagnostics tab system specifications and current app status section
+  with a one-click copy button for sanitized support reports covering OS,
+  Python, Ollama model/GPU state, CUDA visibility, voice runtime, and motion
+  backend status.
+
+
 2026-05-14 - PR #201 - Windows Installer Python Command
 --------------------------------------------------------
 

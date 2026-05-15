@@ -2,7 +2,13 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { renderLatencyResults, renderMotionTransportCapture, renderSetupCheckResults } from '../../static/js/setup-check.js';
+import {
+    copySystemStatusToClipboard,
+    renderLatencyResults,
+    renderMotionTransportCapture,
+    renderSetupCheckResults,
+    renderSystemStatus,
+} from '../../static/js/setup-check.js';
 
 
 describe('settings diagnostics tab', () => {
@@ -11,10 +17,49 @@ describe('settings diagnostics tab', () => {
         resetStubElement('latency-test-results');
         resetStubElement('motion-capture-results');
         resetStubElement('motion-capture-output');
+        resetStubElement('system-status-output');
+        resetStubElement('system-status-copy-status');
         resetStubElement('start-motion-capture-btn');
         resetStubElement('finish-motion-capture-btn');
         resetStubElement('download-motion-capture-btn');
         resetStubElement('setup-check-status');
+    });
+
+    it('renders and copies the system status report', async () => {
+        const writes = [];
+        const originalClipboard = globalThis.navigator.clipboard;
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: async value => writes.push(value) },
+        });
+        try {
+            renderSystemStatus({
+                text: [
+                    'StrokeGPT-ReVibed Diagnostics',
+                    'Ollama',
+                    '- Selected model: local/test-model:latest',
+                    '- GPU state: gpu',
+                ].join('\n'),
+                app: {
+                    ollama: {
+                        current_model: 'local/test-model:latest',
+                        gpu_state: 'gpu',
+                    },
+                },
+            });
+            await copySystemStatusToClipboard();
+        } finally {
+            Object.defineProperty(globalThis.navigator, 'clipboard', {
+                configurable: true,
+                value: originalClipboard,
+            });
+        }
+
+        assert.match(getStubElement('system-status-output').textContent, /Selected model: local\/test-model:latest/);
+        assert.equal(writes.length, 1);
+        assert.match(writes[0], /GPU state: gpu/);
+        assert.equal(getStubElement('system-status-copy-status').textContent, 'System status copied to clipboard.');
+        assert.equal(getStubElement('system-status-copy-status').dataset.statusTone, 'success');
     });
 
     it('renders grouped setup rows without losing backend detail', () => {

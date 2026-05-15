@@ -33,6 +33,12 @@ def diagnostics_latency_route():
     return jsonify(web.diagnostics_latency_payload())
 
 
+@settings_blueprint.route('/diagnostics_system_status')
+def diagnostics_system_status_route():
+    web = _web()
+    return jsonify(web.diagnostics_system_status_payload())
+
+
 @settings_blueprint.route('/motion_transport_capture', methods=['POST'])
 def motion_transport_capture_route():
     web = _web()
