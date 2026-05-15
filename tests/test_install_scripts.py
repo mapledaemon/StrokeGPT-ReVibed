@@ -94,7 +94,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1', readme)
         self.assertIn('Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest', readme)
         self.assertIn('; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap', readme)
-        self.assertIn('You do not need to run it as', readme)
+        self.assertIn('no admin needed', readme)
 
     def test_parakeet_installer_defaults_to_blackwell_capable_pytorch_wheels(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")
