@@ -48,6 +48,8 @@
     --motion-compact-log-height: 4.25rem;
     --motion-compact-status-height: 6.75rem;
     --motion-feedback-button-size: 2.25rem;
+    --app-viewport-height: 100dvh;
+    --mobile-browser-bottom-reserve: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -60,6 +62,7 @@ body {
     min-height: 100vh;
     height: 100vh;
     height: 100dvh;
+    height: var(--app-viewport-height, 100dvh);
     overflow: hidden;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-min-width), var(--sidebar-width));
@@ -539,6 +542,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 }
 
 @media (max-width: 760px) {
+    :root { --mobile-browser-bottom-reserve: 2.75rem; }
     body { grid-template-columns: 1fr; }
     body.sidebar-collapsed { grid-template-columns: 1fr; }
     #sidebar { position: fixed; top: var(--mobile-top-bar-offset); right: 0; bottom: 0; width: min(18rem, 88vw); z-index: 8000; border-top: 1px solid var(--background-lighter); box-shadow: -12px 16px 28px rgba(0, 0, 0, 0.28); transition: transform 0.35s ease-in-out; }
@@ -547,6 +551,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     #top-bar .top-bar-info { width: 100%; justify-self: stretch; justify-content: flex-start; flex-wrap: wrap; }
     #mood-display { max-width: 100%; }
     #chat-view, #bottom-input-area { padding: var(--space-2); }
+    #bottom-input-area { padding-bottom: max(var(--space-2), env(safe-area-inset-bottom), var(--mobile-browser-bottom-reserve)); }
     #chat-messages-container { padding: var(--space-2); border-radius: 6px; }
     #motion-status-strip { width: 100%; height: auto; max-height: none; min-height: 0; grid-template-columns: 1fr; grid-template-rows: none; gap: var(--space-1); }
     .motion-compact-panel { height: auto; border: 1px solid #2d333d; border-radius: 6px; background: rgba(14, 15, 18, 0.68); overflow: hidden; }
@@ -588,4 +593,23 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-studio-crop-header span:last-child { text-align: left; }
     .motion-backend-stack { justify-content: flex-start; max-width: none; }
     .motion-training-preview-wrap { height: 260px; min-height: 220px; }
+}
+
+@media (max-width: 760px) and (max-height: 430px) {
+    :root {
+        --composer-min-height: 2.5rem;
+        --control-min-height: 2.375rem;
+        --motion-compact-log-height: 3rem;
+        --motion-compact-status-height: 4.5rem;
+        --mobile-browser-bottom-reserve: 2.25rem;
+    }
+    #chat-view { padding-block: var(--space-1); }
+    #bottom-input-area { gap: var(--space-1); padding: var(--space-1) var(--space-2); padding-bottom: max(var(--space-1), env(safe-area-inset-bottom), var(--mobile-browser-bottom-reserve)); }
+    .motion-compact-summary { min-height: 1.75rem; padding: 3px 8px; }
+    #motion-quick-status-row { min-height: 2.125rem; }
+    #visualizer-box { padding: 4px 6px; }
+    .motion-diagnostics-panel { display: none; }
+    #status-text { min-height: 1.85rem; padding: 4px 8px; font-size: 0.76rem; }
+    #message-input-line { min-height: var(--composer-min-height); padding: 3px; }
+    #message-input-line .my-button { min-width: 4rem; padding-left: 0.55rem; padding-right: 0.55rem; }
 }
