@@ -684,6 +684,30 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"as fast as you can on the base": `{"sp": 50', prompt)
         self.assertNotIn('"sp": 88', prompt)
 
+    def test_chat_prompt_includes_autospeak_followup_contract_when_enabled(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 5,
+            "max_speed": 50,
+            "motion_preferences": "",
+            "autospeak_enabled": True,
+            "autospeak_min_seconds": 0,
+            "autospeak_max_seconds": 12,
+            "autospeak_event": True,
+        })
+
+        self.assertIn('"autospeak_seconds":<0-12>', prompt)
+        self.assertIn("Autospeak is enabled", prompt)
+        self.assertIn("Include top-level `autospeak_seconds` in every JSON response", prompt)
+        self.assertIn("Autospeak can be chat-only", prompt)
+        self.assertIn("This request is an Autospeak follow-up", prompt)
+
     def test_snarky_scientist_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")
 

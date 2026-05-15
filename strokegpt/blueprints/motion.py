@@ -436,9 +436,14 @@ def set_llm_edge_permissions_route():
     if web.settings.autospeak_enabled and (
         not previous_autospeak_enabled or autospeak_range_changed
     ):
-        with web.app_state.lock:
-            web.app_state.autospeak_wake_requested = True
-        web.app_state.mode_message_event.set()
+        if web.app_state.auto_mode_active_task:
+            with web.app_state.lock:
+                web.app_state.autospeak_wake_requested = True
+            web.app_state.mode_message_event.set()
+        else:
+            web._schedule_standalone_autospeak(0)
+    elif previous_autospeak_enabled and not web.settings.autospeak_enabled:
+        web._cancel_standalone_autospeak()
     web.settings.save()
     return jsonify({
         "status": "success",
