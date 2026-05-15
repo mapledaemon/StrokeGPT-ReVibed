@@ -294,4 +294,23 @@ describe('chat action statuses', () => {
         assert.strictEqual(statusText.dataset.statusTone, 'warning');
         assert.strictEqual(statusText.style.color, 'var(--yellow)');
     });
+
+    it('surfaces mode narration as status instead of chat messages', async () => {
+        globalThis.fetch = async endpoint => {
+            assert.strictEqual(endpoint, '/get_updates');
+            return jsonResponse(200, {
+                messages: [],
+                audio_ready: false,
+                mode_status_message: 'Adding slower pressure in Freestyle.',
+                chat_audio_warning: '',
+            });
+        };
+
+        await pollChatUpdates();
+
+        const statusText = getStubElement('status-text');
+        const chatView = getStubElement('chat-view');
+        assert.strictEqual(statusText.textContent, 'Adding slower pressure in Freestyle.');
+        assert.strictEqual(chatView.children.length, 0);
+    });
 });
