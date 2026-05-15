@@ -289,7 +289,16 @@ def ollama_gpu_status_payload(current_model, running_models, error=""):
     return payload
 
 
-def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_models, running_models=None):
+def ollama_status_payload(
+    *,
+    settings,
+    llm,
+    base_url,
+    pull_snapshot,
+    installed_models,
+    running_models=None,
+    load_model_for_status=None,
+):
     current_model = normalize_ollama_model(llm.model)
     diagnostics_level = settings.ollama_diagnostics_level
     model_options = ollama_models_for_ui(settings, llm)
@@ -326,13 +335,35 @@ def ollama_status_payload(*, settings, llm, base_url, pull_snapshot, installed_m
         except Exception as exc:
             running_error = str(exc)
 
-    names = [item["name"] for item in installed]
     current_model_installed = bool(_matching_model_detail(current_model, installed))
     installed_model_candidates = (
         [] if current_model_installed else _installed_model_candidates(model_options, installed)
     )
     suggested_model = installed_model_candidates[0] if installed_model_candidates else ""
+    preflight_load = {}
+    if (
+        current_model_installed
+        and not running_error
+        and running_models
+        and load_model_for_status
+        and not _matching_model_detail(current_model, running)
+    ):
+        try:
+            preflight_load = load_model_for_status(current_model) or {}
+        except Exception as exc:
+            preflight_load = {"ok": False, "error": str(exc)}
+        if preflight_load.get("ok", True):
+            try:
+                running = running_models()
+            except Exception as exc:
+                running_error = str(exc)
+    names = [item["name"] for item in installed]
     gpu_status = ollama_gpu_status_payload(current_model, running, running_error)
+    if preflight_load:
+        gpu_status["preflight_load"] = preflight_load
+        if preflight_load.get("ok") is False and gpu_status.get("state") == "not_loaded":
+            error = str(preflight_load.get("error") or "unknown error").strip()
+            gpu_status["message"] = f"Ollama could not load the selected model for GPU status: {error}"
     payload.update({
         "available": True,
         "installed_models": installed,
