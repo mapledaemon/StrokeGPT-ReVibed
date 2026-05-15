@@ -121,6 +121,15 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         self.assertEqual(milk.actions[0].pos, 4.0)
         self.assertEqual(milk.actions[-1].pos, 6.0)
         self.assertEqual(milk.window_scale, 0.92)
+        self.assertEqual(milk.tempo_scale, 0.8)
+
+    def test_hold_pattern_uses_broader_continuous_window(self):
+        hold = PATTERNS["hold"]
+        positions = [action.pos for action in hold.actions]
+
+        self.assertLessEqual(min(positions), 52.0)
+        self.assertGreaterEqual(max(positions), 92.0)
+        self.assertGreaterEqual(hold.window_scale, 0.36)
 
     def test_edge_build_low_pattern_endpoints_match_expected_shape(self):
         pattern = PATTERNS["edge-build-low"]
