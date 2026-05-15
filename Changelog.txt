@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #206 - Fixed Motion Panel Heights
+-------------------------------------------------
+
+Branch: codex/motion-status-fixed-height
+
+- Fixed the chat-footer motion history and current-status panels to keep
+  bounded heights, so longer motion history logs scroll inside their box
+  instead of expanding over the composer and voice controls.
+
+
 2026-05-15 - PR #204 - Ollama GPU Status Preflight
 --------------------------------------------------
 
