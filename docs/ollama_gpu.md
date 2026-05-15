@@ -13,6 +13,15 @@ context and runtime overhead need additional memory. If a model is close to
 or above GPU VRAM, Ollama may partially run it in system memory and chat
 slows down.
 
+Default installer model choices:
+
+| Model | Size |
+| --- | ---: |
+| `huihui_ai/granite4.1-abliterated:3b` | 2.1 GB |
+| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e2b` | 4.4 GB |
+| `huihui_ai/granite4.1-abliterated:8b` | 5.3 GB |
+| `nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b` | 6.3 GB |
+
 The app checks Ollama's running-model status during setup and warns when the
 selected model is loaded but reports no VRAM use. A nonzero `/api/ps`
 `size_vram` value is treated as GPU use, even when it is lower than total

@@ -24,6 +24,8 @@ behavior, and route motion changes through the shared controller path.
   survive between branches until fixed.
 - `docs/local_voice_setup.md`: manual CUDA PyTorch install paths for fast
   local Chatterbox voice on non-Windows or custom NVIDIA setups.
+- `docs/lan_https.md`: LAN/mobile browser HTTPS setup, local certificate trust
+  notes, and Mobile Chrome exact-IP troubleshooting.
 - `docs/voice_input.md`: voice-input provider details (NVIDIA Parakeet vs
   faster-whisper), Parakeet runtime install, and the hands-free /
   typed-chat mode-action toggles.

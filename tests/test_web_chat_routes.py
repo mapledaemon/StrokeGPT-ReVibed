@@ -114,6 +114,8 @@ class WebChatRouteTests(WebTestCase):
                 }, buffered=True)
 
             self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers.get("Cache-Control"), "no-cache, no-transform")
+            self.assertEqual(response.headers.get("X-Accel-Buffering"), "no")
             events = [
                 json.loads(line)
                 for line in response.get_data(as_text=True).splitlines()

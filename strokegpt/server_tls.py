@@ -13,6 +13,7 @@ HTTPS_CA_CERT_NAME = "strokegpt-lan-ca.crt"
 HTTPS_CA_KEY_NAME = "strokegpt-lan-ca-key.pem"
 HTTPS_CERT_NAME = "strokegpt-lan-cert.pem"
 HTTPS_KEY_NAME = "strokegpt-lan-key.pem"
+HTTPS_SERVER_CERT_VALID_DAYS = 397
 IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
@@ -39,6 +40,18 @@ def _env_truthy(value: str | None) -> bool:
 
 def _env_path(value: str) -> Path:
     return Path(os.path.expandvars(value)).expanduser()
+
+
+def _split_env_candidates(value: str | None) -> list[str]:
+    normalized = (value or "").replace(",", " ").replace(";", " ")
+    return [part.strip() for part in normalized.split() if part.strip()]
+
+
+def _env_identity_candidates(env: Mapping[str, str]) -> list[str]:
+    candidates: list[str] = []
+    candidates.extend(_split_env_candidates(env.get("STROKEGPT_HTTPS_IPS")))
+    candidates.extend(_split_env_candidates(env.get("STROKEGPT_HTTPS_HOSTS")))
+    return candidates
 
 
 def resolve_server_tls(
@@ -81,7 +94,11 @@ def resolve_server_tls(
             source="temporary Werkzeug certificate",
         )
 
-    cert_path, key_path, trust_cert_path = ensure_local_https_certificate(cert_dir, bind_host)
+    cert_path, key_path, trust_cert_path = ensure_local_https_certificate(
+        cert_dir,
+        bind_host,
+        extra_candidates=_env_identity_candidates(env),
+    )
     return ServerTlsConfig(
         enabled=True,
         scheme="https",
@@ -93,7 +110,12 @@ def resolve_server_tls(
     )
 
 
-def ensure_local_https_certificate(cert_dir: Path, bind_host: str) -> tuple[Path, Path, Path]:
+def ensure_local_https_certificate(
+    cert_dir: Path,
+    bind_host: str,
+    *,
+    extra_candidates: list[str] | tuple[str, ...] = (),
+) -> tuple[Path, Path, Path]:
     cert_dir.mkdir(parents=True, exist_ok=True)
     ca_cert_path = cert_dir / HTTPS_CA_CERT_NAME
     ca_key_path = cert_dir / HTTPS_CA_KEY_NAME
@@ -101,12 +123,16 @@ def ensure_local_https_certificate(cert_dir: Path, bind_host: str) -> tuple[Path
     key_path = cert_dir / HTTPS_KEY_NAME
 
     ca_cert, ca_key = _ensure_local_ca(ca_cert_path, ca_key_path)
-    dns_names, ip_addresses = local_certificate_identities(bind_host)
+    dns_names, ip_addresses = local_certificate_identities(bind_host, extra_candidates=extra_candidates)
     _write_server_certificate(cert_path, key_path, dns_names, ip_addresses, ca_cert, ca_key)
     return cert_path, key_path, ca_cert_path
 
 
-def local_certificate_identities(bind_host: str) -> tuple[set[str], set[IpAddress]]:
+def local_certificate_identities(
+    bind_host: str,
+    *,
+    extra_candidates: list[str] | tuple[str, ...] = (),
+) -> tuple[set[str], set[IpAddress]]:
     dns_names: set[str] = {"localhost"}
     ip_addresses: set[IpAddress] = {
         ipaddress.ip_address("127.0.0.1"),
@@ -123,6 +149,10 @@ def local_certificate_identities(bind_host: str) -> tuple[set[str], set[IpAddres
             dns_names.add(value.lower())
 
     add_candidate(bind_host)
+    for candidate in extra_candidates:
+        add_candidate(candidate)
+    for address in local_route_addresses():
+        add_candidate(str(address))
     for name in {socket.gethostname(), socket.getfqdn()}:
         add_candidate(name)
         try:
@@ -133,6 +163,29 @@ def local_certificate_identities(bind_host: str) -> tuple[set[str], set[IpAddres
             continue
 
     return dns_names, ip_addresses
+
+
+def local_route_addresses() -> set[IpAddress]:
+    addresses: set[IpAddress] = set()
+    targets = (
+        (socket.AF_INET, ("8.8.8.8", 80)),
+        (socket.AF_INET, ("1.1.1.1", 80)),
+        (socket.AF_INET, ("192.168.0.1", 80)),
+        (socket.AF_INET, ("10.0.0.1", 80)),
+        (socket.AF_INET6, ("2001:4860:4860::8888", 80, 0, 0)),
+    )
+    for family, target in targets:
+        with socket.socket(family, socket.SOCK_DGRAM) as probe:
+            try:
+                probe.connect(target)
+                local_address = str(probe.getsockname()[0])
+                parsed = ipaddress.ip_address(local_address)
+            except OSError:
+                continue
+            if parsed.is_unspecified or parsed.is_loopback:
+                continue
+            addresses.add(parsed)
+    return addresses
 
 
 def _require_cryptography(reason: str):
@@ -173,6 +226,7 @@ def _ensure_local_ca(ca_cert_path: Path, ca_key_path: Path):
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - _dt.timedelta(minutes=5))
         .not_valid_after(now + _dt.timedelta(days=3650))
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
         .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
         .add_extension(
             x509.KeyUsage(
@@ -237,8 +291,13 @@ def _write_server_certificate(
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - _dt.timedelta(minutes=5))
-        .not_valid_after(now + _dt.timedelta(days=825))
+        .not_valid_after(now + _dt.timedelta(days=HTTPS_SERVER_CERT_VALID_DAYS))
         .add_extension(x509.SubjectAlternativeName(san_values), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+            critical=False,
+        )
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(
             x509.KeyUsage(
@@ -268,7 +327,10 @@ def _write_server_certificate(
             encryption_algorithm=serialization.NoEncryption(),
         )
     )
-    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    cert_path.write_bytes(
+        cert.public_bytes(serialization.Encoding.PEM)
+        + ca_cert.public_bytes(serialization.Encoding.PEM)
+    )
     try:
         key_path.chmod(0o600)
     except OSError:

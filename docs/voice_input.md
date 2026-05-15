@@ -15,8 +15,8 @@ Push-to-talk and hands-free voice input work with either provider.
 Mobile browsers usually require HTTPS before allowing microphone capture on
 LAN addresses. Start StrokeGPT with `STROKEGPT_HOST=0.0.0.0` and
 `STROKEGPT_HTTPS=1`, then open the `https://` LAN URL from the mobile
-browser. See the README LAN section for the full command and local
-certificate trust notes.
+browser. See [lan_https.md](lan_https.md) for the full command, local
+certificate trust notes, and Mobile Chrome exact-IP troubleshooting.
 
 ## Install (Windows)
 

@@ -2058,7 +2058,10 @@ def handle_user_message_stream():
     return Response(
         stream_with_context(generate()),
         mimetype="application/x-ndjson; charset=utf-8",
-        headers={"Cache-Control": "no-cache"},
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 def _read_uploaded_pattern_payload(upload):
