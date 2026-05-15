@@ -228,12 +228,16 @@ def _candidate_enabled(candidate, record):
 
 
 def _candidate_allowed_for_routine_freestyle(pattern_id, pattern_name, feedback_target):
-    if not pattern_id.startswith("edge-"):
+    text = _slug_pattern_id(f"{pattern_id} {pattern_name}")
+    is_edge_pattern = pattern_id.startswith("edge-")
+    is_staccato_pattern = any(
+        word in text for word in ("flick", "flutter", "snap", "burst")
+    )
+    if not is_edge_pattern and not is_staccato_pattern:
         return True
     if not feedback_target:
         return False
     requested = _slug_pattern_id(feedback_target.label)
-    text = _slug_pattern_id(f"{pattern_id} {pattern_name}")
     return bool("edge" in requested or pattern_id in requested or requested in text)
 
 

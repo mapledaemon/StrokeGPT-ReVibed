@@ -391,6 +391,22 @@ class MotionScriptPlannerTests(unittest.TestCase):
             with self.subTest(index=index):
                 self.assertGreaterEqual(round(sampled.speed), round(base))
 
+    def test_hold_continuous_pattern_uses_more_target_range(self):
+        plan = continuous_motion_plan("hold")
+        target = MotionTarget(55, 50, 80, "hold")
+        samples = [
+            sample_continuous_motion(plan, target, plan.duration_seconds * index / 80.0).target
+            for index in range(80)
+        ]
+        depth_span = max(sample.depth for sample in samples) - min(sample.depth for sample in samples)
+        range_span = max(sample.stroke_range for sample in samples)
+        program_range = continuous_plan_depth_range(plan, target)
+
+        self.assertGreaterEqual(depth_span, 30.0)
+        self.assertGreaterEqual(range_span, 24.0)
+        self.assertLessEqual(program_range["min"], 52)
+        self.assertGreaterEqual(program_range["max"], 83)
+
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:
             early_depths = [depth for _pattern_id, _mood, _speed, depth, _stroke_range in arc[:2]]

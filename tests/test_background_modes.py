@@ -923,6 +923,46 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertIn("Flick", choice.debug_reason)
         self.assertNotIn("weight", choice.reason.lower())
 
+    def test_freestyle_selector_skips_staccato_patterns_without_feedback(self):
+        current = MotionTarget(30, 50, 55)
+        flick = FakePatternRecord("flick", "Flick")
+        flutter = FakePatternRecord("flutter", "Flutter")
+        sway = FakePatternRecord("sway", "Sway")
+
+        choice = freestyle._choose_freestyle_pattern(
+            [
+                {
+                    "id": "flick",
+                    "name": "Flick",
+                    "source": "fixed",
+                    "enabled": True,
+                    "weight": 100,
+                    "record": flick,
+                },
+                {
+                    "id": "flutter",
+                    "name": "Flutter",
+                    "source": "fixed",
+                    "enabled": True,
+                    "weight": 100,
+                    "record": flutter,
+                },
+                {
+                    "id": "sway",
+                    "name": "Sway",
+                    "source": "fixed",
+                    "enabled": True,
+                    "weight": 10,
+                    "record": sway,
+                },
+            ],
+            current,
+            rng=random.Random(2),
+        )
+
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice.pattern_id, "sway")
+
     def test_freestyle_selector_skips_edge_patterns_without_feedback(self):
         current = MotionTarget(30, 50, 55)
         edge = FakePatternRecord("edge-middle-hold", "Edge Middle Hold")

@@ -68,6 +68,7 @@
     ],
     "window_scale": 0.92,
     "speed_scale": 1.02,
+    "tempo_scale": 0.8,
     "interpolation_ms": 130,
     "max_step_delta": 34
   },
@@ -105,7 +106,7 @@
     "actions": [
       {
         "at": 0,
-        "pos": 72
+        "pos": 52
       },
       {
         "at": 350,
@@ -113,18 +114,18 @@
       },
       {
         "at": 700,
-        "pos": 76
+        "pos": 58
       },
       {
         "at": 1050,
-        "pos": 90
+        "pos": 92
       },
       {
         "at": 1400,
-        "pos": 74
+        "pos": 54
       }
     ],
-    "window_scale": 0.16,
+    "window_scale": 0.36,
     "speed_scale": 0.8,
     "depth_jitter": 1.0,
     "interpolation_ms": 175

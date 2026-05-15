@@ -905,6 +905,25 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(min(intervals) + 0.001, CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS)
         self.assertLessEqual(min(intervals), CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
 
+    def test_continuous_hsp_milk_keeps_intermediate_points_at_high_speed(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        plan = continuous_motion_plan("milk")
+        target = MotionTarget(80, 50, 80, "milk")
+        duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
+
+        phase_points = controller._hsp_stream_phase_points(plan, duration)
+        samples = [
+            sample_continuous_motion(plan, target, point["phase"] * duration).target
+            for point in phase_points
+        ]
+        depth_steps = [
+            abs(right.depth - left.depth)
+            for left, right in zip(samples, samples[1:])
+        ]
+
+        self.assertGreaterEqual(len(phase_points), 18)
+        self.assertLessEqual(max(depth_steps), 28.0)
+
     def test_continuous_hsp_trace_uses_scheduled_point_times(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
