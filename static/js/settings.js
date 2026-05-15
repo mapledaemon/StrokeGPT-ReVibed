@@ -20,6 +20,7 @@ export async function refreshSystemPrompts() {
         if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Could not load system prompts.';
         return;
     }
+    populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
     if (el.systemPromptChat) el.systemPromptChat.textContent = data.chat || '';
     if (el.systemPromptRepair) el.systemPromptRepair.textContent = data.repair || '';
     if (el.systemPromptNameThisMove) el.systemPromptNameThisMove.textContent = data.name_this_move || '';
@@ -33,6 +34,40 @@ export async function refreshSystemPrompts() {
     }
     state.systemPromptsLoadedOnce = true;
     if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = `Loaded at ${new Date().toLocaleTimeString()}.`;
+}
+
+function promptModeStatusText(mode) {
+    return mode === 'legacy'
+        ? 'Legacy prompt style selected.'
+        : 'ReVibed prompt style selected.';
+}
+
+export function populatePromptModeSetting(mode = 'revibed', options = []) {
+    const normalizedMode = mode || 'revibed';
+    const normalizedOptions = Array.isArray(options) && options.length
+        ? options
+        : [
+            {id: 'revibed', label: 'ReVibed', description: 'Less clinical default voice with the same motion-control contract.'},
+            {id: 'legacy', label: 'Legacy', description: 'Previous technical prompt shape for comparison or fallback.'},
+        ];
+    state.llmPromptMode = normalizedMode;
+    state.llmPromptModeOptions = normalizedOptions;
+    if (el.llmPromptModeSelect) {
+        el.llmPromptModeSelect.innerHTML = '';
+        normalizedOptions.forEach(option => {
+            const item = D.createElement('option');
+            item.value = option.id;
+            item.textContent = option.label || option.id;
+            if (option.description) item.title = option.description;
+            el.llmPromptModeSelect.appendChild(item);
+        });
+        el.llmPromptModeSelect.value = normalizedMode;
+    }
+    if (el.llmPromptModeStatus) {
+        const current = normalizedOptions.find(option => option.id === normalizedMode) || {};
+        el.llmPromptModeStatus.textContent = current.description || promptModeStatusText(normalizedMode);
+        el.llmPromptModeStatus.style.color = 'var(--comment)';
+    }
 }
 
 function setProfileMenuOpen(isOpen) {
@@ -610,6 +645,28 @@ async function saveDiagnosticsLevels() {
     }
 }
 
+async function savePromptModeSetting() {
+    const mode = el.llmPromptModeSelect?.value || state.llmPromptMode || 'revibed';
+    if (el.llmPromptModeStatus) {
+        el.llmPromptModeStatus.textContent = 'Saving prompt style...';
+        el.llmPromptModeStatus.style.color = 'var(--comment)';
+    }
+    const data = await apiCall('/set_llm_prompt_mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({llm_prompt_mode: mode}),
+    });
+    if (data && data.status === 'success') {
+        populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
+        state.systemPromptsLoadedOnce = false;
+        await refreshSystemPrompts();
+        if (el.statusText) el.statusText.textContent = 'Prompt style saved.';
+    } else {
+        reportSaveFailure(el.llmPromptModeStatus || el.statusText, data, 'Prompt style save failed.');
+    }
+    return data;
+}
+
 async function setOllamaModel(model) {
     const normalized = normalizeModelName(model);
     if (!normalized) {
@@ -841,6 +898,21 @@ export function initSettingsControls({addChatMessage}) {
     });
     if (el.refreshSystemPromptsBtn) {
         el.refreshSystemPromptsBtn.addEventListener('click', refreshSystemPrompts);
+    }
+    if (el.llmPromptModeSelect) {
+        el.llmPromptModeSelect.addEventListener('change', () => {
+            if (!el.llmPromptModeStatus) return;
+            const mode = el.llmPromptModeSelect.value || 'revibed';
+            if (mode === state.llmPromptMode) {
+                populatePromptModeSetting(state.llmPromptMode, state.llmPromptModeOptions);
+                return;
+            }
+            el.llmPromptModeStatus.textContent = `Unsaved. ${promptModeStatusText(mode)}`;
+            el.llmPromptModeStatus.style.color = 'var(--comment)';
+        });
+    }
+    if (el.saveLlmPromptModeBtn) {
+        el.saveLlmPromptModeBtn.addEventListener('click', savePromptModeSetting);
     }
     D.getElementById('use-selected-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelSelect.value));
     D.getElementById('refresh-model-field-btn').addEventListener('click', () => {

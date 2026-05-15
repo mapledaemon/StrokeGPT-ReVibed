@@ -74,6 +74,22 @@ def set_persona_prompt_route():
     })
 
 
+@settings_blueprint.route('/set_llm_prompt_mode', methods=['POST'])
+def set_llm_prompt_mode_route():
+    web = _web()
+    data = web._request_json()
+    mode = web.settings._normalize_llm_prompt_mode(
+        data.get("llm_prompt_mode", web.settings.llm_prompt_mode)
+    )
+    web.settings.llm_prompt_mode = mode
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "llm_prompt_mode": mode,
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(),
+    })
+
+
 @settings_blueprint.route('/set_ollama_model', methods=['POST'])
 def set_ollama_model_route():
     web = _web()
@@ -251,6 +267,8 @@ def system_prompts_route():
     web = _web()
     context = web.get_current_context()
     return jsonify({
+        "llm_prompt_mode": web.settings.llm_prompt_mode,
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(),
         "chat": web.llm.system_prompt(context),
         "repair": web.llm.repair_prompt(context),
         "name_this_move": web.llm.name_this_move_prompt(**_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),

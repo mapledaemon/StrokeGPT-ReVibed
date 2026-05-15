@@ -12,6 +12,7 @@ sys.modules.setdefault("requests", requests_module)
 
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
+    DEFAULT_LLM_PROMPT_MODE,
     DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_PERSONA_PROMPTS,
@@ -66,6 +67,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["local_tts_style"], "expressive")
         self.assertEqual(saved["local_tts_temperature"], 0.85)
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
+        self.assertEqual(saved["llm_prompt_mode"], DEFAULT_LLM_PROMPT_MODE)
         self.assertEqual(saved["handy_firmware_version"], "fw4")
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         self.assertEqual(saved["motion_pattern_enabled"], {})
@@ -140,6 +142,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.local_tts_style, "expressive")
         self.assertEqual(settings.local_tts_top_p, 1.0)
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
+        self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
         self.assertEqual(settings.motion_pattern_enabled, {})
         self.assertEqual(settings.motion_pattern_feedback, {})
         self.assertEqual(settings.motion_pattern_feedback_history, [])
@@ -225,6 +228,19 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.apply_dict({"motion_style": "bad"})
         self.assertEqual(settings.motion_style, "balanced")
+
+    def test_llm_prompt_mode_setting_is_normalized(self):
+        settings = SettingsManager("settings.json")
+
+        settings.apply_dict({"llm_prompt_mode": "classic"})
+        self.assertEqual(settings.llm_prompt_mode, "legacy")
+        self.assertEqual(settings.to_dict()["llm_prompt_mode"], "legacy")
+
+        settings.apply_dict({"llm_prompt_mode": "revibed"})
+        self.assertEqual(settings.llm_prompt_mode, "revibed")
+
+        settings.apply_dict({"llm_prompt_mode": "bad"})
+        self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
 
     def test_motion_pattern_enabled_map_is_normalized(self):
         fake_path = FakePath(json.dumps({
@@ -398,18 +414,42 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("full_range - favor longer travel", prompt)
         self.assertIn("bounded bias", prompt)
         self.assertIn("sway=74", prompt)
-        self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
+        self.assertIn('{"chat":"<in-character reply>","move":', prompt)
+        self.assertIn('"motion":"<anchor_loop|null>"', prompt)
+        self.assertIn("Motion requests need a non-null `move`", prompt)
+        self.assertIn("FINAL CHAT VOICE CHECK", prompt)
+        self.assertIn("your cock", prompt)
         self.assertIn("do not sanitize or euphemize", prompt)
         self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
-        self.assertIn("TRANSLATE SPEED WORDS INTO `sp`", prompt)
-        self.assertIn("favor base-through-mid or mid-base movement first", prompt)
-        self.assertIn("The current configured speed range is `10-80`", prompt)
+        self.assertIn("SPEED WORDS SET `sp`", prompt)
+        self.assertIn("favor base-through-mid or mid-base first", prompt)
+        self.assertIn("current range `10-80`", prompt)
         self.assertIn('"slowly focus on the tip"', prompt)
         self.assertIn('"slowly focus on the tip": `{"sp": 24', prompt)
         self.assertIn('"quickly use the shaft"', prompt)
         self.assertIn('"quickly use the shaft": `{"sp": 62', prompt)
         self.assertIn('"as fast as you can on the base"', prompt)
         self.assertIn('"as fast as you can on the base": `{"sp": 80', prompt)
+
+    def test_llm_prompt_legacy_mode_keeps_previous_prompt_shape(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "",
+            "llm_prompt_mode": "legacy",
+        })
+
+        self.assertIn("ACTION TO MOVEMENT MAPPING", prompt)
+        self.assertIn("The current configured speed range is `10-80`", prompt)
+        self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
+        self.assertNotIn("FINAL CHAT VOICE CHECK", prompt)
 
     def test_llm_prompt_can_disallow_edge_patterns_in_chat(self):
         service = LLMService(url="http://localhost:11434/api/chat")
@@ -472,7 +512,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "motion_preferences": "",
         })
 
-        self.assertIn("The current configured speed range is `5-50`", prompt)
+        self.assertIn("current range `5-50`", prompt)
         self.assertIn('"as fast as you can on the base": `{"sp": 50', prompt)
         self.assertNotIn('"sp": 88', prompt)
 

@@ -1409,6 +1409,7 @@ def get_current_context():
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
+        'llm_prompt_mode': settings.llm_prompt_mode,
         'motion_preferences': _motion_preference_payload()["prompt"],
         'motion_style': settings.motion_style,
         'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,

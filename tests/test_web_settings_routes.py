@@ -35,6 +35,26 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             response.close()
 
+    def test_llm_prompt_mode_can_be_selected_and_saved(self):
+        from strokegpt.web import settings
+
+        original_mode = settings.llm_prompt_mode
+        try:
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/set_llm_prompt_mode", json={
+                    "llm_prompt_mode": "classic",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["llm_prompt_mode"], "legacy")
+            self.assertTrue(any(option["id"] == "revibed" for option in data["llm_prompt_mode_options"]))
+            self.assertEqual(settings.llm_prompt_mode, "legacy")
+            save.assert_called_once()
+        finally:
+            settings.llm_prompt_mode = original_mode
+
     def test_json_routes_handle_missing_or_invalid_payloads_without_500(self):
         invalid_posts = [
             "/set_handy_key",
@@ -422,9 +442,11 @@ class WebSettingsRouteTests(WebTestCase):
 
         original_min = settings.min_speed
         original_max = settings.max_speed
+        original_mode = settings.llm_prompt_mode
         try:
             settings.min_speed = 18
             settings.max_speed = 62
+            settings.llm_prompt_mode = "revibed"
 
             response = self.client.get("/system_prompts")
 
@@ -433,6 +455,8 @@ class WebSettingsRouteTests(WebTestCase):
             for key in ("chat", "repair", "name_this_move", "profile_consolidation",
                         "name_this_move_sample_inputs"):
                 self.assertIn(key, data)
+            self.assertEqual(data["llm_prompt_mode"], "revibed")
+            self.assertTrue(any(option["id"] == "legacy" for option in data["llm_prompt_mode_options"]))
 
             # The chat prompt is rendered against live context, so the
             # configured speed range must round-trip through it.
@@ -458,6 +482,7 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.min_speed = original_min
             settings.max_speed = original_max
+            settings.llm_prompt_mode = original_mode
 
     def test_system_prompts_route_does_not_leak_proper_noun_handles_in_default_branch(self):
         # Persona Naming And Prompt Audit follow-up: the Prompts tab is

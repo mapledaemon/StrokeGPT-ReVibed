@@ -465,9 +465,17 @@
                         run on demand. Chat history and the per-request user message are appended
                         outside these prompts and are not shown here.
                     </p>
-                    <div class="settings-checkbox-line">
+                    <div class="settings-field-group prompt-mode-panel">
+                        <label class="settings-field-label" for="llm-prompt-mode-select">Chat prompt style</label>
+                        <div class="prompt-mode-controls">
+                            <select id="llm-prompt-mode-select" class="input-text" data-requires-backend></select>
+                            <button id="save-llm-prompt-mode-btn" class="my-button" data-requires-backend>Save Style</button>
+                        </div>
+                        <div id="llm-prompt-mode-status" class="settings-help">ReVibed is the less clinical default; Legacy keeps the previous prompt shape.</div>
+                    </div>
+                    <div class="prompt-refresh-row">
                         <button id="refresh-system-prompts-btn" class="my-button" data-requires-backend>Refresh</button>
-                        <span id="system-prompts-status" style="font-size: 0.85em; color: var(--comment);"></span>
+                        <span id="system-prompts-status" class="settings-help prompt-refresh-status"></span>
                     </div>
                     <h5>Chat</h5>
                     <pre id="system-prompt-chat" class="diagnostics-output">Open this tab to load the current chat prompt.</pre>

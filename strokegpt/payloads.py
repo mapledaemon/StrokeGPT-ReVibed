@@ -1,6 +1,7 @@
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .settings import (
     DIAGNOSTICS_LEVELS,
+    LLM_PROMPT_MODES,
     MOTION_STYLES,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
@@ -94,6 +95,26 @@ def motion_style_options():
         }
         for style in order
         if style in MOTION_STYLES
+    ]
+
+
+def llm_prompt_mode_options():
+    labels = {
+        "revibed": "ReVibed",
+        "legacy": "Legacy",
+    }
+    descriptions = {
+        "revibed": "Less clinical default voice with the same motion-control contract.",
+        "legacy": "Previous technical prompt shape for comparison or fallback.",
+    }
+    return [
+        {
+            "id": mode,
+            "label": labels[mode],
+            "description": descriptions[mode],
+        }
+        for mode in ("revibed", "legacy")
+        if mode in LLM_PROMPT_MODES
     ]
 
 
@@ -743,6 +764,8 @@ def settings_payload(
         "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
+        "llm_prompt_mode": settings.llm_prompt_mode,
+        "llm_prompt_mode_options": llm_prompt_mode_options(),
         "handy_key": settings.handy_key,
         "handy_firmware_version": settings.handy_firmware_version,
         "handy_api_v3_key": settings.handy_api_v3_key,

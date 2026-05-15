@@ -42,6 +42,8 @@ DEFAULT_PERSONA_PROMPTS = [
     "An energetic and passionate boyfriend",
     "An energetic and passionate partner",
 ]
+DEFAULT_LLM_PROMPT_MODE = "revibed"
+LLM_PROMPT_MODES = {"revibed", "legacy"}
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
@@ -157,6 +159,7 @@ def default_settings_dict():
         "ollama_thinking_enabled": False,
         "persona_desc": DEFAULT_PERSONA_PROMPT,
         "persona_prompts": list(DEFAULT_PERSONA_PROMPTS),
+        "llm_prompt_mode": DEFAULT_LLM_PROMPT_MODE,
         "profile_picture_b64": "",
         "audio_provider": "elevenlabs",
         "audio_enabled": False,
@@ -322,6 +325,9 @@ class SettingsManager:
         self.persona_prompts = self._normalize_persona_prompt_list(
             data.get("persona_prompts", []),
             include_current=True,
+        )
+        self.llm_prompt_mode = self._normalize_llm_prompt_mode(
+            data.get("llm_prompt_mode", defaults["llm_prompt_mode"])
         )
 
         self.profile_picture_b64 = str(data.get("profile_picture_b64", "") or "")
@@ -516,6 +522,7 @@ class SettingsManager:
             "ollama_thinking_enabled": bool(self.ollama_thinking_enabled),
             "persona_desc": self.persona_desc,
             "persona_prompts": self.persona_prompt_options(),
+            "llm_prompt_mode": self._normalize_llm_prompt_mode(self.llm_prompt_mode),
             "profile_picture_b64": self.profile_picture_b64,
             "audio_provider": self.audio_provider,
             "audio_enabled": self.audio_enabled,
@@ -642,6 +649,14 @@ class SettingsManager:
             if current and current not in ordered:
                 ordered.insert(0, current)
         return ordered
+
+    def _normalize_llm_prompt_mode(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"old", "classic", "technical"}:
+            return "legacy"
+        if cleaned in LLM_PROMPT_MODES:
+            return cleaned
+        return DEFAULT_LLM_PROMPT_MODE
 
     def _normalize_bool_map(self, values):
         if not isinstance(values, dict):
