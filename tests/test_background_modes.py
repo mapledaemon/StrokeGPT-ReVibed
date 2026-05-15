@@ -1118,6 +1118,54 @@ class CoerceModeDecisionTests(unittest.TestCase):
         )
         self.assertEqual(decision.autospeak_seconds, 300.0)
 
+    def test_autospeak_seconds_clamps_to_configured_range(self):
+        decision = mode_decisions._coerce_mode_decision_with_autospeak_range(
+            {"action": "continue", "autospeak_seconds": 999},
+            mode="freestyle",
+            event="autospeak",
+            autospeak_min_seconds=6,
+            autospeak_max_seconds=14,
+        )
+        self.assertEqual(decision.autospeak_seconds, 14.0)
+
+        decision = mode_decisions._coerce_mode_decision_with_autospeak_range(
+            {"action": "continue", "autospeak_seconds": 1},
+            mode="freestyle",
+            event="autospeak",
+            autospeak_min_seconds=6,
+            autospeak_max_seconds=14,
+        )
+        self.assertEqual(decision.autospeak_seconds, 6.0)
+
+    def test_mode_decision_request_uses_configured_autospeak_range(self):
+        callbacks = {
+            "autospeak_range": lambda: (2, 8),
+            "mode_decision": lambda **_kwargs: {
+                "action": "continue",
+                "autospeak_seconds": 99,
+                "chat": "Still here.",
+            },
+        }
+
+        decision = mode_decisions._request_mode_decision(
+            callbacks,
+            "freestyle",
+            "autospeak",
+        )
+
+        self.assertEqual(decision.autospeak_seconds, 8.0)
+        self.assertEqual(decision.chat, "Still here.")
+
+    def test_autospeak_interval_preserves_zero_current_interval(self):
+        interval = mode_decisions._autospeak_interval_from_decision(
+            mode_decisions.ModeDecision(),
+            current_interval=0,
+            min_seconds=0,
+            max_seconds=300,
+        )
+
+        self.assertEqual(interval, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

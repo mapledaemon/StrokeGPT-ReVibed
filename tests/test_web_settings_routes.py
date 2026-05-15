@@ -460,6 +460,8 @@ class WebSettingsRouteTests(WebTestCase):
             settings.allow_llm_edge_in_freestyle,
             settings.allow_llm_edge_in_chat,
             settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
         )
         try:
             with mock.patch.object(settings, "save"):
@@ -467,6 +469,8 @@ class WebSettingsRouteTests(WebTestCase):
                     "allow_llm_edge_in_freestyle": False,
                     "allow_llm_edge_in_chat": False,
                     "autospeak_enabled": True,
+                    "autospeak_min_seconds": 8,
+                    "autospeak_max_seconds": 2,
                 })
 
             self.assertEqual(response.status_code, 200)
@@ -474,9 +478,13 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertFalse(data["allow_llm_edge_in_freestyle"])
             self.assertFalse(data["allow_llm_edge_in_chat"])
             self.assertTrue(data["autospeak_enabled"])
+            self.assertEqual(data["autospeak_min_seconds"], 2.0)
+            self.assertEqual(data["autospeak_max_seconds"], 8.0)
             self.assertFalse(settings.allow_llm_edge_in_freestyle)
             self.assertFalse(settings.allow_llm_edge_in_chat)
             self.assertTrue(settings.autospeak_enabled)
+            self.assertEqual(settings.autospeak_min_seconds, 2.0)
+            self.assertEqual(settings.autospeak_max_seconds, 8.0)
             self.assertIn("motion_preferences", data)
 
             response = self.client.get("/check_settings")
@@ -484,11 +492,15 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertFalse(payload["allow_llm_edge_in_freestyle"])
             self.assertFalse(payload["allow_llm_edge_in_chat"])
             self.assertTrue(payload["autospeak_enabled"])
+            self.assertEqual(payload["autospeak_min_seconds"], 2.0)
+            self.assertEqual(payload["autospeak_max_seconds"], 8.0)
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,
                 settings.allow_llm_edge_in_chat,
                 settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
             ) = original
 
     def test_diagnostics_levels_can_be_selected_and_saved(self):

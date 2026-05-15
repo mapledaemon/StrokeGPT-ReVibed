@@ -51,6 +51,10 @@ MAX_CUSTOM_LLM_PROMPT_CHARS = 30000
 DEFAULT_USER_GENITALIA = "penis"
 USER_GENITALIA_OPTIONS = {"penis", "vagina", "custom"}
 MAX_USER_GENITALIA_CUSTOM_CHARS = 120
+DEFAULT_AUTOSPEAK_MIN_SECONDS = 0.0
+DEFAULT_AUTOSPEAK_MAX_SECONDS = 45.0
+MIN_AUTOSPEAK_SECONDS = 0.0
+MAX_AUTOSPEAK_SECONDS = 300.0
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
@@ -223,6 +227,8 @@ def default_settings_dict():
         "allow_llm_edge_in_chat": True,
         "allow_llm_mode_actions_in_chat": False,
         "autospeak_enabled": False,
+        "autospeak_min_seconds": DEFAULT_AUTOSPEAK_MIN_SECONDS,
+        "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -388,6 +394,10 @@ class SettingsManager:
         self.autospeak_enabled = _as_bool(
             data.get("autospeak_enabled", defaults["autospeak_enabled"]),
             defaults["autospeak_enabled"],
+        )
+        self.autospeak_min_seconds, self.autospeak_max_seconds = self._autospeak_timing_pair(
+            data.get("autospeak_min_seconds", defaults["autospeak_min_seconds"]),
+            data.get("autospeak_max_seconds", defaults["autospeak_max_seconds"]),
         )
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
@@ -610,6 +620,8 @@ class SettingsManager:
             "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
             "allow_llm_mode_actions_in_chat": bool(self.allow_llm_mode_actions_in_chat),
             "autospeak_enabled": bool(self.autospeak_enabled),
+            "autospeak_min_seconds": self.autospeak_min_seconds,
+            "autospeak_max_seconds": self.autospeak_max_seconds,
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,
@@ -961,6 +973,21 @@ class SettingsManager:
     def _timing_pair(self, first, second, default_first, default_second):
         first = _clamp_float(first, 1.0, 60.0, default_first)
         second = _clamp_float(second, 1.0, 60.0, default_second)
+        return min(first, second), max(first, second)
+
+    def _autospeak_timing_pair(self, first, second):
+        first = _clamp_float(
+            first,
+            MIN_AUTOSPEAK_SECONDS,
+            MAX_AUTOSPEAK_SECONDS,
+            DEFAULT_AUTOSPEAK_MIN_SECONDS,
+        )
+        second = _clamp_float(
+            second,
+            MIN_AUTOSPEAK_SECONDS,
+            MAX_AUTOSPEAK_SECONDS,
+            DEFAULT_AUTOSPEAK_MAX_SECONDS,
+        )
         return min(first, second), max(first, second)
 
     def set_persona_prompt(self, prompt, save_prompt=True):

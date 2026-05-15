@@ -1427,6 +1427,8 @@ def get_current_context():
         'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,
         'allow_llm_edge_in_freestyle': settings.allow_llm_edge_in_freestyle,
         'autospeak_enabled': settings.autospeak_enabled,
+        'autospeak_min_seconds': settings.autospeak_min_seconds,
+        'autospeak_max_seconds': settings.autospeak_max_seconds,
         'active_mode': active_mode_name,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
@@ -1560,6 +1562,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'freestyle_candidates': _freestyle_candidate_patterns,
         'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
         'autospeak_enabled': lambda: settings.autospeak_enabled,
+        'autospeak_range': lambda: (settings.autospeak_min_seconds, settings.autospeak_max_seconds),
         'set_mode_name': set_mode_name,
         'mode_decision': mode_decision,
         'send_chat': add_message_to_queue,

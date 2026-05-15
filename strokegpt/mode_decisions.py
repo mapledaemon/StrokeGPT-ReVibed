@@ -31,6 +31,35 @@ class ModeDecision:
 
 
 def _coerce_mode_decision(raw, *, mode, event):
+    return _coerce_mode_decision_with_autospeak_range(raw, mode=mode, event=event)
+
+
+def _autospeak_range(min_seconds=None, max_seconds=None):
+    try:
+        low = float(min_seconds)
+    except (TypeError, ValueError):
+        low = MIN_AUTOSPEAK_SECONDS
+    try:
+        high = float(max_seconds)
+    except (TypeError, ValueError):
+        high = MAX_AUTOSPEAK_SECONDS
+    low = max(MIN_AUTOSPEAK_SECONDS, min(MAX_AUTOSPEAK_SECONDS, low))
+    high = max(MIN_AUTOSPEAK_SECONDS, min(MAX_AUTOSPEAK_SECONDS, high))
+    return min(low, high), max(low, high)
+
+
+def _coerce_mode_decision_with_autospeak_range(
+    raw,
+    *,
+    mode,
+    event,
+    autospeak_min_seconds=None,
+    autospeak_max_seconds=None,
+):
+    autospeak_min_seconds, autospeak_max_seconds = _autospeak_range(
+        autospeak_min_seconds,
+        autospeak_max_seconds,
+    )
     if not isinstance(raw, dict):
         return ModeDecision()
     if not any(
@@ -107,8 +136,8 @@ def _coerce_mode_decision(raw, *, mode, event):
             autospeak_seconds = None
     if autospeak_seconds is not None:
         autospeak_seconds = max(
-            MIN_AUTOSPEAK_SECONDS,
-            min(MAX_AUTOSPEAK_SECONDS, autospeak_seconds),
+            autospeak_min_seconds,
+            min(autospeak_max_seconds, autospeak_seconds),
         )
 
     chat = str(raw.get("chat") or raw.get("message") or "").strip()
@@ -148,7 +177,14 @@ def _request_mode_decision(
     except Exception as exc:
         print(f"Mode decision failed: {exc}")
         return ModeDecision()
-    return _coerce_mode_decision(raw, mode=mode, event=event)
+    autospeak_min_seconds, autospeak_max_seconds = _autospeak_range_from_callbacks(callbacks)
+    return _coerce_mode_decision_with_autospeak_range(
+        raw,
+        mode=mode,
+        event=event,
+        autospeak_min_seconds=autospeak_min_seconds,
+        autospeak_max_seconds=autospeak_max_seconds,
+    )
 
 
 def _start_mode_decision_request(
@@ -213,12 +249,31 @@ def _send_mode_decision_message(send_message, decision):
         send_message(decision.chat)
 
 
-def _autospeak_interval_from_decision(decision, current_interval=None):
+def _autospeak_range_from_callbacks(callbacks: ModeCallbacks):
+    provider = callbacks.get("autospeak_range")
+    if not provider:
+        return MIN_AUTOSPEAK_SECONDS, MAX_AUTOSPEAK_SECONDS
+    try:
+        min_seconds, max_seconds = provider()
+    except Exception:
+        return MIN_AUTOSPEAK_SECONDS, MAX_AUTOSPEAK_SECONDS
+    return _autospeak_range(min_seconds, max_seconds)
+
+
+def _autospeak_interval_from_decision(
+    decision,
+    current_interval=None,
+    *,
+    min_seconds=None,
+    max_seconds=None,
+):
+    min_seconds, max_seconds = _autospeak_range(min_seconds, max_seconds)
     if decision.autospeak_seconds is None:
-        return float(current_interval or DEFAULT_AUTOSPEAK_SECONDS)
+        interval = DEFAULT_AUTOSPEAK_SECONDS if current_interval is None else float(current_interval)
+        return max(min_seconds, min(max_seconds, interval))
     return max(
-        MIN_AUTOSPEAK_SECONDS,
-        min(MAX_AUTOSPEAK_SECONDS, float(decision.autospeak_seconds)),
+        min_seconds,
+        min(max_seconds, float(decision.autospeak_seconds)),
     )
 
 

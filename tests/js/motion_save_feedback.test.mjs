@@ -77,6 +77,8 @@ describe('motion/audio save feedback', () => {
         resetStubElement('download-local-tts-model-button');
         resetStubElement('llm-edge-permissions-status');
         resetStubElement('top-bar-autospeak-toggle-btn');
+        resetStubElement('autospeak-min-seconds');
+        resetStubElement('autospeak-max-seconds');
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
@@ -90,6 +92,8 @@ describe('motion/audio save feedback', () => {
         state.connectionLost = false;
         state.activeModeName = '';
         state.autospeakEnabled = false;
+        state.autospeakMinSeconds = 0;
+        state.autospeakMaxSeconds = 45;
         state.motionTraining = {state: 'idle', pattern_id: 'seed', pattern_name: 'Seed', preview: false};
         state.motionTrainingOriginalPattern = null;
         state.motionTrainingEditedPattern = null;
@@ -358,13 +362,17 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_chat: false,
                 allow_llm_mode_actions_in_chat: true,
                 autospeak_enabled: true,
+                autospeak_min_seconds: 2,
+                autospeak_max_seconds: 12,
                 motion_preferences: {prompt: '', summary: ''},
             });
         };
-        populateMotionSettings({autospeak_enabled: true});
+        populateMotionSettings({autospeak_enabled: true, autospeak_min_seconds: 2, autospeak_max_seconds: 12});
         getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
         getStubElement('allow-llm-edge-chat-checkbox').checked = false;
         getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
+        getStubElement('autospeak-min-seconds').value = '12';
+        getStubElement('autospeak-max-seconds').value = '2';
 
         getStubElement('save-llm-edge-permissions-btn').click();
         await flushAsyncHandlers();
@@ -376,10 +384,16 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_chat: false,
                 allow_llm_mode_actions_in_chat: true,
                 autospeak_enabled: true,
+                autospeak_min_seconds: 2,
+                autospeak_max_seconds: 12,
             },
         ]]);
         assert.strictEqual(state.allowLlmModeActionsInChat, true);
         assert.strictEqual(state.autospeakEnabled, true);
+        assert.strictEqual(state.autospeakMinSeconds, 2);
+        assert.strictEqual(state.autospeakMaxSeconds, 12);
+        assert.strictEqual(Number(getStubElement('autospeak-min-seconds').value), 2);
+        assert.strictEqual(Number(getStubElement('autospeak-max-seconds').value), 12);
         assert.strictEqual(getStubElement('llm-edge-permissions-status').textContent, 'LLM permissions saved.');
     });
 
@@ -393,10 +407,12 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_chat: true,
                 allow_llm_mode_actions_in_chat: false,
                 autospeak_enabled: true,
+                autospeak_min_seconds: 3,
+                autospeak_max_seconds: 30,
                 motion_preferences: {prompt: '', summary: ''},
             });
         };
-        populateMotionSettings({autospeak_enabled: false});
+        populateMotionSettings({autospeak_enabled: false, autospeak_min_seconds: 3, autospeak_max_seconds: 30});
 
         getStubElement('top-bar-autospeak-toggle-btn').click();
         await flushAsyncHandlers();
