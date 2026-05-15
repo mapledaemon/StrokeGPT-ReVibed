@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-15 - PR #204 - Ollama GPU Status Preflight
+--------------------------------------------------
+
+Branch: codex/ollama-gpu-preflight-status
+
+- Made live Ollama status checks load the installed selected model with a
+  zero-token preflight before reading `/api/ps`, so GPU/CPU status can be
+  reported before the first user chat message.
+
+
 2026-05-15 - PR #203 - Ollama Chat Speed And GPU Diagnostics
 ------------------------------------------------------------
 

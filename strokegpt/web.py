@@ -383,6 +383,31 @@ def _ollama_running_models():
     models.sort(key=lambda item: item["name"].lower())
     return models
 
+
+def _ollama_load_model_for_status(model):
+    model = normalize_ollama_model(model)
+    if not model:
+        return {"ok": False, "error": "Model name is required."}
+    response = requests.post(
+        f"{OLLAMA_BASE_URL}/api/generate",
+        json={
+            "model": model,
+            "prompt": "",
+            "stream": False,
+            "keep_alive": "5m",
+            "options": {"num_predict": 0},
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return {
+        "ok": True,
+        "model": normalize_ollama_model(data.get("model") or model),
+        "done_reason": data.get("done_reason") or "",
+    }
+
+
 def _ollama_status_payload(live=True):
     # Service-bound adapter for ``payloads.ollama_status_payload()``: binds the
     # live ``settings``/``llm`` services and the local pull/installation helpers
@@ -404,6 +429,7 @@ def _ollama_status_payload(live=True):
         pull_snapshot=_ollama_pull_snapshot,
         installed_models=_ollama_installed_models,
         running_models=_ollama_running_models,
+        load_model_for_status=_ollama_load_model_for_status,
     )
 
 def _run_ollama_pull(model):

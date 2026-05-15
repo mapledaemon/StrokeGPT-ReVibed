@@ -336,7 +336,7 @@ class WebOllamaRouteTests(WebTestCase):
         finally:
             llm.model = original_model
 
-    def test_ollama_status_keeps_idle_current_model_as_unknown_not_cpu_warning(self):
+    def test_ollama_status_preloads_installed_current_model_before_gpu_status(self):
         from strokegpt.web import llm
 
         original_model = llm.model
@@ -344,7 +344,46 @@ class WebOllamaRouteTests(WebTestCase):
         try:
             with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
                 {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
-            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[]):
+            ]), mock.patch("strokegpt.web._ollama_running_models", side_effect=[
+                [],
+                [{
+                    "name": "local/test-model:latest",
+                    "size": 4096,
+                    "size_label": "4.0 KB",
+                    "size_vram": 4096,
+                    "size_vram_label": "4.0 KB",
+                    "size_vram_reported": True,
+                }],
+            ]) as running_models, mock.patch(
+                "strokegpt.web._ollama_load_model_for_status",
+                return_value={"ok": True, "model": "local/test-model:latest", "done_reason": "load"},
+            ) as load_model:
+                response = self.client.get("/ollama_status")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertTrue(data["gpu_status"]["accelerated"])
+            self.assertEqual(data["gpu_status"]["state"], "gpu")
+            self.assertEqual(data["gpu_status"]["current_model_size_vram_label"], "4.0 KB")
+            self.assertEqual(data["gpu_status"]["preflight_load"]["done_reason"], "load")
+            load_model.assert_called_once_with("local/test-model:latest")
+            self.assertEqual(running_models.call_count, 2)
+        finally:
+            llm.model = original_model
+
+    def test_ollama_status_keeps_idle_current_model_as_unknown_when_preload_fails(self):
+        from strokegpt.web import llm
+
+        original_model = llm.model
+        llm.model = "local/test-model:latest"
+        try:
+            with mock.patch("strokegpt.web._ollama_installed_models", return_value=[
+                {"name": "local/test-model:latest", "size": 4096, "size_label": "4.0 KB"},
+            ]), mock.patch("strokegpt.web._ollama_running_models", return_value=[]), \
+                    mock.patch("strokegpt.web._ollama_load_model_for_status", return_value={
+                        "ok": False,
+                        "error": "load failed",
+                    }):
                 response = self.client.get("/ollama_status")
 
             self.assertEqual(response.status_code, 200)
@@ -353,6 +392,8 @@ class WebOllamaRouteTests(WebTestCase):
             self.assertEqual(data["gpu_status"]["state"], "not_loaded")
             self.assertEqual(data["gpu_status"]["warning"], "")
             self.assertEqual(data["gpu_status"]["setup_warning"], "")
+            self.assertEqual(data["gpu_status"]["preflight_load"]["error"], "load failed")
+            self.assertIn("could not load", data["gpu_status"]["message"])
         finally:
             llm.model = original_model
 
