@@ -474,6 +474,19 @@
                         outside these prompts and are not shown here.
                     </p>
                     <div class="settings-field-group prompt-mode-panel">
+                        <label class="settings-field-label" for="user-genitalia-select">User anatomy for prompts</label>
+                        <div class="prompt-anatomy-controls">
+                            <select id="user-genitalia-select" class="input-text" data-requires-backend>
+                                <option value="penis">Penis</option>
+                                <option value="vagina">Vagina</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <input type="text" id="user-genitalia-custom-input" class="input-text" placeholder="Custom anatomy wording" autocomplete="off" data-requires-backend>
+                            <button id="save-user-genitalia-btn" class="my-button" data-requires-backend>Save Anatomy</button>
+                        </div>
+                        <div id="user-genitalia-status" class="settings-help">This tells the prompt what the device is being used on, separate from persona gender.</div>
+                    </div>
+                    <div class="settings-field-group prompt-mode-panel">
                         <label class="settings-field-label" for="llm-prompt-mode-select">Chat prompt style</label>
                         <div class="prompt-mode-controls">
                             <select id="llm-prompt-mode-select" class="input-text" data-requires-backend></select>

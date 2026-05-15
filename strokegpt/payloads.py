@@ -4,6 +4,7 @@ from .settings import (
     DIAGNOSTICS_LEVELS,
     LLM_PROMPT_MODES,
     MOTION_STYLES,
+    USER_GENITALIA_OPTIONS,
     VOICE_INPUT_PROVIDER_DISABLED,
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
@@ -129,6 +130,28 @@ def llm_prompt_mode_options(settings=None):
                 "custom": True,
             })
     return options
+
+
+def user_genitalia_options():
+    labels = {
+        "penis": "Penis",
+        "vagina": "Vagina",
+        "custom": "Custom",
+    }
+    descriptions = {
+        "penis": "Tell the prompt the device is being used on a penis.",
+        "vagina": "Tell the prompt the device is being used on a vagina/vulva.",
+        "custom": "Use custom anatomy wording in the prompt.",
+    }
+    return [
+        {
+            "id": option,
+            "label": labels[option],
+            "description": descriptions[option],
+        }
+        for option in ("penis", "vagina", "custom")
+        if option in USER_GENITALIA_OPTIONS
+    ]
 
 
 def ollama_models_for_ui(settings, llm):
@@ -779,6 +802,9 @@ def settings_payload(
         "persona_prompts": persona_prompts,
         "llm_prompt_mode": settings.llm_prompt_mode,
         "llm_prompt_mode_options": llm_prompt_mode_options(settings),
+        "user_genitalia": settings.user_genitalia,
+        "user_genitalia_custom": settings.user_genitalia_custom,
+        "user_genitalia_options": user_genitalia_options(),
         "handy_key": settings.handy_key,
         "handy_firmware_version": settings.handy_firmware_version,
         "handy_api_v3_key": settings.handy_api_v3_key,

@@ -48,6 +48,9 @@ CUSTOM_LLM_PROMPT_PREFIX = "custom:"
 LLM_PROMPT_SET_KEYS = ("chat", "repair", "name_this_move", "profile_consolidation")
 MAX_CUSTOM_LLM_PROMPT_SETS = 20
 MAX_CUSTOM_LLM_PROMPT_CHARS = 30000
+DEFAULT_USER_GENITALIA = "penis"
+USER_GENITALIA_OPTIONS = {"penis", "vagina", "custom"}
+MAX_USER_GENITALIA_CUSTOM_CHARS = 120
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
@@ -165,6 +168,8 @@ def default_settings_dict():
         "persona_prompts": list(DEFAULT_PERSONA_PROMPTS),
         "llm_prompt_mode": DEFAULT_LLM_PROMPT_MODE,
         "llm_custom_prompt_sets": [],
+        "user_genitalia": DEFAULT_USER_GENITALIA,
+        "user_genitalia_custom": "",
         "profile_picture_b64": "",
         "audio_provider": "elevenlabs",
         "audio_enabled": False,
@@ -338,6 +343,12 @@ class SettingsManager:
         )
         self.llm_prompt_mode = self._normalize_llm_prompt_mode(
             data.get("llm_prompt_mode", defaults["llm_prompt_mode"])
+        )
+        self.user_genitalia = self._normalize_user_genitalia(
+            data.get("user_genitalia", defaults["user_genitalia"])
+        )
+        self.user_genitalia_custom = self._normalize_user_genitalia_custom(
+            data.get("user_genitalia_custom", defaults["user_genitalia_custom"])
         )
 
         self.profile_picture_b64 = str(data.get("profile_picture_b64", "") or "")
@@ -542,6 +553,8 @@ class SettingsManager:
             "persona_prompts": self.persona_prompt_options(),
             "llm_prompt_mode": self._normalize_llm_prompt_mode(self.llm_prompt_mode),
             "llm_custom_prompt_sets": self._normalize_llm_custom_prompt_sets(self.llm_custom_prompt_sets),
+            "user_genitalia": self._normalize_user_genitalia(self.user_genitalia),
+            "user_genitalia_custom": self._normalize_user_genitalia_custom(self.user_genitalia_custom),
             "profile_picture_b64": self.profile_picture_b64,
             "audio_provider": self.audio_provider,
             "audio_enabled": self.audio_enabled,
@@ -730,6 +743,19 @@ class SettingsManager:
         if cleaned in LLM_PROMPT_MODES:
             return cleaned
         return DEFAULT_LLM_PROMPT_MODE
+
+    def _normalize_user_genitalia(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"penis", "cock", "dick", "male"}:
+            return "penis"
+        if cleaned in {"vagina", "vulva", "pussy", "cunt", "female"}:
+            return "vagina"
+        if cleaned in {"custom", "other", "manual"}:
+            return "custom"
+        return DEFAULT_USER_GENITALIA
+
+    def _normalize_user_genitalia_custom(self, value):
+        return " ".join(str(value or "").split())[:MAX_USER_GENITALIA_CUSTOM_CHARS]
 
     def selected_llm_custom_prompt_set(self):
         mode = self._normalize_llm_prompt_mode(getattr(self, "llm_prompt_mode", DEFAULT_LLM_PROMPT_MODE))

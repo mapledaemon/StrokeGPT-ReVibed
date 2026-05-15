@@ -25,6 +25,7 @@ export async function refreshSystemPrompts() {
         return;
     }
     populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
+    populateUserGenitaliaSetting(data.user_genitalia, data.user_genitalia_custom, data.user_genitalia_options);
     setPromptBoxText(el.systemPromptChat, data.chat || '');
     setPromptBoxText(el.systemPromptRepair, data.repair || '');
     setPromptBoxText(el.systemPromptNameThisMove, data.name_this_move || '');
@@ -74,6 +75,94 @@ export function populatePromptModeSetting(mode = 'revibed', options = []) {
         el.llmPromptModeStatus.textContent = current.description || promptModeStatusText(normalizedMode);
         el.llmPromptModeStatus.style.color = 'var(--comment)';
     }
+}
+
+function userGenitaliaStatusText(value, custom = '') {
+    if (value === 'vagina') return 'Prompt context says the device is being used on a vagina/vulva.';
+    if (value === 'custom') {
+        return custom
+            ? `Prompt context uses custom anatomy wording: ${custom}.`
+            : 'Custom anatomy is selected. Add wording so the prompt does not infer a body from the persona.';
+    }
+    return 'Prompt context says the device is being used on a penis.';
+}
+
+function updateUserGenitaliaCustomState() {
+    if (!el.userGenitaliaSelect || !el.userGenitaliaCustomInput) return;
+    const isCustom = el.userGenitaliaSelect.value === 'custom';
+    el.userGenitaliaCustomInput.disabled = !isCustom;
+    el.userGenitaliaCustomInput.placeholder = isCustom
+        ? 'Custom anatomy wording'
+        : 'Only used when Custom is selected';
+}
+
+export function populateUserGenitaliaSetting(value = 'penis', custom = '', options = []) {
+    const normalizedValue = value || 'penis';
+    const normalizedCustom = custom || '';
+    const normalizedOptions = Array.isArray(options) && options.length
+        ? options
+        : [
+            {id: 'penis', label: 'Penis', description: 'Tell the prompt the device is being used on a penis.'},
+            {id: 'vagina', label: 'Vagina', description: 'Tell the prompt the device is being used on a vagina/vulva.'},
+            {id: 'custom', label: 'Custom', description: 'Use custom anatomy wording in the prompt.'},
+        ];
+    state.userGenitalia = normalizedValue;
+    state.userGenitaliaCustom = normalizedCustom;
+    state.userGenitaliaOptions = normalizedOptions;
+    if (el.userGenitaliaSelect) {
+        el.userGenitaliaSelect.innerHTML = '';
+        normalizedOptions.forEach(option => {
+            const item = D.createElement('option');
+            item.value = option.id;
+            item.textContent = option.label || option.id;
+            if (option.description) item.title = option.description;
+            el.userGenitaliaSelect.appendChild(item);
+        });
+        el.userGenitaliaSelect.value = normalizedValue;
+    }
+    if (el.userGenitaliaCustomInput) {
+        el.userGenitaliaCustomInput.value = normalizedCustom;
+    }
+    updateUserGenitaliaCustomState();
+    if (el.userGenitaliaStatus) {
+        setStatusMessage(el.userGenitaliaStatus, userGenitaliaStatusText(normalizedValue, normalizedCustom), 'neutral');
+    }
+}
+
+function markUserGenitaliaUnsaved() {
+    if (!el.userGenitaliaStatus) return;
+    updateUserGenitaliaCustomState();
+    const value = el.userGenitaliaSelect?.value || 'penis';
+    const custom = el.userGenitaliaCustomInput?.value?.trim?.() || '';
+    const changed = value !== state.userGenitalia || custom !== state.userGenitaliaCustom;
+    if (!changed) {
+        setStatusMessage(el.userGenitaliaStatus, userGenitaliaStatusText(state.userGenitalia, state.userGenitaliaCustom), 'neutral');
+        return;
+    }
+    setStatusMessage(el.userGenitaliaStatus, `Unsaved. ${userGenitaliaStatusText(value, custom)}`, 'info');
+}
+
+async function saveUserGenitaliaSetting() {
+    const userGenitalia = el.userGenitaliaSelect?.value || state.userGenitalia || 'penis';
+    const custom = el.userGenitaliaCustomInput?.value?.trim?.() || '';
+    setStatusMessage(el.userGenitaliaStatus, 'Saving anatomy prompt context...', 'info');
+    const data = await apiCall('/set_user_genitalia', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            user_genitalia: userGenitalia,
+            user_genitalia_custom: custom,
+        }),
+    });
+    if (data && data.status === 'success') {
+        populateUserGenitaliaSetting(data.user_genitalia, data.user_genitalia_custom, data.user_genitalia_options);
+        state.systemPromptsLoadedOnce = false;
+        await refreshSystemPrompts();
+        setStatusMessage(el.userGenitaliaStatus, `Saved. ${userGenitaliaStatusText(data.user_genitalia, data.user_genitalia_custom)}`, 'success');
+    } else {
+        reportSaveFailure(el.userGenitaliaStatus || el.statusText, data, 'Anatomy prompt context save failed.');
+    }
+    return data;
 }
 
 function promptBoxes() {
@@ -1023,6 +1112,15 @@ export function initSettingsControls({addChatMessage}) {
     });
     if (el.refreshSystemPromptsBtn) {
         el.refreshSystemPromptsBtn.addEventListener('click', refreshSystemPrompts);
+    }
+    if (el.userGenitaliaSelect) {
+        el.userGenitaliaSelect.addEventListener('change', markUserGenitaliaUnsaved);
+    }
+    if (el.userGenitaliaCustomInput) {
+        el.userGenitaliaCustomInput.addEventListener('input', markUserGenitaliaUnsaved);
+    }
+    if (el.saveUserGenitaliaBtn) {
+        el.saveUserGenitaliaBtn.addEventListener('click', saveUserGenitaliaSetting);
     }
     if (el.llmPromptModeSelect) {
         el.llmPromptModeSelect.addEventListener('change', () => {

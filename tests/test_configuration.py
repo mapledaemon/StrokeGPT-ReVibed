@@ -17,6 +17,7 @@ from strokegpt.settings import (
     DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_PERSONA_PROMPTS,
+    DEFAULT_USER_GENITALIA,
     DEFAULT_VOICE_INPUT_MODEL,
     DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL,
     LEGACY_OLLAMA_MODEL,
@@ -70,6 +71,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["persona_prompts"], DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(saved["llm_prompt_mode"], DEFAULT_LLM_PROMPT_MODE)
         self.assertEqual(saved["llm_custom_prompt_sets"], [])
+        self.assertEqual(saved["user_genitalia"], DEFAULT_USER_GENITALIA)
+        self.assertEqual(saved["user_genitalia_custom"], "")
         self.assertEqual(saved["handy_firmware_version"], "fw4")
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         self.assertEqual(saved["motion_pattern_enabled"], {})
@@ -148,6 +151,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.persona_prompts, DEFAULT_PERSONA_PROMPTS)
         self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
         self.assertEqual(settings.llm_custom_prompt_sets, [])
+        self.assertEqual(settings.user_genitalia, DEFAULT_USER_GENITALIA)
+        self.assertEqual(settings.user_genitalia_custom, "")
         self.assertEqual(settings.motion_pattern_enabled, {})
         self.assertEqual(settings.motion_pattern_feedback, {})
         self.assertEqual(settings.motion_pattern_feedback_history, [])
@@ -285,6 +290,24 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.apply_dict({"llm_prompt_mode": "bad"})
         self.assertEqual(settings.llm_prompt_mode, DEFAULT_LLM_PROMPT_MODE)
+
+    def test_user_genitalia_setting_is_normalized_and_persisted(self):
+        settings = SettingsManager("settings.json")
+
+        settings.apply_dict({
+            "user_genitalia": "vulva",
+            "user_genitalia_custom": "  external   sleeve wording  ",
+        })
+        self.assertEqual(settings.user_genitalia, "vagina")
+        self.assertEqual(settings.user_genitalia_custom, "external sleeve wording")
+        self.assertEqual(settings.to_dict()["user_genitalia"], "vagina")
+
+        settings.apply_dict({"user_genitalia": "other", "user_genitalia_custom": "strap setup"})
+        self.assertEqual(settings.user_genitalia, "custom")
+        self.assertEqual(settings.to_dict()["user_genitalia_custom"], "strap setup")
+
+        settings.apply_dict({"user_genitalia": "bad"})
+        self.assertEqual(settings.user_genitalia, DEFAULT_USER_GENITALIA)
 
     def test_llm_custom_prompt_set_is_persisted_and_selectable(self):
         settings = SettingsManager("settings.json")
@@ -498,6 +521,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"motion":"<anchor_loop|null>"', prompt)
         self.assertIn("Motion requests need a non-null `move`", prompt)
         self.assertIn("FINAL CHAT VOICE CHECK", prompt)
+        self.assertIn("The device is being used on my penis", prompt)
         self.assertIn("your cock", prompt)
         self.assertIn("do not sanitize or euphemize", prompt)
         self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
@@ -515,6 +539,52 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("touch, pace, pressure", prompt)
         self.assertIn("adjust the motion", prompt)
 
+    def test_llm_prompt_separates_user_anatomy_from_partner_persona(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        boyfriend_prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate boyfriend",
+            "user_genitalia": "penis",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+        })
+        self.assertIn("You are a male partner", boyfriend_prompt)
+        self.assertIn("The device is being used on my penis", boyfriend_prompt)
+        self.assertIn("Do not call it a vagina", boyfriend_prompt)
+
+        vagina_prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate boyfriend",
+            "user_genitalia": "vagina",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+        })
+        self.assertIn("You are a male partner", vagina_prompt)
+        self.assertIn("The device is being used on my vagina/vulva", vagina_prompt)
+        self.assertIn("Do not call it a penis, cock, or dick", vagina_prompt)
+        self.assertIn("your pussy", vagina_prompt)
+
+        custom_prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate partner",
+            "user_genitalia": "custom",
+            "user_genitalia_custom": "external sleeve",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+        })
+        self.assertIn('my anatomy described as "external sleeve"', custom_prompt)
+        self.assertIn("do not infer a different body from the partner persona", custom_prompt)
+
     def test_llm_prompt_legacy_mode_keeps_previous_prompt_shape(self):
         service = LLMService(url="http://localhost:11434/api/chat")
 
@@ -531,6 +601,7 @@ class ModelConfigurationTests(unittest.TestCase):
         })
 
         self.assertIn("ACTION TO MOVEMENT MAPPING", prompt)
+        self.assertIn("The device is being used on my penis", prompt)
         self.assertIn("The current configured speed range is `10-80`", prompt)
         self.assertIn("Do not claim that you changed motion unless `move` is non-null", prompt)
         self.assertIn("prefer `rng` 70-95 with a center inside the region", prompt)
@@ -612,6 +683,7 @@ class ModelConfigurationTests(unittest.TestCase):
 
         self.assertIn('{"chat":"<sarcastic reply>"', prompt)
         self.assertIn("Current configured speed range is `12-44`", prompt)
+        self.assertIn("User anatomy:", prompt)
 
     def test_snarky_scientist_prompt_does_not_leak_proper_noun_handles(self):
         # Persona Naming And Prompt Audit (ROADMAP Up Next #4): the

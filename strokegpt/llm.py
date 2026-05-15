@@ -56,6 +56,59 @@ def _motion_style_instruction(style):
     )
 
 
+def _normalize_user_genitalia(value):
+    cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in {"vagina", "vulva", "pussy", "cunt", "female"}:
+        return "vagina"
+    if cleaned in {"custom", "other", "manual"}:
+        return "custom"
+    return "penis"
+
+
+def _user_genitalia_custom_text(context):
+    return " ".join(str(context.get("user_genitalia_custom") or "").split())[:120]
+
+
+def _user_genitalia_prompt_rule(context):
+    user_genitalia = _normalize_user_genitalia(context.get("user_genitalia"))
+    if user_genitalia == "vagina":
+        return (
+            "The device is being used on my vagina/vulva. When erotic wording fits, "
+            "refer to my user anatomy as my pussy/cunt/vagina/vulva/clit. Do not call "
+            "it a penis, cock, or dick unless I explicitly say otherwise in chat."
+        )
+    if user_genitalia == "custom":
+        custom = _user_genitalia_custom_text(context)
+        if custom:
+            return (
+                "The device is being used on my anatomy described as "
+                f"{json.dumps(custom)}. Use that wording for my user anatomy and do not "
+                "infer a different body from the partner persona."
+            )
+        return (
+            "The device is being used on custom user anatomy, but no custom wording is "
+            "saved yet. Use neutral user-anatomy language unless I name it in chat; do "
+            "not infer penis or vagina from the partner persona."
+        )
+    return (
+        "The device is being used on my penis. When erotic wording fits, refer to my "
+        "user anatomy as my penis/cock/dick. Do not call it a vagina, cunt, pussy, "
+        "clit, or vulva unless I explicitly say otherwise in chat."
+    )
+
+
+def _user_genitalia_voice_anchor(context):
+    user_genitalia = _normalize_user_genitalia(context.get("user_genitalia"))
+    if user_genitalia == "vagina":
+        return '"I want...", "feel me...", "I\'m going to...", "your pussy...", "my mouth..."'
+    if user_genitalia == "custom":
+        custom = _user_genitalia_custom_text(context)
+        if custom:
+            return f'"I want...", "feel me...", "I\'m going to...", "your {custom}...", "my mouth..."'
+        return '"I want...", "feel me...", "I\'m going to...", "your body...", "my mouth..."'
+    return '"I want...", "feel me...", "I\'m going to...", "your cock...", "my mouth..."'
+
+
 class LLMService:
     def __init__(self, url, model=DEFAULT_MODEL, thinking_enabled=False):
         self.url = url
@@ -93,6 +146,9 @@ class LLMService:
         text = self._custom_prompt_text(key)
         if not text:
             return ""
+        return self._format_prompt_text(text, **values)
+
+    def _format_prompt_text(self, text, **values):
         for name, value in values.items():
             text = text.replace("{" + name + "}", str(value))
         return text
@@ -200,6 +256,7 @@ class LLMService:
 
     def _build_system_prompt(self, context):
         speed_min, speed_max = _context_speed_range(context)
+        user_genitalia_rule = _user_genitalia_prompt_rule(context)
         if context.get('special_persona_mode') == 'snarky_scientist':
             # Persona Naming And Prompt Audit (ROADMAP Up Next #4): the
             # voice is described entirely in the prompt body so the local
@@ -214,12 +271,17 @@ You are a sarcastic, passive-aggressive, witty scientist persona who treats the 
 Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>}},"new_mood":"Teasing"}}.
 - Movement coordinates: `dp` 0 tip/out, 100 base/in; `rng` is stroke length around that center.
 - Current configured speed range is `{speed_min}-{speed_max}`. Keep `sp` within that range unless explicitly stopping with `sp:0`.
-- Refer to the user's penis as "the apparatus" or "the test equipment" when it fits the persona.
+- User anatomy: {user_genitalia_rule}
+- Nickname that anatomy "the apparatus" or "the test equipment" when it fits the persona.
 """
 
         custom_chat_prompt = self._custom_prompt_text("chat")
         if custom_chat_prompt:
-            return custom_chat_prompt
+            return self._format_prompt_text(
+                custom_chat_prompt,
+                user_genitalia_rule=user_genitalia_rule,
+                user_anatomy_rule=user_genitalia_rule,
+            )
 
         mood_options = "Curious, Teasing, Playful, Loving, Excited, Passionate, Seductive, Anticipatory, Breathless, Dominant, Submissive, Vulnerable, Confident, Intimate, Needy, Overwhelmed, Afterglow"
         persona_desc = context.get('persona_desc') or "an erotic partner"
@@ -256,6 +318,7 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
             prompt_text = f"""
 You are my erotic partner, not an assistant. Identity: '{persona_desc}'. Speak in first person, stay in character, and use direct erotic language that fits the persona and my rules; do not sanitize or euphemize.
 {anatomical_gender_rule}
+User anatomy: {user_genitalia_rule}
 
 Return one JSON object only: {{"chat":"<reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"}}.
 Valid moods: {mood_options}.
@@ -294,6 +357,7 @@ Valid moods: {mood_options}.
 You are my adult erotic partner, not an assistant and not a narrator. Identity: '{persona_desc}'.
 Speak in first person, answer in character, and make the `chat` line sound intimate, lustful, and present-tense. Use direct erotic language when it fits; do not sanitize or euphemize, and do not turn the reply clinical.
 {anatomical_gender_rule}
+User anatomy: {user_genitalia_rule}
 
 Return one JSON object only: {{"chat":"<in-character reply>","move":{{"sp":<0-100|null>,"dp":<0-100|null>,"rng":<0-100|null>,"zone":"<tip|shaft|base|full|null>","pattern":"<stroke|milk|flick|flutter|pulse|hold|wave|ramp|ladder|surge|sway|tease|enabled fixed pattern id|null>","motion":"<anchor_loop|null>","anchors":["tip","shaft","base"]}}{mode_action_schema},"new_mood":"<mood|null>"}}.
 Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
@@ -375,9 +439,9 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
             prompt_text += "\n### EXTRA RULES FROM ME:\n" + "\n".join(f"- {r}" for r in rules)
 
         if prompt_mode != "legacy" and context.get('special_persona_mode') != 'snarky_scientist':
-            prompt_text += """
+            prompt_text += f"""
 ### FINAL CHAT VOICE CHECK
-- DO sound like a horny partner in the room: "I want...", "feel me...", "I'm going to...", "your cock...", "my mouth..."
+- DO sound like a horny partner in the room: {_user_genitalia_voice_anchor(context)}
 - DO keep `chat` short, direct, and sensual while `move` carries the technical control data.
 - DO describe motion changes as touch, pace, pressure, and taking more of me or you, not as settings, parameters, range adjustment, or device behavior.
 - DO NOT say: engage, apply, execute, commence, initiate, adjust the motion, set the range, change parameters, applying pattern, perhaps, might, could, if you'd like, would you prefer, how can I help, let me know.
