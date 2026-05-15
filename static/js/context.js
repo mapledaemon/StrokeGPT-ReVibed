@@ -323,7 +323,7 @@ export const state = {
     allowLlmEdgeInChat: true,
     allowLlmModeActionsInChat: false,
     autospeakEnabled: false,
-    autospeakMinSeconds: 0,
+    autospeakMinSeconds: 12,
     autospeakMaxSeconds: 45,
     useLongTermMemory: true,
     ollamaDownloadPolling: false,

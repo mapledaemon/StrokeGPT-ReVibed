@@ -12,6 +12,7 @@ sys.modules.setdefault("requests", requests_module)
 
 from strokegpt.llm import DEFAULT_MODEL, LLMService
 from strokegpt.settings import (
+    AUTOSPEAK_CADENCE_DEFAULT_VERSION,
     CUSTOM_LLM_PROMPT_PREFIX,
     DEFAULT_AUTOSPEAK_MAX_SECONDS,
     DEFAULT_AUTOSPEAK_MIN_SECONDS,
@@ -93,6 +94,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(saved["autospeak_enabled"])
         self.assertEqual(saved["autospeak_min_seconds"], DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(saved["autospeak_max_seconds"], DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
         self.assertTrue(saved["voice_input_noise_suppression"])
         self.assertTrue(saved["voice_input_echo_cancellation"])
         self.assertTrue(saved["voice_input_auto_gain_control"])
@@ -173,6 +175,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertFalse(settings.autospeak_enabled)
         self.assertEqual(settings.autospeak_min_seconds, DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(settings.autospeak_cadence_default_version, AUTOSPEAK_CADENCE_DEFAULT_VERSION)
         self.assertTrue(settings.voice_input_noise_suppression)
         self.assertTrue(settings.voice_input_echo_cancellation)
         self.assertTrue(settings.voice_input_auto_gain_control)
@@ -264,6 +267,55 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["autospeak_enabled"])
         self.assertEqual(saved["autospeak_min_seconds"], 3.0)
         self.assertEqual(saved["autospeak_max_seconds"], 12.0)
+        self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
+
+    def test_legacy_autospeak_default_range_uses_natural_default(self):
+        fake_path = FakePath(json.dumps({
+            "autospeak_enabled": True,
+            "autospeak_min_seconds": 0,
+            "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertTrue(settings.autospeak_enabled)
+        self.assertEqual(settings.autospeak_min_seconds, DEFAULT_AUTOSPEAK_MIN_SECONDS)
+        self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(saved["autospeak_min_seconds"], DEFAULT_AUTOSPEAK_MIN_SECONDS)
+        self.assertEqual(saved["autospeak_max_seconds"], DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
+
+    def test_current_autospeak_default_version_preserves_explicit_zero_default_range(self):
+        fake_path = FakePath(json.dumps({
+            "autospeak_enabled": True,
+            "autospeak_min_seconds": 0,
+            "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
+            "autospeak_cadence_default_version": AUTOSPEAK_CADENCE_DEFAULT_VERSION,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertTrue(settings.autospeak_enabled)
+        self.assertEqual(settings.autospeak_min_seconds, 0.0)
+        self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
+
+    def test_custom_autospeak_zero_range_is_still_allowed(self):
+        fake_path = FakePath(json.dumps({
+            "autospeak_enabled": True,
+            "autospeak_min_seconds": 0,
+            "autospeak_max_seconds": 30,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertTrue(settings.autospeak_enabled)
+        self.assertEqual(settings.autospeak_min_seconds, 0.0)
+        self.assertEqual(settings.autospeak_max_seconds, 30.0)
 
     def test_motion_style_setting_is_normalized(self):
         fake_path = FakePath(json.dumps({"motion_style": "high-variation"}))
@@ -705,6 +757,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"autospeak_seconds":<0-12>', prompt)
         self.assertIn("Autospeak is enabled", prompt)
         self.assertIn("Include top-level `autospeak_seconds` in every JSON response", prompt)
+        self.assertIn("Prefer natural conversational pacing over back-to-back lines", prompt)
+        self.assertIn("shortest natural pause", prompt)
         self.assertIn("Autospeak can be chat-only", prompt)
         self.assertIn("This request is an Autospeak follow-up", prompt)
 
@@ -847,6 +901,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("Use action continue when no motion change is needed", user_message)
         self.assertIn("between 0 and 12", user_message)
         self.assertIn("Do not use null for chat or autospeak_seconds", user_message)
+        self.assertIn("Pace it like natural conversation", user_message)
+        self.assertIn("shortest natural pause", user_message)
 
     def test_freestyle_mode_decision_prompt_honors_edge_permission(self):
         service = LLMService(url="http://localhost:11434/api/chat")

@@ -38,7 +38,7 @@ INTENT_MATCHER = IntentMatcher()
 
 EDGE_START_MIN_STEPS = 12
 EDGE_PROGRESS_MIN_STEPS = 10
-AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS = 0.25
+AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS = 8.0
 
 
 __all__ = [
@@ -224,7 +224,8 @@ def _default_autospeak_interval(callbacks: ModeCallbacks):
 
 def _initial_autospeak_schedule(callbacks: ModeCallbacks):
     interval = _default_autospeak_interval(callbacks)
-    first_interval = 0.0 if _autospeak_enabled(callbacks) else interval
+    min_seconds, _max_seconds = _autospeak_range(callbacks)
+    first_interval = min_seconds if _autospeak_enabled(callbacks) else interval
     return interval, _next_autospeak_at(first_interval)
 
 
@@ -268,7 +269,8 @@ def _maybe_send_autospeak(
         autospeak_interval = _autospeak_interval_from_decision(callbacks, ModeDecision(), autospeak_interval)
         return autospeak_interval, _next_autospeak_at(autospeak_interval)
     if force_due:
-        next_autospeak_at = 0.0
+        min_seconds, _max_seconds = _autospeak_range(callbacks)
+        next_autospeak_at = _next_autospeak_at(min_seconds)
     if time.monotonic() < next_autospeak_at:
         return autospeak_interval, next_autospeak_at
 

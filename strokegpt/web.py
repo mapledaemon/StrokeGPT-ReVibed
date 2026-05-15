@@ -74,7 +74,7 @@ MAX_PATTERN_IMPORT_BYTES = 1_000_000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
-STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 0.25
+STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
 
 
 @dataclass(frozen=True)
@@ -1544,7 +1544,8 @@ def _standalone_autospeak_user_message():
         "in-character chat line. Use move:null when no motion change is "
         "needed, or include move only if you deliberately want to change "
         "motion. Choose autospeak_seconds between "
-        f"{min_seconds:g} and {max_seconds:g}."
+        f"{min_seconds:g} and {max_seconds:g}. If the range allows 0, "
+        "0 means the shortest natural pause, not an immediate loop."
     )
 
 

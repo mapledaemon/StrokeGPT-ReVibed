@@ -64,11 +64,15 @@ def _autospeak_prompt_suffix(context):
             "waiting for the user; use `move:null` unless you deliberately "
             "want a motion change.\n"
         )
-    zero_rule = "- If the minimum is 0, choosing 0 means ask again almost continuously.\n"
+    zero_rule = (
+        "- If the range allows 0, choosing 0 means the shortest natural pause "
+        "before the next line, roughly several seconds; do not use it to loop "
+        "as fast as the model can answer.\n"
+    )
     return f"""
 ### AUTOSPEAK
 - Autospeak is enabled. Include top-level `autospeak_seconds` in every JSON response, choosing a number from `{autospeak_min_text}-{autospeak_max_text}` seconds.
-- Choose lower values for frequent talk and higher values for longer silence.
+- Choose lower values for frequent talk and higher values for longer silence. Prefer natural conversational pacing over back-to-back lines.
 {zero_rule if autospeak_min == 0 else ""}\
 - Autospeak can be chat-only: use `move:null` when you only want to speak. Include `move` only when you deliberately want the app to change motion.
 {event_line}"""
@@ -535,7 +539,7 @@ Rules:
 - `milking` and `freestyle` are continuous; they run until the user stops them, changes mode, or a later non-start decision deliberately returns `stop`.
 - `duration_seconds` times temporary holds, pullbacks, intensity changes, and edge reactions. It is not a countdown to finish a continuous mode.
 - When Autospeak is enabled, return a numeric `autospeak_seconds` every time. Choose only within the configured range `{autospeak_min_text}-{autospeak_max_text}` seconds; do not use null while Autospeak is enabled.
-- Choose lower values for more constant talk and higher values for longer silence. If `{autospeak_min_text}` is 0, 0 means ask again almost continuously.
+- Choose lower values for more constant talk and higher values for longer silence. If `{autospeak_min_text}` is 0, 0 means the shortest natural pause before the next line, not an immediate loop.
 - When Autospeak is off, `autospeak_seconds` is ignored and may be null.
 - Avoid very short durations. Use 20-90 seconds for normal holds/reactions and 10-20 seconds only for deliberately brief reactions.
 - Choose `intensity` 0-100 while respecting configured speed range `{speed_min}-{speed_max}`; the app clamps output.
@@ -564,7 +568,8 @@ State:
                 "Autospeak is due. Return one short in-character chat line. "
                 "Use action continue when no motion change is needed, or choose a bounded mode action when the mode should change. "
                 f"choose the next autospeak_seconds between {autospeak_min_text} and {autospeak_max_text}, "
-                "and return only the JSON object. Do not use null for chat or autospeak_seconds."
+                "and return only the JSON object. Do not use null for chat or autospeak_seconds. "
+                "Pace it like natural conversation; 0 is the shortest natural pause, not immediate re-prompting."
             )
         else:
             request_text = (

@@ -51,8 +51,10 @@ MAX_CUSTOM_LLM_PROMPT_CHARS = 30000
 DEFAULT_USER_GENITALIA = "penis"
 USER_GENITALIA_OPTIONS = {"penis", "vagina", "custom"}
 MAX_USER_GENITALIA_CUSTOM_CHARS = 120
-DEFAULT_AUTOSPEAK_MIN_SECONDS = 0.0
+DEFAULT_AUTOSPEAK_MIN_SECONDS = 12.0
 DEFAULT_AUTOSPEAK_MAX_SECONDS = 45.0
+LEGACY_DEFAULT_AUTOSPEAK_MIN_SECONDS = 0.0
+AUTOSPEAK_CADENCE_DEFAULT_VERSION = 2
 MIN_AUTOSPEAK_SECONDS = 0.0
 MAX_AUTOSPEAK_SECONDS = 300.0
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
@@ -229,6 +231,7 @@ def default_settings_dict():
         "autospeak_enabled": False,
         "autospeak_min_seconds": DEFAULT_AUTOSPEAK_MIN_SECONDS,
         "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
+        "autospeak_cadence_default_version": AUTOSPEAK_CADENCE_DEFAULT_VERSION,
         "rules": [],
         "user_profile": default_user_profile(),
         "min_depth": 5,
@@ -395,10 +398,22 @@ class SettingsManager:
             data.get("autospeak_enabled", defaults["autospeak_enabled"]),
             defaults["autospeak_enabled"],
         )
-        self.autospeak_min_seconds, self.autospeak_max_seconds = self._autospeak_timing_pair(
-            data.get("autospeak_min_seconds", defaults["autospeak_min_seconds"]),
-            data.get("autospeak_max_seconds", defaults["autospeak_max_seconds"]),
+        self.autospeak_cadence_default_version = self._normalize_autospeak_cadence_default_version(
+            data.get("autospeak_cadence_default_version", 1)
         )
+        autospeak_min_raw = data.get("autospeak_min_seconds", defaults["autospeak_min_seconds"])
+        autospeak_max_raw = data.get("autospeak_max_seconds", defaults["autospeak_max_seconds"])
+        if (
+            self.autospeak_cadence_default_version < AUTOSPEAK_CADENCE_DEFAULT_VERSION
+            and self._is_legacy_autospeak_default_range(autospeak_min_raw, autospeak_max_raw)
+        ):
+            autospeak_min_raw = defaults["autospeak_min_seconds"]
+            autospeak_max_raw = defaults["autospeak_max_seconds"]
+        self.autospeak_min_seconds, self.autospeak_max_seconds = self._autospeak_timing_pair(
+            autospeak_min_raw,
+            autospeak_max_raw,
+        )
+        self.autospeak_cadence_default_version = AUTOSPEAK_CADENCE_DEFAULT_VERSION
         self.rules = _as_list(data.get("rules", []))
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
@@ -622,6 +637,7 @@ class SettingsManager:
             "autospeak_enabled": bool(self.autospeak_enabled),
             "autospeak_min_seconds": self.autospeak_min_seconds,
             "autospeak_max_seconds": self.autospeak_max_seconds,
+            "autospeak_cadence_default_version": self.autospeak_cadence_default_version,
             "rules": self.rules,
             "user_profile": self.user_profile,
             "min_depth": self.min_depth,
@@ -989,6 +1005,23 @@ class SettingsManager:
             DEFAULT_AUTOSPEAK_MAX_SECONDS,
         )
         return min(first, second), max(first, second)
+
+    def _is_legacy_autospeak_default_range(self, first, second):
+        try:
+            first_value = float(first)
+            second_value = float(second)
+        except (TypeError, ValueError):
+            return False
+        return (
+            min(first_value, second_value) == LEGACY_DEFAULT_AUTOSPEAK_MIN_SECONDS
+            and max(first_value, second_value) == DEFAULT_AUTOSPEAK_MAX_SECONDS
+        )
+
+    def _normalize_autospeak_cadence_default_version(self, value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 1
 
     def set_persona_prompt(self, prompt, save_prompt=True):
         normalized = self._normalize_persona_prompt(prompt)
