@@ -1415,6 +1415,8 @@ def get_current_context():
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
         'llm_prompt_mode': settings.llm_prompt_mode,
+        'user_genitalia': settings.user_genitalia,
+        'user_genitalia_custom': settings.user_genitalia_custom,
         'motion_preferences': _motion_preference_payload()["prompt"],
         'motion_style': settings.motion_style,
         'motion_reverse_direction': settings.motion_reverse_direction,

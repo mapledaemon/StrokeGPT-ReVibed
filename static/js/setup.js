@@ -11,6 +11,7 @@ import {
     populateOllamaThinkingSetting,
     populatePersonaPromptOptions,
     populatePromptModeSetting,
+    populateUserGenitaliaSetting,
     refreshOllamaStatus,
     setPersonaPrompt,
     updateOllamaStatus,
@@ -195,6 +196,7 @@ export async function startupCheck() {
         populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         populateOllamaThinkingSetting(data.ollama_thinking_enabled);
         populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
+        populateUserGenitaliaSetting(data.user_genitalia, data.user_genitalia_custom, data.user_genitalia_options);
         populateDiagnosticsSettings(data);
         updateOllamaStatus(data.ollama_status);
         populateDeviceSettings(data);
@@ -217,6 +219,7 @@ export async function startupCheck() {
         populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
         populateOllamaThinkingSetting(data && data.ollama_thinking_enabled);
         populatePromptModeSetting(data && data.llm_prompt_mode, data && data.llm_prompt_mode_options);
+        populateUserGenitaliaSetting(data && data.user_genitalia, data && data.user_genitalia_custom, data && data.user_genitalia_options);
         populateDiagnosticsSettings(data || {});
         updateOllamaStatus(data && data.ollama_status);
         populateDeviceSettings(data || {});

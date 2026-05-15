@@ -91,6 +91,25 @@ def set_llm_prompt_mode_route():
     })
 
 
+@settings_blueprint.route('/set_user_genitalia', methods=['POST'])
+def set_user_genitalia_route():
+    web = _web()
+    data = web._request_json()
+    web.settings.user_genitalia = web.settings._normalize_user_genitalia(
+        data.get("user_genitalia", web.settings.user_genitalia)
+    )
+    web.settings.user_genitalia_custom = web.settings._normalize_user_genitalia_custom(
+        data.get("user_genitalia_custom", web.settings.user_genitalia_custom)
+    )
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "user_genitalia": web.settings.user_genitalia,
+        "user_genitalia_custom": web.settings.user_genitalia_custom,
+        "user_genitalia_options": web.payloads.user_genitalia_options(),
+    })
+
+
 @settings_blueprint.route('/save_llm_prompt_set', methods=['POST'])
 def save_llm_prompt_set_route():
     web = _web()
@@ -297,6 +316,9 @@ def system_prompts_route():
     return jsonify({
         "llm_prompt_mode": web.settings.llm_prompt_mode,
         "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
+        "user_genitalia": web.settings.user_genitalia,
+        "user_genitalia_custom": web.settings.user_genitalia_custom,
+        "user_genitalia_options": web.payloads.user_genitalia_options(),
         "chat": web.llm.system_prompt(context),
         "repair": web.llm.repair_prompt(context),
         "name_this_move": web.llm.name_this_move_prompt(**_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),

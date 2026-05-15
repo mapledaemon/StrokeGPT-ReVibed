@@ -59,6 +59,40 @@ class WebSettingsRouteTests(WebTestCase):
             settings.llm_custom_prompt_sets = original_prompt_sets
             llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
 
+    def test_user_genitalia_can_be_selected_and_reported_in_prompts(self):
+        from strokegpt.web import get_current_context, settings
+
+        original = (settings.user_genitalia, settings.user_genitalia_custom)
+        try:
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/set_user_genitalia", json={
+                    "user_genitalia": "vulva",
+                    "user_genitalia_custom": "  ignored unless custom  ",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["user_genitalia"], "vagina")
+            self.assertEqual(data["user_genitalia_custom"], "ignored unless custom")
+            self.assertTrue(any(option["id"] == "custom" for option in data["user_genitalia_options"]))
+            self.assertEqual(settings.user_genitalia, "vagina")
+            self.assertEqual(get_current_context()["user_genitalia"], "vagina")
+            save.assert_called_once()
+
+            response = self.client.get("/check_settings")
+            payload = response.get_json()
+            self.assertEqual(payload["user_genitalia"], "vagina")
+            self.assertTrue(any(option["id"] == "penis" for option in payload["user_genitalia_options"]))
+
+            response = self.client.get("/system_prompts")
+            prompts = response.get_json()
+            self.assertEqual(prompts["user_genitalia"], "vagina")
+            self.assertIn("The device is being used on my vagina/vulva", prompts["chat"])
+            self.assertIn("The device is being used on my vagina/vulva", prompts["repair"])
+        finally:
+            settings.user_genitalia, settings.user_genitalia_custom = original
+
     def test_custom_llm_prompt_set_can_be_saved_and_selected(self):
         from strokegpt.web import llm, settings
 
@@ -516,7 +550,8 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             for key in ("chat", "repair", "name_this_move", "profile_consolidation",
-                        "name_this_move_sample_inputs"):
+                        "name_this_move_sample_inputs", "user_genitalia",
+                        "user_genitalia_custom", "user_genitalia_options"):
                 self.assertIn(key, data)
             self.assertEqual(data["llm_prompt_mode"], "revibed")
             self.assertTrue(any(option["id"] == "legacy" for option in data["llm_prompt_mode_options"]))
