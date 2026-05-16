@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - Unreleased - Add Programs Funscript Library
+---------------------------------------------------------
+
+Branch: gpt-programs-funscripts
+
+- Added a separate Programs (funscripts) library for long authored timelines so
+  imported full funscripts are not treated as short LLM-selectable loop
+  patterns.
+- Added Motion settings controls to import, list, export, and delete saved
+  Programs, including a trash-icon delete action on each Program row.
+- Added a Motion Studio Save Program action that stores the original imported
+  funscript source through the Programs library while leaving future playback
+  on the shared motion safety path.
+
+
 2026-05-16 - PR #229 - Split Motion Studio Edit And Draw Tools
 ---------------------------------------------------------------
 
