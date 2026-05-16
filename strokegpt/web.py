@@ -30,7 +30,7 @@ from .server_tls import ServerTlsError, resolve_server_tls
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
-from .motion_patterns import PATTERNS, PatternFrame, expand_motion_pattern
+from .motion_patterns import PATTERNS, PatternFrame
 from .motion_preferences import (
     THUMBS_DOWN_DISABLE_THRESHOLD,
     adjust_weight_for_feedback,
@@ -1224,8 +1224,8 @@ def _motion_training_snapshot():
 def _set_motion_training_state(**updates):
     return app_state.set_motion_training_state(**updates)
 
-def _training_target_for_record(record):
-    current = motion.current_target()
+def _training_target_for_record(record, current=None):
+    current = current or motion.current_target()
     speed = current.speed if current.speed > 0 else 35
     if settings.min_speed >= settings.max_speed:
         speed = max(10, min(45, speed))
@@ -1288,23 +1288,8 @@ def _program_section_message(record, start_ms=None, end_ms=None):
 
 def _run_motion_training_pattern(record, *, preview=False):
     try:
-        target = _training_target_for_record(record)
-        frames = expand_motion_pattern(
-            record.to_motion_pattern(),
-            motion.current_target(),
-            target,
-            preserve_timing=_training_preserves_pattern_timing(record),
-            base_step_seconds=getattr(motion, "step_delay", 0.25),
-        )
-        if not frames:
-            _set_motion_training_state(
-                state="error",
-                pattern_id=record.pattern_id,
-                pattern_name=record.name,
-                message=f"Pattern {record.name} has no playable frames.",
-                preview=preview,
-            )
-            return
+        current = motion.current_target()
+        target = _training_target_for_record(record, current)
         _set_motion_training_state(
             state="playing",
             pattern_id=record.pattern_id,
@@ -1312,8 +1297,10 @@ def _run_motion_training_pattern(record, *, preview=False):
             message=f"Playing {'edited preview' if preview else record.name}.",
             preview=preview,
         )
-        completed = motion.apply_position_frames(
-            frames,
+        completed = motion.apply_motion_pattern(
+            record.to_motion_pattern(),
+            target,
+            preserve_timing=_training_preserves_pattern_timing(record),
             stop_after=True,
             source="motion training preview" if preview else "motion training",
         )

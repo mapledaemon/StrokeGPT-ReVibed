@@ -51,6 +51,7 @@ CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
 CONTINUOUS_MORPH_SECONDS = 0.95
 CONTINUOUS_MIN_MORPH_SECONDS = 0.45
 CONTINUOUS_MAX_MORPH_SECONDS = 1.8
+MOTION_PATTERN_PREVIEW_MIN_SECONDS = 3.0
 
 
 def _depth_direction(start: "MotionTarget", end: "MotionTarget", threshold: float = 7.0) -> int:
@@ -1234,6 +1235,106 @@ class MotionController:
         if plan is None:
             return False
 
+        return self._apply_continuous_plan(
+            plan,
+            target,
+            source=source,
+            trace_metadata=trace_metadata,
+        )
+
+    def apply_motion_pattern(
+        self,
+        pattern: Any,
+        target: MotionTarget,
+        *,
+        preserve_timing: bool = False,
+        stop_after: bool = False,
+        source: str = "motion pattern",
+    ) -> bool:
+        if target.speed <= 0:
+            self.stop()
+            return True
+
+        target = target.clamped()
+        if self.backend == "continuous":
+            from .motion_patterns import continuous_motion_plan_from_pattern
+
+            plan = continuous_motion_plan_from_pattern(pattern)
+            if plan is None:
+                return False
+            return self._apply_continuous_plan(
+                plan,
+                target,
+                source=source,
+                stop_after=stop_after,
+                finite_cycles=self._finite_pattern_cycles(plan, target) if stop_after else None,
+                block=True,
+            )
+
+        if self.backend == "position":
+            from .motion_patterns import continuous_motion_plan_from_pattern, continuous_plan_timed_frames
+
+            plan = continuous_motion_plan_from_pattern(pattern)
+            frames = continuous_plan_timed_frames(
+                plan,
+                target,
+                base_step_seconds=self.step_delay,
+                reverse_phase=self.reverse_direction,
+            ) if plan is not None else []
+            if stop_after:
+                frames = self._repeat_frames_for_min_duration(frames)
+            return self.apply_position_frames(frames, stop_after=stop_after, source=source)
+
+        from .motion_patterns import expand_motion_pattern
+
+        current = self.current_target()
+        frames = expand_motion_pattern(
+            pattern,
+            current,
+            target,
+            preserve_timing=preserve_timing,
+            base_step_seconds=self.step_delay,
+        )
+        if stop_after:
+            frames = self._repeat_frames_for_min_duration(frames)
+        return self.apply_frames(frames, stop_after=stop_after, source=source)
+
+    def _repeat_frames_for_min_duration(self, frames: list[Any]) -> list[Any]:
+        if not frames:
+            return frames
+        step_delay = max(0.0, float(self.step_delay or 0.0))
+        if step_delay <= 0:
+            return frames
+        duration = sum(max(0.0, float(getattr(frame, "delay_factor", 1.0) or 0.0)) for frame in frames) * step_delay
+        if duration <= 0:
+            return frames
+        cycles = max(1, int(math.ceil(MOTION_PATTERN_PREVIEW_MIN_SECONDS / duration)))
+        return list(frames) * cycles
+
+    def _finite_pattern_cycles(self, plan: Any, target: MotionTarget) -> float:
+        from .motion_patterns import sample_continuous_motion
+
+        try:
+            sample = self._sample_continuous_motion(plan, target, 0.0, sample_continuous_motion)
+            duration_seconds = max(0.001, float(sample.effective_duration_seconds))
+        except (TypeError, ValueError, AttributeError):
+            duration_seconds = max(0.001, float(getattr(plan, "duration_seconds", 0.001) or 0.001))
+        return max(1.0, float(math.ceil(MOTION_PATTERN_PREVIEW_MIN_SECONDS / duration_seconds)))
+
+    def _apply_continuous_plan(
+        self,
+        plan: Any,
+        target: MotionTarget,
+        *,
+        source: str,
+        trace_metadata: Optional[dict[str, Any]] = None,
+        stop_after: bool = False,
+        finite_cycles: Optional[float] = None,
+        block: bool = False,
+    ) -> bool:
+        if plan is None:
+            return False
+
         started_at = time.monotonic()
         plan_key = self._continuous_plan_key(plan)
         clamped_target = target.clamped()
@@ -1270,21 +1371,30 @@ class MotionController:
             )
         self._set_frame_playback_active(True)
 
+        args = (
+            plan,
+            clamped_target,
+            source,
+            generation,
+            started_at,
+            phase_offset_seconds,
+            stream_offset_seconds,
+            replacing_active_stream,
+            preserve_replacement_phase,
+            start_target,
+        )
+        kwargs = {
+            "trace_metadata": trace_metadata,
+            "stop_after": stop_after,
+            "finite_cycles": finite_cycles,
+        }
+        if block:
+            return bool(self._run_continuous_plan(*args, **kwargs))
+
         thread = threading.Thread(
             target=self._run_continuous_plan,
-            args=(
-                plan,
-                clamped_target,
-                source,
-                generation,
-                started_at,
-                phase_offset_seconds,
-                stream_offset_seconds,
-                replacing_active_stream,
-                preserve_replacement_phase,
-                start_target,
-                trace_metadata,
-            ),
+            args=args,
+            kwargs=kwargs,
             daemon=True,
         )
         thread.start()
@@ -1511,16 +1621,18 @@ class MotionController:
         preserve_replacement_phase: bool,
         start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
+        stop_after: bool = False,
+        finite_cycles: Optional[float] = None,
+    ) -> bool:
         if not self._supports_continuous_streaming():
             self._record_continuous_stream_unavailable(
                 target,
                 source=source,
                 trace_metadata=trace_metadata,
             )
-            return
+            return True
 
-        self._run_continuous_stream_plan(
+        return self._run_continuous_stream_plan(
             plan,
             target,
             source,
@@ -1532,6 +1644,8 @@ class MotionController:
             preserve_replacement_phase,
             start_target,
             trace_metadata=trace_metadata,
+            stop_after=stop_after,
+            finite_cycles=finite_cycles,
         )
 
     def _supports_continuous_streaming(self) -> bool:
@@ -1650,6 +1764,8 @@ class MotionController:
         preserve_replacement_phase: bool,
         start_target: MotionTarget,
         trace_metadata: Optional[dict[str, Any]] = None,
+        stop_after: bool = False,
+        finite_cycles: Optional[float] = None,
     ) -> bool:
         from .motion_patterns import (
             continuous_plan_depth_range,
@@ -1693,6 +1809,16 @@ class MotionController:
             play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds
         else:
             play_start_stream_seconds = play_start_seconds
+        finite_stop_stream_seconds = None
+        if finite_cycles is not None:
+            try:
+                finite_cycles = max(0.0, float(finite_cycles))
+            except (TypeError, ValueError):
+                finite_cycles = 0.0
+            if finite_cycles > 0:
+                finite_stop_stream_seconds = play_start_stream_seconds + (
+                    effective_duration_seconds * finite_cycles
+                )
         morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
         stream_seconds = play_start_stream_seconds
         sample_index = 0
@@ -1854,6 +1980,8 @@ class MotionController:
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
             nonlocal start_point_pending, pending_hsp_twitch_filtered_points
+            if finite_stop_stream_seconds is not None:
+                until_seconds = min(until_seconds, finite_stop_stream_seconds)
             points: list[dict[str, Any]] = []
             if start_point_pending:
                 start_point_pending = False
@@ -1885,7 +2013,9 @@ class MotionController:
                 point_stream_seconds = (
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + transport_interval
-                if point_stream_seconds > until_seconds and len(points) >= min_points:
+                if point_stream_seconds > until_seconds and (
+                    len(points) >= min_points or finite_stop_stream_seconds is not None
+                ):
                     break
 
                 sample = sample_stream_point(point_seconds, point_stream_seconds)
@@ -1906,6 +2036,33 @@ class MotionController:
                 )
                 pending_hsp_twitch_filtered_points = 0
                 advance_phase_cursor()
+            if finite_stop_stream_seconds is not None and until_seconds >= finite_stop_stream_seconds:
+                last_stream_seconds = (
+                    float(points[-1]["t"]) / 1000.0
+                    if points
+                    else (previous_point_time_seconds or play_start_stream_seconds)
+                )
+                if last_stream_seconds < finite_stop_stream_seconds - 0.001:
+                    point_seconds = play_start_seconds + max(
+                        0.0,
+                        finite_stop_stream_seconds - play_start_stream_seconds,
+                    )
+                    sample = sample_stream_point(point_seconds, finite_stop_stream_seconds)
+                    phase_interval = (
+                        base_interval
+                        if previous_phase_time_seconds is None
+                        else max(0.001, point_seconds - previous_phase_time_seconds)
+                    )
+                    append_stream_point(
+                        points,
+                        point_seconds,
+                        finite_stop_stream_seconds,
+                        False,
+                        sample,
+                        phase_interval,
+                        hsp_twitch_filtered_points=pending_hsp_twitch_filtered_points,
+                    )
+                    pending_hsp_twitch_filtered_points = 0
             return points
 
         def record_batch(
@@ -2007,10 +2164,17 @@ class MotionController:
                 previous_recorded_point = point
 
         try:
-            initial_points = build_batch(
-                play_start_stream_seconds + CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS,
-                min_points=min(3, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND),
+            initial_min_points = (
+                1
+                if finite_stop_stream_seconds is not None
+                else min(3, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
             )
+            initial_until = (
+                finite_stop_stream_seconds
+                if finite_stop_stream_seconds is not None
+                else play_start_stream_seconds + CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS
+            )
+            initial_points = build_batch(initial_until, min_points=initial_min_points)
             if not initial_points:
                 return False
             send_started_at = time.monotonic()
@@ -2041,6 +2205,16 @@ class MotionController:
 
                 elapsed = max(0.0, time.monotonic() - started_at)
                 hsp_elapsed = hsp_clock_start_seconds + elapsed
+                if finite_stop_stream_seconds is not None and hsp_elapsed >= finite_stop_stream_seconds:
+                    if stop_after:
+                        with self._lock:
+                            if generation != self._generation:
+                                return True
+                            self._generation += 1
+                        self._set_frame_playback_active(False)
+                        self.handy.stop()
+                        self._record_current_state(source=source, label=f"{plan_name} preview stopped")
+                    return True
                 current_phase_seconds, phase_rate = phase_at_stream_time(hsp_elapsed)
                 self._refresh_continuous_phase_state(
                     plan=plan,
@@ -2052,9 +2226,12 @@ class MotionController:
                     phase_rate=phase_rate,
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
-                if buffer_remaining <= CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS:
+                can_append = finite_stop_stream_seconds is None or stream_seconds < finite_stop_stream_seconds - 0.001
+                if buffer_remaining <= CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS and can_append:
                     until = hsp_elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
-                    points = build_batch(until)
+                    if finite_stop_stream_seconds is not None:
+                        until = min(until, finite_stop_stream_seconds)
+                    points = build_batch(until) if until > stream_seconds + 0.001 else []
                     if points:
                         batch_index += 1
                         send_started_at = time.monotonic()

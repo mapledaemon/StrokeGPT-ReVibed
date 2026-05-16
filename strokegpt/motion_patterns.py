@@ -119,6 +119,11 @@ class TimedMotionPoint:
     interval_seconds: float
 
 
+CONTINUOUS_MIN_CYCLE_SECONDS = 1.5
+CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
+CONTINUOUS_MAX_CYCLE_SECONDS = 6.0
+
+
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
     if not actions:
         return 0
@@ -567,7 +572,11 @@ def _continuous_cycle_ms(actions: tuple[PatternAction, ...]) -> int:
 
 def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
-    return _clamp((_continuous_cycle_ms(actions) / 1000.0) / tempo_scale, 0.45, 6.0)
+    return _clamp(
+        (_continuous_cycle_ms(actions) / 1000.0) / tempo_scale,
+        CONTINUOUS_MIN_CYCLE_SECONDS,
+        CONTINUOUS_MAX_CYCLE_SECONDS,
+    )
 
 
 def continuous_plan_phase_points(plan: ContinuousMotionPlan) -> tuple[tuple[float, float], ...]:
@@ -619,7 +628,7 @@ def continuous_plan_timed_phase_points(
         phase = float(raw_phase)
         segment_seconds = max(0.0, (phase - previous_phase) * duration)
         if segment_seconds > target_interval:
-            intermediate_count = max(0, int(round(segment_seconds / target_interval)) - 1)
+            intermediate_count = max(0, int(math.ceil(segment_seconds / target_interval)) - 1)
             for step in range(1, intermediate_count + 1):
                 amount = step / (intermediate_count + 1)
                 dense.append(
@@ -959,7 +968,10 @@ def sample_continuous_motion(
     target = target.clamped()
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
-    effective_duration_seconds = duration_seconds / tempo_scale
+    effective_duration_seconds = max(
+        CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS,
+        duration_seconds / tempo_scale,
+    )
     raw_phase = (elapsed / effective_duration_seconds) % 1.0
     phase = (1.0 - raw_phase) % 1.0 if reverse_phase else raw_phase
     pos = _sample_action_position(plan.actions, phase)

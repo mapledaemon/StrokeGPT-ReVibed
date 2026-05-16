@@ -5,6 +5,7 @@ from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import (
     PATTERNS,
     JITTER_CYCLE_SECONDS,
+    CONTINUOUS_MIN_CYCLE_SECONDS,
     FrameStyle,
     MotionPattern,
     PatternAction,
@@ -127,11 +128,11 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertIsNotNone(ramp)
         self.assertAlmostEqual(ramp.duration_seconds, 1.8)
 
-        # Symmetric patterns still get the small 50 ms wrap floor so the
-        # closed loop has an explicit nonzero segment at phase wraparound.
+        # Symmetric patterns still get the small 50 ms wrap floor, then short
+        # cycles are lifted to the app's minimum to avoid subsecond HSP loops.
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
-        self.assertAlmostEqual(stroke.duration_seconds, 0.95)
+        self.assertAlmostEqual(stroke.duration_seconds, CONTINUOUS_MIN_CYCLE_SECONDS)
 
     def test_continuous_plan_caches_projectable_normalized_range(self):
         plan = continuous_motion_plan("ramp")

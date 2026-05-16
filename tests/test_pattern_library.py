@@ -280,6 +280,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         )
         self.original_apply_frames = self.web.motion.apply_frames
         self.original_apply_position_frames = self.web.motion.apply_position_frames
+        self.original_apply_motion_pattern = self.web.motion.apply_motion_pattern
         self.original_motion_stop = self.web.motion.stop
         self.stop_calls = []
         self.web.motion_pattern_library = PatternLibrary(self.temp_dir.name)
@@ -323,6 +324,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         ) = self.original_handy_state
         self.web.motion.apply_frames = self.original_apply_frames
         self.web.motion.apply_position_frames = self.original_apply_position_frames
+        self.web.motion.apply_motion_pattern = self.original_apply_motion_pattern
         self.web.motion.stop = self.original_motion_stop
         self.temp_dir.cleanup()
 
@@ -393,13 +395,19 @@ class MotionPatternRouteTests(unittest.TestCase):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
-            calls.append({"frames": frames, "stop_after": stop_after})
+        def fake_apply_motion_pattern(pattern, target, *, preserve_timing=False, stop_after=False, source=""):
+            calls.append({
+                "pattern": pattern,
+                "target": target,
+                "preserve_timing": preserve_timing,
+                "stop_after": stop_after,
+                "source": source,
+            })
             if stop_after:
                 self.web.motion.stop()
             return True
 
-        self.web.motion.apply_position_frames = fake_apply_position_frames
+        self.web.motion.apply_motion_pattern = fake_apply_motion_pattern
 
         response = self.client.post("/motion_training/start", json={"pattern_id": "stroke"})
 
@@ -413,20 +421,28 @@ class MotionPatternRouteTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertTrue(calls)
         self.assertTrue(calls[0]["stop_after"])
-        self.assertGreater(len(calls[0]["frames"]), 1)
+        self.assertEqual(calls[0]["pattern"].name, "stroke")
+        self.assertFalse(calls[0]["preserve_timing"])
+        self.assertEqual(calls[0]["source"], "motion training")
         self.assertEqual(self.stop_calls, ["stopped"])
 
     def test_training_preview_routes_unsaved_pattern_without_writing_file(self):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
-            calls.append({"frames": frames, "stop_after": stop_after})
+        def fake_apply_motion_pattern(pattern, target, *, preserve_timing=False, stop_after=False, source=""):
+            calls.append({
+                "pattern": pattern,
+                "target": target,
+                "preserve_timing": preserve_timing,
+                "stop_after": stop_after,
+                "source": source,
+            })
             if stop_after:
                 self.web.motion.stop()
             return True
 
-        self.web.motion.apply_position_frames = fake_apply_position_frames
+        self.web.motion.apply_motion_pattern = fake_apply_motion_pattern
         response = self.client.post("/motion_training/preview", json={
             "pattern": {
                 "id": "edited-preview",
@@ -446,6 +462,8 @@ class MotionPatternRouteTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertTrue(calls)
         self.assertTrue(calls[0]["stop_after"])
+        self.assertTrue(calls[0]["preserve_timing"])
+        self.assertEqual(calls[0]["source"], "motion training preview")
         self.assertEqual(tuple(Path(self.temp_dir.name).iterdir()), ())
 
     def test_training_preview_preserves_unsaved_pattern_timing(self):
@@ -455,13 +473,19 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.handy.last_depth_pos = 50
         self.web.handy.last_stroke_range = 80
 
-        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
-            calls.append({"frames": frames, "stop_after": stop_after})
+        def fake_apply_motion_pattern(pattern, target, *, preserve_timing=False, stop_after=False, source=""):
+            calls.append({
+                "pattern": pattern,
+                "target": target,
+                "preserve_timing": preserve_timing,
+                "stop_after": stop_after,
+                "source": source,
+            })
             if stop_after:
                 self.web.motion.stop()
             return True
 
-        self.web.motion.apply_position_frames = fake_apply_position_frames
+        self.web.motion.apply_motion_pattern = fake_apply_motion_pattern
         response = self.client.post("/motion_training/preview", json={
             "pattern": {
                 "id": "timed-preview",
@@ -476,16 +500,50 @@ class MotionPatternRouteTests(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertTrue(calls)
-        timed_frames = [
-            frame
-            for frame in calls[0]["frames"]
-            if str(getattr(frame, "phase", "")).startswith("timed")
-        ]
-        authored_frames = [frame for frame in timed_frames if frame.phase == "timed-pattern"]
-        self.assertEqual(len(authored_frames), 4)
-        self.assertTrue(any(frame.phase == "timed-blend" for frame in timed_frames))
-        self.assertGreater(sum(frame.delay_factor for frame in timed_frames), 3.0)
-        self.assertGreater(max(frame.target.speed for frame in timed_frames), min(frame.target.speed for frame in timed_frames))
+        self.assertTrue(calls[0]["preserve_timing"])
+        self.assertEqual([action.at for action in calls[0]["pattern"].actions], [0, 100, 900])
+        self.assertEqual([action.pos for action in calls[0]["pattern"].actions], [50.0, 95.0, 100.0])
+        self.assertEqual(calls[0]["target"].depth, 50)
+        self.assertEqual(calls[0]["target"].stroke_range, 80)
+
+    def test_training_preview_uses_authored_shape_without_forcing_full_range(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+        self.web.handy.last_relative_speed = 35
+        self.web.handy.last_depth_pos = 50
+        self.web.handy.last_stroke_range = 80
+
+        def fake_apply_motion_pattern(pattern, target, *, preserve_timing=False, stop_after=False, source=""):
+            calls.append({
+                "pattern": pattern,
+                "target": target,
+                "preserve_timing": preserve_timing,
+                "stop_after": stop_after,
+                "source": source,
+            })
+            if stop_after:
+                self.web.motion.stop()
+            return True
+
+        self.web.motion.apply_motion_pattern = fake_apply_motion_pattern
+        response = self.client.post("/motion_training/preview", json={
+            "pattern": {
+                "id": "small-shape",
+                "name": "Small Shape",
+                "actions": [{"at": 0, "pos": 45}, {"at": 300, "pos": 55}, {"at": 600, "pos": 45}],
+            }
+        })
+
+        self.assertEqual(response.status_code, 200)
+        for _ in range(10):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        self.assertTrue(calls[0]["preserve_timing"])
+        self.assertEqual([action.pos for action in calls[0]["pattern"].actions], [45.0, 55.0, 45.0])
+        self.assertEqual(calls[0]["target"].depth, 50)
+        self.assertEqual(calls[0]["target"].stroke_range, 80)
 
     def test_save_generated_pattern_writes_trained_pattern_file(self):
         response = self.client.post("/motion_patterns/save_generated", json={
@@ -508,13 +566,13 @@ class MotionPatternRouteTests(unittest.TestCase):
         calls = []
         self.web.handy.handy_key = "test-key"
 
-        def fake_apply_position_frames(frames, *, stop_after=False, **_kwargs):
-            calls.append(tuple(round(frame.target.depth) for frame in frames))
+        def fake_apply_motion_pattern(pattern, target, *, preserve_timing=False, stop_after=False, source=""):
+            calls.append(tuple(round(action.pos) for action in pattern.actions))
             if stop_after:
                 self.web.motion.stop()
             return True
 
-        self.web.motion.apply_position_frames = fake_apply_position_frames
+        self.web.motion.apply_motion_pattern = fake_apply_motion_pattern
 
         for pattern_id in ("stroke", "tease"):
             response = self.client.post("/motion_training/start", json={"pattern_id": pattern_id})
