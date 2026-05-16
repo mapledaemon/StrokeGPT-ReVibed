@@ -6,11 +6,34 @@ import {
     cropPatternToWindow,
     patternFromImportPayload,
     segmentIntensity,
+    STUDIO_EDIT_HIT_TOLERANCE_PX,
     STUDIO_MAX_ACTIONS,
+    studioActionAtPixel,
+    studioActionFromPixel,
     studioCropPreviewPayload,
+    studioDeleteActionAt,
+    studioInsertSortedAction,
+    studioMoveActionAt,
     timelineIntensityColor,
 } from '../../static/js/motion/training-editor.js';
 import { state } from '../../static/js/context.js';
+
+function studioMetrics(actions, width = 400, height = 200) {
+    const pad = 34;
+    const start = actions[0].at;
+    const end = actions[actions.length - 1].at;
+    const duration = Math.max(1, end - start);
+    return {
+        pad,
+        start,
+        end,
+        duration,
+        width,
+        height,
+        innerWidth: width - pad * 2,
+        innerHeight: height - pad * 2,
+    };
+}
 
 describe('motion pattern studio helpers', () => {
     it('imports a funscript as a rebased editable pattern', () => {
@@ -109,5 +132,89 @@ describe('motion pattern studio helpers', () => {
         state.motionStudioCropStartMs = 0;
         state.motionStudioCropEndMs = 0;
         state.motionTrainingEditedPattern = null;
+    });
+});
+
+describe('motion pattern studio edit-tool helpers', () => {
+    const actions = [
+        { at: 0, pos: 20 },
+        { at: 1000, pos: 80 },
+        { at: 2000, pos: 20 },
+    ];
+    const metrics = studioMetrics(actions);
+
+    it('returns the closest point index when the cursor is within tolerance', () => {
+        // Mid action sits at the midpoint of the inner width, on a curve
+        // top high enough that pixel y maps to pos 80.
+        const midX = metrics.pad + metrics.innerWidth / 2;
+        const midY = metrics.pad + ((100 - 80) / 100) * metrics.innerHeight;
+        assert.strictEqual(studioActionAtPixel(actions, midX, midY, metrics), 1);
+    });
+
+    it('returns -1 when the cursor is outside the hit tolerance ring', () => {
+        const midX = metrics.pad + metrics.innerWidth / 2;
+        const midY = metrics.pad + ((100 - 80) / 100) * metrics.innerHeight;
+        assert.strictEqual(
+            studioActionAtPixel(actions, midX + STUDIO_EDIT_HIT_TOLERANCE_PX + 4, midY, metrics),
+            -1,
+        );
+    });
+
+    it('inserts a new point and keeps the action list sorted by `at`', () => {
+        const next = studioInsertSortedAction(actions, { at: 1500, pos: 50 });
+
+        assert.strictEqual(next.length, actions.length + 1);
+        assert.deepStrictEqual(next.map(a => a.at), [0, 1000, 1500, 2000]);
+        assert.strictEqual(next[2].pos, 50);
+    });
+
+    it('refuses to delete the start or end anchor and preserves cycle duration', () => {
+        // Interior point goes away cleanly.
+        const trimmed = studioDeleteActionAt(actions, 1);
+        assert.deepStrictEqual(trimmed.map(a => a.at), [0, 2000]);
+
+        // First and last anchors are protected so cycle duration / start
+        // pos stay stable.
+        assert.strictEqual(studioDeleteActionAt(actions, 0), actions);
+        assert.strictEqual(studioDeleteActionAt(actions, actions.length - 1), actions);
+
+        // Patterns with only the two anchors have nothing safe to remove.
+        const onlyAnchors = [{ at: 0, pos: 50 }, { at: 1000, pos: 50 }];
+        assert.strictEqual(studioDeleteActionAt(onlyAnchors, 0), onlyAnchors);
+    });
+
+    it('clamps a dragged interior point between its neighbors', () => {
+        // Try to drag the middle point past the right neighbor.
+        const moved = studioMoveActionAt(actions, 1, 5000, 95);
+
+        // `at` is clamped to one ms below the next neighbor.
+        assert.strictEqual(moved[1].at, 1999);
+        assert.strictEqual(moved[1].pos, 95);
+
+        // Original list is untouched.
+        assert.strictEqual(actions[1].at, 1000);
+    });
+
+    it('keeps endpoint anchors at their authored `at` while letting pos follow the drag', () => {
+        const moved = studioMoveActionAt(actions, 0, 500, 10);
+        assert.strictEqual(moved[0].at, 0);
+        assert.strictEqual(moved[0].pos, 10);
+
+        const movedEnd = studioMoveActionAt(actions, 2, 5000, 90);
+        assert.strictEqual(movedEnd[2].at, 2000);
+        assert.strictEqual(movedEnd[2].pos, 90);
+    });
+
+    it('reverse-projects a pixel coordinate back into an action', () => {
+        const action = studioActionFromPixel(
+            metrics.pad + metrics.innerWidth / 4,
+            metrics.pad + metrics.innerHeight / 2,
+            metrics,
+        );
+
+        // Quarter across the inner width maps to a quarter of the cycle.
+        assert.strictEqual(action.at, Math.round(metrics.duration / 4));
+        // Half the inner height maps to pos 50 (top of canvas = pos 100).
+        assert.strictEqual(action.pos, 50);
     });
 });
