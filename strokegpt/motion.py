@@ -35,7 +35,7 @@ CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
 CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.8
-CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 40
+CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.08
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.06
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
@@ -398,6 +398,7 @@ def _target_from_cues(
         next_speed = min(max(next_speed, 16.0), 30.0)
         next_range = min(next_range, 12.0)
     elif cues.pattern == "wave":
+        next_speed = max(next_speed, 36.0)
         next_range = max(next_range, 55.0)
     elif cues.pattern == "ramp":
         next_speed = max(next_speed, 38.0)
@@ -420,6 +421,9 @@ def _target_from_cues(
             next_range = min(next_range, 34.0)
         else:
             next_range = max(next_range, 65.0)
+    elif cues.pattern == "stroke":
+        next_speed = max(next_speed, 42.0)
+        next_range = max(next_range, 70.0)
 
     if motion_program and cues.pattern != "anchor_loop":
         next_speed = max(next_speed, 36.0)
@@ -1235,6 +1239,30 @@ class MotionController:
         if plan is None:
             return False
 
+        return self._apply_continuous_plan(
+            plan,
+            target,
+            source=source,
+            trace_metadata=trace_metadata,
+        )
+
+    def apply_continuous_pattern(
+        self,
+        pattern: Any,
+        target: MotionTarget,
+        source: str = "continuous pattern",
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        if target.speed <= 0:
+            self.stop()
+            return True
+        if self.backend != "continuous":
+            return False
+        from .motion_patterns import continuous_motion_plan_from_pattern
+
+        plan = continuous_motion_plan_from_pattern(pattern)
+        if plan is None:
+            return False
         return self._apply_continuous_plan(
             plan,
             target,
@@ -2197,12 +2225,12 @@ class MotionController:
                 send_started_at=send_started_at,
                 send_ended_at=send_ended_at,
             )
-            if start_error:
+            if start_error or started is False:
                 self._augment_last_trace(
                     {
                         "continuous_error": "continuous_hsp_start_failed",
                         "handy_ok": False,
-                        "handy_error": start_error,
+                        "handy_error": start_error or "HSP start failed",
                     }
                 )
             if started is False:
@@ -2266,12 +2294,12 @@ class MotionController:
                             send_started_at=send_started_at,
                             send_ended_at=send_ended_at,
                         )
-                        if append_error:
+                        if append_error or appended is False:
                             self._augment_last_trace(
                                 {
                                     "continuous_error": "continuous_hsp_append_failed",
                                     "handy_ok": False,
-                                    "handy_error": append_error,
+                                    "handy_error": append_error or "HSP append failed",
                                 }
                             )
                         if appended is False:

@@ -450,8 +450,22 @@ def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=Non
     if backend == "continuous":
         if not choices or not hasattr(motion_controller, "apply_continuous_target"):
             return False
+        choice = choices[0]
+        apply_pattern = getattr(motion_controller, "apply_continuous_pattern", None)
+        if callable(apply_pattern):
+            try:
+                pattern = choice.record.to_motion_pattern()
+            except Exception:
+                pattern = None
+            if pattern is not None:
+                return apply_pattern(
+                    pattern,
+                    choice.target,
+                    source="freestyle planner",
+                    trace_metadata=trace_metadata,
+                )
         return motion_controller.apply_continuous_target(
-            choices[0].target,
+            choice.target,
             source="freestyle planner",
             trace_metadata=trace_metadata,
         )

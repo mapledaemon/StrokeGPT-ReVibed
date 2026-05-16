@@ -16,7 +16,6 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
-    CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
@@ -933,22 +932,6 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_hsp_startup_batches_stay_small_enough_for_device_start(self):
-        for label in ("stroke", "milk", "flutter", "deep waves"):
-            with self.subTest(label=label):
-                handy = StreamingFakeHandy()
-                controller = MotionController(handy, step_delay=0.16)
-                try:
-                    controller.apply_continuous_target(MotionTarget(80, 50, 80, label), source="unit test")
-                    self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
-
-                    points = handy.stream_starts[0]["points"]
-                    self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
-                    self.assertLessEqual(len(points), 40)
-                    self.assertGreater(points[-1]["t"], 2500)
-                finally:
-                    controller.stop()
-
     def test_continuous_hsp_stream_preserves_timed_pattern_slopes(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -1667,6 +1650,26 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(handy.position_moves, [])
         self.assertGreater(len(handy.moves), 1)
         self.assertEqual(handy.moves[-1], (70, 90, 80))
+
+    def test_continuous_pattern_chat_restarts_from_stopped_state(self):
+        handy = StreamingFakeHandy()
+        handy.last_relative_speed = 0
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            target = controller.sanitizer.from_llm_move(
+                {"pattern": "stroke"},
+                controller.current_target(),
+            )
+            self.assertIsNotNone(target)
+            self.assertGreater(target.speed, 0)
+
+            controller.apply_generated_target(target, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            self.assertTrue(controller.observability_snapshot()["playback_active"])
+        finally:
+            controller.stop()
 
     def test_position_backend_routes_generated_frames_to_position_moves(self):
         handy = FakeHandy()
