@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - Unreleased - Fix Motion Training Playback Shape
+-------------------------------------------------------------
+
+Branch: gpt-motion-training-playback-shape
+
+- Fixed Motion Training library and Studio preview playback so edited/imported
+  patterns route through the shared MotionController pattern path instead of a
+  preview-only HDSP position-frame path.
+- Added regression coverage that Continuous previews use HSP timed-point
+  streaming and preserve small-range authored shapes instead of forcing full
+  top/bottom travel.
+- Repeated short pattern previews long enough to be judgeable, and raised the
+  minimum Continuous cycle length so chat-selected built-in patterns no longer
+  stream subsecond HSP loops.
+
+
 2026-05-16 - PR #231 - Add Program Playback And Sections
 ---------------------------------------------------------
 

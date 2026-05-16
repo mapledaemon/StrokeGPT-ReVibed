@@ -20,11 +20,19 @@ from strokegpt.motion import (
     MotionController,
     MotionSanitizer,
     MotionTarget,
+    MOTION_PATTERN_PREVIEW_MIN_SECONDS,
     PositionFrame,
     POSITION_MAX_DEPTH_STEP,
     POSITION_PASS_THROUGH_MIN_SECONDS,
 )
-from strokegpt.motion_patterns import continuous_motion_plan, sample_continuous_motion
+from strokegpt.motion_patterns import (
+    CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS,
+    MotionPattern,
+    PatternAction,
+    continuous_motion_plan,
+    continuous_motion_plan_from_pattern,
+    sample_continuous_motion,
+)
 
 
 class FakeHandy:
@@ -714,6 +722,104 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_motion_pattern_preview_uses_continuous_hsp_stream(self):
+        handy = StreamingFakeHandy()
+        handy.last_relative_speed = 50
+        handy.last_depth_pos = 46
+        handy.last_stroke_range = 80
+        controller = MotionController(handy, step_delay=0.16)
+        pattern = MotionPattern(
+            "Small Shape",
+            (
+                PatternAction(0, 45),
+                PatternAction(300, 55),
+                PatternAction(600, 45),
+            ),
+        )
+
+        started_at = time.monotonic()
+        completed = controller.apply_motion_pattern(
+            pattern,
+            MotionTarget(50, 50, 80, "motion training preview"),
+            preserve_timing=True,
+            stop_after=True,
+            source="motion training preview",
+        )
+        elapsed = time.monotonic() - started_at
+
+        self.assertTrue(completed)
+        self.assertEqual(handy.moves, [])
+        self.assertEqual(handy.position_moves, [])
+        self.assertEqual(len(handy.stream_starts), 1)
+        self.assertEqual(handy.stream_appends, [])
+        points = handy.stream_starts[0]["points"]
+        self.assertGreater(len(points), 2)
+        self.assertEqual(points[0]["t"], 0)
+        self.assertGreaterEqual(points[-1]["t"], int(MOTION_PATTERN_PREVIEW_MIN_SECONDS * 1000) - 1)
+        self.assertGreaterEqual(elapsed, MOTION_PATTERN_PREVIEW_MIN_SECONDS - 0.1)
+        depths = [point["x"] for point in points]
+        self.assertGreater(min(depths), 40)
+        self.assertLess(max(depths), 60)
+        self.assertTrue(handy.stopped)
+        self.assertFalse(controller.observability_snapshot()["playback_active"])
+
+    def test_position_motion_pattern_preview_repeats_short_frames(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        controller.set_backend("position")
+        pattern = MotionPattern(
+            "Short Shape",
+            (
+                PatternAction(0, 45),
+                PatternAction(300, 55),
+                PatternAction(600, 45),
+            ),
+        )
+
+        completed = controller.apply_motion_pattern(
+            pattern,
+            MotionTarget(50, 50, 80, "motion training preview"),
+            preserve_timing=True,
+            stop_after=True,
+            source="motion training preview",
+        )
+
+        self.assertTrue(completed)
+        self.assertGreaterEqual(
+            sum((duration or 0) for duration in handy.position_durations),
+            int(MOTION_PATTERN_PREVIEW_MIN_SECONDS * 1000) - 50,
+        )
+        self.assertTrue(handy.stopped)
+
+    def test_short_motion_pattern_preview_cycles_cover_minimum_duration(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        pattern = MotionPattern(
+            "Short Shape",
+            (
+                PatternAction(0, 45),
+                PatternAction(300, 55),
+                PatternAction(600, 45),
+            ),
+        )
+        target = MotionTarget(50, 50, 80, "motion training preview")
+        plan = continuous_motion_plan_from_pattern(pattern)
+        duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
+
+        cycles = controller._finite_pattern_cycles(plan, target)
+
+        self.assertGreater(cycles, 1)
+        self.assertGreaterEqual(cycles * duration, MOTION_PATTERN_PREVIEW_MIN_SECONDS)
+        self.assertLess(cycles * duration, MOTION_PATTERN_PREVIEW_MIN_SECONDS + duration)
+
+    def test_fast_continuous_short_patterns_do_not_run_subsecond_cycles(self):
+        plan = continuous_motion_plan("flick")
+        sample = sample_continuous_motion(plan, MotionTarget(100, 50, 80, "flick"), 0.0)
+
+        self.assertGreaterEqual(
+            sample.effective_duration_seconds,
+            CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS,
+        )
+
     def test_continuous_hsp_points_report_intent_range_and_sample_range(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -781,7 +887,7 @@ class MotionControllerTests(unittest.TestCase):
                         )
                         * 1000.0
                     )
-                ),
+                ) + int(round(CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS * 500.0)),
             )
 
             hsp_points = [
