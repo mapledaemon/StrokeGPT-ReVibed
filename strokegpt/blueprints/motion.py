@@ -31,6 +31,12 @@ def motion_patterns_route():
     return jsonify(web._motion_pattern_catalog_payload())
 
 
+@motion_blueprint.route('/motion_programs')
+def motion_programs_route():
+    web = _web()
+    return jsonify(web._motion_program_catalog_payload())
+
+
 @motion_blueprint.route('/motion_preferences')
 def motion_preferences_route():
     web = _web()
@@ -105,6 +111,73 @@ def import_motion_pattern_route():
     except web.PatternValidationError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     return jsonify({"status": "success", "pattern": _pattern_summary(web, record, include_actions=True)})
+
+
+@motion_blueprint.route('/motion_programs/<program_id>')
+def motion_program_detail_route(program_id):
+    web = _web()
+    record = web._motion_program_record(program_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    return jsonify({"status": "success", "program": record.to_summary_dict(include_actions=True)})
+
+
+@motion_blueprint.route('/motion_programs/<program_id>', methods=['DELETE'])
+def delete_motion_program_route(program_id):
+    web = _web()
+    try:
+        record = web.motion_program_library.delete_program(program_id)
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    return jsonify({
+        "status": "success",
+        "message": f"Deleted program: {record.name}.",
+        "program": record.to_summary_dict(),
+        "motion_programs": web._motion_program_catalog_payload(),
+    })
+
+
+@motion_blueprint.route('/motion_programs/<program_id>/export')
+def export_motion_program_route(program_id):
+    web = _web()
+    record = web._motion_program_record(program_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    payload = json.dumps(record.to_export_dict(), indent=2).encode("utf-8")
+    return send_file(
+        io.BytesIO(payload),
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=f"{record.program_id}.strokegpt-program.json",
+    )
+
+
+@motion_blueprint.route('/import_motion_program', methods=['POST'])
+def import_motion_program_route():
+    web = _web()
+    try:
+        if "program" in request.files:
+            filename, payload = web._read_uploaded_program_payload(request.files["program"])
+        else:
+            data = web._request_json()
+            payload = data.get("program") if isinstance(data.get("program"), dict) else data
+            filename_source = (
+                data.get("filename")
+                or payload.get("id")
+                or payload.get("name")
+                or "program"
+            ) if isinstance(payload, dict) else "program"
+            filename = secure_filename(f"{filename_source}.json")
+        record = web.motion_program_library.import_payload(payload, filename=filename)
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({
+        "status": "success",
+        "program": record.to_summary_dict(include_actions=True),
+        "motion_programs": web._motion_program_catalog_payload(),
+    })
 
 
 @motion_blueprint.route('/motion_patterns/save_generated', methods=['POST'])

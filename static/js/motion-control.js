@@ -33,6 +33,12 @@ import {
     renderMotionFeedbackHistory,
     saveMotionFeedbackOptions,
 } from './motion/feedback-controls.js';
+import {
+    bindMotionProgramControls,
+    refreshMotionPrograms,
+    renderMotionPrograms,
+    setProgramStatus,
+} from './motion/program-list.js';
 import { updateHandyConnectionStatusFromMotion } from './device-control.js';
 import {
     bindMotionPatternStudioControls,
@@ -52,6 +58,7 @@ import {
     setMotionTrainingLoadingDetail,
     smoothEditedPattern,
     studioCropPreviewPayload,
+    studioSourceProgramPayload,
     stepMotionTrainingRangeInput,
     syncRangeInputsFromPattern,
     updateMotionTrainingEditButtons,
@@ -95,6 +102,13 @@ export {
     renderMotionFeedbackHistory,
     saveMotionFeedbackOptions,
 } from './motion/feedback-controls.js';
+// Compatibility shim - do not extend. New code imports from './motion/program-list.js'.
+export {
+    bindMotionProgramControls,
+    refreshMotionPrograms,
+    renderMotionPrograms,
+    setProgramStatus,
+} from './motion/program-list.js';
 // Compatibility shim - do not extend. New code imports from './motion/training-editor.js'.
 export {
     drawMotionTrainingPreview,
@@ -112,6 +126,7 @@ export {
     setMotionTrainingDetail,
     setMotionTrainingLoadingDetail,
     smoothEditedPattern,
+    studioSourceProgramPayload,
     stepMotionTrainingRangeInput,
     syncRangeInputsFromPattern,
     updateMotionTrainingEditButtons,
@@ -287,6 +302,7 @@ export function populateMotionSettings(data = {}) {
     el.milkingMinTimeInput.value = timings.milking_min ?? el.milkingMinTimeInput.value ?? 2.5;
     el.milkingMaxTimeInput.value = timings.milking_max ?? el.milkingMaxTimeInput.value ?? 4.5;
     if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
+    if (data.motion_programs) renderMotionPrograms(data.motion_programs);
 }
 
 async function saveMotionBackend() {
@@ -601,6 +617,28 @@ async function playStudioCropPreview() {
         el.statusText.textContent = data.motion_training.message || 'Crop preview started.';
     } else {
         reportSaveFailure(el.statusText, data, 'Could not start crop preview.');
+    }
+}
+
+async function saveStudioSourceProgram() {
+    let program;
+    try {
+        program = studioSourceProgramPayload();
+    } catch (error) {
+        el.statusText.textContent = error.message || 'Import a funscript before saving a program.';
+        return;
+    }
+    const data = await fetchJsonWithMessage('/import_motion_program', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({program}),
+    });
+    if (data && data.status === 'success') {
+        if (data.motion_programs) renderMotionPrograms(data.motion_programs);
+        setProgramStatus(`Saved program: ${data.program.name}.`, 'success');
+        el.statusText.textContent = `Saved program: ${data.program.name}.`;
+    } else {
+        reportSaveFailure(el.motionProgramStatus || el.statusText, data, 'Could not save program.');
     }
 }
 
@@ -1179,6 +1217,7 @@ async function startFreestyleMode() {
 export function initMotionControls({sendUserMessage}) {
     configureMotionPatternList({renderMotionPatterns, setMotionTrainingDetail});
     configureMotionFeedbackControls({renderMotionPatterns});
+    bindMotionProgramControls();
     D.getElementById('like-this-move-btn').addEventListener('click', likeLastMove);
     D.getElementById('dislike-this-move-btn')?.addEventListener('click', dislikeLastMove);
     el.edgingModeBtn.addEventListener('click', startEdgingMode);
@@ -1233,13 +1272,17 @@ export function initMotionControls({sendUserMessage}) {
     el.motionTransformResetBtn?.addEventListener('click', resetEditedPattern);
     el.playMotionTrainingPreviewBtn?.addEventListener('click', playEditedMotionTrainingPreview);
     el.motionStudioPlayCropBtn?.addEventListener('click', playStudioCropPreview);
+    el.motionStudioSaveProgramBtn?.addEventListener('click', saveStudioSourceProgram);
     el.saveMotionTrainingPatternBtn?.addEventListener('click', saveEditedMotionPattern);
     el.stopMotionTrainingBtn.addEventListener('click', stopMotionTraining);
     el.motionTrainingFeedbackUp.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_up'));
     el.motionTrainingFeedbackNeutral.addEventListener('click', () => sendMotionTrainingFeedback('neutral'));
     el.motionTrainingFeedbackDown.addEventListener('click', () => sendMotionTrainingFeedback('thumbs_down'));
     el.settingsTabs.forEach(tab => {
-        if (tab.dataset.settingsTab === 'motion') tab.addEventListener('click', refreshMotionPatterns);
+        if (tab.dataset.settingsTab === 'motion') {
+            tab.addEventListener('click', refreshMotionPatterns);
+            tab.addEventListener('click', refreshMotionPrograms);
+        }
     });
     D.getElementById('start-auto-btn').addEventListener('click', startAutoMode);
     D.getElementById('milking-mode-btn').addEventListener('click', startMilkingMode);
@@ -1247,4 +1290,5 @@ export function initMotionControls({sendUserMessage}) {
     updateMotionTrainingEditButtons();
     startHandyCylinderAnimation();
     refreshMotionPatterns();
+    refreshMotionPrograms();
 }

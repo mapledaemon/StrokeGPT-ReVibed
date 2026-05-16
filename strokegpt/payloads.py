@@ -793,6 +793,7 @@ def settings_payload(
     motion_patterns,
     diagnostics_levels,
     voice_input_status,
+    motion_programs=None,
     motion_preferences=None,
 ):
     local_tts_status = audio.local_status()
@@ -892,6 +893,7 @@ def settings_payload(
         "diagnostics_levels": diagnostics_levels,
         "motion_backends": motion_backends_payload(),
         "motion_patterns": motion_patterns,
+        "motion_programs": motion_programs or {"programs": [], "errors": []},
         "pfp": settings.profile_picture_b64,
         "timings": {
             "auto_min": settings.auto_min_time,

@@ -46,6 +46,7 @@ from .pattern_library import (
     record_from_payload,
     slugify_pattern_id,
 )
+from .program_library import MAX_PROGRAM_IMPORT_BYTES, ProgramLibrary, ProgramValidationError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -55,6 +56,7 @@ VOICE_INPUT_UPLOAD_DIR = USER_DATA_DIR / "voice_input"
 VOICE_INPUT_MODEL_DIR = USER_DATA_DIR / "voice_input_hf_cache"
 DIAGNOSTICS_DIR = USER_DATA_DIR / "diagnostics"
 MOTION_PATTERN_DIR = USER_DATA_DIR / "patterns"
+MOTION_PROGRAM_DIR = USER_DATA_DIR / "programs"
 HTTPS_CERT_DIR = USER_DATA_DIR / "https"
 ALLOWED_VOICE_SAMPLE_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac"}
 ALLOWED_VOICE_INPUT_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac"}
@@ -235,6 +237,7 @@ handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth
 motion = MotionController(handy)
 intent_matcher = IntentMatcher()
 motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
+motion_program_library = ProgramLibrary(MOTION_PROGRAM_DIR)
 motion_transport_capture_session = None
 
 ollama_model = normalize_ollama_model(os.getenv("STROKEGPT_OLLAMA_MODEL", settings.ollama_model)) or settings.ollama_model
@@ -627,6 +630,7 @@ def settings_payload(*, include_live_ollama_status=True, include_motion_preferen
         ollama_models=get_ollama_models_for_ui(),
         ollama_status=_ollama_status_payload(live=include_live_ollama_status),
         motion_patterns=_motion_pattern_catalog_payload(),
+        motion_programs=motion_program_library.catalog(),
         motion_preferences=_motion_preference_payload() if include_motion_preferences else None,
         diagnostics_levels=_diagnostics_level_options(),
         voice_input_status=voice_input_status_payload(),
@@ -975,6 +979,12 @@ def _motion_pattern_record(pattern_id):
         settings.motion_pattern_enabled,
         settings.motion_pattern_feedback,
     )
+
+def _motion_program_catalog_payload():
+    return motion_program_library.catalog()
+
+def _motion_program_record(program_id):
+    return motion_program_library.get_record(program_id)
 
 def _motion_pattern_summary(record, include_actions=False):
     # Service-bound adapter for ``payloads.motion_pattern_summary()``: binds
@@ -2311,6 +2321,19 @@ def _read_uploaded_pattern_payload(upload):
         return filename, json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PatternValidationError(f"Pattern file is not valid JSON: {exc}") from exc
+
+def _read_uploaded_program_payload(upload):
+    filename = secure_filename(upload.filename or "program.funscript")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_IMPORT_EXTENSIONS:
+        raise ProgramValidationError("Program imports must be .json or .funscript files.")
+    raw = upload.read(MAX_PROGRAM_IMPORT_BYTES + 1)
+    if len(raw) > MAX_PROGRAM_IMPORT_BYTES:
+        raise ProgramValidationError("Program import is too large.")
+    try:
+        return filename, json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProgramValidationError(f"Program file is not valid JSON: {exc}") from exc
 
 def persist_local_voice_settings():
     settings.audio_provider = "local"

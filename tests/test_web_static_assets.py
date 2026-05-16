@@ -24,6 +24,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/motion/feedback-controls.js": "text/javascript",
             "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/pattern-list.js": "text/javascript",
+            "/static/js/motion/program-list.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
             "/static/js/motion/training-editor.js": "text/javascript",
             "/static/js/setup.js": "text/javascript",
@@ -342,6 +343,13 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="motion-studio-window-value"', page)
             self.assertIn('id="motion-studio-play-crop-btn"', page)
             self.assertIn('id="motion-studio-apply-crop-btn"', page)
+            self.assertIn('id="motion-studio-save-program-btn"', page)
+            self.assertIn('Programs (funscripts)', page)
+            self.assertIn('id="refresh-motion-programs-btn"', page)
+            self.assertIn('id="import-motion-program-btn"', page)
+            self.assertIn('id="motion-program-import-input"', page)
+            self.assertIn('id="motion-program-status"', page)
+            self.assertIn('id="motion-program-list"', page)
             self.assertIn('data-settings-tab="diagnostics"', page)
             self.assertIn('id="settings-tab-diagnostics"', page)
             self.assertIn('id="run-setup-check-btn"', page)
@@ -653,6 +661,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".settings-tabs { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }", css)
             self.assertIn(".motion-pattern-row", css)
             self.assertIn(".motion-pattern-list", css)
+            self.assertIn(".motion-program-list", css)
+            self.assertIn(".motion-program-empty", css)
             self.assertIn(".motion-feedback-history", css)
             self.assertIn("#dislike-this-move-btn", css)
             self.assertIn(".motion-pattern-weight-control", css)
@@ -1044,6 +1054,12 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("Flexible position/script", script)
         self.assertIn("refreshMotionPatterns", script)
         self.assertIn("/motion_patterns", script)
+        self.assertIn("refreshMotionPrograms", script)
+        self.assertIn("/motion_programs", script)
+        self.assertIn("/import_motion_program", script)
+        self.assertIn("method: 'DELETE'", script)
+        self.assertIn("motionProgramList.replaceChildren", script)
+        self.assertIn("studioSourceProgramPayload", script)
         self.assertIn("motionPatternList.replaceChildren", script)
         self.assertIn("motionTrainingPatternList.replaceChildren", script)
         self.assertIn("motionPatternImportInput", script)
@@ -1213,6 +1229,35 @@ class WebStaticAssetTests(WebTestCase):
             motion_response.close()
             feedback_response.close()
 
+    def test_motion_program_list_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        program_response = self.client.get("/static/js/motion/program-list.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            program_list_script = program_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/program-list.js'", motion_control_script)
+            self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function renderMotionPrograms", program_list_script)
+            self.assertIn("export async function refreshMotionPrograms", program_list_script)
+            self.assertIn("export async function importMotionProgramFile", program_list_script)
+            self.assertIn("export async function deleteMotionProgram", program_list_script)
+            self.assertIn("export function bindMotionProgramControls", program_list_script)
+            self.assertIn("motionProgramList.replaceChildren", program_list_script)
+            self.assertIn("/motion_programs", program_list_script)
+            self.assertIn("/import_motion_program", program_list_script)
+            self.assertIn("method: 'DELETE'", program_list_script)
+            self.assertIn("motion-program-delete", program_list_script)
+            self.assertNotIn("function renderMotionPrograms", motion_control_script)
+            self.assertNotIn("async function refreshMotionPrograms", motion_control_script)
+            self.assertNotIn("async function importMotionProgramFile", motion_control_script)
+            self.assertNotIn("async function deleteMotionProgram", motion_control_script)
+            self.assertNotIn("/motion_training/preview", program_list_script)
+            self.assertNotIn("/send_message", program_list_script)
+        finally:
+            motion_response.close()
+            program_response.close()
+
     def test_motion_training_editor_module_is_extracted(self):
         motion_response = self.client.get("/static/js/motion-control.js")
         editor_response = self.client.get("/static/js/motion/training-editor.js")
@@ -1232,6 +1277,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("export function cropPatternToWindow", training_editor_script)
             self.assertIn("export function createBlankStudioPattern", training_editor_script)
             self.assertIn("export function studioCropPreviewPayload", training_editor_script)
+            self.assertIn("export function studioSourceProgramPayload", training_editor_script)
             self.assertIn("export function segmentIntensity", training_editor_script)
             self.assertIn("export function timelineIntensityColor", training_editor_script)
             self.assertIn("export function bindMotionPatternStudioControls", training_editor_script)
@@ -1257,6 +1303,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("motionStudioCropStartHandle", training_editor_script)
             self.assertIn("motionStudioCropEndHandle", training_editor_script)
             self.assertIn("motionStudioPlayCropBtn", motion_control_script)
+            self.assertIn("motionStudioSaveProgramBtn", motion_control_script)
             self.assertIn("motionStudioTimelineZoom", training_editor_script)
             self.assertIn("motionStudioTimelineOffsetMs", training_editor_script)
             self.assertIn("motionStudioFlow", training_editor_script)

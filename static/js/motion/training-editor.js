@@ -711,6 +711,7 @@ function setCropControlsEnabled(enabled) {
         el.motionStudioCropEndInput,
         el.motionStudioPlayCropBtn,
         el.motionStudioApplyCropBtn,
+        el.motionStudioSaveProgramBtn,
         el.motionStudioCropStartHandle,
         el.motionStudioCropEndHandle,
     ].forEach(control => {
@@ -1003,6 +1004,25 @@ export function studioCropPreviewPayload() {
         id: `${state.motionStudioSourcePattern.id || sourceName} ${start}-${end}s crop-preview`,
         name: `${sourceName} ${start}-${end}s crop`,
         description: `Cropped ${start}-${end}s from ${sourceName}.`,
+    };
+}
+
+export function studioSourceProgramPayload() {
+    const source = state.motionStudioSourcePattern;
+    if (!source) throw new Error('Import a funscript before saving a program.');
+    const actions = normalizedActions(source.actions);
+    if (actions.length < 2) throw new Error('Imported source does not contain enough actions to save as a program.');
+    const sourceName = patternDisplayName(source);
+    const tags = Array.from(new Set([...(Array.isArray(source.tags) ? source.tags : []), 'program', 'funscript']));
+    return {
+        schema_version: 1,
+        kind: 'funscript_program',
+        id: source.id || sourceName,
+        name: sourceName,
+        description: `Long-form funscript program imported from ${sourceName}.`,
+        source: 'imported',
+        actions,
+        tags,
     };
 }
 

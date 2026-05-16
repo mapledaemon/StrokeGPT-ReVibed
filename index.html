@@ -433,6 +433,17 @@
                     <div id="motion-pattern-status" style="font-size: 0.85em; color: var(--comment);">Pattern list not loaded yet.</div>
                     <div id="motion-pattern-list" class="motion-pattern-list"></div>
                 </div>
+                <div class="settings-subsection motion-panel">
+                    <h4>Programs (funscripts)</h4>
+                    <div class="settings-help">Long funscript timelines are stored separately from short LLM-selectable patterns. This first pass imports, lists, and exports saved programs; playback and section editing will stay on the shared motion safety path when added.</div>
+                    <div class="motion-program-actions">
+                        <button id="refresh-motion-programs-btn" class="my-button" data-requires-backend>Refresh Programs</button>
+                        <button id="import-motion-program-btn" class="my-button" data-requires-backend>Import Program</button>
+                    </div>
+                    <input type="file" id="motion-program-import-input" accept=".json,.funscript,application/json" style="display: none;" data-requires-backend>
+                    <div id="motion-program-status" class="settings-help">Program list not loaded yet.</div>
+                    <div id="motion-program-list" class="motion-pattern-list motion-program-list"></div>
+                </div>
             </div>
             <div id="settings-tab-device" class="settings-panel">
                 <div class="settings-subsection device-panel">
@@ -728,6 +739,7 @@
                                 </label>
                                 <button id="motion-studio-play-crop-btn" class="my-button" type="button" disabled data-requires-backend>Play Crop</button>
                                 <button id="motion-studio-apply-crop-btn" class="my-button" type="button" disabled>Use Crop</button>
+                                <button id="motion-studio-save-program-btn" class="my-button" type="button" disabled data-requires-backend>Save Program</button>
                             </div>
                         </div>
                     </div>

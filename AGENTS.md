@@ -71,6 +71,9 @@ behavior, and route motion changes through the shared controller path.
   _patterns()`. Keeping the data in JSON keeps it free of Python imports.
 - `strokegpt/pattern_library.py`: shareable motion pattern schema, built-in
   pattern catalog, and user pattern file registry.
+- `strokegpt/program_library.py`: separate long-form Programs (funscripts)
+  schema and user program registry for imported full timelines that should not
+  be treated as short LLM-selectable loop patterns.
 - `strokegpt/motion_scripts.py`: longer scripted motion plans.
 - `strokegpt/background_modes.py`: auto, edging, milking, and freestyle mode
   orchestration.
@@ -203,6 +206,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   `hsp_state_play_state` when checking whether firmware is actually following
   the planned stream.
 - `strokegpt/motion_patterns.py` prepares pattern actions before expansion: sort/dedupe, minimum interval filtering, repeat expansion, eased interpolation, large-step limiting, and redundant point simplification. Keep that pipeline dependency-free unless a larger funscript importer is deliberately added.
+- Long imported funscripts belong in the separate Programs (funscripts) library
+  rather than being forced through the short pattern library. Programs are for
+  authored timelines that should preserve long timing/shape; future playback
+  still has to route through the shared motion controller and Handy safety path.
 - `strokegpt/motion_preferences.py` turns enabled fixed patterns and thumbs
   feedback into simple LLM-facing weights. Disabled fixed patterns should stay
   visible in settings but hidden from the LLM prompt to avoid confusing smaller

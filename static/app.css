@@ -350,7 +350,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .voice-panel, .motion-panel, .device-panel { display: flex; flex-direction: column; gap: 12px; }
 .voice-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .motion-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.motion-pattern-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.motion-pattern-actions, .motion-program-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .model-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
 .model-actions-wide { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
 .model-required-box .model-actions-wide { margin-top: 2px; }
@@ -374,7 +374,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .ollama-model-download:not(:disabled):hover { border-color: var(--cyan); color: var(--cyan); }
 .ollama-model-delete:not(:disabled):hover { border-color: var(--yellow); color: var(--yellow); }
 .ollama-model-action:hover, .ollama-model-action:active, .ollama-model-action:disabled:hover { transform: none; box-shadow: none; }
-.voice-actions .my-button, .motion-actions .my-button, .motion-pattern-actions .my-button, .model-actions .my-button { width: auto; min-width: 0; }
+.voice-actions .my-button, .motion-actions .my-button, .motion-pattern-actions .my-button, .motion-program-actions .my-button, .model-actions .my-button { width: auto; min-width: 0; }
 .settings-status-line { min-height: 2rem; display: flex; align-items: center; padding: 7px 9px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.85em; line-height: 1.35; overflow-wrap: anywhere; }
 .browse-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .browse-line .my-button { width: auto; white-space: nowrap; }
@@ -430,6 +430,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-feedback-history-empty { color: var(--comment); }
 .motion-feedback-history-row { color: var(--comment); }
 .motion-pattern-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 2px; }
+.motion-program-list { max-height: 220px; }
+.motion-program-empty { padding: 10px; border: 1px dashed #37404c; border-radius: 6px; color: var(--comment); background: rgba(20, 23, 30, 0.58); font-size: 0.85rem; line-height: 1.35; }
 .motion-pattern-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); }
 .motion-pattern-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .motion-pattern-main input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; }
@@ -439,6 +441,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
 .motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; min-width: 104px; }
 .motion-pattern-play, .motion-pattern-export, .motion-pattern-feedback-reset { width: auto; min-width: 96px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
+.motion-program-row .motion-pattern-row-actions { grid-template-columns: minmax(96px, 1fr) 1.65rem; align-items: center; }
+.motion-program-delete { justify-self: end; }
 .motion-pattern-weight-control { display: flex; flex-direction: column; gap: 4px; min-width: 92px; }
 .motion-pattern-weight-label { color: var(--comment); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
 .motion-pattern-weight-field { min-height: 34px; }
@@ -496,7 +500,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-studio-crop-handle:disabled { cursor: default; opacity: 0.45; }
 .motion-studio-crop-handle-start { left: 0; }
 .motion-studio-crop-handle-end { left: 100%; }
-.motion-studio-crop-fields { display: grid; grid-template-columns: repeat(2, minmax(100px, 0.55fr)) repeat(2, minmax(110px, 0.7fr)); gap: 8px; align-items: stretch; }
+.motion-studio-crop-fields { display: grid; grid-template-columns: repeat(2, minmax(100px, 0.55fr)) repeat(3, minmax(110px, 0.7fr)); gap: 8px; align-items: stretch; }
 .motion-studio-crop-field { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; min-height: 34px; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.8rem; }
 .motion-studio-crop-field span { color: var(--foreground); font-weight: 700; }
 .motion-studio-crop-field input[type="number"] { min-width: 0; height: 28px; padding: 5px 7px; border: 1px solid #37404c; border-radius: 5px; background: #101217; color: var(--foreground); }
@@ -616,7 +620,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .settings-tabs { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .prompt-anatomy-controls, .prompt-mode-controls, .prompt-refresh-row { grid-template-columns: 1fr; }
     .prompt-anatomy-controls .my-button, .prompt-mode-controls .my-button, .prompt-refresh-row .my-button { width: 100%; }
-    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }
+    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .motion-program-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }
     .latency-test-row { grid-template-columns: 1fr; }
     .latency-test-elapsed { white-space: normal; }
     .browse-line { grid-template-columns: 1fr; }
