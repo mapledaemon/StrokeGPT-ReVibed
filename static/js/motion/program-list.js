@@ -5,6 +5,14 @@ import { formatPatternDuration } from './pattern-list.js';
 const TRASH_ICON = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm3 0v7h2v-7h-2Z"></path></svg>';
 
 
+let openMotionProgramWindowCallback = null;
+
+
+export function configureMotionProgramList({openMotionProgramWindow} = {}) {
+    openMotionProgramWindowCallback = openMotionProgramWindow || null;
+}
+
+
 export function formatProgramDuration(durationMs) {
     const duration = Math.max(0, Number(durationMs) || 0);
     if (duration >= 60_000) {
@@ -66,10 +74,36 @@ function createProgramExportButton(program) {
     exportButton.className = 'my-button motion-pattern-export';
     exportButton.textContent = 'Export';
     exportButton.addEventListener('click', event => {
-        event.stopPropagation();
+        event.stopPropagation?.();
         window.location.href = `/motion_programs/${encodeURIComponent(program.id)}/export`;
     });
     return exportButton;
+}
+
+
+function createProgramOpenButton(program) {
+    const openButton = D.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'my-button motion-pattern-play motion-program-open';
+    openButton.textContent = 'Open';
+    openButton.addEventListener('click', event => {
+        event.stopPropagation?.();
+        openMotionProgramWindowCallback?.(program.id);
+    });
+    return openButton;
+}
+
+
+function createProgramRenameButton(program) {
+    const renameButton = D.createElement('button');
+    renameButton.type = 'button';
+    renameButton.className = 'my-button motion-pattern-export motion-program-rename';
+    renameButton.textContent = 'Rename';
+    renameButton.addEventListener('click', event => {
+        event.stopPropagation?.();
+        renameMotionProgram(program);
+    });
+    return renameButton;
 }
 
 
@@ -86,6 +120,42 @@ function createProgramDeleteButton(program) {
         deleteMotionProgram(program);
     });
     return deleteButton;
+}
+
+
+export async function renameMotionProgram(program, nextName) {
+    const programId = typeof program === 'string' ? program : program?.id;
+    if (!programId) return null;
+    const currentName = typeof program === 'string' ? program : programDisplayName(program);
+    let name = nextName;
+    if (name === undefined) {
+        name = window.prompt?.('Rename Program', currentName);
+    }
+    if (name === null || name === undefined) return null;
+    name = String(name).trim();
+    if (!name) {
+        setProgramStatus('Program name is required.', 'warning');
+        return null;
+    }
+    if (name === currentName) return null;
+    setProgramStatus(`Renaming ${currentName}...`, 'neutral');
+    const data = await apiCall(`/motion_programs/${encodeURIComponent(programId)}/rename`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name}),
+    });
+    if (data && data.status === 'success') {
+        if (data.motion_programs) renderMotionPrograms(data.motion_programs);
+        if (data.program && state.motionProgramSelected?.id === data.program.id) {
+            state.motionProgramSelected = {...state.motionProgramSelected, ...data.program};
+            if (el.motionProgramDialogTitle) el.motionProgramDialogTitle.textContent = data.program.name || data.program.id;
+            if (el.motionProgramDialogMeta) el.motionProgramDialogMeta.textContent = formatProgramMetadata(data.program);
+        }
+        setStatusMessage(el.statusText, data.message || `Renamed program: ${name}.`, 'success');
+    } else {
+        reportSaveFailure(el.motionProgramStatus || el.statusText, data, `Could not rename ${currentName}.`);
+    }
+    return data;
 }
 
 
@@ -129,7 +199,7 @@ export function renderMotionPrograms(catalog = {}) {
 
             const actions = D.createElement('div');
             actions.className = 'motion-pattern-row-actions';
-            actions.append(createProgramExportButton(program), createProgramDeleteButton(program));
+            actions.append(createProgramOpenButton(program), createProgramRenameButton(program), createProgramExportButton(program), createProgramDeleteButton(program));
 
             row.append(main, actions);
             el.motionProgramList.appendChild(row);

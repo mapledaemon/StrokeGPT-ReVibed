@@ -435,7 +435,7 @@
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Programs (funscripts)</h4>
-                    <div class="settings-help">Long funscript timelines are stored separately from short LLM-selectable patterns. This first pass imports, lists, and exports saved programs; playback and section editing will stay on the shared motion safety path when added.</div>
+                    <div class="settings-help">Long funscript timelines are stored separately from short LLM-selectable patterns. Open a Program to play the full timeline, preview a section, or save a short section as a reusable pattern.</div>
                     <div class="motion-program-actions">
                         <button id="refresh-motion-programs-btn" class="my-button" data-requires-backend>Refresh Programs</button>
                         <button id="import-motion-program-btn" class="my-button" data-requires-backend>Import Program</button>
@@ -816,6 +816,56 @@
                         <button id="motion-training-feedback-neutral" class="my-button" disabled data-requires-backend>Neutral</button>
                         <button id="motion-training-feedback-down" class="my-button" disabled data-requires-backend>Thumbs Down</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="motion-program-dialog" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="motion-program-dialog-title">
+        <div class="modal-box motion-program-box">
+            <div class="modal-header">
+                <h3 id="motion-program-dialog-title">Program Player</h3>
+                <button id="close-motion-program-btn" class="modal-close" aria-label="Close Program player">&times;</button>
+            </div>
+            <div id="motion-program-dialog-meta" class="motion-pattern-meta">Open a saved Program to load its timeline.</div>
+            <div class="motion-program-player-toolbar">
+                <div id="motion-program-player-status" class="motion-training-status">Program player idle.</div>
+                <button id="stop-motion-program-playback-btn" class="my-button stop" type="button" data-requires-backend>Stop Playback</button>
+            </div>
+            <div class="motion-program-tabs" role="tablist" aria-label="Program tools">
+                <button id="motion-program-playback-tab-btn" class="my-button motion-program-tab active" type="button" role="tab" aria-selected="true" aria-controls="motion-program-playback-panel">Playback</button>
+                <button id="motion-program-section-tab-btn" class="my-button motion-program-tab" type="button" role="tab" aria-selected="false" aria-controls="motion-program-section-panel">Section</button>
+            </div>
+            <div id="motion-program-range-timeline" class="motion-studio-crop-timeline motion-program-range-timeline" role="group" aria-label="Program section timeline">
+                <canvas id="motion-program-timeline-canvas" aria-hidden="true"></canvas>
+                <div id="motion-program-section-selection" class="motion-studio-crop-selection"></div>
+                <button id="motion-program-section-start-handle" class="motion-studio-crop-handle motion-studio-crop-handle-start" type="button" role="slider" aria-orientation="horizontal" disabled aria-label="Program section start"></button>
+                <button id="motion-program-section-end-handle" class="motion-studio-crop-handle motion-studio-crop-handle-end" type="button" role="slider" aria-orientation="horizontal" disabled aria-label="Program section end"></button>
+            </div>
+            <div id="motion-program-playback-panel" class="motion-program-panel active" role="tabpanel" aria-labelledby="motion-program-playback-tab-btn">
+                <div class="settings-help">Full playback and section preview use the shared motion controller path and stop automatically when the timeline completes.</div>
+                <div class="motion-program-action-grid">
+                    <button id="play-motion-program-full-btn" class="my-button" type="button" data-requires-backend>Play Full Program</button>
+                    <button id="play-motion-program-section-btn" class="my-button" type="button" data-requires-backend>Play Selected Section</button>
+                </div>
+            </div>
+            <div id="motion-program-section-panel" class="motion-program-panel" role="tabpanel" aria-labelledby="motion-program-section-tab-btn" hidden>
+                <div class="settings-help">Pick a short window from the Program, preview it, then save it into the short Motion Pattern library for normal editing and LLM-selectable reuse.</div>
+                <div class="motion-program-section-grid">
+                    <label class="motion-studio-crop-field" for="motion-program-section-start">
+                        <span>Start</span>
+                        <input type="number" id="motion-program-section-start" min="0" step="0.1" value="0" aria-label="Program section start seconds">
+                        <small>seconds</small>
+                    </label>
+                    <label class="motion-studio-crop-field" for="motion-program-section-end">
+                        <span>End</span>
+                        <input type="number" id="motion-program-section-end" min="0" step="0.1" value="0" aria-label="Program section end seconds">
+                        <small>seconds</small>
+                    </label>
+                    <div id="motion-program-section-duration" class="motion-program-section-duration">0s selected</div>
+                </div>
+                <div class="motion-program-save-row">
+                    <input type="text" id="motion-program-section-name" class="input-text" placeholder="Section pattern name">
+                    <button id="save-motion-program-section-pattern-btn" class="my-button" type="button" data-requires-backend>Save Section As Pattern</button>
                 </div>
             </div>
         </div>

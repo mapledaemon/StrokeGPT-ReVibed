@@ -35,10 +35,17 @@ import {
 } from './motion/feedback-controls.js';
 import {
     bindMotionProgramControls,
+    configureMotionProgramList,
     refreshMotionPrograms,
     renderMotionPrograms,
     setProgramStatus,
 } from './motion/program-list.js';
+import {
+    bindMotionProgramPlayerControls,
+    closeMotionProgramWindow,
+    configureMotionProgramPlayer,
+    openMotionProgramWindow,
+} from './motion/program-player.js';
 import { updateHandyConnectionStatusFromMotion } from './device-control.js';
 import {
     bindMotionPatternStudioControls,
@@ -105,10 +112,18 @@ export {
 // Compatibility shim - do not extend. New code imports from './motion/program-list.js'.
 export {
     bindMotionProgramControls,
+    configureMotionProgramList,
     refreshMotionPrograms,
     renderMotionPrograms,
     setProgramStatus,
 } from './motion/program-list.js';
+// Compatibility shim - do not extend. New code imports from './motion/program-player.js'.
+export {
+    bindMotionProgramPlayerControls,
+    closeMotionProgramWindow,
+    configureMotionProgramPlayer,
+    openMotionProgramWindow,
+} from './motion/program-player.js';
 // Compatibility shim - do not extend. New code imports from './motion/training-editor.js'.
 export {
     drawMotionTrainingPreview,
@@ -1217,7 +1232,10 @@ async function startFreestyleMode() {
 export function initMotionControls({sendUserMessage}) {
     configureMotionPatternList({renderMotionPatterns, setMotionTrainingDetail});
     configureMotionFeedbackControls({renderMotionPatterns});
+    configureMotionProgramList({openMotionProgramWindow});
+    configureMotionProgramPlayer({renderMotionPatterns, updateMotionTrainingStatus});
     bindMotionProgramControls();
+    bindMotionProgramPlayerControls();
     D.getElementById('like-this-move-btn').addEventListener('click', likeLastMove);
     D.getElementById('dislike-this-move-btn')?.addEventListener('click', dislikeLastMove);
     el.edgingModeBtn.addEventListener('click', startEdgingMode);

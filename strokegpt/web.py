@@ -30,7 +30,7 @@ from .server_tls import ServerTlsError, resolve_server_tls
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher, MotionController, MotionTarget
-from .motion_patterns import PATTERNS, expand_motion_pattern
+from .motion_patterns import PATTERNS, PatternFrame, expand_motion_pattern
 from .motion_preferences import (
     THUMBS_DOWN_DISABLE_THRESHOLD,
     adjust_weight_for_feedback,
@@ -1241,6 +1241,51 @@ def _training_target_for_record(record):
 def _training_preserves_pattern_timing(record):
     return str(getattr(record, "source", "") or "").lower() in {"imported", "trained", "user"}
 
+def _target_for_program_action(action, base_target, speed, label):
+    base_target = base_target.clamped()
+    stroke_range = base_target.stroke_range if base_target.stroke_range >= 5 else 50
+    half_range = stroke_range / 2.0
+    shallow = max(0.0, min(100.0, base_target.depth - half_range))
+    deep = max(0.0, min(100.0, base_target.depth + half_range))
+    if deep - shallow < 5:
+        shallow = max(0.0, min(100.0, base_target.depth - 2.5))
+        deep = max(0.0, min(100.0, base_target.depth + 2.5))
+    position = max(0.0, min(100.0, float(action.pos))) / 100.0
+    depth = shallow + ((deep - shallow) * position)
+    return MotionTarget(
+        speed=speed,
+        depth=depth,
+        stroke_range=stroke_range,
+        label=label,
+    ).clamped()
+
+def _program_playback_frames(record, *, start_ms=None, end_ms=None):
+    actions = record.section_actions(start_ms, end_ms)
+    if len(actions) < 2:
+        return []
+    current = motion.current_target()
+    speed = current.speed if current.speed > 0 else 35
+    if settings.min_speed >= settings.max_speed:
+        speed = max(10, min(45, speed))
+    step_delay = max(0.01, float(getattr(motion, "step_delay", 0.25) or 0.25))
+    frames = []
+    previous_at = None
+    for action in actions:
+        interval_seconds = 0.0 if previous_at is None else max(0.001, (action.at - previous_at) / 1000.0)
+        frames.append(PatternFrame(
+            _target_for_program_action(action, current, speed, f"program {record.program_id}"),
+            delay_factor=interval_seconds / step_delay,
+            phase="timed-pattern",
+        ))
+        previous_at = action.at
+    return frames
+
+def _program_section_message(record, start_ms=None, end_ms=None):
+    lower, upper = record.section_bounds(start_ms, end_ms)
+    if lower <= 0 and upper >= record.duration_ms:
+        return record.name
+    return f"{record.name} section {round(lower / 1000, 1)}-{round(upper / 1000, 1)}s"
+
 def _run_motion_training_pattern(record, *, preview=False):
     try:
         target = _training_target_for_record(record)
@@ -1307,6 +1352,66 @@ def _run_motion_training_pattern(record, *, preview=False):
     finally:
         app_state.motion_training_stop_event.clear()
 
+def _run_motion_program(record, *, start_ms=None, end_ms=None):
+    section_name = _program_section_message(record, start_ms, end_ms)
+    try:
+        frames = _program_playback_frames(record, start_ms=start_ms, end_ms=end_ms)
+        if not frames:
+            _set_motion_training_state(
+                state="error",
+                pattern_id=record.program_id,
+                pattern_name=section_name,
+                message=f"Program {section_name} has no playable frames.",
+                preview=True,
+            )
+            return
+        _set_motion_training_state(
+            state="playing",
+            pattern_id=record.program_id,
+            pattern_name=section_name,
+            message=f"Playing {section_name}.",
+            preview=True,
+        )
+        completed = motion.apply_position_frames(
+            frames,
+            stop_after=True,
+            source="program playback",
+        )
+        if app_state.motion_training_stop_event.is_set():
+            _set_motion_training_state(
+                state="stopped",
+                pattern_id=record.program_id,
+                pattern_name=section_name,
+                message=f"Stopped {section_name}.",
+                preview=True,
+            )
+        elif not completed:
+            _set_motion_training_state(
+                state="stopped",
+                pattern_id=record.program_id,
+                pattern_name=section_name,
+                message=f"Interrupted {section_name}.",
+                preview=True,
+            )
+        else:
+            _set_motion_training_state(
+                state="idle",
+                pattern_id=record.program_id,
+                pattern_name=section_name,
+                message=f"Finished {section_name}.",
+                preview=True,
+            )
+    except Exception as exc:
+        _set_motion_training_state(
+            state="error",
+            pattern_id=record.program_id,
+            pattern_name=section_name,
+            message=f"Program playback failed: {exc}",
+            preview=True,
+        )
+    finally:
+        app_state.motion_training_stop_event.clear()
+
 def _training_payload_record(data):
     payload = data.get("pattern") if isinstance(data.get("pattern"), dict) else data
     if not isinstance(payload, dict):
@@ -1344,6 +1449,49 @@ def _start_motion_training_record(record, *, preview=False):
         app_state.motion_training_thread.start()
         snapshot = dict(app_state.motion_training_state)
     return jsonify({"status": "started", "motion_training": snapshot})
+
+def _start_motion_program_record(record, *, start_ms=None, end_ms=None):
+    if not handy.handy_key:
+        return jsonify({"status": "error", "message": "Set a Handy connection key before playing Programs."}), 400
+    if app_state.auto_mode_active_task:
+        return jsonify({"status": "error", "message": "Stop the active mode before playing a Program."}), 409
+    section_name = _program_section_message(record, start_ms, end_ms)
+
+    with app_state.lock:
+        if app_state.motion_training_thread and app_state.motion_training_thread.is_alive():
+            return jsonify({"status": "error", "message": "A motion training pattern or Program is already playing."}), 409
+        app_state.motion_training_stop_event.clear()
+        app_state.motion_training_state.update({
+            "state": "starting",
+            "pattern_id": record.program_id,
+            "pattern_name": section_name,
+            "message": f"Starting {section_name}.",
+            "preview": True,
+        })
+        app_state.motion_training_thread = threading.Thread(
+            target=_run_motion_program,
+            args=(record,),
+            kwargs={"start_ms": start_ms, "end_ms": end_ms},
+            daemon=True,
+        )
+        app_state.motion_training_thread.start()
+        snapshot = dict(app_state.motion_training_state)
+    return jsonify({"status": "started", "motion_training": snapshot})
+
+def _save_motion_program_section_pattern(record, data):
+    name = str(data.get("name") or "").strip()
+    payload = record.section_pattern_payload(
+        data.get("start_ms"),
+        data.get("end_ms"),
+        name=name,
+    )
+    filename_source = name or payload.get("id") or payload.get("name") or "program-section"
+    filename = secure_filename(f"{filename_source}.json")
+    return motion_pattern_library.import_payload(
+        payload,
+        filename=filename,
+        source_override="trained",
+    )
 
 def _stop_motion_training():
     app_state.motion_training_stop_event.set()

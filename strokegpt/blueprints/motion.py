@@ -139,6 +139,61 @@ def delete_motion_program_route(program_id):
     })
 
 
+@motion_blueprint.route('/motion_programs/<program_id>/rename', methods=['POST'])
+def rename_motion_program_route(program_id):
+    web = _web()
+    data = web._request_json()
+    try:
+        record = web.motion_program_library.rename_program(program_id, data.get("name"))
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    return jsonify({
+        "status": "success",
+        "message": f"Renamed program: {record.name}.",
+        "program": record.to_summary_dict(),
+        "motion_programs": web._motion_program_catalog_payload(),
+    })
+
+
+@motion_blueprint.route('/motion_programs/<program_id>/play', methods=['POST'])
+def play_motion_program_route(program_id):
+    web = _web()
+    data = web._request_json()
+    record = web._motion_program_record(program_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    try:
+        return web._start_motion_program_record(
+            record,
+            start_ms=data.get("start_ms"),
+            end_ms=data.get("end_ms"),
+        )
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+
+@motion_blueprint.route('/motion_programs/<program_id>/sections/save_pattern', methods=['POST'])
+def save_motion_program_section_pattern_route(program_id):
+    web = _web()
+    data = web._request_json()
+    record = web._motion_program_record(program_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    try:
+        pattern = web._save_motion_program_section_pattern(record, data)
+    except (web.ProgramValidationError, web.PatternValidationError) as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    return jsonify({
+        "status": "success",
+        "message": f"Saved section as pattern: {pattern.name}.",
+        "pattern": _pattern_summary(web, pattern, include_actions=True),
+        "motion_patterns": web._motion_pattern_catalog_payload(),
+        "motion_preferences": web._motion_preference_payload(),
+    })
+
+
 @motion_blueprint.route('/motion_programs/<program_id>/export')
 def export_motion_program_route(program_id):
     web = _web()

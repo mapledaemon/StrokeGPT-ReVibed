@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import shutil
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from strokegpt.program_library import (
     ProgramValidationError,
     record_from_payload,
 )
+from strokegpt.pattern_library import PATTERN_FILE_SUFFIX, PatternLibrary
 
 
 REQUIRED_WEB_MODULES = ("flask", "requests", "elevenlabs")
@@ -140,6 +142,44 @@ class ProgramLibraryTests(unittest.TestCase):
             self.assertFalse((Path(temp_dir) / f"long-wave{PROGRAM_FILE_SUFFIX}").exists())
             self.assertEqual(library.catalog()["programs"], [])
 
+    def test_library_renames_program_without_changing_id(self):
+        with temporary_program_dir() as temp_dir:
+            library = ProgramLibrary(temp_dir)
+            library.import_payload(long_program_payload(), filename="long-wave.funscript")
+
+            renamed = library.rename_program("long-wave", "Renamed Wave")
+
+            self.assertIsNotNone(renamed)
+            self.assertEqual(renamed.program_id, "long-wave")
+            self.assertEqual(renamed.name, "Renamed Wave")
+            path = Path(temp_dir) / f"long-wave{PROGRAM_FILE_SUFFIX}"
+            self.assertTrue(path.exists())
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["id"], "long-wave")
+            self.assertEqual(saved["name"], "Renamed Wave")
+            self.assertEqual(library.catalog()["programs"][0]["name"], "Renamed Wave")
+
+    def test_program_sections_interpolate_boundaries_and_rebase(self):
+        record = record_from_payload({
+            "id": "timeline",
+            "name": "Timeline",
+            "actions": [
+                {"at": 0, "pos": 0},
+                {"at": 1000, "pos": 100},
+                {"at": 2000, "pos": 0},
+            ],
+        })
+
+        section = record.section_actions(500, 1500)
+
+        self.assertEqual([action.at for action in section], [0, 500, 1000])
+        self.assertEqual([round(action.pos) for action in section], [50, 100, 50])
+
+        payload = record.section_pattern_payload(500, 1500, name="Middle Cut")
+        self.assertEqual(payload["name"], "Middle Cut")
+        self.assertEqual(payload["actions"][0], {"at": 0, "pos": 50.0})
+        self.assertIn("program-section", payload["tags"])
+
 
 @unittest.skipIf(MISSING_WEB_MODULES, f"missing app dependencies: {', '.join(MISSING_WEB_MODULES)}")
 class MotionProgramRouteTests(unittest.TestCase):
@@ -152,12 +192,35 @@ class MotionProgramRouteTests(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = temporary_program_dir()
+        self.pattern_temp_dir = temporary_program_dir()
         self.original_library = self.web.motion_program_library
+        self.original_pattern_library = self.web.motion_pattern_library
+        self.original_handy_key = self.web.handy.handy_key
+        self.original_apply_position_frames = self.web.motion.apply_position_frames
+        self.original_motion_stop = self.web.motion.stop
         self.web.motion_program_library = ProgramLibrary(self.temp_dir.name)
+        self.web.motion_pattern_library = PatternLibrary(self.pattern_temp_dir.name)
+        self.stop_calls = []
+        self.web.motion.stop = lambda: self.stop_calls.append("stopped")
+        self.web._set_motion_training_state(
+            state="idle",
+            pattern_id="",
+            pattern_name="",
+            message="Motion training idle.",
+            last_feedback="",
+            preview=False,
+        )
+        self.web.app_state.motion_training_stop_event.clear()
 
     def tearDown(self):
+        self.web._stop_motion_training()
         self.web.motion_program_library = self.original_library
+        self.web.motion_pattern_library = self.original_pattern_library
+        self.web.handy.handy_key = self.original_handy_key
+        self.web.motion.apply_position_frames = self.original_apply_position_frames
+        self.web.motion.stop = self.original_motion_stop
         self.temp_dir.cleanup()
+        self.pattern_temp_dir.cleanup()
 
     def test_program_import_detail_catalog_and_export_routes(self):
         payload = long_program_payload()
@@ -207,6 +270,60 @@ class MotionProgramRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn(".json or .funscript", response.get_json()["message"])
+
+    def test_program_play_route_uses_motion_controller_for_full_and_section(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+        self.web.motion.apply_position_frames = lambda frames, *, stop_after=False, **_kwargs: calls.append({
+            "frames": frames,
+            "stop_after": stop_after,
+        }) or True
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post("/motion_programs/long-wave/play", json={"start_ms": 1000, "end_ms": 3000})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "started")
+        for _ in range(20):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        self.assertTrue(calls[0]["stop_after"])
+        self.assertEqual(len(calls[0]["frames"]), 3)
+        self.assertTrue(all(frame.phase == "timed-pattern" for frame in calls[0]["frames"]))
+        self.assertGreater(calls[0]["frames"][1].delay_factor, 0)
+
+    def test_program_rename_route_updates_catalog_name(self):
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post("/motion_programs/long-wave/rename", json={"name": "Renamed Wave"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["program"]["id"], "long-wave")
+        self.assertEqual(data["program"]["name"], "Renamed Wave")
+        self.assertEqual(data["motion_programs"]["programs"][0]["name"], "Renamed Wave")
+
+        blank_response = self.client.post("/motion_programs/long-wave/rename", json={"name": "   "})
+        self.assertEqual(blank_response.status_code, 400)
+
+    def test_program_section_save_route_writes_short_pattern(self):
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post("/motion_programs/long-wave/sections/save_pattern", json={
+            "start_ms": 1000,
+            "end_ms": 3000,
+            "name": "Wave Clip",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["id"], "wave-clip")
+        self.assertEqual(data["pattern"]["source"], "trained")
+        self.assertTrue((Path(self.pattern_temp_dir.name) / f"wave-clip{PATTERN_FILE_SUFFIX}").exists())
 
 
 if __name__ == "__main__":

@@ -12,8 +12,8 @@ deterministic motion guardrails, and optional voice input/output.
   behavior before commands reach hardware.
 - **Motion Pattern Studio** for funscript import, drawing, crop/edit,
   preview, and save.
-- **Programs (funscripts)** for saving long authored timelines separately from
-  short LLM-selectable loop patterns.
+- **Programs (funscripts)** for saving, playing, and clipping long authored
+  timelines separately from short LLM-selectable loop patterns.
 - **Optional voice** with ElevenLabs or local Chatterbox for output, plus
   Parakeet or faster-whisper for input.
 - **Single-operator local app:** one trusted browser session, one Handy, no
@@ -155,7 +155,8 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Device** - Handy key, firmware v3/v4 path, stroke range, and range
   test.
 - **Motion** - speed limits, backend, preset timing, pattern weights,
-  pattern/program import/export, and thumbs feedback.
+  pattern/program import/export/rename/playback, Program section clipping, and
+  thumbs feedback.
 - **Prompts** - read-only view of the system prompts sent to the local
   model.
 - **Diagnostics** - setup checks, runtime latency tests, system/app status,

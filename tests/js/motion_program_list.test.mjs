@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 
 import { resetStubElement } from './_harness.mjs';
 import {
+    configureMotionProgramList,
     deleteMotionProgram,
     formatProgramDuration,
     formatProgramMetadata,
+    renameMotionProgram,
     renderMotionPrograms,
 } from '../../static/js/motion/program-list.js';
 import { el, state } from '../../static/js/context.js';
@@ -39,21 +41,29 @@ async function flushAsyncClickHandlers() {
 describe('motion program list helpers', () => {
     let originalFetch;
     let originalConfirm;
+    let originalPrompt;
 
     beforeEach(() => {
         resetStubElement('motion-program-list');
         resetStubElement('motion-program-status');
+        resetStubElement('motion-program-dialog-title');
+        resetStubElement('motion-program-dialog-meta');
         resetStubElement('status-text');
         state.connectionLost = false;
         state.motionPrograms = [];
+        state.motionProgramSelected = null;
+        configureMotionProgramList({openMotionProgramWindow: null});
         originalFetch = globalThis.fetch;
         originalConfirm = globalThis.window.confirm;
+        originalPrompt = globalThis.window.prompt;
         globalThis.window.confirm = () => true;
+        globalThis.window.prompt = undefined;
     });
 
     afterEach(() => {
         globalThis.fetch = originalFetch;
         globalThis.window.confirm = originalConfirm;
+        globalThis.window.prompt = originalPrompt;
     });
 
     it('formats long program durations in minutes', () => {
@@ -88,8 +98,10 @@ describe('motion program list helpers', () => {
         assert.equal(formatProgramMetadata(state.motionPrograms[0]), 'imported | 10m duration | 2501 actions | long funscript');
     });
 
-    it('renders a trash button that deletes and refreshes Programs', async () => {
+    it('renders open, rename, and trash buttons for Programs', async () => {
         const calls = [];
+        const opened = [];
+        configureMotionProgramList({openMotionProgramWindow: programId => opened.push(programId)});
         globalThis.fetch = async (endpoint, options = {}) => {
             calls.push({endpoint, options});
             return jsonResponse(200, {
@@ -113,7 +125,12 @@ describe('motion program list helpers', () => {
 
         const row = el.motionProgramList.children[0];
         const actions = row.children[1];
-        const deleteButton = actions.children[1];
+        const openButton = actions.children[0];
+        const renameButton = actions.children[1];
+        const deleteButton = actions.children[3];
+        openButton.click();
+        assert.deepEqual(opened, ['long-wave']);
+        assert.equal(renameButton.textContent, 'Rename');
         assert.equal(deleteButton.getAttribute('aria-label'), 'Delete Long Wave');
         assert.equal(deleteButton.hasAttribute('data-requires-backend'), true);
 
@@ -126,6 +143,65 @@ describe('motion program list helpers', () => {
         assert.equal(state.motionPrograms.length, 0);
         assert.match(el.motionProgramList.children[0].textContent, /No long programs saved yet/);
         assert.equal(el.statusText.textContent, 'Deleted program: Long Wave.');
+    });
+
+    it('renames a Program and updates an open Program player title', async () => {
+        const calls = [];
+        state.motionProgramSelected = {
+            id: 'long-wave',
+            name: 'Long Wave',
+            source: 'imported',
+            duration_ms: 600_000,
+            action_count: 2501,
+        };
+        el.motionProgramDialogTitle.textContent = 'Long Wave';
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, options});
+            return jsonResponse(200, {
+                status: 'success',
+                message: 'Renamed program: Renamed Wave.',
+                program: {
+                    id: 'long-wave',
+                    name: 'Renamed Wave',
+                    source: 'imported',
+                    duration_ms: 600_000,
+                    action_count: 2501,
+                },
+                motion_programs: {
+                    programs: [{id: 'long-wave', name: 'Renamed Wave', source: 'imported', duration_ms: 600_000, action_count: 2501}],
+                    errors: [],
+                },
+            });
+        };
+
+        const data = await renameMotionProgram({id: 'long-wave', name: 'Long Wave'}, 'Renamed Wave');
+
+        assert.equal(data.status, 'success');
+        assert.equal(calls[0].endpoint, '/motion_programs/long-wave/rename');
+        assert.equal(calls[0].options.method, 'POST');
+        assert.deepEqual(JSON.parse(calls[0].options.body), {name: 'Renamed Wave'});
+        assert.equal(state.motionPrograms[0].name, 'Renamed Wave');
+        assert.equal(state.motionProgramSelected.name, 'Renamed Wave');
+        assert.equal(el.motionProgramDialogTitle.textContent, 'Renamed Wave');
+        assert.equal(el.statusText.textContent, 'Renamed program: Renamed Wave.');
+    });
+
+    it('prompts for Program rename when no name is provided', async () => {
+        const calls = [];
+        globalThis.window.prompt = () => 'Prompted Wave';
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, options});
+            return jsonResponse(200, {
+                status: 'success',
+                program: {id: 'long-wave', name: 'Prompted Wave'},
+                motion_programs: {programs: [{id: 'long-wave', name: 'Prompted Wave'}], errors: []},
+            });
+        };
+
+        await renameMotionProgram({id: 'long-wave', name: 'Long Wave'});
+
+        assert.equal(calls.length, 1);
+        assert.deepEqual(JSON.parse(calls[0].options.body), {name: 'Prompted Wave'});
     });
 
     it('does not delete when confirmation is cancelled', async () => {

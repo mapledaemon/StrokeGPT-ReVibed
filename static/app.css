@@ -441,8 +441,24 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
 .motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; min-width: 104px; }
 .motion-pattern-play, .motion-pattern-export, .motion-pattern-feedback-reset { width: auto; min-width: 96px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
-.motion-program-row .motion-pattern-row-actions { grid-template-columns: minmax(96px, 1fr) 1.65rem; align-items: center; }
+.motion-program-row .motion-pattern-row-actions { grid-template-columns: repeat(3, minmax(76px, 1fr)) 1.65rem; align-items: center; }
 .motion-program-delete { justify-self: end; }
+.motion-program-box { width: min(980px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.motion-program-player-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }
+.motion-program-player-toolbar .my-button { width: auto; min-width: 132px; }
+.motion-program-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.motion-program-tab { width: auto; min-width: 0; }
+.motion-program-tab.active { border-color: rgba(127, 183, 163, 0.82); background: #263d36; color: var(--foreground); box-shadow: inset 0 0 0 1px rgba(127, 183, 163, 0.22); }
+.motion-program-range-timeline { height: 190px; border-radius: 8px; }
+#motion-program-timeline-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.motion-program-panel { display: none; flex-direction: column; gap: 12px; }
+.motion-program-panel.active { display: flex; }
+.motion-program-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.motion-program-action-grid .my-button { width: auto; min-width: 0; }
+.motion-program-section-grid { display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)) minmax(140px, 0.8fr); gap: 8px; align-items: stretch; }
+.motion-program-section-duration { min-height: 34px; display: flex; align-items: center; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.82rem; }
+.motion-program-save-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+.motion-program-save-row .my-button { width: auto; min-width: 170px; }
 .motion-pattern-weight-control { display: flex; flex-direction: column; gap: 4px; min-width: 92px; }
 .motion-pattern-weight-label { color: var(--comment); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
 .motion-pattern-weight-field { min-height: 34px; }
@@ -631,9 +647,9 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-training-box { position: fixed; top: 8px; right: auto; bottom: 8px; left: 8px; width: calc(100vw - 32px); max-width: calc(100vw - 32px); height: auto; max-height: none; padding: 12px 28px 12px 12px; }
     .about-wallet-grid { grid-template-columns: 1fr; }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
-    .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row, .motion-studio-actions, .motion-studio-entry-actions, .motion-studio-timeline-controls, .motion-studio-crop-fields { grid-template-columns: 1fr; }
+    .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row, .motion-studio-actions, .motion-studio-entry-actions, .motion-studio-timeline-controls, .motion-studio-crop-fields, .motion-program-player-toolbar, .motion-program-action-grid, .motion-program-section-grid, .motion-program-save-row { grid-template-columns: 1fr; }
     .motion-training-timing-control { grid-template-columns: minmax(0, 1fr) 38px 38px; }
-    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button, .motion-studio-actions .my-button, .motion-studio-entry-actions .my-button, .motion-studio-timeline-controls .my-button, .motion-studio-crop-fields .my-button { width: 100%; }
+    .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button, .motion-studio-actions .my-button, .motion-studio-entry-actions .my-button, .motion-studio-timeline-controls .my-button, .motion-studio-crop-fields .my-button, .motion-program-player-toolbar .my-button, .motion-program-action-grid .my-button, .motion-program-save-row .my-button { width: 100%; }
     .motion-studio-crop-header { flex-direction: column; gap: 4px; }
     .motion-studio-crop-header span:last-child { text-align: left; }
     .motion-training-detail-header > *, .motion-backend-stack { min-width: 0; }
