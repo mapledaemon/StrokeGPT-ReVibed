@@ -422,6 +422,8 @@ export const state = {
     motionProgramSectionStartMs: 0,
     motionProgramSectionEndMs: 0,
     motionProgramSectionDragHandle: '',
+    motionProgramTimelineZoom: 1,
+    motionProgramTimelineOffsetMs: 0,
     motionProgramActiveTab: 'playback',
     motionTraining: {state: 'idle', pattern_id: '', pattern_name: ''},
     motionTrainingSelectedPatternId: '',

@@ -5,6 +5,7 @@ import { segmentIntensity, timelineIntensityColor } from './training-editor.js';
 
 
 const PROGRAM_SECTION_MIN_DURATION_MS = 100;
+const PROGRAM_TIMELINE_MAX_ZOOM = 16;
 
 
 let renderMotionPatternsCallback = null;
@@ -103,6 +104,63 @@ function currentSectionBounds() {
 }
 
 
+function programTimelineZoom() {
+    return clampNumber(state.motionProgramTimelineZoom, 1, PROGRAM_TIMELINE_MAX_ZOOM, 1);
+}
+
+
+export function programTimelineViewWindow(program = selectedProgram()) {
+    const duration = Math.max(0, programDurationMs(program));
+    const zoom = programTimelineZoom();
+    const viewDuration = duration > 0 ? Math.max(1, duration / zoom) : 0;
+    const maxOffset = Math.max(0, duration - viewDuration);
+    const viewStart = clampNumber(state.motionProgramTimelineOffsetMs, 0, maxOffset, 0);
+    const viewEnd = Math.min(duration, viewStart + viewDuration);
+    return {duration, zoom, viewStart, viewEnd, viewDuration: Math.max(0, viewEnd - viewStart)};
+}
+
+
+function programTimelinePercentForMs(ms, view = programTimelineViewWindow()) {
+    if (!view.viewDuration) return 0;
+    return ((ms - view.viewStart) / view.viewDuration) * 100;
+}
+
+
+function programTimelineMsForPercent(percent, view = programTimelineViewWindow()) {
+    if (!view.duration) return 0;
+    const amount = clampNumber(percent, 0, 1, 0);
+    return Math.round(view.viewStart + (amount * view.viewDuration));
+}
+
+
+function setProgramTimelineZoom(zoom, anchorMs = null) {
+    const program = selectedProgram();
+    const duration = programDurationMs(program);
+    if (!program || duration <= 0) return;
+    const before = programTimelineViewWindow(program);
+    const anchor = anchorMs === null
+        ? before.viewStart + (before.viewDuration / 2)
+        : clampNumber(anchorMs, before.viewStart, before.viewEnd, before.viewStart);
+    const anchorRatio = before.viewDuration > 0 ? (anchor - before.viewStart) / before.viewDuration : 0.5;
+    state.motionProgramTimelineZoom = clampNumber(zoom, 1, PROGRAM_TIMELINE_MAX_ZOOM, 1);
+    const afterViewDuration = Math.max(1, duration / programTimelineZoom());
+    state.motionProgramTimelineOffsetMs = clampNumber(
+        anchor - (afterViewDuration * anchorRatio),
+        0,
+        Math.max(0, duration - afterViewDuration),
+        0,
+    );
+    syncSectionInputs();
+    drawTimeline();
+}
+
+
+function resetProgramTimelineView() {
+    state.motionProgramTimelineZoom = 1;
+    state.motionProgramTimelineOffsetMs = 0;
+}
+
+
 function setProgramSectionRange(startMs, endMs, changed = '') {
     const program = selectedProgram();
     const duration = programDurationMs(program);
@@ -185,12 +243,12 @@ export function setMotionProgramTab(tabName = 'playback') {
 
 function programTimelineMsFromEvent(event) {
     const program = selectedProgram();
-    const duration = programDurationMs(program);
-    if (!program || duration <= 0 || !el.motionProgramRangeTimeline) return 0;
+    const view = programTimelineViewWindow(program);
+    if (!program || view.duration <= 0 || !el.motionProgramRangeTimeline) return 0;
     const rect = el.motionProgramRangeTimeline.getBoundingClientRect?.() || {};
     const width = Math.max(1, rect.width || el.motionProgramRangeTimeline.clientWidth || el.motionProgramRangeTimeline.offsetWidth || 1);
     const x = clampNumber((event.clientX ?? 0) - (rect.left || 0), 0, width, 0);
-    return Math.round((x / width) * duration);
+    return programTimelineMsForPercent(x / width, view);
 }
 
 
@@ -267,6 +325,27 @@ function handleProgramSectionHandleKeydown(handleName, event) {
 }
 
 
+function programTimelineAnchorMsFromEvent(event) {
+    const program = selectedProgram();
+    const view = programTimelineViewWindow(program);
+    if (!program || view.duration <= 0 || !el.motionProgramRangeTimeline) return null;
+    const rect = el.motionProgramRangeTimeline.getBoundingClientRect?.() || {};
+    const width = Math.max(1, rect.width || el.motionProgramRangeTimeline.clientWidth || el.motionProgramRangeTimeline.offsetWidth || 1);
+    const x = clampNumber((event.clientX ?? 0) - (rect.left || 0), 0, width, 0);
+    return programTimelineMsForPercent(x / width, view);
+}
+
+
+function handleProgramTimelineWheel(event) {
+    if (!selectedProgram()) return;
+    event.preventDefault?.();
+    const anchor = programTimelineAnchorMsFromEvent(event);
+    const direction = (event.deltaY || 0) > 0 ? -1 : 1;
+    const factor = direction > 0 ? 1.25 : 0.8;
+    setProgramTimelineZoom(programTimelineZoom() * factor, anchor);
+}
+
+
 function syncSectionInputs() {
     const program = selectedProgram();
     const duration = programDurationMs(program);
@@ -294,13 +373,16 @@ function syncSectionInputs() {
 
 function updateProgramTimelineHandles() {
     const program = selectedProgram();
-    const duration = programDurationMs(program);
-    const enabled = Boolean(program && duration > 0);
+    const view = programTimelineViewWindow(program);
+    const enabled = Boolean(program && view.duration > 0);
     const bounds = currentSectionBounds();
-    const startPercent = enabled ? (bounds.startMs / duration) * 100 : 0;
-    const endPercent = enabled ? (bounds.endMs / duration) * 100 : 100;
+    const visibleStart = enabled ? Math.max(bounds.startMs, view.viewStart) : 0;
+    const visibleEnd = enabled ? Math.min(bounds.endMs, view.viewEnd) : 0;
+    const startPercent = enabled ? programTimelinePercentForMs(visibleStart, view) : 0;
+    const endPercent = enabled ? programTimelinePercentForMs(visibleEnd, view) : 100;
+    const hasVisibleSelection = enabled && visibleEnd > visibleStart;
     if (el.motionProgramSectionSelection) {
-        el.motionProgramSectionSelection.hidden = !enabled;
+        el.motionProgramSectionSelection.hidden = !hasVisibleSelection;
         el.motionProgramSectionSelection.style.left = `${startPercent}%`;
         el.motionProgramSectionSelection.style.width = `${Math.max(0, endPercent - startPercent)}%`;
     }
@@ -309,12 +391,13 @@ function updateProgramTimelineHandles() {
         [el.motionProgramSectionEndHandle, bounds.endMs, 'end'],
     ].forEach(([handle, ms, label]) => {
         if (!handle) return;
-        handle.hidden = !enabled;
+        const visible = enabled && ms >= view.viewStart && ms <= view.viewEnd;
+        handle.hidden = !visible;
         handle.disabled = !enabled;
-        const percent = enabled ? (ms / duration) * 100 : 0;
+        const percent = visible ? programTimelinePercentForMs(ms, view) : 0;
         handle.style.left = `${percent}%`;
         handle.setAttribute('aria-valuemin', '0');
-        handle.setAttribute('aria-valuemax', String(msToSeconds(duration)));
+        handle.setAttribute('aria-valuemax', String(msToSeconds(view.duration)));
         handle.setAttribute('aria-valuenow', String(msToSeconds(ms)));
         handle.setAttribute('aria-valuetext', `${label} ${msToSeconds(ms)} seconds`);
     });
@@ -342,8 +425,8 @@ function drawTimeline() {
     context.fillRect(0, 0, width, height);
 
     const actions = normalizedActions(program.actions);
-    const duration = programDurationMs(program);
-    if (actions.length < 2 || duration <= 0) {
+    const view = programTimelineViewWindow(program);
+    if (actions.length < 2 || view.duration <= 0) {
         context.fillStyle = '#66707f';
         context.fillText('No timeline actions loaded.', 20, 28);
         return;
@@ -372,24 +455,31 @@ function drawTimeline() {
     const innerWidth = Math.max(1, width - pad * 2);
     const innerHeight = Math.max(1, height - padY * 2);
     const bounds = currentSectionBounds();
-    const selectionX = pad + (bounds.startMs / duration) * innerWidth;
-    const selectionWidth = Math.max(2, (bounds.durationMs / duration) * innerWidth);
+    const selectionStart = Math.max(bounds.startMs, view.viewStart);
+    const selectionEnd = Math.min(bounds.endMs, view.viewEnd);
+    const selectionX = pad + programTimelinePercentForMs(selectionStart, view) / 100 * innerWidth;
+    const selectionWidth = Math.max(2, programTimelinePercentForMs(selectionEnd, view) / 100 * innerWidth - (selectionX - pad));
 
     context.strokeStyle = '#2d333d';
     context.lineWidth = 1;
     context.strokeRect(pad, padY, innerWidth, innerHeight);
 
-    const maxPoints = Math.min(actions.length, 1400);
+    const start = view.viewStart;
+    const end = view.viewEnd;
+    const allVisibleActions = [
+        programActionAt(actions, start),
+        ...actions.filter(action => action.at > start && action.at < end),
+        programActionAt(actions, end),
+    ];
+    const maxPoints = Math.min(allVisibleActions.length, 1400);
     const visibleActions = [];
     for (let index = 0; index < maxPoints; index++) {
-        const sourceIndex = Math.round((index / Math.max(1, maxPoints - 1)) * (actions.length - 1));
-        const action = actions[sourceIndex];
+        const sourceIndex = Math.round((index / Math.max(1, maxPoints - 1)) * (allVisibleActions.length - 1));
+        const action = allVisibleActions[sourceIndex];
         if (!visibleActions.length || visibleActions[visibleActions.length - 1].at !== action.at) visibleActions.push(action);
     }
-    if (visibleActions[0]?.at !== actions[0].at) visibleActions.unshift(actions[0]);
-    if (visibleActions[visibleActions.length - 1]?.at !== actions[actions.length - 1].at) visibleActions.push(actions[actions.length - 1]);
 
-    const xFor = action => pad + (action.at / duration) * innerWidth;
+    const xFor = action => pad + ((action.at - view.viewStart) / view.viewDuration) * innerWidth;
     const yFor = action => padY + ((100 - clampNumber(action.pos, 0, 100, 50)) / 100) * innerHeight;
     context.lineWidth = 2.5;
     for (let index = 1; index < visibleActions.length; index++) {
@@ -405,22 +495,24 @@ function drawTimeline() {
         context.fillRect(xFor(left), height - padY + 2, Math.max(1, xFor(right) - xFor(left)), 4);
     }
 
-    context.fillStyle = 'rgba(127, 183, 163, 0.12)';
-    context.fillRect(selectionX, padY, selectionWidth, innerHeight);
-    context.strokeStyle = 'rgba(216, 182, 106, 0.95)';
-    context.lineWidth = 2;
-    [selectionX, selectionX + selectionWidth].forEach(x => {
-        context.beginPath();
-        context.moveTo(x, padY);
-        context.lineTo(x, height - padY);
-        context.stroke();
-    });
+    if (selectionEnd > selectionStart) {
+        context.fillStyle = 'rgba(127, 183, 163, 0.12)';
+        context.fillRect(selectionX, padY, selectionWidth, innerHeight);
+        context.strokeStyle = 'rgba(216, 182, 106, 0.95)';
+        context.lineWidth = 2;
+        [selectionX, selectionX + selectionWidth].forEach(x => {
+            context.beginPath();
+            context.moveTo(x, padY);
+            context.lineTo(x, height - padY);
+            context.stroke();
+        });
+    }
 
     context.fillStyle = 'rgba(216, 182, 106, 0.72)';
     const pointStride = Math.max(1, Math.ceil(visibleActions.length / 180));
     visibleActions.forEach((action, index) => {
         if (index % pointStride !== 0 && index !== visibleActions.length - 1) return;
-        const x = pad + (action.at / duration) * innerWidth;
+        const x = xFor(action);
         const y = padY + ((100 - action.pos) / 100) * innerHeight;
         context.beginPath();
         context.arc(x, y, 2, 0, Math.PI * 2);
@@ -429,9 +521,13 @@ function drawTimeline() {
 
     context.fillStyle = '#66707f';
     context.font = '11px Inter, sans-serif';
-    context.fillText(`0s`, pad, height - 8);
+    context.fillText(`${msToSeconds(view.viewStart)}s`, pad, height - 8);
     context.textAlign = 'right';
-    context.fillText(formatProgramDuration(duration), width - pad, height - 8);
+    context.fillText(view.zoom > 1 ? `${msToSeconds(view.viewEnd)}s` : formatProgramDuration(view.duration), width - pad, height - 8);
+    if (view.zoom > 1) {
+        context.textAlign = 'center';
+        context.fillText(`${view.zoom.toFixed(2).replace(/\.?0+$/, '')}x`, width / 2, height - 8);
+    }
     context.textAlign = 'left';
     updateProgramTimelineHandles();
 }
@@ -444,6 +540,9 @@ export function renderMotionProgramWindow(program) {
         return;
     }
     const duration = programDurationMs(program);
+    if (state.motionProgramTimelineOffsetMs > duration || state.motionProgramTimelineZoom < 1) {
+        resetProgramTimelineView();
+    }
     if (!state.motionProgramSectionEndMs || state.motionProgramSectionEndMs > duration) {
         state.motionProgramSectionStartMs = 0;
         state.motionProgramSectionEndMs = Math.min(duration, 30_000);
@@ -464,6 +563,7 @@ export async function openMotionProgramWindow(programId) {
     setProgramPlayerStatus('Loading Program...', 'neutral');
     const data = await requestProgramJson(`/motion_programs/${encodeURIComponent(cleanId)}`);
     if (data && data.status === 'success' && data.program) {
+        resetProgramTimelineView();
         state.motionProgramSectionStartMs = 0;
         state.motionProgramSectionEndMs = Math.min(programDurationMs(data.program), 30_000);
         renderMotionProgramWindow(data.program);
@@ -569,6 +669,7 @@ export function bindMotionProgramPlayerControls() {
     el.motionProgramSectionStartHandle?.addEventListener('keydown', event => handleProgramSectionHandleKeydown('start', event));
     el.motionProgramSectionEndHandle?.addEventListener('keydown', event => handleProgramSectionHandleKeydown('end', event));
     el.motionProgramRangeTimeline?.addEventListener('pointerdown', handleProgramRangeTimelinePointerDown);
+    el.motionProgramRangeTimeline?.addEventListener('wheel', handleProgramTimelineWheel, {passive: false});
     D.addEventListener?.('pointermove', handleProgramRangePointerMove);
     ['pointerup', 'pointercancel'].forEach(eventName => {
         D.addEventListener?.(eventName, finishProgramRangeDrag);

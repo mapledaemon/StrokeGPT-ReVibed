@@ -9,6 +9,7 @@ import {
     playSelectedMotionProgram,
     programSectionActions,
     programSectionBounds,
+    programTimelineViewWindow,
     saveSelectedProgramSectionAsPattern,
     setMotionProgramTab,
 } from '../../static/js/motion/program-player.js';
@@ -77,6 +78,8 @@ describe('motion program player', () => {
         state.motionProgramSectionStartMs = 0;
         state.motionProgramSectionEndMs = 0;
         state.motionProgramSectionDragHandle = '';
+        state.motionProgramTimelineZoom = 1;
+        state.motionProgramTimelineOffsetMs = 0;
         state.motionProgramActiveTab = 'playback';
         configureMotionProgramPlayer({renderMotionPatterns: null, updateMotionTrainingStatus: null});
         originalFetch = globalThis.fetch;
@@ -165,6 +168,50 @@ describe('motion program player', () => {
         assert.equal(state.motionProgramSectionStartMs, 1_000);
         assert.equal(el.motionProgramSectionStartInput.value, '1');
         assert.equal(el.motionProgramSectionStartHandle.getAttribute('aria-valuenow'), '1');
+    });
+
+    it('zooms the Program timeline around the wheel cursor', () => {
+        bindMotionProgramPlayerControls();
+        state.motionProgramSelected = program;
+        state.motionProgramSectionStartMs = 0;
+        state.motionProgramSectionEndMs = 30_000;
+        el.motionProgramRangeTimeline.getBoundingClientRect = () => ({left: 0, right: 600, width: 600, top: 0, bottom: 190, height: 190});
+
+        let prevented = false;
+        el.motionProgramRangeTimeline.dispatchEvent('wheel', {
+            clientX: 300,
+            deltaY: -100,
+            preventDefault() { prevented = true; },
+        });
+
+        assert.equal(prevented, true);
+        assert.equal(state.motionProgramTimelineZoom, 1.25);
+        assert.equal(state.motionProgramTimelineOffsetMs, 6_000);
+        assert.deepEqual(programTimelineViewWindow(program), {
+            duration: 60_000,
+            zoom: 1.25,
+            viewStart: 6_000,
+            viewEnd: 54_000,
+            viewDuration: 48_000,
+        });
+
+        el.motionProgramRangeTimeline.dispatchEvent('pointerdown', {
+            target: el.motionProgramRangeTimeline,
+            clientX: 600,
+            preventDefault() {},
+        });
+        assert.equal(state.motionProgramSectionEndMs, 54_000);
+        assert.equal(el.motionProgramSectionEndHandle.style.left, '100%');
+        assert.equal(el.motionProgramSectionSelection.style.left, '0%');
+        assert.equal(el.motionProgramSectionSelection.style.width, '100%');
+
+        el.motionProgramRangeTimeline.dispatchEvent('wheel', {
+            clientX: 300,
+            deltaY: 100,
+            preventDefault() {},
+        });
+        assert.equal(state.motionProgramTimelineZoom, 1);
+        assert.equal(state.motionProgramTimelineOffsetMs, 0);
     });
 
     it('plays the selected Program section through the Program route', async () => {

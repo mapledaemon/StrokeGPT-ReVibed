@@ -155,8 +155,8 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Device** - Handy key, firmware v3/v4 path, stroke range, and range
   test.
 - **Motion** - speed limits, backend, preset timing, pattern weights,
-  pattern/program import/export/playback, Program section clipping, and thumbs
-  feedback.
+  pattern/program import/export/rename/playback, Program section clipping, and
+  thumbs feedback.
 - **Prompts** - read-only view of the system prompts sent to the local
   model.
 - **Diagnostics** - setup checks, runtime latency tests, system/app status,

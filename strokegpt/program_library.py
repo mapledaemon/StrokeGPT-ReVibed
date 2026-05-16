@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .motion_patterns import PatternAction, normalize_actions
@@ -332,6 +332,34 @@ class ProgramLibrary:
             except OSError as exc:
                 raise ProgramValidationError(f"Could not delete program file: {exc}") from exc
             return record
+        return None
+
+    def rename_program(self, program_id, name):
+        requested = slugify_pattern_id(program_id)
+        new_name = _safe_text(name, max_length=100)
+        if not new_name:
+            raise ProgramValidationError("Program name is required.")
+        try:
+            files = self.user_program_files()
+        except OSError as exc:
+            raise ProgramValidationError(f"Could not read program directory: {exc}") from exc
+
+        for path in files:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                record = record_from_payload(payload, fallback_id=path.stem, readonly=False)
+            except (OSError, json.JSONDecodeError, ProgramValidationError):
+                continue
+            if record.program_id != requested:
+                continue
+            updated = replace(record, name=new_name)
+            try:
+                tmp_path = path.with_name(f"{path.name}.tmp")
+                tmp_path.write_text(json.dumps(updated.to_export_dict(), indent=2) + "\n", encoding="utf-8")
+                tmp_path.replace(path)
+            except OSError as exc:
+                raise ProgramValidationError(f"Could not rename program file: {exc}") from exc
+            return updated
         return None
 
     def import_payload(self, payload, *, filename="program.funscript", source_override="imported"):

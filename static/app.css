@@ -441,7 +441,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
 .motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; min-width: 104px; }
 .motion-pattern-play, .motion-pattern-export, .motion-pattern-feedback-reset { width: auto; min-width: 96px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
-.motion-program-row .motion-pattern-row-actions { grid-template-columns: repeat(2, minmax(86px, 1fr)) 1.65rem; align-items: center; }
+.motion-program-row .motion-pattern-row-actions { grid-template-columns: repeat(3, minmax(76px, 1fr)) 1.65rem; align-items: center; }
 .motion-program-delete { justify-self: end; }
 .motion-program-box { width: min(980px, 100%); display: flex; flex-direction: column; gap: 12px; }
 .motion-program-player-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }

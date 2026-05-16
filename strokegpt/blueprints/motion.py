@@ -139,6 +139,24 @@ def delete_motion_program_route(program_id):
     })
 
 
+@motion_blueprint.route('/motion_programs/<program_id>/rename', methods=['POST'])
+def rename_motion_program_route(program_id):
+    web = _web()
+    data = web._request_json()
+    try:
+        record = web.motion_program_library.rename_program(program_id, data.get("name"))
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    return jsonify({
+        "status": "success",
+        "message": f"Renamed program: {record.name}.",
+        "program": record.to_summary_dict(),
+        "motion_programs": web._motion_program_catalog_payload(),
+    })
+
+
 @motion_blueprint.route('/motion_programs/<program_id>/play', methods=['POST'])
 def play_motion_program_route(program_id):
     web = _web()

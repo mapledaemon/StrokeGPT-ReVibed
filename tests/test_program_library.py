@@ -142,6 +142,23 @@ class ProgramLibraryTests(unittest.TestCase):
             self.assertFalse((Path(temp_dir) / f"long-wave{PROGRAM_FILE_SUFFIX}").exists())
             self.assertEqual(library.catalog()["programs"], [])
 
+    def test_library_renames_program_without_changing_id(self):
+        with temporary_program_dir() as temp_dir:
+            library = ProgramLibrary(temp_dir)
+            library.import_payload(long_program_payload(), filename="long-wave.funscript")
+
+            renamed = library.rename_program("long-wave", "Renamed Wave")
+
+            self.assertIsNotNone(renamed)
+            self.assertEqual(renamed.program_id, "long-wave")
+            self.assertEqual(renamed.name, "Renamed Wave")
+            path = Path(temp_dir) / f"long-wave{PROGRAM_FILE_SUFFIX}"
+            self.assertTrue(path.exists())
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["id"], "long-wave")
+            self.assertEqual(saved["name"], "Renamed Wave")
+            self.assertEqual(library.catalog()["programs"][0]["name"], "Renamed Wave")
+
     def test_program_sections_interpolate_boundaries_and_rebase(self):
         record = record_from_payload({
             "id": "timeline",
@@ -276,6 +293,21 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.assertEqual(len(calls[0]["frames"]), 3)
         self.assertTrue(all(frame.phase == "timed-pattern" for frame in calls[0]["frames"]))
         self.assertGreater(calls[0]["frames"][1].delay_factor, 0)
+
+    def test_program_rename_route_updates_catalog_name(self):
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post("/motion_programs/long-wave/rename", json={"name": "Renamed Wave"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["program"]["id"], "long-wave")
+        self.assertEqual(data["program"]["name"], "Renamed Wave")
+        self.assertEqual(data["motion_programs"]["programs"][0]["name"], "Renamed Wave")
+
+        blank_response = self.client.post("/motion_programs/long-wave/rename", json={"name": "   "})
+        self.assertEqual(blank_response.status_code, 400)
 
     def test_program_section_save_route_writes_short_pattern(self):
         self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
