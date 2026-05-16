@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - PR #238 - Prioritize Library Sharing Roadmap
+----------------------------------------------------------
+
+Branch: gpt-roadmap-library-collaboration-priority
+
+- Moved one-click customized library export and pattern/program tag editing
+  into their own short-term roadmap item, separate from the longer-term
+  LLM-curated playback architecture.
+
+
 2026-05-16 - PR #237 - Extend Curated Library Roadmap
 ------------------------------------------------------
 

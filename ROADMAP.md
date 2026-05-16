@@ -278,9 +278,33 @@ watch items after recent regressions.
   Pause/Resume, chat edge-blocking, motion-target language) while moving
   the visible surface into the new layout.
 
+### 6. Shareable Library Export And Tags (S/M)
+
+Why next: sharing user-authored prompts, Motion Patterns, and Programs /
+funscripts is a short-term collaboration unlock. A portable library export and
+explicit pattern/script tags let users exchange useful content now and provide
+the metadata needed for later LLM-curated playback without waiting for the
+larger curation architecture.
+
+- Add a one-click library backup/export action that downloads a zip containing
+  user-customized prompts, saved Motion Patterns, and imported Programs /
+  funscripts so users can share, move, or preserve curated content before
+  reset, reinstall, or branch testing.
+- Include a simple manifest with schema/app version, exported item counts, and
+  source library paths. Do not include secrets such as Handy keys, hosted TTS
+  keys, local voice samples, or unrelated settings in the collaboration export.
+- Add visible tag editors for Motion Patterns and Programs / funscripts, with
+  suggested tags such as intense, full shaft, mid shaft, tip, base, teasing,
+  slow, and edging.
+- Include saved tags in the LLM-facing pattern/program catalog summaries so the
+  local model can choose scripts by user-visible semantics instead of relying
+  only on names, feedback weights, or recent playback history.
+- Keep the export and tag editor useful on their own. Do not block this item on
+  the later LLM-curated playback schema redesign.
+
 ## Queued
 
-### 6. Soft-Anchor Pattern Authoring (M/L)
+### 7. Soft-Anchor Pattern Authoring (M/L)
 
 Why later: it addresses the gap between fixed scripts and raw LLM numeric
 control while staying inspectable, but should follow the code reorg so it
@@ -313,7 +337,7 @@ controls that do not exist yet.
   them as pattern examples; those gaps usually describe source media timing,
   not useful standalone motion intent.
 
-### 7. Architecture Audit And Strategic Refactor (M)
+### 8. Architecture Audit And Strategic Refactor (M)
 
 Why later: the immediate code reorg in Up Next #2, the recently completed
 `static/js/motion-control.js` module split (PRs #64-#67 plus the training
@@ -384,7 +408,7 @@ a clean tree first.
 - Prefer practical maintainability refactors when they improve
   editability, recoverability, or safety.
 
-### 8. Motion Training Editor Depth (M)
+### 9. Motion Training Editor Depth (M)
 
 Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
@@ -408,7 +432,7 @@ multi-pattern sequencing.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 
-### 9. User Profile And Preference Setup (M)
+### 10. User Profile And Preference Setup (M)
 
 Why later: identity and preference setup affects persona prompts and model
 context, so it should follow runtime diagnostics, motion vocabulary
@@ -433,7 +457,7 @@ cleanup, and the persona naming audit.
 - Keep identity/preferences inspectable and resettable; do not bury them
   inside natural-language memory.
 
-### 10. Runtime And Setup Diagnostics (M)
+### 11. Runtime And Setup Diagnostics (M)
 
 Why later: the Settings > Diagnostics tab now covers setup checks and basic
 latency probes, copyable system/app status, motion transport capture, Ollama
@@ -497,7 +521,7 @@ manual browser/device smoke, or are guardrails for future diagnostics changes.
 
 ## Backlog
 
-### 11. Tip And Base Calibration Research And Restoration (M/L)
+### 12. Tip And Base Calibration Research And Restoration (M/L)
 
 Why later: calibrated tip/base anchors may solve feel issues, but the
 benefit should be confirmed against current stroke-range behavior before
@@ -523,7 +547,7 @@ adding another setup surface.
   honoring the same calibration mapping without bypassing smoothing, stop
   behavior, or user speed limits.
 
-### 12. Reference Research Backlog (S/M)
+### 13. Reference Research Backlog (S/M)
 
 Why later: the external projects are useful inputs, but each needs
 licensing, scope, and architecture review before implementation.
@@ -568,7 +592,7 @@ licensing, scope, and architecture review before implementation.
   device behavior, but avoid importing designs that add unnecessary
   pauses, stops, or other counterproductive playback behavior.
 
-### 13. Local Voice Control Hardening (L)
+### 14. Local Voice Control Hardening (L)
 
 Why later: PR #89 landed the provider-neutral service, browser
 `MediaRecorder` capture, faster-whisper transcription route, explicit
@@ -642,7 +666,7 @@ pruning routine controls rather than adding more knobs.
   It has a larger state/concurrency surface than the quick latency wins and
   should not be mixed into the first tuning slice.
 
-### 14. Story Mode (L/XL)
+### 15. Story Mode (L/XL)
 
 Why later: it depends on reliable voice, motion preferences, and sequence
 editing.
@@ -657,7 +681,7 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
-### 15. LLM-Curated Playback And Anchor-Loop Freestyle Repositioning (L)
+### 16. LLM-Curated Playback And Anchor-Loop Freestyle Repositioning (L)
 
 Why later: this is a strategic shift in how LLM output drives motion. The
 existing `anchor_loop` output already feels more freestyle than the rest of
@@ -683,18 +707,9 @@ commitment.
 - Audit the catalog: the 34 built-in patterns plus any user-imported Programs
   are not large enough to support pure curation across normal conversation.
   Decide whether to grow a curated built-in library (manual authoring or
-  permissively-licensed funscript sources from the references in item #12),
+  permissively-licensed funscript sources from the references in item #13),
   rely on user-managed Program imports as the primary content source, or
   both with a small starter set for fresh installs.
-- Add a one-click library backup/export action that downloads a zip containing
-  all user-customized prompts, saved Motion Patterns, and imported Programs /
-  funscripts so users can move or preserve their curated content before reset,
-  reinstall, or branch testing.
-- Add visible tag editors for Motion Patterns and Programs / funscripts, with
-  suggested tags such as intense, full shaft, mid shaft, tip, base, teasing,
-  slow, and edging. Include those tags in the LLM-facing catalog summaries so
-  curated selection can match user intent without relying only on names,
-  feedback weights, or recent playback history.
 - Keep the deterministic LLM numeric/named-pattern motion path reachable as
   a fallback so the model is not silenced when no library entry matches the
   current chat intent.
@@ -707,14 +722,14 @@ commitment.
   and that the library is large enough that "the LLM keeps picking the same
   two scripts" does not become the dominant failure mode. If it does, the
   strategic shift is premature until the library grows.
-- Related work: item #3 Freestyle / freeform toggle, item #6 soft-anchor
-  pattern authoring, item #14 Story Mode (the same architecture with longer
-  scripted/voiced beats), and item #12 funscript reference research for
-  library sourcing.
+- Related work: item #3 Freestyle / freeform toggle, item #6 shareable library
+  export/tags, item #7 soft-anchor pattern authoring, item #15 Story Mode (the
+  same architecture with longer scripted/voiced beats), and item #13 funscript
+  reference research for library sourcing.
 
 ## Long-Horizon
 
-### 16. Internet-Exposed Remote Control And Multi-User Sessions (XL)
+### 17. Internet-Exposed Remote Control And Multi-User Sessions (XL)
 
 Why later: the app is currently designed for one trusted local operator, one
 active browser session, and one Handy controller. Opening control to the public
@@ -756,7 +771,7 @@ flows are reliable.
   an intentional architecture change; do not let ordinary LAN/mobile fixes
   accidentally create a partial multi-user control model.
 
-### 17. Optional Runtime And Packaging Work (XL)
+### 18. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
