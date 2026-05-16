@@ -65,6 +65,7 @@ ALLOWED_STYLE_FIELDS = frozenset({
     "window_scale",
     "speed_scale",
     "tempo_scale",
+    "duration_scale",
     "depth_jitter",
     "range_jitter",
     "repeat",
@@ -142,8 +143,8 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # against the JSON-materialized catalog. Pin a couple of values
         # so future tweaks to the loader path cannot silently shift
         # pattern duration.
-        self.assertEqual(PATTERNS["stroke"].duration_ms, 900)
-        self.assertEqual(PATTERNS["milk"].duration_ms, 1280)
+        self.assertEqual(PATTERNS["stroke"].duration_ms, 4500)
+        self.assertEqual(PATTERNS["milk"].duration_ms, 6400)
 
     def test_json_data_file_only_uses_known_fields(self):
         # The loader silently skips unknown fields, so this test catches

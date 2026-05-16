@@ -31,6 +31,7 @@ class MotionPattern:
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
+    duration_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
     repeat: int = 1
@@ -44,7 +45,7 @@ class MotionPattern:
         actions = prepare_pattern_actions(self)
         if not actions:
             return 0
-        return _duration_ms(actions)
+        return int(round(_duration_ms(actions) * _clamp(self.duration_scale, 0.1, 20.0)))
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class FrameStyle:
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
+    duration_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
 
@@ -121,7 +123,7 @@ class TimedMotionPoint:
 
 CONTINUOUS_MIN_CYCLE_SECONDS = 1.5
 CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
-CONTINUOUS_MAX_CYCLE_SECONDS = 6.0
+CONTINUOUS_MAX_CYCLE_SECONDS = 12.0
 
 
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
@@ -443,6 +445,7 @@ def _load_builtin_patterns() -> dict[str, MotionPattern]:
             "window_scale",
             "speed_scale",
             "tempo_scale",
+            "duration_scale",
             "depth_jitter",
             "range_jitter",
             "repeat",
@@ -490,10 +493,11 @@ def _actions_to_frames(
     previous_at = actions[0].at
     previous_pos = actions[0].pos
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
+    duration_scale = _clamp(style.duration_scale, 0.1, 20.0)
     for index, action in enumerate(actions):
         interval_ms = max(0, action.at - previous_at)
         if preserve_timing:
-            interval_seconds = (interval_ms / 1000.0) / tempo_scale
+            interval_seconds = ((interval_ms / 1000.0) * duration_scale) / tempo_scale
             delay_factor = 0.0 if index == 0 else interval_seconds / max(0.01, base_step_seconds)
         elif index == 0:
             delay_factor = 0.4
@@ -502,7 +506,7 @@ def _actions_to_frames(
             delay_factor = _clamp(interval_ratio * 3.0, 0.15, 1.1)
         previous_at = action.at
         if not preserve_timing:
-            delay_factor = _clamp(delay_factor / tempo_scale, 0.08, 1.8)
+            delay_factor = _clamp(delay_factor / tempo_scale, 0.08, 1.8) * duration_scale
 
         normalized_pos = _clamp(action.pos) / 100.0
         depth = shallow + (deep - shallow) * normalized_pos
@@ -572,8 +576,9 @@ def _continuous_cycle_ms(actions: tuple[PatternAction, ...]) -> int:
 
 def _continuous_duration_seconds(actions: tuple[PatternAction, ...], style: FrameStyle) -> float:
     tempo_scale = _clamp(style.tempo_scale, 0.25, 4.0)
+    duration_scale = _clamp(style.duration_scale, 0.1, 20.0)
     return _clamp(
-        (_continuous_cycle_ms(actions) / 1000.0) / tempo_scale,
+        ((_continuous_cycle_ms(actions) / 1000.0) * duration_scale) / tempo_scale,
         CONTINUOUS_MIN_CYCLE_SECONDS,
         CONTINUOUS_MAX_CYCLE_SECONDS,
     )
@@ -724,6 +729,7 @@ def _continuous_normalized_range(
         _sample_action_position(actions, index / (sample_count - 1))
         for index in range(sample_count)
     ]
+    positions.extend(action.pos for action in actions)
     return (min(positions), max(positions))
 
 
@@ -853,6 +859,7 @@ def continuous_motion_plan_from_pattern(pattern: MotionPattern) -> Optional[Cont
         window_scale=pattern.window_scale,
         speed_scale=pattern.speed_scale,
         tempo_scale=pattern.tempo_scale,
+        duration_scale=pattern.duration_scale,
         depth_jitter=pattern.depth_jitter,
         range_jitter=pattern.range_jitter,
     )
@@ -1304,6 +1311,7 @@ def expand_motion_pattern(
             window_scale=pattern.window_scale,
             speed_scale=pattern.speed_scale,
             tempo_scale=pattern.tempo_scale,
+            duration_scale=pattern.duration_scale,
             depth_jitter=pattern.depth_jitter,
             range_jitter=pattern.range_jitter,
         ),

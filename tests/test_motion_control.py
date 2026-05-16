@@ -899,13 +899,43 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_long_patterns_keep_smooth_point_cadence(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(47, 50, 66, "surge"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            depth_deltas = [abs(right["x"] - left["x"]) for left, right in zip(points, points[1:])]
+            depths = [point["x"] for point in points]
+
+            self.assertGreater(len(points), 30)
+            self.assertLessEqual(max(intervals), 220)
+            self.assertLessEqual(max(depth_deltas), 8.0)
+            self.assertGreater(max(depths) - min(depths), 20.0)
+        finally:
+            controller.stop()
+
     def test_continuous_hsp_stream_preserves_timed_pattern_slopes(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
 
         try:
-            controller.apply_continuous_target(
-                MotionTarget(50, 50, 80, "milk"),
+            plan = continuous_motion_plan_from_pattern(MotionPattern(
+                "fast transport test",
+                (
+                    PatternAction(0, 0),
+                    PatternAction(180, 100),
+                    PatternAction(360, 0),
+                ),
+                window_scale=1.0,
+            ))
+            controller._apply_continuous_plan(
+                plan,
+                MotionTarget(50, 50, 80, "fast transport test"),
                 source="unit test",
             )
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
@@ -918,7 +948,7 @@ class MotionControllerTests(unittest.TestCase):
                 if right["t"] > left["t"]
             ]
 
-            self.assertGreater(max(segment_depths), POSITION_MAX_DEPTH_STEP * 2.0)
+            self.assertGreater(max(segment_depths), POSITION_MAX_DEPTH_STEP)
             self.assertGreater(max(segment_rates), 120.0)
             trace_rates = [
                 point["hsp_segment_depth_per_second"]
@@ -1603,7 +1633,22 @@ class MotionControllerTests(unittest.TestCase):
 
         controller.apply_position_frames = capture_position_frames
 
-        controller.apply_generated_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+        controller.apply_motion_pattern(
+            MotionPattern(
+                "fast position test",
+                (
+                    PatternAction(0, 76),
+                    PatternAction(90, 6),
+                    PatternAction(430, 64),
+                ),
+                window_scale=0.18,
+                speed_scale=1.1,
+                interpolation_ms=80,
+                max_step_delta=26,
+            ),
+            MotionTarget(80, 50, 80, "fast position test"),
+            source="unit test",
+        )
 
         timed = [frame for frame in captured if getattr(frame, "phase", "") == "timed-pattern"]
         self.assertTrue(timed)

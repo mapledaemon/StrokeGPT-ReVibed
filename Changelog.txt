@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - PR #234 - Stretch Built-In Motion Pattern Durations
+-----------------------------------------------------------------
+
+Branch: gpt-default-pattern-duration-5x
+
+- Added a 5x duration scale to every built-in Motion Pattern so default loops
+  keep their authored shape while giving the device more time to travel.
+- Kept dense HSP curve points for longer cycles so slower patterns still move
+  smoothly instead of stepping between sparse targets.
+- Increased Continuous HSP stream buffering so slow Handy API responses are
+  less likely to starve the firmware point queue mid-pattern.
+- Raised the continuous cycle cap enough for the longer built-in patterns to
+  play at their authored duration.
+
+
 2026-05-16 - PR #233 - Improve Pattern Studio Deletion And Preview Range
 -------------------------------------------------------------------------
 

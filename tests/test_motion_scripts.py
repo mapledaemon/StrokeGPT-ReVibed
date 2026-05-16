@@ -5,7 +5,6 @@ from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import (
     PATTERNS,
     JITTER_CYCLE_SECONDS,
-    CONTINUOUS_MIN_CYCLE_SECONDS,
     FrameStyle,
     MotionPattern,
     PatternAction,
@@ -121,18 +120,23 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreaterEqual(first.stroke_range, 5)
 
     def test_continuous_motion_plan_duration_includes_wrap_segment(self):
-        # ``ramp`` is strongly asymmetric (20 -> 100). Its implicit wrap
-        # segment must contribute real cycle time; otherwise the sampler
-        # glides through the gap only by compressing the authored ramp.
+        # Built-in patterns keep their authored action shape but apply a 5x
+        # duration scale so the device has more time to follow the range.
         ramp = continuous_motion_plan("ramp")
         self.assertIsNotNone(ramp)
-        self.assertAlmostEqual(ramp.duration_seconds, 1.8)
+        self.assertAlmostEqual(ramp.duration_seconds, 9.0)
 
-        # Symmetric patterns still get the small 50 ms wrap floor, then short
-        # cycles are lifted to the app's minimum to avoid subsecond HSP loops.
+        # Symmetric patterns keep the wrap segment from their original shape,
+        # then stretch the full cycle by the pattern duration scale.
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
-        self.assertAlmostEqual(stroke.duration_seconds, CONTINUOUS_MIN_CYCLE_SECONDS)
+        self.assertAlmostEqual(stroke.duration_seconds, 4.75)
+
+    def test_builtin_patterns_use_extended_authored_timings(self):
+        self.assertEqual([action.at for action in PATTERNS["stroke"].actions], [0, 450, 900])
+        self.assertEqual([action.at for action in PATTERNS["flick"].actions], [0, 90, 430])
+        self.assertEqual(PATTERNS["stroke"].duration_scale, 5.0)
+        self.assertEqual(PATTERNS["flick"].duration_scale, 5.0)
 
     def test_continuous_plan_caches_projectable_normalized_range(self):
         plan = continuous_motion_plan("ramp")
@@ -333,7 +337,17 @@ class MotionScriptPlannerTests(unittest.TestCase):
         # a single ``target.speed`` to every HDSP frame. The budget must
         # remain tied to the intent speed, though; otherwise low speed
         # settings still collapse back to maximum XAVA velocity.
-        plan = continuous_motion_plan("ramp")
+        plan = continuous_motion_plan_from_pattern(MotionPattern(
+            "fast-ramp",
+            (
+                PatternAction(0, 20),
+                PatternAction(350, 45),
+                PatternAction(700, 70),
+                PatternAction(1000, 100),
+            ),
+            speed_scale=0.95,
+            interpolation_ms=150,
+        ))
         target = MotionTarget(40, 50, 80, "ramp")
 
         speeds = [
@@ -428,7 +442,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         current = MotionTarget(50, 80, 40)
 
         steps = [planner.next_step(current, edge_count=3)]
-        steps.extend(planner.next_step(current) for _ in range(24))
+        steps.extend(planner.next_step(current) for _ in range(48))
         reaction_labels = [step.target.label for step in steps]
 
         pullback_index = next(
@@ -822,7 +836,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
                 )
                 self.assertGreater(len(frames), 4)
                 self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
-                self.assertLessEqual(sum(frame.delay_factor for frame in frames), 5.5)
+                self.assertLessEqual(sum(frame.delay_factor for frame in frames), 27.5)
 
     def test_anchor_program_expands_to_motion_frames(self):
         frames = expand_anchor_program(

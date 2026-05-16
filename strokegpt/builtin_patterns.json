@@ -16,7 +16,8 @@
       }
     ],
     "window_scale": 0.35,
-    "interpolation_ms": 160
+    "interpolation_ms": 160,
+    "duration_scale": 5.0
   },
   "flick": {
     "name": "flick",
@@ -40,7 +41,8 @@
     "range_jitter": 1.0,
     "min_interval_ms": 70,
     "interpolation_ms": 80,
-    "max_step_delta": 26
+    "max_step_delta": 26,
+    "duration_scale": 5.0
   },
   "milk": {
     "name": "milk",
@@ -70,7 +72,8 @@
     "speed_scale": 1.02,
     "tempo_scale": 0.8,
     "interpolation_ms": 130,
-    "max_step_delta": 34
+    "max_step_delta": 34,
+    "duration_scale": 5.0
   },
   "pulse": {
     "name": "pulse",
@@ -99,7 +102,8 @@
     "window_scale": 0.25,
     "depth_jitter": 3.0,
     "range_jitter": 2.0,
-    "interpolation_ms": 150
+    "interpolation_ms": 150,
+    "duration_scale": 5.0
   },
   "hold": {
     "name": "hold",
@@ -128,7 +132,8 @@
     "window_scale": 0.36,
     "speed_scale": 0.8,
     "depth_jitter": 1.0,
-    "interpolation_ms": 175
+    "interpolation_ms": 175,
+    "duration_scale": 5.0
   },
   "wave": {
     "name": "wave",
@@ -156,7 +161,8 @@
     ],
     "window_scale": 0.4,
     "speed_scale": 0.95,
-    "interpolation_ms": 125
+    "interpolation_ms": 125,
+    "duration_scale": 5.0
   },
   "ramp": {
     "name": "ramp",
@@ -180,7 +186,8 @@
     ],
     "window_scale": 0.35,
     "speed_scale": 0.95,
-    "interpolation_ms": 150
+    "interpolation_ms": 150,
+    "duration_scale": 5.0
   },
   "tease": {
     "name": "tease",
@@ -206,7 +213,8 @@
     "speed_scale": 0.75,
     "depth_jitter": 3.0,
     "range_jitter": 2.0,
-    "interpolation_ms": 175
+    "interpolation_ms": 175,
+    "duration_scale": 5.0
   },
   "flutter": {
     "name": "flutter",
@@ -238,7 +246,8 @@
     "range_jitter": 1.0,
     "repeat": 2,
     "min_interval_ms": 55,
-    "max_step_delta": 28
+    "max_step_delta": 28,
+    "duration_scale": 5.0
   },
   "ladder": {
     "name": "ladder",
@@ -270,7 +279,8 @@
     ],
     "window_scale": 0.32,
     "interpolation_ms": 150,
-    "max_step_delta": 30
+    "max_step_delta": 30,
+    "duration_scale": 5.0
   },
   "surge": {
     "name": "surge",
@@ -299,7 +309,8 @@
     "window_scale": 0.38,
     "speed_scale": 1.05,
     "interpolation_ms": 140,
-    "max_step_delta": 32
+    "max_step_delta": 32,
+    "duration_scale": 5.0
   },
   "sway": {
     "name": "sway",
@@ -327,7 +338,8 @@
     ],
     "window_scale": 0.42,
     "speed_scale": 0.9,
-    "interpolation_ms": 140
+    "interpolation_ms": 140,
+    "duration_scale": 5.0
   },
   "milking-pressure-build": {
     "name": "Milking Pressure Build",
@@ -352,7 +364,8 @@
     "window_scale": 0.48,
     "speed_scale": 0.95,
     "interpolation_ms": 150,
-    "max_step_delta": 28
+    "max_step_delta": 28,
+    "duration_scale": 5.0
   },
   "milking-wide-pressure": {
     "name": "Milking Wide Pressure",
@@ -380,7 +393,8 @@
     ],
     "window_scale": 0.55,
     "interpolation_ms": 140,
-    "max_step_delta": 32
+    "max_step_delta": 32,
+    "duration_scale": 5.0
   },
   "milking-deep-pulse": {
     "name": "Milking Deep Pulse",
@@ -410,7 +424,8 @@
     "speed_scale": 1.1,
     "repeat": 2,
     "interpolation_ms": 90,
-    "max_step_delta": 24
+    "max_step_delta": 24,
+    "duration_scale": 5.0
   },
   "milking-fast-middle": {
     "name": "Milking Fast Middle",
@@ -440,7 +455,8 @@
     "speed_scale": 1.18,
     "repeat": 2,
     "min_interval_ms": 55,
-    "max_step_delta": 24
+    "max_step_delta": 24,
+    "duration_scale": 5.0
   },
   "milking-deep-finish": {
     "name": "Milking Deep Finish",
@@ -469,7 +485,8 @@
     "window_scale": 0.28,
     "speed_scale": 1.05,
     "interpolation_ms": 120,
-    "max_step_delta": 28
+    "max_step_delta": 28,
+    "duration_scale": 5.0
   },
   "milking-recover": {
     "name": "Milking Recover",
@@ -494,7 +511,8 @@
     "window_scale": 0.2,
     "speed_scale": 0.72,
     "interpolation_ms": 180,
-    "max_step_delta": 24
+    "max_step_delta": 24,
+    "duration_scale": 5.0
   },
   "milking-steady-press": {
     "name": "Milking Steady Press",
@@ -523,7 +541,8 @@
     "window_scale": 0.38,
     "speed_scale": 0.95,
     "interpolation_ms": 150,
-    "max_step_delta": 28
+    "max_step_delta": 28,
+    "duration_scale": 5.0
   },
   "milking-short-burst": {
     "name": "Milking Short Burst",
@@ -553,7 +572,8 @@
     "speed_scale": 1.2,
     "repeat": 2,
     "min_interval_ms": 50,
-    "max_step_delta": 24
+    "max_step_delta": 24,
+    "duration_scale": 5.0
   },
   "milking-full-drive": {
     "name": "Milking Full Drive",
@@ -581,7 +601,8 @@
     ],
     "window_scale": 0.6,
     "interpolation_ms": 130,
-    "max_step_delta": 34
+    "max_step_delta": 34,
+    "duration_scale": 5.0
   },
   "milking-deep-squeeze": {
     "name": "Milking Deep Squeeze",
@@ -606,7 +627,8 @@
     "window_scale": 0.18,
     "speed_scale": 0.95,
     "interpolation_ms": 170,
-    "max_step_delta": 22
+    "max_step_delta": 22,
+    "duration_scale": 5.0
   },
   "milking-final-wave": {
     "name": "Milking Final Wave",
@@ -639,7 +661,8 @@
     "window_scale": 0.5,
     "speed_scale": 1.02,
     "interpolation_ms": 130,
-    "max_step_delta": 30
+    "max_step_delta": 30,
+    "duration_scale": 5.0
   },
   "edge-build-low": {
     "name": "Edge Build Low",
@@ -664,7 +687,8 @@
     "window_scale": 0.28,
     "speed_scale": 0.8,
     "interpolation_ms": 160,
-    "max_step_delta": 22
+    "max_step_delta": 22,
+    "duration_scale": 5.0
   },
   "edge-build-mid": {
     "name": "Edge Build Mid",
@@ -689,7 +713,8 @@
     "window_scale": 0.34,
     "speed_scale": 0.9,
     "interpolation_ms": 150,
-    "max_step_delta": 26
+    "max_step_delta": 26,
+    "duration_scale": 5.0
   },
   "edge-hold": {
     "name": "Edge Hold",
@@ -714,7 +739,8 @@
     "window_scale": 0.18,
     "speed_scale": 0.68,
     "interpolation_ms": 180,
-    "max_step_delta": 18
+    "max_step_delta": 18,
+    "duration_scale": 5.0
   },
   "edge-tip-tease": {
     "name": "Edge Tip Tease",
@@ -743,7 +769,8 @@
     "window_scale": 0.18,
     "speed_scale": 0.88,
     "interpolation_ms": 150,
-    "max_step_delta": 20
+    "max_step_delta": 20,
+    "duration_scale": 5.0
   },
   "edge-recover": {
     "name": "Edge Recover",
@@ -768,7 +795,8 @@
     "window_scale": 0.15,
     "speed_scale": 0.62,
     "interpolation_ms": 200,
-    "max_step_delta": 18
+    "max_step_delta": 18,
+    "duration_scale": 5.0
   },
   "edge-slow-wide": {
     "name": "Edge Slow Wide",
@@ -793,7 +821,8 @@
     "window_scale": 0.46,
     "speed_scale": 0.74,
     "interpolation_ms": 180,
-    "max_step_delta": 26
+    "max_step_delta": 26,
+    "duration_scale": 5.0
   },
   "edge-shallow-snap": {
     "name": "Edge Shallow Snap",
@@ -823,7 +852,8 @@
     "speed_scale": 1.12,
     "repeat": 2,
     "min_interval_ms": 55,
-    "max_step_delta": 22
+    "max_step_delta": 22,
+    "duration_scale": 5.0
   },
   "edge-middle-hold": {
     "name": "Edge Middle Hold",
@@ -848,7 +878,8 @@
     "window_scale": 0.2,
     "speed_scale": 0.76,
     "interpolation_ms": 190,
-    "max_step_delta": 18
+    "max_step_delta": 18,
+    "duration_scale": 5.0
   },
   "edge-deeper-risk": {
     "name": "Edge Deeper Risk",
@@ -873,7 +904,8 @@
     "window_scale": 0.24,
     "speed_scale": 0.98,
     "interpolation_ms": 140,
-    "max_step_delta": 24
+    "max_step_delta": 24,
+    "duration_scale": 5.0
   },
   "edge-pull-back": {
     "name": "Edge Pull Back",
@@ -894,7 +926,8 @@
     "window_scale": 0.14,
     "speed_scale": 0.6,
     "interpolation_ms": 160,
-    "max_step_delta": 20
+    "max_step_delta": 20,
+    "duration_scale": 5.0
   },
   "edge-restart": {
     "name": "Edge Restart",
@@ -919,6 +952,7 @@
     "window_scale": 0.22,
     "speed_scale": 0.82,
     "interpolation_ms": 160,
-    "max_step_delta": 20
+    "max_step_delta": 20,
+    "duration_scale": 5.0
   }
 }
