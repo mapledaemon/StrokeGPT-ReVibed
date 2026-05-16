@@ -196,7 +196,9 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.original_library = self.web.motion_program_library
         self.original_pattern_library = self.web.motion_pattern_library
         self.original_handy_key = self.web.handy.handy_key
+        self.original_motion_backend = self.web.motion.backend
         self.original_apply_position_frames = self.web.motion.apply_position_frames
+        self.original_apply_authored_actions = self.web.motion.apply_authored_actions
         self.original_motion_stop = self.web.motion.stop
         self.web.motion_program_library = ProgramLibrary(self.temp_dir.name)
         self.web.motion_pattern_library = PatternLibrary(self.pattern_temp_dir.name)
@@ -217,7 +219,9 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.web.motion_program_library = self.original_library
         self.web.motion_pattern_library = self.original_pattern_library
         self.web.handy.handy_key = self.original_handy_key
+        self.web.motion.backend = self.original_motion_backend
         self.web.motion.apply_position_frames = self.original_apply_position_frames
+        self.web.motion.apply_authored_actions = self.original_apply_authored_actions
         self.web.motion.stop = self.original_motion_stop
         self.temp_dir.cleanup()
         self.pattern_temp_dir.cleanup()
@@ -274,6 +278,7 @@ class MotionProgramRouteTests(unittest.TestCase):
     def test_program_play_route_uses_motion_controller_for_full_and_section(self):
         calls = []
         self.web.handy.handy_key = "test-key"
+        self.web.motion.backend = "position"
         self.web.motion.apply_position_frames = lambda frames, *, stop_after=False, **_kwargs: calls.append({
             "frames": frames,
             "stop_after": stop_after,
@@ -293,6 +298,41 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.assertEqual(len(calls[0]["frames"]), 3)
         self.assertTrue(all(frame.phase == "timed-pattern" for frame in calls[0]["frames"]))
         self.assertGreater(calls[0]["frames"][1].delay_factor, 0)
+
+    def test_program_play_route_uses_authored_hsp_on_continuous_backend(self):
+        calls = []
+        self.web.handy.handy_key = "test-key"
+        self.web.motion.backend = "continuous"
+
+        def fake_apply_authored_actions(actions, target, *, stop_after=False, block=False, source="", **_kwargs):
+            calls.append({
+                "actions": tuple(actions),
+                "target": target,
+                "stop_after": stop_after,
+                "block": block,
+                "source": source,
+            })
+            return True
+
+        self.web.motion.apply_authored_actions = fake_apply_authored_actions
+        self.web.motion.apply_position_frames = lambda *_args, **_kwargs: self.fail("Continuous Program playback should not use HDSP position frames")
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post("/motion_programs/long-wave/play", json={"start_ms": 1000, "end_ms": 3000})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "started")
+        for _ in range(20):
+            if calls:
+                break
+            time.sleep(0.02)
+        self.assertTrue(calls)
+        self.assertEqual([action.at for action in calls[0]["actions"]], [0, 1000, 2000])
+        self.assertEqual([action.pos for action in calls[0]["actions"]], [1.0, 2.0, 3.0])
+        self.assertEqual(calls[0]["target"].stroke_range, 100)
+        self.assertTrue(calls[0]["stop_after"])
+        self.assertTrue(calls[0]["block"])
+        self.assertEqual(calls[0]["source"], "program playback")
 
     def test_program_rename_route_updates_catalog_name(self):
         self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")

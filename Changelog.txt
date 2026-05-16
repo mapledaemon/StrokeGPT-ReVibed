@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - PR #236 - Stream Authored Funscripts Through HSP
+---------------------------------------------------------------
+
+Branch: gpt-authored-hsp-funscript-playback
+
+- Added an HSP-authored playback path for imported/trained Motion Patterns
+  and Programs so authored funscript timestamps and positions bypass the
+  cyclic continuous pattern sampler.
+- Kept the slow Continuous HSP twitch filter so stretched built-in patterns
+  drop redundant same-integer stream points before the device visibly steps.
+- Kept built-in/generated Continuous patterns on the existing smoothing,
+  morphing, and twitch-filtered path.
+- Routed Continuous Program playback through authored HSP streaming instead of
+  HDSP position frames when the Continuous backend is selected.
+
+
 2026-05-16 - PR #235 - Smooth Freestyle Continuous Mode
 --------------------------------------------------------
 

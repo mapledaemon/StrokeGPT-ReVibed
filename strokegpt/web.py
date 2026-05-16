@@ -1278,6 +1278,18 @@ def _program_playback_frames(record, *, start_ms=None, end_ms=None):
         previous_at = action.at
     return frames
 
+def _program_playback_target(record):
+    current = motion.current_target()
+    speed = current.speed if current.speed > 0 else 35
+    if settings.min_speed >= settings.max_speed:
+        speed = max(10, min(45, speed))
+    return MotionTarget(
+        speed=speed,
+        depth=50,
+        stroke_range=100,
+        label=f"program {record.program_id}",
+    ).clamped()
+
 def _program_section_message(record, start_ms=None, end_ms=None):
     lower, upper = record.section_bounds(start_ms, end_ms)
     if lower <= 0 and upper >= record.duration_ms:
@@ -1340,8 +1352,8 @@ def _run_motion_training_pattern(record, *, preview=False):
 def _run_motion_program(record, *, start_ms=None, end_ms=None):
     section_name = _program_section_message(record, start_ms, end_ms)
     try:
-        frames = _program_playback_frames(record, start_ms=start_ms, end_ms=end_ms)
-        if not frames:
+        actions = record.section_actions(start_ms, end_ms)
+        if len(actions) < 2:
             _set_motion_training_state(
                 state="error",
                 pattern_id=record.program_id,
@@ -1357,11 +1369,21 @@ def _run_motion_program(record, *, start_ms=None, end_ms=None):
             message=f"Playing {section_name}.",
             preview=True,
         )
-        completed = motion.apply_position_frames(
-            frames,
-            stop_after=True,
-            source="program playback",
-        )
+        if motion.backend == "continuous":
+            completed = motion.apply_authored_actions(
+                actions,
+                _program_playback_target(record),
+                stop_after=True,
+                block=True,
+                source="program playback",
+            )
+        else:
+            frames = _program_playback_frames(record, start_ms=start_ms, end_ms=end_ms)
+            completed = motion.apply_position_frames(
+                frames,
+                stop_after=True,
+                source="program playback",
+            )
         if app_state.motion_training_stop_event.is_set():
             _set_motion_training_state(
                 state="stopped",

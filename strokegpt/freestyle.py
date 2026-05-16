@@ -451,6 +451,15 @@ def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=Non
         if not choices or not hasattr(motion_controller, "apply_continuous_target"):
             return False
         choice = choices[0]
+        if str(getattr(choice.record, "source", "") or "").lower() in {"imported", "trained", "user"}:
+            apply_authored = getattr(motion_controller, "apply_authored_actions", None)
+            if callable(apply_authored):
+                return apply_authored(
+                    getattr(choice.record, "actions", ()) or (),
+                    choice.target,
+                    source="freestyle planner",
+                    trace_metadata=trace_metadata,
+                )
         apply_pattern = getattr(motion_controller, "apply_continuous_pattern", None)
         if callable(apply_pattern):
             try:
