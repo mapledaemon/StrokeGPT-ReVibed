@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - Unreleased - Add Program Playback And Sections
+------------------------------------------------------------
+
+Branch: gpt-programs-playback-sections
+
+- Added a tabbed Program player window for saved funscripts with full-timeline
+  playback and selected-section playback routed through the shared motion
+  controller stop/safety path.
+- Added Program section controls for choosing a start/end window with draggable
+  timeline handles, color-coded motion intensity preview, and saving the
+  selected section into the short Motion Pattern library for normal editing and
+  reuse.
+- Added backend section helpers and route tests so Program playback preserves
+  authored point timing without treating long Programs as LLM-selectable loops.
+
+
 2026-05-16 - PR #230 - Add Programs Funscript Library
 ------------------------------------------------------
 

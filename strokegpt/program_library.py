@@ -3,7 +3,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .motion_patterns import PatternAction, normalize_actions
-from .pattern_library import ALLOWED_IMPORT_EXTENSIONS, PatternValidationError, slugify_pattern_id
+from .pattern_library import (
+    ALLOWED_IMPORT_EXTENSIONS,
+    MAX_PATTERN_ACTIONS,
+    MAX_PATTERN_DURATION_MS,
+    PatternValidationError,
+    slugify_pattern_id,
+)
 
 
 PROGRAM_SCHEMA_VERSION = 1
@@ -68,6 +74,50 @@ def _coerce_program_actions(actions):
     return tuple(PatternAction(action.at - start, action.pos) for action in normalized)
 
 
+def _coerce_ms(value, default=0):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _action_at(actions, at):
+    if not actions:
+        return PatternAction(at, 50)
+    if at <= actions[0].at:
+        return PatternAction(at, actions[0].pos)
+    last = actions[-1]
+    if at >= last.at:
+        return PatternAction(at, last.pos)
+    for index in range(1, len(actions)):
+        right = actions[index]
+        if right.at < at:
+            continue
+        left = actions[index - 1]
+        span = max(1, right.at - left.at)
+        amount = (at - left.at) / span
+        return PatternAction(at, left.pos + ((right.pos - left.pos) * amount))
+    return PatternAction(at, last.pos)
+
+
+def _downsample_actions(actions, max_actions):
+    if len(actions) <= max_actions:
+        return actions
+    if max_actions < 2:
+        return actions[:2]
+    selected = []
+    used = set()
+    for index in range(max_actions):
+        source_index = round((index / (max_actions - 1)) * (len(actions) - 1))
+        if source_index in used:
+            continue
+        selected.append(actions[source_index])
+        used.add(source_index)
+    if selected[-1] != actions[-1]:
+        selected[-1] = actions[-1]
+    return tuple(selected)
+
+
 @dataclass(frozen=True)
 class ProgramRecord:
     program_id: str
@@ -112,6 +162,54 @@ class ProgramRecord:
         if include_actions:
             payload["actions"] = [{"at": action.at, "pos": action.pos} for action in self.actions]
         return payload
+
+    def section_bounds(self, start_ms=None, end_ms=None, *, min_duration_ms=1):
+        duration = self.duration_ms
+        if duration <= 0:
+            raise ProgramValidationError("Program does not have a playable duration.")
+        lower = _coerce_ms(start_ms, 0)
+        upper = _coerce_ms(end_ms, duration) if end_ms is not None else duration
+        min_duration = max(1, _coerce_ms(min_duration_ms, 1))
+        lower = max(0, min(duration - min_duration, lower))
+        upper = max(lower + min_duration, min(duration, upper))
+        if upper > duration:
+            upper = duration
+            lower = max(0, upper - min_duration)
+        return lower, upper
+
+    def section_actions(self, start_ms=None, end_ms=None, *, min_duration_ms=1):
+        lower, upper = self.section_bounds(start_ms, end_ms, min_duration_ms=min_duration_ms)
+        interior = [action for action in self.actions if lower < action.at < upper]
+        actions = (_action_at(self.actions, lower), *interior, _action_at(self.actions, upper))
+        return tuple(PatternAction(action.at - lower, action.pos) for action in actions)
+
+    def section_pattern_payload(self, start_ms=None, end_ms=None, *, name="", max_actions=MAX_PATTERN_ACTIONS):
+        lower, upper = self.section_bounds(start_ms, end_ms, min_duration_ms=100)
+        duration = upper - lower
+        if duration > MAX_PATTERN_DURATION_MS:
+            raise ProgramValidationError(
+                f"Program section is too long for a motion pattern. Limit is {MAX_PATTERN_DURATION_MS // 1000} seconds."
+            )
+        actions = _downsample_actions(self.section_actions(lower, upper), max_actions)
+        section_name = _safe_text(
+            name,
+            default=f"{self.name} section {round(lower / 1000, 1)}-{round(upper / 1000, 1)}s",
+            max_length=100,
+        )
+        tags = list(self.tags)
+        for tag in ("program-section", "crop"):
+            if tag not in tags:
+                tags.append(tag)
+        return {
+            "schema_version": 1,
+            "kind": "actions",
+            "id": section_name,
+            "name": section_name,
+            "description": f"Section {round(lower / 1000, 1)}-{round(upper / 1000, 1)}s from {self.name}.",
+            "source": "trained",
+            "actions": [{"at": action.at, "pos": action.pos} for action in actions],
+            "tags": tags,
+        }
 
 
 def record_from_payload(payload, *, fallback_id="program", source_override=None, readonly=False):

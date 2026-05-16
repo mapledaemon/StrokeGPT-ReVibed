@@ -402,10 +402,9 @@ multi-pattern sequencing.
   points, mirror timing, and apply subtle randomized variation.
 - Add pattern sequencing: alternate multiple patterns in order with small
   blends between segments to avoid stutter.
-- Continue Programs (funscripts) beyond the first import/list/export slice:
-  reuse the import timeline for long-form section editing, crop-to-pattern
-  handoff, and eventual playback controls without treating authored programs as
-  short LLM-selectable loops.
+- Continue Programs (funscripts) after playback/sections: add richer timeline
+  navigation, named section bookmarks, and optional full-timeline diagnostics
+  without treating authored programs as short LLM-selectable loops.
 - Keep compact Motion settings limited to management: enablement, weights,
   import/export, and status.
 

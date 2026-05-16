@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { resetStubElement } from './_harness.mjs';
 import {
+    configureMotionProgramList,
     deleteMotionProgram,
     formatProgramDuration,
     formatProgramMetadata,
@@ -46,6 +47,7 @@ describe('motion program list helpers', () => {
         resetStubElement('status-text');
         state.connectionLost = false;
         state.motionPrograms = [];
+        configureMotionProgramList({openMotionProgramWindow: null});
         originalFetch = globalThis.fetch;
         originalConfirm = globalThis.window.confirm;
         globalThis.window.confirm = () => true;
@@ -88,8 +90,10 @@ describe('motion program list helpers', () => {
         assert.equal(formatProgramMetadata(state.motionPrograms[0]), 'imported | 10m duration | 2501 actions | long funscript');
     });
 
-    it('renders a trash button that deletes and refreshes Programs', async () => {
+    it('renders open and trash buttons for Programs', async () => {
         const calls = [];
+        const opened = [];
+        configureMotionProgramList({openMotionProgramWindow: programId => opened.push(programId)});
         globalThis.fetch = async (endpoint, options = {}) => {
             calls.push({endpoint, options});
             return jsonResponse(200, {
@@ -113,7 +117,10 @@ describe('motion program list helpers', () => {
 
         const row = el.motionProgramList.children[0];
         const actions = row.children[1];
-        const deleteButton = actions.children[1];
+        const openButton = actions.children[0];
+        const deleteButton = actions.children[2];
+        openButton.click();
+        assert.deepEqual(opened, ['long-wave']);
         assert.equal(deleteButton.getAttribute('aria-label'), 'Delete Long Wave');
         assert.equal(deleteButton.hasAttribute('data-requires-backend'), true);
 

@@ -24,6 +24,7 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/motion/feedback-controls.js": "text/javascript",
             "/static/js/motion/pause-controls.js": "text/javascript",
             "/static/js/motion/pattern-list.js": "text/javascript",
+            "/static/js/motion/program-player.js": "text/javascript",
             "/static/js/motion/program-list.js": "text/javascript",
             "/static/js/motion/sequence-log.js": "text/javascript",
             "/static/js/motion/training-editor.js": "text/javascript",
@@ -350,6 +351,17 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="motion-program-import-input"', page)
             self.assertIn('id="motion-program-status"', page)
             self.assertIn('id="motion-program-list"', page)
+            self.assertIn('id="motion-program-dialog" class="modal-overlay"', page)
+            self.assertIn('id="motion-program-playback-tab-btn"', page)
+            self.assertIn('id="motion-program-section-tab-btn"', page)
+            self.assertIn('id="motion-program-range-timeline"', page)
+            self.assertIn('id="motion-program-timeline-canvas"', page)
+            self.assertIn('id="motion-program-section-selection"', page)
+            self.assertIn('id="motion-program-section-start-handle"', page)
+            self.assertIn('id="motion-program-section-end-handle"', page)
+            self.assertIn('id="play-motion-program-full-btn"', page)
+            self.assertIn('id="play-motion-program-section-btn"', page)
+            self.assertIn('id="save-motion-program-section-pattern-btn"', page)
             self.assertIn('data-settings-tab="diagnostics"', page)
             self.assertIn('id="settings-tab-diagnostics"', page)
             self.assertIn('id="run-setup-check-btn"', page)
@@ -663,6 +675,10 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-pattern-list", css)
             self.assertIn(".motion-program-list", css)
             self.assertIn(".motion-program-empty", css)
+            self.assertIn(".motion-program-box", css)
+            self.assertIn(".motion-program-tabs", css)
+            self.assertIn(".motion-program-range-timeline", css)
+            self.assertIn("#motion-program-timeline-canvas", css)
             self.assertIn(".motion-feedback-history", css)
             self.assertIn("#dislike-this-move-btn", css)
             self.assertIn(".motion-pattern-weight-control", css)
@@ -1058,7 +1074,9 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("/motion_programs", script)
         self.assertIn("/import_motion_program", script)
         self.assertIn("method: 'DELETE'", script)
+        self.assertIn("/sections/save_pattern", script)
         self.assertIn("motionProgramList.replaceChildren", script)
+        self.assertIn("openMotionProgramWindow", script)
         self.assertIn("studioSourceProgramPayload", script)
         self.assertIn("motionPatternList.replaceChildren", script)
         self.assertIn("motionTrainingPatternList.replaceChildren", script)
@@ -1237,7 +1255,9 @@ class WebStaticAssetTests(WebTestCase):
             program_list_script = program_response.get_data(as_text=True)
 
             self.assertIn("from './motion/program-list.js'", motion_control_script)
+            self.assertIn("configureMotionProgramList({openMotionProgramWindow})", motion_control_script)
             self.assertIn("Compatibility shim - do not extend", motion_control_script)
+            self.assertIn("export function configureMotionProgramList", program_list_script)
             self.assertIn("export function renderMotionPrograms", program_list_script)
             self.assertIn("export async function refreshMotionPrograms", program_list_script)
             self.assertIn("export async function importMotionProgramFile", program_list_script)
@@ -1247,6 +1267,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("/motion_programs", program_list_script)
             self.assertIn("/import_motion_program", program_list_script)
             self.assertIn("method: 'DELETE'", program_list_script)
+            self.assertIn("motion-program-open", program_list_script)
             self.assertIn("motion-program-delete", program_list_script)
             self.assertNotIn("function renderMotionPrograms", motion_control_script)
             self.assertNotIn("async function refreshMotionPrograms", motion_control_script)
@@ -1257,6 +1278,31 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             motion_response.close()
             program_response.close()
+
+    def test_motion_program_player_module_is_extracted(self):
+        motion_response = self.client.get("/static/js/motion-control.js")
+        player_response = self.client.get("/static/js/motion/program-player.js")
+        try:
+            motion_control_script = motion_response.get_data(as_text=True)
+            player_script = player_response.get_data(as_text=True)
+
+            self.assertIn("from './motion/program-player.js'", motion_control_script)
+            self.assertIn("configureMotionProgramPlayer({renderMotionPatterns, updateMotionTrainingStatus})", motion_control_script)
+            self.assertIn("export async function openMotionProgramWindow", player_script)
+            self.assertIn("export function programSectionBounds", player_script)
+            self.assertIn("export function programSectionActions", player_script)
+            self.assertIn("timelineIntensityColor", player_script)
+            self.assertIn("motionProgramRangeTimeline", player_script)
+            self.assertIn("export async function playSelectedMotionProgram", player_script)
+            self.assertIn("export async function saveSelectedProgramSectionAsPattern", player_script)
+            self.assertIn("/motion_programs/${encodeURIComponent(program.id)}/play", player_script)
+            self.assertIn("/sections/save_pattern", player_script)
+            self.assertIn("/motion_training/stop", player_script)
+            self.assertNotIn("function renderMotionPrograms", motion_control_script)
+            self.assertNotIn("function programSectionBounds", motion_control_script)
+        finally:
+            motion_response.close()
+            player_response.close()
 
     def test_motion_training_editor_module_is_extracted(self):
         motion_response = self.client.get("/static/js/motion-control.js")
