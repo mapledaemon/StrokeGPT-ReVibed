@@ -266,9 +266,16 @@ export function updateMotionTrainingEditButtons() {
     ].forEach(button => {
         if (button) button.disabled = !hasEditable;
     });
-    const drawFlowActive = state.motionStudioFlow === 'draw';
-    const toolsAvailable = hasEditable && drawFlowActive;
+    const toolsAvailable = hasEditable && Boolean(state.motionStudioFlow);
     const tool = state.motionStudioTool === 'draw' ? 'draw' : 'edit';
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    const selectedIndex = Number.isInteger(state.motionStudioSelectedPointIndex)
+        ? state.motionStudioSelectedPointIndex
+        : -1;
+    const selectedPointDeletable = toolsAvailable && tool === 'edit' && studioCanDeleteActionAt(actions, selectedIndex);
+    if (el.motionStudioDrawControls) {
+        el.motionStudioDrawControls.hidden = !toolsAvailable;
+    }
     if (el.motionStudioToolEditBtn) {
         el.motionStudioToolEditBtn.disabled = !toolsAvailable;
         el.motionStudioToolEditBtn.classList.toggle('active', toolsAvailable && tool === 'edit');
@@ -284,15 +291,20 @@ export function updateMotionTrainingEditButtons() {
             el.motionStudioToolHint.textContent = '';
         } else if (tool === 'draw') {
             el.motionStudioToolHint.textContent = 'Drag once across the Edited graph to record a fresh shape. Reverts to Edit after one stroke.';
+        } else if (selectedPointDeletable) {
+            el.motionStudioToolHint.textContent = 'Drag the selected point to move it, or use Delete Point to remove it.';
         } else {
-            el.motionStudioToolHint.textContent = 'Drag a point to move it. Click empty space to add. Right-click to delete.';
+            el.motionStudioToolHint.textContent = 'Drag a point to move it. Click empty space to add. Select an interior point to delete.';
         }
+    }
+    if (el.motionStudioDeletePointBtn) {
+        el.motionStudioDeletePointBtn.disabled = !selectedPointDeletable;
     }
     if (el.motionTrainingPreviewCanvas) {
         el.motionTrainingPreviewCanvas.classList.toggle('studio-tool-edit', toolsAvailable && tool === 'edit');
         el.motionTrainingPreviewCanvas.classList.toggle('studio-tool-draw', toolsAvailable && tool === 'draw');
     }
-    if (el.motionStudioClearDrawingBtn) el.motionStudioClearDrawingBtn.disabled = !hasEditable || !drawFlowActive;
+    if (el.motionStudioClearDrawingBtn) el.motionStudioClearDrawingBtn.disabled = !toolsAvailable;
     if (el.motionTransformResetBtn) el.motionTransformResetBtn.disabled = !hasEditable || !dirty;
     if (el.saveMotionTrainingPatternBtn) el.saveMotionTrainingPatternBtn.disabled = !hasEditable || !dirty;
     if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.disabled = !hasEditable;
@@ -348,9 +360,13 @@ export function refreshMotionTrainingDetail(message = '') {
 
 function setEditedPatternActions(actions, message) {
     if (!state.motionTrainingEditedPattern) return;
+    const nextActions = normalizedActions(actions);
+    if (state.motionStudioSelectedPointIndex >= nextActions.length) {
+        state.motionStudioSelectedPointIndex = -1;
+    }
     state.motionTrainingEditedPattern = updatePatternStats({
         ...state.motionTrainingEditedPattern,
-        actions: normalizedActions(actions),
+        actions: nextActions,
     });
     state.motionTrainingDirty = true;
     refreshMotionTrainingDetail(message);
@@ -363,6 +379,8 @@ function setStudioEditedPattern(pattern, message, {dirty = true, sourcePattern =
     state.motionTrainingPreviewPattern = cleanPattern;
     state.motionTrainingDirty = Boolean(dirty);
     state.motionTrainingSelectedPatternId = '';
+    state.motionStudioSelectedPointIndex = -1;
+    state.motionStudioDragPointIndex = -1;
     if (el.motionTrainingSaveNameInput && cleanPattern) el.motionTrainingSaveNameInput.value = patternDisplayName(cleanPattern);
     syncRangeInputsFromPattern(cleanPattern);
     refreshMotionTrainingDetail(message);
@@ -563,8 +581,16 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
     });
     previewCtx.stroke();
 
-    previewCtx.fillStyle = pointColor;
-    actions.forEach(action => {
+    const selectedPointIndex = Number.isInteger(options.selectedPointIndex) ? options.selectedPointIndex : -1;
+    actions.forEach((action, index) => {
+        if (index === selectedPointIndex) {
+            previewCtx.strokeStyle = 'rgba(189, 147, 249, 0.96)';
+            previewCtx.lineWidth = 2;
+            previewCtx.beginPath();
+            previewCtx.arc(xFor(action), yFor(action), 7, 0, Math.PI * 2);
+            previewCtx.stroke();
+        }
+        previewCtx.fillStyle = index === selectedPointIndex ? 'rgba(189, 147, 249, 0.98)' : pointColor;
         previewCtx.beginPath();
         previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
         previewCtx.fill();
@@ -597,6 +623,9 @@ export function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewP
         el.motionTrainingPreviewCanvas,
         pattern,
         state.motionTrainingOriginalPattern ? 'Edited preview appears here.' : 'Select a pattern to preview.',
+        '#7fb7a3',
+        '#d8b66a',
+        {selectedPointIndex: state.motionStudioTool === 'edit' ? state.motionStudioSelectedPointIndex : -1},
     );
     drawStudioCropTimeline();
     updateStudioTimelineHandles();
@@ -608,18 +637,22 @@ export function setMotionTrainingDetail(pattern) {
     state.motionTrainingEditedPattern = updatePatternStats(clonePattern(pattern));
     state.motionTrainingPreviewPattern = state.motionTrainingEditedPattern || null;
     state.motionTrainingDirty = false;
-    if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
-        drawMotionTrainingPreview(state.motionTrainingPreviewPattern);
-        updateMotionTrainingEditButtons();
-        return;
-    }
+    state.motionStudioSelectedPointIndex = -1;
     if (!pattern) {
-        el.motionTrainingPatternTitle.textContent = 'No pattern selected';
-        el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
+        if (el.motionTrainingPatternTitle) el.motionTrainingPatternTitle.textContent = 'No pattern selected';
+        if (el.motionTrainingPatternMeta) el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
         if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.value = '';
         setMotionEditStatus('Select a pattern to edit a temporary copy.');
         updateMotionTrainingTimingReadouts(null);
         drawMotionTrainingPreview(null);
+        updateMotionTrainingEditButtons();
+        return;
+    }
+    showStudioFlow('edit');
+    setStudioTool('edit', {announce: false});
+    setStudioStatus('Editing an unsaved copy. Use Edit to nudge points or Draw to replace the shape.', 'var(--comment)');
+    if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
+        drawMotionTrainingPreview(state.motionTrainingPreviewPattern);
         updateMotionTrainingEditButtons();
         return;
     }
@@ -644,7 +677,7 @@ function showStudioFlow(flow) {
     state.motionStudioFlow = flow || '';
     const active = Boolean(state.motionStudioFlow);
     if (el.motionStudioPanel) el.motionStudioPanel.hidden = !active;
-    if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = state.motionStudioFlow !== 'draw';
+    if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = !active || !state.motionTrainingEditedPattern;
     if (el.motionStudioCropPanel) el.motionStudioCropPanel.hidden = state.motionStudioFlow !== 'import';
     updateMotionTrainingEditButtons();
 }
@@ -663,6 +696,8 @@ function closeStudioFlow() {
     state.motionStudioDrawingEnabled = false;
     state.motionStudioDrawingActive = false;
     state.motionStudioDrawBuffer = [];
+    state.motionStudioDragPointIndex = -1;
+    state.motionStudioSelectedPointIndex = -1;
     if (el.motionStudioPanel) el.motionStudioPanel.hidden = true;
     if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = true;
     if (el.motionStudioCropPanel) el.motionStudioCropPanel.hidden = true;
@@ -980,6 +1015,9 @@ function applyStudioCrop() {
             `Loaded ${formatPatternDuration(cropped.duration_ms)} crop as an unsaved pattern.`,
             {dirty: true, sourcePattern: state.motionStudioSourcePattern},
         );
+        showStudioFlow('edit');
+        setStudioTool('edit', {announce: false});
+        setStudioStatus('Crop loaded as an unsaved copy. Use Edit to nudge points or Draw to replace the shape.', 'var(--cyan)');
     } catch (error) {
         setStudioStatus(error.message || 'Could not crop imported pattern.', 'var(--yellow)');
     }
@@ -1063,9 +1101,16 @@ export function studioInsertSortedAction(actions, action) {
     return normalizedActions(next);
 }
 
+export function studioCanDeleteActionAt(actions, index) {
+    return Array.isArray(actions)
+        && actions.length > 2
+        && Number.isInteger(index)
+        && index > 0
+        && index < actions.length - 1;
+}
+
 export function studioDeleteActionAt(actions, index) {
-    if (!Array.isArray(actions) || actions.length <= 2) return actions;
-    if (index <= 0 || index >= actions.length - 1) return actions;
+    if (!studioCanDeleteActionAt(actions, index)) return actions;
     return actions.filter((_, i) => i !== index);
 }
 
@@ -1095,12 +1140,13 @@ function setStudioTool(tool, {announce = true} = {}) {
     state.motionStudioDrawingActive = false;
     state.motionStudioDrawBuffer = [];
     state.motionStudioDragPointIndex = -1;
+    if (next === 'draw') state.motionStudioSelectedPointIndex = -1;
     updateMotionTrainingEditButtons();
     if (announce && state.motionTrainingEditedPattern) {
         if (next === 'draw') {
             setMotionEditStatus('Draw mode: drag once across the Edited graph to record a fresh shape.', 'var(--cyan)');
         } else {
-            setMotionEditStatus('Edit mode: drag a point to move it, click empty space to add, right-click to delete.');
+            setMotionEditStatus('Edit mode: drag a point to move it, click empty space to add, then use Delete Point for selected interior points.');
         }
     }
 }
@@ -1198,6 +1244,24 @@ function commitStudioEditPointer(message = '') {
     setEditedPatternActions(normalizedActions(pattern.actions), message);
 }
 
+function selectStudioPoint(index, {redraw = true} = {}) {
+    state.motionStudioSelectedPointIndex = Number.isInteger(index) && index >= 0 ? index : -1;
+    updateMotionTrainingEditButtons();
+    if (redraw) drawMotionTrainingPreview();
+}
+
+function deleteSelectedStudioPoint() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    const index = state.motionStudioSelectedPointIndex;
+    if (!studioCanDeleteActionAt(actions, index)) {
+        updateMotionTrainingEditButtons();
+        return;
+    }
+    state.motionStudioSelectedPointIndex = -1;
+    state.motionStudioDragPointIndex = -1;
+    setEditedPatternActions(studioDeleteActionAt(actions, index), 'Removed a point.');
+}
+
 function handleStudioEditPointer(event) {
     const canvas = el.motionTrainingPreviewCanvas;
     if (!canvas) return;
@@ -1213,10 +1277,8 @@ function handleStudioEditPointer(event) {
             event.preventDefault?.();
             const hit = studioActionAtPixel(actions, x, y, metrics);
             if (hit > 0 && hit < actions.length - 1) {
-                const next = studioDeleteActionAt(actions, hit);
-                if (next !== actions) {
-                    setEditedPatternActions(next, 'Removed a point.');
-                }
+                state.motionStudioSelectedPointIndex = hit;
+                deleteSelectedStudioPoint();
             }
             return;
         }
@@ -1225,6 +1287,7 @@ function handleStudioEditPointer(event) {
         const hit = studioActionAtPixel(actions, x, y, metrics);
         if (hit >= 0) {
             state.motionStudioDragPointIndex = hit;
+            selectStudioPoint(hit);
             canvas.setPointerCapture?.(event.pointerId);
             return;
         }
@@ -1236,11 +1299,11 @@ function handleStudioEditPointer(event) {
             metrics,
         );
         const next = studioInsertSortedAction(actions, action);
+        const insertedIndex = next.findIndex(candidate => candidate.at === action.at && candidate.pos === action.pos);
+        state.motionStudioSelectedPointIndex = insertedIndex >= 0 ? insertedIndex : -1;
+        state.motionStudioDragPointIndex = state.motionStudioSelectedPointIndex;
         setEditedPatternActions(next, 'Added a point.');
-        const refreshed = normalizedActions(state.motionTrainingEditedPattern?.actions);
-        const insertedIndex = refreshed.findIndex(candidate => candidate.at === action.at && candidate.pos === action.pos);
-        if (insertedIndex >= 0) {
-            state.motionStudioDragPointIndex = insertedIndex;
+        if (state.motionStudioDragPointIndex >= 0) {
             canvas.setPointerCapture?.(event.pointerId);
         }
         return;
@@ -1252,11 +1315,8 @@ function handleStudioEditPointer(event) {
         const moved = studioActionFromPixel(x, y, metrics);
         const next = studioMoveActionAt(actions, state.motionStudioDragPointIndex, moved.at, moved.pos);
         if (next === actions) return;
-        // Track the dragged point across sorts by matching the updated
-        // ``at`` value (interior points are clamped between their neighbors
-        // so the value is unique after the move).
-        const newIndex = next.findIndex(candidate => candidate.at === next[state.motionStudioDragPointIndex]?.at && candidate.pos === next[state.motionStudioDragPointIndex]?.pos);
-        if (newIndex >= 0) state.motionStudioDragPointIndex = newIndex;
+        state.motionStudioDragPointIndex = Math.min(state.motionStudioDragPointIndex, next.length - 1);
+        state.motionStudioSelectedPointIndex = state.motionStudioDragPointIndex;
         setEditedPatternActions(next, '');
         return;
     }
@@ -1273,12 +1333,12 @@ function handleStudioCanvasContextMenu(event) {
     // Suppress the OS context menu over the studio canvas so right-click
     // can be reserved for deleting points in Edit mode without surprising
     // the user with a browser menu.
-    if (state.motionStudioFlow !== 'draw' || !state.motionTrainingEditedPattern) return;
+    if (!state.motionStudioFlow || !state.motionTrainingEditedPattern || state.motionStudioTool !== 'edit') return;
     event.preventDefault?.();
 }
 
 function handleStudioCanvasPointer(event) {
-    if (state.motionStudioFlow !== 'draw' || !state.motionTrainingEditedPattern || !el.motionTrainingPreviewCanvas) return;
+    if (!state.motionStudioFlow || !state.motionTrainingEditedPattern || !el.motionTrainingPreviewCanvas) return;
     const tool = state.motionStudioTool === 'draw' ? 'draw' : 'edit';
     if (tool === 'draw') {
         handleStudioDrawPointer(event);
@@ -1390,6 +1450,7 @@ export function bindMotionPatternStudioControls() {
     el.motionStudioApplyCropBtn?.addEventListener('click', applyStudioCrop);
     el.motionStudioToolEditBtn?.addEventListener('click', () => setStudioTool('edit'));
     el.motionStudioToolDrawBtn?.addEventListener('click', () => setStudioTool('draw'));
+    el.motionStudioDeletePointBtn?.addEventListener('click', deleteSelectedStudioPoint);
     el.motionStudioClearDrawingBtn?.addEventListener('click', clearStudioDrawing);
     el.motionTrainingPreviewCanvas?.addEventListener('contextmenu', handleStudioCanvasContextMenu);
     el.motionStudioZoomSlider?.addEventListener('input', event => {

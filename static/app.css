@@ -468,7 +468,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-backend-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; white-space: nowrap; }
 .motion-studio-panel { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: rgba(20, 23, 30, 0.78); }
 .motion-studio-panel[hidden], .motion-studio-actions[hidden], .motion-studio-crop-panel[hidden] { display: none; }
-.motion-studio-actions { display: grid; grid-template-columns: auto repeat(2, minmax(82px, 1fr)) minmax(118px, 1fr); gap: 8px; align-items: center; }
+.motion-studio-actions { display: grid; grid-template-columns: auto repeat(4, minmax(78px, 1fr)); gap: 8px; align-items: center; }
 .motion-studio-actions .my-button, .motion-studio-crop-fields .my-button { width: auto; min-width: 0; min-height: 34px; padding: 7px 9px; font-size: 0.82rem; }
 .motion-studio-tool-label { color: var(--comment); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding-right: 4px; }
 .motion-studio-tool-btn.active { border-color: rgba(127, 183, 163, 0.86); background: #263d36; color: var(--foreground); }
@@ -561,7 +561,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
     .motion-training-pattern-list { max-height: min(18rem, 34vh); }
     .motion-training-detail-pane { overflow: visible; }
-    .motion-studio-actions { grid-template-columns: repeat(2, minmax(82px, 1fr)) minmax(118px, 1fr); align-items: stretch; }
+    .motion-studio-actions { grid-template-columns: repeat(2, minmax(82px, 1fr)); align-items: stretch; }
     .motion-studio-actions .motion-studio-tool-label { grid-column: 1 / -1; padding-right: 0; }
     .motion-studio-entry-actions { grid-template-columns: repeat(2, minmax(118px, 1fr)); }
     .motion-training-preview-wrap { height: clamp(240px, 36vh, 360px); }
@@ -623,7 +623,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .browse-line .my-button { width: 100%; }
     .motion-pattern-row { grid-template-columns: 1fr; }
     .motion-pattern-play, .motion-pattern-export { width: 100%; }
-    .motion-training-box { width: 100%; height: calc(100vh - 16px); max-height: calc(100vh - 16px); }
+    #motion-training-dialog.modal-overlay { padding: 8px; overflow: hidden; }
+    .motion-training-box { position: fixed; top: 8px; right: auto; bottom: 8px; left: 8px; width: calc(100vw - 32px); max-width: calc(100vw - 32px); height: auto; max-height: none; padding: 12px 28px 12px 12px; }
     .about-wallet-grid { grid-template-columns: 1fr; }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
     .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row, .motion-studio-actions, .motion-studio-entry-actions, .motion-studio-timeline-controls, .motion-studio-crop-fields { grid-template-columns: 1fr; }
@@ -631,7 +632,9 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button, .motion-studio-actions .my-button, .motion-studio-entry-actions .my-button, .motion-studio-timeline-controls .my-button, .motion-studio-crop-fields .my-button { width: 100%; }
     .motion-studio-crop-header { flex-direction: column; gap: 4px; }
     .motion-studio-crop-header span:last-child { text-align: left; }
+    .motion-training-detail-header > *, .motion-backend-stack { min-width: 0; }
     .motion-backend-stack { justify-content: flex-start; max-width: none; }
+    .motion-backend-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .motion-training-preview-wrap { height: 260px; min-height: 220px; }
 }
 

@@ -189,6 +189,7 @@ export const el = {
     motionStudioNewPatternBtn: D.getElementById('motion-studio-new-pattern-btn'),
     motionStudioToolEditBtn: D.getElementById('motion-studio-tool-edit-btn'),
     motionStudioToolDrawBtn: D.getElementById('motion-studio-tool-draw-btn'),
+    motionStudioDeletePointBtn: D.getElementById('motion-studio-delete-point-btn'),
     motionStudioToolHint: D.getElementById('motion-studio-tool-hint'),
     motionStudioClearDrawingBtn: D.getElementById('motion-studio-clear-drawing-btn'),
     motionStudioImportBtn: D.getElementById('motion-studio-import-btn'),
@@ -409,6 +410,7 @@ export const state = {
     // not wipe carefully-tweaked patterns.
     motionStudioTool: 'edit',
     motionStudioDragPointIndex: -1,
+    motionStudioSelectedPointIndex: -1,
     motionStudioCropDragHandle: '',
     motionStudioFlow: '',
     motionObservability: null,
