@@ -698,7 +698,7 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertFalse(any("Freestyle selecting" in message for message in messages))
         self.assertFalse(any("weight" in message.lower() for message in messages))
 
-    def test_freestyle_continuous_trace_metadata_describes_choice_and_sleep(self):
+    def test_freestyle_continuous_trace_metadata_describes_choice_and_hold(self):
         motion = FakeMotionController()
         motion.backend = "continuous"
         motion.continuous_calls = []
@@ -739,7 +739,7 @@ class AutoModeThreadTests(unittest.TestCase):
         with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
             background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
 
-        self.assertEqual(sleep_seconds, [1.25])
+        self.assertEqual(sleep_seconds, [freestyle.FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS])
         self.assertEqual(remembered, ["sway"])
         self.assertEqual(len(motion.continuous_calls), 1)
         source, metadata = motion.continuous_calls[0]
@@ -748,8 +748,67 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(metadata["freestyle_step"], 0)
         self.assertEqual(metadata["freestyle_pattern_id"], "sway")
         self.assertEqual(metadata["freestyle_pattern_name"], "Sway")
-        self.assertEqual(metadata["freestyle_planner_sleep_ms"], 1250.0)
+        self.assertEqual(metadata["freestyle_planner_sleep_ms"], 8000.0)
         self.assertFalse(metadata["freestyle_feedback"])
+
+    def test_freestyle_continuous_hold_uses_pattern_cycle_floor(self):
+        choice = freestyle.FreestyleChoice(
+            "slow-sway",
+            "Slow Sway",
+            FakePatternRecord("slow-sway", "Slow Sway"),
+            MotionTarget(40, 50, 70, label="Freestyle: Slow Sway"),
+            50.0,
+            "Playful",
+            "Keeping Freestyle varied.",
+        )
+
+        with mock.patch(
+            "strokegpt.motion_patterns.continuous_motion_plan_from_pattern",
+            return_value=mock.Mock(duration_seconds=12.0),
+        ):
+            hold_seconds = freestyle._freestyle_continuous_hold_seconds(choice, 1.0, 1.0, random.Random(2))
+
+        self.assertAlmostEqual(hold_seconds, 13.8)
+
+    def test_freestyle_continuous_applies_exact_record_pattern(self):
+        class PatternMotion(FakeMotionController):
+            def __init__(self):
+                super().__init__()
+                self.backend = "continuous"
+                self.pattern_calls = []
+
+            def apply_continuous_pattern(self, pattern, target, **kwargs):
+                self.pattern_calls.append((pattern, target, kwargs))
+                return True
+
+            def apply_continuous_target(self, *_args, **_kwargs):
+                raise AssertionError("Freestyle should not resolve continuous patterns by label")
+
+        motion = PatternMotion()
+        choice = freestyle.FreestyleChoice(
+            "edge-build-low",
+            "Edge Build Low",
+            FakePatternRecord("edge-build-low", "Edge Build Low"),
+            MotionTarget(42, 50, 70, label="Freestyle: Edge Build Low"),
+            50.0,
+            "Playful",
+            "Keeping Freestyle varied.",
+        )
+
+        applied = freestyle._apply_freestyle_choices(
+            motion,
+            [choice],
+            random.Random(3),
+            trace_metadata={"mode": "freestyle"},
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(len(motion.pattern_calls), 1)
+        pattern, target, kwargs = motion.pattern_calls[0]
+        self.assertEqual(pattern.name, "Edge Build Low")
+        self.assertEqual(target.label, "Freestyle: Edge Build Low")
+        self.assertEqual(kwargs["source"], "freestyle planner")
+        self.assertEqual(kwargs["trace_metadata"], {"mode": "freestyle"})
 
     def test_scripted_position_mode_routes_patterns_through_generated_target(self):
         motion = FakeMotionController()

@@ -207,6 +207,19 @@ class AppendFailStreamingFakeHandy(StreamingFakeHandy):
         return False
 
 
+class StartRaiseStreamingFakeHandy(StreamingFakeHandy):
+    def start_continuous_stream(
+        self,
+        points,
+        *,
+        stream_id=None,
+        start_time_ms=0,
+        tail_point_stream_index=None,
+        tail_point_threshold=None,
+    ):
+        raise RuntimeError("start failed")
+
+
 class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
     def __init__(self, min_speed, max_speed):
         super().__init__()
@@ -1243,6 +1256,34 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_start_exception_records_failed_trace(self):
+        handy = StartRaiseStreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous_error") == "continuous_hsp_start_failed"
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                ),
+                controller.observability_snapshot()["trace"],
+            )
+
+            point = next(
+                point
+                for point in reversed(controller.observability_snapshot()["trace"])
+                if point.get("continuous_error") == "continuous_hsp_start_failed"
+            )
+            self.assertFalse(point["handy_ok"])
+            self.assertIn("start failed", point["handy_error"])
+            self.assertEqual(handy.position_moves, [])
+            self.assertTrue(self.wait_until(lambda: not controller.observability_snapshot()["playback_active"]))
+        finally:
+            controller.stop()
+
     def test_continuous_hsp_periodically_syncs_firmware_clock(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -1609,6 +1650,26 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(handy.position_moves, [])
         self.assertGreater(len(handy.moves), 1)
         self.assertEqual(handy.moves[-1], (70, 90, 80))
+
+    def test_continuous_pattern_chat_restarts_from_stopped_state(self):
+        handy = StreamingFakeHandy()
+        handy.last_relative_speed = 0
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            target = controller.sanitizer.from_llm_move(
+                {"pattern": "stroke"},
+                controller.current_target(),
+            )
+            self.assertIsNotNone(target)
+            self.assertGreater(target.speed, 0)
+
+            controller.apply_generated_target(target, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            self.assertTrue(controller.observability_snapshot()["playback_active"])
+        finally:
+            controller.stop()
 
     def test_position_backend_routes_generated_frames_to_position_moves(self):
         handy = FakeHandy()

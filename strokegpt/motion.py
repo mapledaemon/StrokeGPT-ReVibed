@@ -398,6 +398,7 @@ def _target_from_cues(
         next_speed = min(max(next_speed, 16.0), 30.0)
         next_range = min(next_range, 12.0)
     elif cues.pattern == "wave":
+        next_speed = max(next_speed, 36.0)
         next_range = max(next_range, 55.0)
     elif cues.pattern == "ramp":
         next_speed = max(next_speed, 38.0)
@@ -420,6 +421,9 @@ def _target_from_cues(
             next_range = min(next_range, 34.0)
         else:
             next_range = max(next_range, 65.0)
+    elif cues.pattern == "stroke":
+        next_speed = max(next_speed, 42.0)
+        next_range = max(next_range, 70.0)
 
     if motion_program and cues.pattern != "anchor_loop":
         next_speed = max(next_speed, 36.0)
@@ -1235,6 +1239,30 @@ class MotionController:
         if plan is None:
             return False
 
+        return self._apply_continuous_plan(
+            plan,
+            target,
+            source=source,
+            trace_metadata=trace_metadata,
+        )
+
+    def apply_continuous_pattern(
+        self,
+        pattern: Any,
+        target: MotionTarget,
+        source: str = "continuous pattern",
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        if target.speed <= 0:
+            self.stop()
+            return True
+        if self.backend != "continuous":
+            return False
+        from .motion_patterns import continuous_motion_plan_from_pattern
+
+        plan = continuous_motion_plan_from_pattern(pattern)
+        if plan is None:
+            return False
         return self._apply_continuous_plan(
             plan,
             target,
@@ -2178,12 +2206,17 @@ class MotionController:
             if not initial_points:
                 return False
             send_started_at = time.monotonic()
-            started = start_stream(
-                initial_points,
-                start_time_ms=int(round(play_start_stream_seconds * 1000.0)),
-                tail_point_stream_index=initial_points[-1]["stream_index"],
-                tail_point_threshold=self._hsp_tail_point_threshold(initial_points),
-            )
+            start_error = ""
+            try:
+                started = start_stream(
+                    initial_points,
+                    start_time_ms=int(round(play_start_stream_seconds * 1000.0)),
+                    tail_point_stream_index=initial_points[-1]["stream_index"],
+                    tail_point_threshold=self._hsp_tail_point_threshold(initial_points),
+                )
+            except Exception as exc:
+                started = False
+                start_error = str(exc)[:180]
             send_ended_at = time.monotonic()
             record_batch(
                 initial_points,
@@ -2192,6 +2225,14 @@ class MotionController:
                 send_started_at=send_started_at,
                 send_ended_at=send_ended_at,
             )
+            if start_error or started is False:
+                self._augment_last_trace(
+                    {
+                        "continuous_error": "continuous_hsp_start_failed",
+                        "handy_ok": False,
+                        "handy_error": start_error or "HSP start failed",
+                    }
+                )
             if started is False:
                 return False
 
@@ -2235,11 +2276,16 @@ class MotionController:
                     if points:
                         batch_index += 1
                         send_started_at = time.monotonic()
-                        appended = append_stream(
-                            points,
-                            tail_point_stream_index=points[-1]["stream_index"],
-                            tail_point_threshold=self._hsp_tail_point_threshold(points),
-                        )
+                        append_error = ""
+                        try:
+                            appended = append_stream(
+                                points,
+                                tail_point_stream_index=points[-1]["stream_index"],
+                                tail_point_threshold=self._hsp_tail_point_threshold(points),
+                            )
+                        except Exception as exc:
+                            appended = False
+                            append_error = str(exc)[:180]
                         send_ended_at = time.monotonic()
                         record_batch(
                             points,
@@ -2248,6 +2294,14 @@ class MotionController:
                             send_started_at=send_started_at,
                             send_ended_at=send_ended_at,
                         )
+                        if append_error or appended is False:
+                            self._augment_last_trace(
+                                {
+                                    "continuous_error": "continuous_hsp_append_failed",
+                                    "handy_ok": False,
+                                    "handy_error": append_error or "HSP append failed",
+                                }
+                            )
                         if appended is False:
                             return False
 

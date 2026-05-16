@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - PR #235 - Smooth Freestyle Continuous Mode
+--------------------------------------------------------
+
+Branch: gpt-freestyle-smooth-legacy-labels
+
+- Added visible Legacy labels to the Edge Me and Milk Me preset mode buttons.
+- Made continuous Freestyle hold each selected pattern for at least one stable
+  run window instead of reapplying jittered targets every short auto interval.
+- Reduced routine Freestyle target jitter so continuous mode feels closer to a
+  chat-selected pattern running until the next meaningful mode decision.
+- Kept Continuous on HSP-only transport while making pattern-only chat commands
+  restart from a stopped state and making Freestyle apply the selected pattern
+  record directly instead of resolving it back from a display label.
+- Added HSP startup exception trace records so failed HSP starts are visible
+  without falling back to HDSP.
+
+
 2026-05-16 - PR #234 - Stretch Built-In Motion Pattern Durations
 -----------------------------------------------------------------
 

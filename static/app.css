@@ -200,6 +200,8 @@ body.chat-model-unavailable #chat-messages-container { border-color: rgba(216, 1
 .control-action-stack, .preset-mode-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .experimental-mode-stack { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 .control-action-stack .my-button, .preset-mode-stack .my-button, .experimental-mode-stack .my-button, .sidebar-stop-section .my-button { min-height: var(--sidebar-control-min-height); padding: 0.45rem 0.55rem; font-size: 0.85rem; }
+.preset-mode-stack .my-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.preset-mode-legacy-label { display: inline-flex; align-items: center; justify-content: center; padding: 1px 5px; border-radius: 999px; background: rgba(14, 15, 18, 0.22); color: currentColor; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.04em; line-height: 1.1; text-transform: uppercase; opacity: 0.78; }
 #pause-resume-btn, #toggle-memory-btn, #im-close-btn { grid-column: 1 / -1; }
 .experimental-mode-section { border-color: rgba(189, 147, 249, 0.42); }
 .sidebar-stop-section { margin-top: 0; }
