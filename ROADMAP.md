@@ -287,7 +287,7 @@ the metadata needed for later LLM-curated playback without waiting for the
 larger curation architecture.
 
 - Add a one-click library backup/export action that downloads a zip containing
-  user-customized prompts, saved Motion Patterns, and imported Programs /
+  user-customized prompts, saved Motion Patterns, tags, and imported Programs /
   funscripts so users can share, move, or preserve curated content before
   reset, reinstall, or branch testing.
 - Include a simple manifest with schema/app version, exported item counts, and
@@ -299,8 +299,6 @@ larger curation architecture.
 - Include saved tags in the LLM-facing pattern/program catalog summaries so the
   local model can choose scripts by user-visible semantics instead of relying
   only on names, feedback weights, or recent playback history.
-- Keep the export and tag editor useful on their own. Do not block this item on
-  the later LLM-curated playback schema redesign.
 
 ## Queued
 
