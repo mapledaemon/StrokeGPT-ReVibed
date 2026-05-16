@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-16 - Unreleased - Prioritize Library Sharing Roadmap
--------------------------------------------------------------
+2026-05-16 - PR #238 - Prioritize Library Sharing Roadmap
+----------------------------------------------------------
 
 Branch: gpt-roadmap-library-collaboration-priority
 
