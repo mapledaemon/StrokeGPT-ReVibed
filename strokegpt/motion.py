@@ -39,8 +39,8 @@ CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.08
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.06
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
-CONTINUOUS_HSP_MIN_DEPTH_DELTA = 1.0
-CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS = 0.14
+CONTINUOUS_HSP_MIN_DEPTH_DELTA = 0.5
+CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS = 0.25
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.12
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.2
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 0.65
@@ -1973,13 +1973,30 @@ class MotionController:
             try:
                 previous_depth = float(previous_stream_point["x"])
                 previous_seconds = float(previous_stream_point["t"]) / 1000.0
-                depth_delta = abs(float(sample.target.depth) - previous_depth)
+                current_depth = float(sample.target.depth)
                 elapsed_since_previous = point_stream_seconds - previous_seconds
             except (KeyError, TypeError, ValueError):
                 return False
             if elapsed_since_previous >= CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS:
                 return False
-            return depth_delta < CONTINUOUS_HSP_MIN_DEPTH_DELTA
+            # HSP transports ``x`` as an integer 0..100; two consecutive
+            # samples that round to the same integer produce no device
+            # motion but make the firmware visibly hold-then-snap between
+            # accepted neighbors. Stretched-cycle patterns (built-ins
+            # carry ``duration_scale: 5.0``) spend many consecutive
+            # samples at the same integer near the slow regions of the
+            # curve; the previous float-only filter let those duplicates
+            # through and the user felt each 1-unit jump as a discrete
+            # tick. Drop redundant same-integer candidates within the
+            # keepalive window so the firmware sees a sparser stream of
+            # meaningful integer steps and interpolates smoothly between
+            # them.
+            if int(round(current_depth)) == int(round(previous_depth)):
+                return True
+            # Backstop: also drop sub-fractional float oscillations that
+            # happen to flip across an integer boundary (e.g. 26.49 ->
+            # 26.51 rounds to 26 -> 27 but is essentially noise).
+            return abs(current_depth - previous_depth) < CONTINUOUS_HSP_MIN_DEPTH_DELTA
 
         def phase_at_stream_time(elapsed_seconds: float) -> tuple[float, float]:
             if not phase_schedule:
