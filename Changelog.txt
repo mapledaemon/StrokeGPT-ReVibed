@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - Unreleased - Smooth Freestyle Continuous Mode
+-----------------------------------------------------------
+
+Branch: gpt-freestyle-smooth-legacy-labels
+
+- Added visible Legacy labels to the Edge Me and Milk Me preset mode buttons.
+- Made continuous Freestyle hold each selected pattern for at least one stable
+  run window instead of reapplying jittered targets every short auto interval.
+- Reduced routine Freestyle target jitter so continuous mode feels closer to a
+  chat-selected pattern running until the next meaningful mode decision.
+
+
 2026-05-16 - PR #234 - Stretch Built-In Motion Pattern Durations
 -----------------------------------------------------------------
 

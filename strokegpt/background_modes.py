@@ -610,7 +610,10 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             send_message(choice.reason)
             next_message_at = step_count + rng.randint(3, 5)
 
-        sleep_seconds = random.uniform(min_time, max_time) if continuous_freestyle else 0
+        sleep_seconds = (
+            freestyle_helpers._freestyle_continuous_hold_seconds(choice, min_time, max_time, rng)
+            if continuous_freestyle else 0
+        )
         trace_metadata = None
         if continuous_freestyle:
             trace_metadata = {

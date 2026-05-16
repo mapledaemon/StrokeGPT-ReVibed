@@ -19,6 +19,9 @@ from .motion_scripts import MotionScriptPlanner
 FREESTYLE_CHAIN_LENGTH = 4
 FREESTYLE_EDGE_RESUME_CHAIN_LENGTH = 2
 FREESTYLE_DECISION_GRACE_SECONDS = 0.05
+FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS = 8.0
+FREESTYLE_CONTINUOUS_MAX_HOLD_SECONDS = 24.0
+FREESTYLE_CONTINUOUS_CYCLE_HOLD_MULTIPLIER = 1.15
 
 
 @dataclass(frozen=True)
@@ -281,12 +284,30 @@ def _freestyle_target(pattern_id, pattern_name, profile, current, feedback_targe
         depth = _blend(profile["depth"], current.depth, 0.12)
         stroke_range = _blend(profile["range"], current.stroke_range, 0.16)
     target = MotionTarget(
-        speed + rng.uniform(-4.0, 4.0),
-        depth + rng.uniform(-7.0, 7.0),
-        stroke_range + rng.uniform(-8.0, 8.0),
+        speed + rng.uniform(-2.0, 2.0),
+        depth + rng.uniform(-3.5, 3.5),
+        stroke_range + rng.uniform(-4.0, 4.0),
         label=f"Freestyle: {pattern_name or pattern_id}",
     )
     return target.clamped()
+
+
+def _freestyle_continuous_hold_seconds(choice, min_time, max_time, rng):
+    base = rng.uniform(float(min_time or 0.0), float(max_time or 0.0))
+    cycle_seconds = 0.0
+    try:
+        from .motion_patterns import continuous_motion_plan_from_pattern
+
+        plan = continuous_motion_plan_from_pattern(choice.record.to_motion_pattern())
+        if plan is not None:
+            cycle_seconds = float(getattr(plan, "duration_seconds", 0.0) or 0.0)
+    except Exception:
+        cycle_seconds = 0.0
+    hold_floor = max(
+        FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS,
+        cycle_seconds * FREESTYLE_CONTINUOUS_CYCLE_HOLD_MULTIPLIER,
+    )
+    return min(FREESTYLE_CONTINUOUS_MAX_HOLD_SECONDS, max(base, hold_floor))
 
 
 def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids):
