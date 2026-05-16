@@ -8,8 +8,8 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
-2026-05-16 - Unreleased - Fix Motion Training Playback Shape
--------------------------------------------------------------
+2026-05-16 - PR #232 - Fix Motion Training Playback Shape
+----------------------------------------------------------
 
 Branch: gpt-motion-training-playback-shape
 
