@@ -1751,6 +1751,91 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_authored_hsp_pattern_preserves_long_authored_timestamps(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        pattern = MotionPattern(
+            "Long Authored",
+            (
+                PatternAction(0, 0),
+                PatternAction(150_000, 100),
+                PatternAction(300_000, 0),
+            ),
+        )
+
+        try:
+            applied = controller.apply_motion_pattern(
+                pattern,
+                MotionTarget(50, 50, 100, "long authored"),
+                preserve_timing=True,
+                source="unit test",
+            )
+            self.assertTrue(applied)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            self.assertEqual([point["t"] for point in points[:2]], [0, 150_000])
+            self.assertEqual([point["x"] for point in points[:2]], [0, 100])
+            self.assertEqual(points[1]["stream_index"], 2)
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp_authored"
+            ]
+            self.assertTrue(hsp_points)
+            self.assertFalse(any(point.get("hsp_twitch_filtered_points") for point in hsp_points))
+            self.assertEqual(hsp_points[1]["hsp_point_time_ms"], 150_000)
+        finally:
+            controller.stop()
+
+    def test_authored_hsp_keeps_same_integer_points(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            applied = controller.apply_authored_actions(
+                (
+                    PatternAction(0, 50.1),
+                    PatternAction(80, 50.2),
+                    PatternAction(160, 51.0),
+                ),
+                MotionTarget(45, 50, 100, "same integer authored"),
+                source="unit test",
+            )
+            self.assertTrue(applied)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            self.assertEqual([point["t"] for point in points], [0, 80, 160])
+            self.assertEqual(int(round(points[0]["x"])), int(round(points[1]["x"])))
+        finally:
+            controller.stop()
+
+    def test_authored_hsp_current_target_uses_active_time_not_future_buffer(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            applied = controller.apply_authored_actions(
+                (
+                    PatternAction(0, 0),
+                    PatternAction(10_000, 100),
+                    PatternAction(20_000, 100),
+                ),
+                MotionTarget(45, 50, 100, "long authored"),
+                source="unit test",
+            )
+            self.assertTrue(applied)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            self.assertEqual(handy.last_depth_pos, 100)
+
+            current = controller.current_target()
+
+            self.assertLess(current.depth, 5)
+            self.assertEqual(current.stroke_range, 100)
+        finally:
+            controller.stop()
+
     def test_position_backend_routes_generated_frames_to_position_moves(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)

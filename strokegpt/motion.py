@@ -1,3 +1,4 @@
+import bisect
 import inspect
 import math
 import re
@@ -51,6 +52,9 @@ CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
 CONTINUOUS_MORPH_SECONDS = 0.95
 CONTINUOUS_MIN_MORPH_SECONDS = 0.45
 CONTINUOUS_MAX_MORPH_SECONDS = 1.8
+AUTHORED_HSP_INITIAL_BUFFER_SECONDS = 30.0
+AUTHORED_HSP_TARGET_BUFFER_SECONDS = 30.0
+AUTHORED_HSP_APPEND_THRESHOLD_SECONDS = 8.0
 MOTION_PATTERN_PREVIEW_MIN_SECONDS = 3.0
 
 
@@ -136,6 +140,7 @@ class ContinuousPhaseState:
     phase_rate: float = 1.0
     plan: Any = None
     target: Optional[MotionTarget] = None
+    authored_points: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -762,9 +767,13 @@ class MotionController:
                 not active
                 or state is None
                 or state.generation != generation
-                or state.plan is None
                 or state.target is None
             ):
+                return None
+            if state.authored_points:
+                elapsed = state.offset_seconds + max(0.0, time.monotonic() - state.started_at)
+                return self._estimated_authored_target(state, elapsed)
+            if state.plan is None:
                 return None
             from .motion_patterns import sample_continuous_motion
 
@@ -784,6 +793,34 @@ class MotionController:
             )
         except Exception:
             return None
+
+    def _estimated_authored_target(self, state: ContinuousPhaseState, elapsed_seconds: float) -> Optional[MotionTarget]:
+        points = state.authored_points
+        target = state.target
+        if not points or target is None:
+            return None
+        elapsed_seconds = max(0.0, float(elapsed_seconds or 0.0))
+        index = bisect.bisect_right(points, (elapsed_seconds, float("inf")))
+        if index <= 0:
+            depth = points[0][1]
+        elif index >= len(points):
+            depth = points[-1][1]
+        else:
+            previous_time, previous_depth = points[index - 1]
+            next_time, next_depth = points[index]
+            interval = next_time - previous_time
+            if interval <= 0:
+                depth = next_depth
+            else:
+                amount = (elapsed_seconds - previous_time) / interval
+                depth = _lerp(previous_depth, next_depth, amount)
+        return MotionTarget(
+            target.speed,
+            depth,
+            100,
+            label=target.label,
+            motion_program=target.motion_program,
+        )
 
     def apply_target(self, target: MotionTarget, smooth: bool = True, source: str = "target") -> None:
         if target.speed <= 0:
@@ -1270,6 +1307,146 @@ class MotionController:
             trace_metadata=trace_metadata,
         )
 
+    def apply_authored_actions(
+        self,
+        actions: Iterable[Any],
+        target: MotionTarget,
+        *,
+        source: str = "authored funscript",
+        stop_after: bool = False,
+        block: bool = False,
+        trace_metadata: Optional[dict[str, Any]] = None,
+        min_duration_seconds: float = 0.0,
+    ) -> bool:
+        target = target.clamped()
+        if target.speed <= 0:
+            current = self.current_target()
+            target = MotionTarget(
+                current.speed if current.speed > 0 else 35,
+                target.depth,
+                target.stroke_range,
+                target.label,
+                motion_program=target.motion_program,
+            ).clamped()
+        if self.backend != "continuous":
+            return False
+
+        points = self._authored_hsp_points(actions, target, min_duration_seconds=min_duration_seconds)
+        if len(points) < 2:
+            return False
+        if not self._supports_continuous_streaming():
+            self._record_continuous_stream_unavailable(
+                target,
+                source=source,
+                trace_metadata=trace_metadata,
+            )
+            return False
+
+        started_at = time.monotonic()
+        authored_state_points = tuple((float(point["t"]) / 1000.0, float(point["x"])) for point in points)
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+            self._continuous_phase_state = ContinuousPhaseState(
+                key=("authored_hsp", source, len(points), int(points[-1]["t"])),
+                generation=generation,
+                started_at=started_at,
+                authored_points=authored_state_points,
+                target=target,
+            )
+        self._set_frame_playback_active(True)
+
+        args = (points, target, source, generation, started_at)
+        kwargs = {"stop_after": stop_after, "trace_metadata": trace_metadata}
+        if block:
+            return bool(self._run_authored_hsp_stream(*args, **kwargs))
+
+        threading.Thread(
+            target=self._run_authored_hsp_stream,
+            args=args,
+            kwargs=kwargs,
+            daemon=True,
+        ).start()
+        return True
+
+    def _authored_hsp_points(
+        self,
+        actions: Iterable[Any],
+        target: MotionTarget,
+        *,
+        min_duration_seconds: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        from .motion_patterns import normalize_actions
+
+        normalized = normalize_actions(actions)
+        if len(normalized) < 2:
+            return []
+        start_at = normalized[0].at
+        label = target.label or "authored funscript"
+        source_points: list[dict[str, Any]] = []
+        for action in normalized:
+            point_time_ms = max(0, int(round(action.at - start_at)))
+            point = {
+                "t": point_time_ms,
+                "logical_t": point_time_ms,
+                "x": _clamp(float(action.pos)),
+                "speed": target.speed,
+                "intent_speed": target.speed,
+                "range": 100,
+                "sample_range": 100,
+                "label": label,
+                "authored_point": True,
+                "phase": 0.0,
+                "position_per_second": 0.0,
+                "tempo_scale": 1.0,
+                "effective_duration_seconds": 0.0,
+                "phase_interval_seconds": 0.0,
+                "sample_interval_seconds": 0.0,
+                "reverse_direction": False,
+            }
+            if source_points and point["t"] == source_points[-1]["t"]:
+                source_points[-1] = point
+            else:
+                source_points.append(point)
+
+        duration_ms = int(source_points[-1]["t"] or 0) if source_points else 0
+        repeat_count = 1
+        try:
+            min_duration_ms = int(round(max(0.0, float(min_duration_seconds or 0.0)) * 1000.0))
+        except (TypeError, ValueError):
+            min_duration_ms = 0
+        if duration_ms > 0 and min_duration_ms > duration_ms:
+            repeat_count = max(1, int(math.ceil(min_duration_ms / duration_ms)))
+
+        points: list[dict[str, Any]] = []
+        for repeat_index in range(repeat_count):
+            offset_ms = duration_ms * repeat_index
+            for source_point in source_points:
+                point = dict(source_point)
+                point["t"] = int(point["t"] + offset_ms)
+                point["logical_t"] = point["t"]
+                if points and point["t"] <= points[-1]["t"]:
+                    if int(round(point["x"])) == int(round(points[-1]["x"])):
+                        continue
+                    point["t"] = int(points[-1]["t"] + 1)
+                    point["logical_t"] = point["t"]
+                points.append(point)
+
+        duration_seconds = max(0.001, points[-1]["t"] / 1000.0)
+        previous = None
+        for index, point in enumerate(points):
+            point["stream_index"] = index + 1
+            point["sample_index"] = index
+            point["effective_duration_seconds"] = duration_seconds
+            point["phase"] = point["t"] / max(1.0, points[-1]["t"])
+            if previous is not None:
+                interval_seconds = max(0.001, (point["t"] - previous["t"]) / 1000.0)
+                point["phase_interval_seconds"] = interval_seconds
+                point["sample_interval_seconds"] = interval_seconds
+                point["position_per_second"] = abs(point["x"] - previous["x"]) / interval_seconds
+            previous = point
+        return points
+
     def apply_motion_pattern(
         self,
         pattern: Any,
@@ -1285,6 +1462,15 @@ class MotionController:
 
         target = target.clamped()
         if self.backend == "continuous":
+            if preserve_timing:
+                return self.apply_authored_actions(
+                    getattr(pattern, "actions", ()) or (),
+                    target,
+                    source=source,
+                    stop_after=stop_after,
+                    block=stop_after,
+                    min_duration_seconds=MOTION_PATTERN_PREVIEW_MIN_SECONDS if stop_after else 0.0,
+                )
             from .motion_patterns import continuous_motion_plan_from_pattern
 
             plan = continuous_motion_plan_from_pattern(pattern)
@@ -2349,6 +2535,249 @@ class MotionController:
                     next_sync_elapsed = elapsed + CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS
 
                 sleep_seconds = max(0.02, min(0.08, buffer_remaining - CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS))
+                if not self._sleep_with_pause(sleep_seconds, generation):
+                    return True
+        finally:
+            with self._lock:
+                current_generation = generation == self._generation
+            if current_generation:
+                self._set_frame_playback_active(False)
+
+        return True
+
+    def _run_authored_hsp_stream(
+        self,
+        authored_points: list[dict[str, Any]],
+        target: MotionTarget,
+        source: str,
+        generation: int,
+        started_at: float,
+        *,
+        stop_after: bool = False,
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        start_stream = getattr(self.handy, "start_continuous_stream", None)
+        append_stream = getattr(self.handy, "append_continuous_stream", None)
+        sync_stream = getattr(self.handy, "sync_continuous_stream_time", None)
+        if not callable(start_stream) or not callable(append_stream):
+            return False
+
+        points_all = [dict(point) for point in authored_points]
+        if len(points_all) < 2:
+            return False
+        duration_seconds = max(0.001, float(points_all[-1]["t"]) / 1000.0)
+        target_label = target.label or "authored funscript"
+        next_index = 0
+        batch_index = 0
+        stream_seconds = 0.0
+        previous_command_ended_at = None
+        previous_recorded_point = None
+        stream_wall_zero = None
+        sync_count = 0
+        next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None
+
+        def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
+            nonlocal next_index
+            batch: list[dict[str, Any]] = []
+            while next_index < len(points_all) and len(batch) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND:
+                point = dict(points_all[next_index])
+                point_seconds = float(point["t"]) / 1000.0
+                if batch and len(batch) >= min_points and point_seconds > until_seconds:
+                    break
+                batch.append(point)
+                next_index += 1
+            return batch
+
+        def record_batch(
+            points: list[dict[str, Any]],
+            *,
+            result: Any,
+            kind: str,
+            send_started_at: float,
+            send_ended_at: float,
+        ) -> None:
+            nonlocal previous_command_ended_at, previous_recorded_point, stream_wall_zero
+            command_extras = self._handy_command_trace_extras(result)
+            batch_gap_ms = None
+            if previous_command_ended_at is not None:
+                batch_gap_ms = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
+            previous_command_ended_at = send_ended_at
+            wall_now = time.time()
+            mono_now = time.monotonic()
+            send_ended_wall = wall_now - max(0.0, mono_now - send_ended_at)
+            if stream_wall_zero is None:
+                stream_wall_zero = send_ended_wall
+            for point in points:
+                scheduled_wall_time = stream_wall_zero + (float(point["t"]) / 1000.0)
+                stream_target = MotionTarget(
+                    point["intent_speed"],
+                    point["x"],
+                    100,
+                    label=point.get("label") or target_label,
+                )
+                self._record_target(stream_target, source=source)
+                extras = {
+                    "t": round(scheduled_wall_time, 3),
+                    "continuous": True,
+                    "continuous_schema": "hsp_authored",
+                    "hsp_batch": kind,
+                    "hsp_batch_index": batch_index,
+                    "hsp_point_time_ms": point["t"],
+                    "hsp_point_logical_time_ms": point["logical_t"],
+                    "sample_index": point["sample_index"],
+                    "hsp_stream_index": point["stream_index"],
+                    "hsp_authored_point": True,
+                    "authored_script": True,
+                    "intent_speed": int(round(point["intent_speed"])),
+                    "sample_speed": int(round(point["speed"])),
+                    "sample_range": 100,
+                    "sample_phase": round(point["phase"], 4),
+                    "sample_position_per_second": round(point["position_per_second"], 1),
+                    "sample_tempo_scale": 1.0,
+                    "effective_cycle_ms": round(duration_seconds * 1000.0, 1),
+                    "phase_interval_ms": round(point["phase_interval_seconds"] * 1000.0, 1),
+                    "sample_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
+                    "transport_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
+                    "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
+                }
+                if previous_recorded_point is not None:
+                    dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
+                    if dt_seconds > 0:
+                        depth_delta = point["x"] - previous_recorded_point["x"]
+                        extras["hsp_segment_depth_delta"] = round(depth_delta, 1)
+                        extras["hsp_segment_depth_per_second"] = round(abs(depth_delta) / dt_seconds, 1)
+                if batch_gap_ms is not None:
+                    extras["gap_ms"] = batch_gap_ms
+                if trace_metadata:
+                    for key, value in trace_metadata.items():
+                        extras.setdefault(str(key), value)
+                extras.update(command_extras)
+                self._augment_last_trace(extras)
+                previous_recorded_point = point
+
+        try:
+            initial_until = min(duration_seconds, AUTHORED_HSP_INITIAL_BUFFER_SECONDS)
+            initial_points = build_batch(initial_until, min_points=min(2, len(points_all)))
+            if not initial_points:
+                return False
+            send_started_at = time.monotonic()
+            start_error = ""
+            try:
+                started = start_stream(
+                    initial_points,
+                    start_time_ms=int(initial_points[0]["t"]),
+                    tail_point_stream_index=initial_points[-1]["stream_index"],
+                    tail_point_threshold=self._hsp_tail_point_threshold(initial_points),
+                )
+            except Exception as exc:
+                started = False
+                start_error = str(exc)[:180]
+            send_ended_at = time.monotonic()
+            record_batch(
+                initial_points,
+                result=started,
+                kind="play",
+                send_started_at=send_started_at,
+                send_ended_at=send_ended_at,
+            )
+            stream_seconds = float(initial_points[-1]["t"]) / 1000.0
+            if start_error or started is False:
+                self._augment_last_trace(
+                    {
+                        "continuous_error": "authored_hsp_start_failed",
+                        "handy_ok": False,
+                        "handy_error": start_error or "Authored HSP start failed",
+                    }
+                )
+            if started is False:
+                return False
+
+            while True:
+                with self._lock:
+                    if generation != self._generation:
+                        return True
+                if not self._wait_for_resume(generation):
+                    return True
+                self._set_frame_playback_active(True)
+
+                elapsed = max(0.0, time.monotonic() - started_at)
+                if elapsed >= duration_seconds and next_index >= len(points_all):
+                    if stop_after:
+                        with self._lock:
+                            if generation != self._generation:
+                                return True
+                            self._generation += 1
+                        self._set_frame_playback_active(False)
+                        self.handy.stop()
+                        self._record_current_state(source=source, label=f"{target_label} authored stopped")
+                    return True
+
+                buffer_remaining = stream_seconds - elapsed
+                if next_index < len(points_all) and buffer_remaining <= AUTHORED_HSP_APPEND_THRESHOLD_SECONDS:
+                    until = min(duration_seconds, elapsed + AUTHORED_HSP_TARGET_BUFFER_SECONDS)
+                    points = build_batch(until)
+                    if points:
+                        batch_index += 1
+                        send_started_at = time.monotonic()
+                        append_error = ""
+                        try:
+                            appended = append_stream(
+                                points,
+                                tail_point_stream_index=points[-1]["stream_index"],
+                                tail_point_threshold=self._hsp_tail_point_threshold(points),
+                            )
+                        except Exception as exc:
+                            appended = False
+                            append_error = str(exc)[:180]
+                        send_ended_at = time.monotonic()
+                        record_batch(
+                            points,
+                            result=appended,
+                            kind="add",
+                            send_started_at=send_started_at,
+                            send_ended_at=send_ended_at,
+                        )
+                        stream_seconds = float(points[-1]["t"]) / 1000.0
+                        if append_error or appended is False:
+                            self._augment_last_trace(
+                                {
+                                    "continuous_error": "authored_hsp_append_failed",
+                                    "handy_ok": False,
+                                    "handy_error": append_error or "Authored HSP append failed",
+                                }
+                            )
+                        if appended is False:
+                            return False
+                        continue
+
+                if (
+                    callable(sync_stream)
+                    and next_sync_elapsed is not None
+                    and elapsed >= next_sync_elapsed
+                    and elapsed <= stream_seconds
+                ):
+                    try:
+                        synced = sync_stream(int(round(elapsed * 1000.0)), filter=CONTINUOUS_HSP_SYNC_FILTER)
+                    except Exception as exc:
+                        sync_extras = {"handy_ok": False, "handy_error": str(exc)[:180]}
+                    else:
+                        sync_extras = self._handy_command_trace_extras(synced)
+                    sync_extras.update(
+                        {
+                            "hsp_clock_sync": True,
+                            "hsp_sync_count": sync_count + 1,
+                            "hsp_synctime_ms": int(round(elapsed * 1000.0)),
+                            "hsp_synctime_filter": CONTINUOUS_HSP_SYNC_FILTER,
+                        }
+                    )
+                    self._augment_last_trace(sync_extras)
+                    sync_count += 1
+                    next_sync_elapsed = elapsed + CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS
+
+                if next_index < len(points_all):
+                    sleep_seconds = max(0.02, min(0.08, buffer_remaining - AUTHORED_HSP_APPEND_THRESHOLD_SECONDS))
+                else:
+                    sleep_seconds = max(0.02, min(0.08, duration_seconds - elapsed))
                 if not self._sleep_with_pause(sleep_seconds, generation):
                     return True
         finally:
