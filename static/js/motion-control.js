@@ -15,6 +15,7 @@ import {
 import {
     clonePattern,
     configureMotionPatternList,
+    createPatternDeleteButton,
     createPatternExportButton,
     createPatternFeedbackResetButton,
     createPatternText,
@@ -544,6 +545,7 @@ function renderMotionTrainingPatternList(patterns) {
         actions.append(playButton);
         if (patternHasFeedbackState(pattern)) actions.append(createPatternFeedbackResetButton(pattern));
         actions.append(createPatternExportButton(pattern));
+        actions.append(createPatternDeleteButton(pattern));
         row.append(main, actions);
         el.motionTrainingPatternList.appendChild(row);
     });

@@ -387,3 +387,25 @@ class PatternLibrary:
             record = record_from_payload(export, fallback_id=unique_id, source_override=source_override, readonly=False)
         self.save_user_pattern(record)
         return record
+
+    def delete_pattern(self, pattern_id):
+        requested = slugify_pattern_id(pattern_id)
+        try:
+            files = self.user_pattern_files()
+        except OSError as exc:
+            raise PatternValidationError(f"Could not read pattern directory: {exc}") from exc
+
+        for path in files:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                record = record_from_payload(payload, fallback_id=path.stem, readonly=False)
+            except (OSError, json.JSONDecodeError, PatternValidationError):
+                continue
+            if record.pattern_id != requested:
+                continue
+            try:
+                path.unlink()
+            except OSError as exc:
+                raise PatternValidationError(f"Could not delete pattern file: {exc}") from exc
+            return record
+        return None

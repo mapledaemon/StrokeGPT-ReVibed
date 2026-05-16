@@ -338,12 +338,18 @@ class WebChatRouteTests(WebTestCase):
             handy.last_depth_pos,
             handy.last_stroke_range,
         )
+        original_pattern_enabled = dict(settings.motion_pattern_enabled)
+        original_pattern_feedback = dict(settings.motion_pattern_feedback)
+        original_pattern_weights = dict(settings.motion_pattern_weights)
         captured_targets = []
         app_state.messages_for_ui.clear()
         app_state.chat_history.clear()
         try:
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
+            settings.motion_pattern_enabled["flick"] = True
+            settings.motion_pattern_feedback["flick"] = {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0}
+            settings.motion_pattern_weights["flick"] = 50
             handy.last_relative_speed = 30
             handy.last_depth_pos = 40
             handy.last_stroke_range = 50
@@ -385,6 +391,9 @@ class WebChatRouteTests(WebTestCase):
                 handy.last_depth_pos,
                 handy.last_stroke_range,
             ) = original_handy_state
+            settings.motion_pattern_enabled = original_pattern_enabled
+            settings.motion_pattern_feedback = original_pattern_feedback
+            settings.motion_pattern_weights = original_pattern_weights
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
