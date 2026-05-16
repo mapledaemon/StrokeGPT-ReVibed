@@ -657,9 +657,64 @@ editing.
 - Add interruption and recovery states so stop, pause, and resume remain
   predictable during longer scenes.
 
+### 15. LLM-Curated Playback And Anchor-Loop Freestyle Repositioning (L)
+
+Why later: this is a strategic shift in how LLM output drives motion. The
+existing `anchor_loop` output already feels more freestyle than the rest of
+the LLM motion path, and the long-term direction is for the model to curate
+authored content rather than author raw motion. Both halves depend on
+groundwork that does not yet exist: the curated script/pattern library is
+small, and LLMs have not been shown to design high-quality motion without
+human oversight. Treat as an exploratory direction rather than a near-term
+commitment.
+
+- Reframe the existing LLM `anchor_loop` output as a session-wide Freestyle
+  toggle, surfaced outside the Auto/Edge/Milk/Freestyle preset modes. When
+  the toggle is on, the LLM is allowed to emit soft-anchor sequences and the
+  planner slides through them as freeform output. Extend the Freestyle /
+  freeform toggle noted in item #3 so it controls the motion-architecture
+  switch, not just vocabulary strictness.
+- When the toggle is off (or as the default chat path), restrict LLM motion
+  output to selecting an authored Program or Pattern from the library plus a
+  single intensity parameter mapped to user speed. The selected script plays
+  faithfully through the authored-HSP path (PR #236); speed scales playback
+  intensity within the existing safety limits without rewriting authored
+  timing or positions.
+- Audit the catalog: the 34 built-in patterns plus any user-imported Programs
+  are not large enough to support pure curation across normal conversation.
+  Decide whether to grow a curated built-in library (manual authoring or
+  permissively-licensed funscript sources from the references in item #12),
+  rely on user-managed Program imports as the primary content source, or
+  both with a small starter set for fresh installs.
+- Add a one-click library backup/export action that downloads a zip containing
+  all user-customized prompts, saved Motion Patterns, and imported Programs /
+  funscripts so users can move or preserve their curated content before reset,
+  reinstall, or branch testing.
+- Add visible tag editors for Motion Patterns and Programs / funscripts, with
+  suggested tags such as intense, full shaft, mid shaft, tip, base, teasing,
+  slow, and edging. Include those tags in the LLM-facing catalog summaries so
+  curated selection can match user intent without relying only on names,
+  feedback weights, or recent playback history.
+- Keep the deterministic LLM numeric/named-pattern motion path reachable as
+  a fallback so the model is not silenced when no library entry matches the
+  current chat intent.
+- Update the LLM system prompts and JSON schema so curation is the explicit
+  primary action (for example a ``{script_id, intensity}`` payload plus the
+  existing ``motion_program``/chat/mood fields). Version the schema and keep
+  the legacy free-form ``move`` shape parseable behind a settings flag so the
+  switch is reversible.
+- Verify on real hardware that the model produces meaningful curation choices
+  and that the library is large enough that "the LLM keeps picking the same
+  two scripts" does not become the dominant failure mode. If it does, the
+  strategic shift is premature until the library grows.
+- Related work: item #3 Freestyle / freeform toggle, item #6 soft-anchor
+  pattern authoring, item #14 Story Mode (the same architecture with longer
+  scripted/voiced beats), and item #12 funscript reference research for
+  library sourcing.
+
 ## Long-Horizon
 
-### 15. Internet-Exposed Remote Control And Multi-User Sessions (XL)
+### 16. Internet-Exposed Remote Control And Multi-User Sessions (XL)
 
 Why later: the app is currently designed for one trusted local operator, one
 active browser session, and one Handy controller. Opening control to the public
@@ -701,7 +756,7 @@ flows are reliable.
   an intentional architecture change; do not let ordinary LAN/mobile fixes
   accidentally create a partial multi-user control model.
 
-### 16. Optional Runtime And Packaging Work (XL)
+### 17. Optional Runtime And Packaging Work (XL)
 
 Why later: these should follow device and voice reliability work unless a
 runtime shows a clear app-level benefit.
