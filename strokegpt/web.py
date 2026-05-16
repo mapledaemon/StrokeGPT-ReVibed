@@ -1229,12 +1229,10 @@ def _training_target_for_record(record, current=None):
     speed = current.speed if current.speed > 0 else 35
     if settings.min_speed >= settings.max_speed:
         speed = max(10, min(45, speed))
-    depth = current.depth if current.depth > 0 else 50
-    stroke_range = current.stroke_range if current.stroke_range >= 30 else 50
     return MotionTarget(
         speed=speed,
-        depth=depth,
-        stroke_range=stroke_range,
+        depth=50,
+        stroke_range=100,
         label=f"training {record.pattern_id}",
     ).clamped()
 

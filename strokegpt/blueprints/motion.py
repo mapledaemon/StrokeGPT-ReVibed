@@ -301,6 +301,36 @@ def set_motion_pattern_weight_route(pattern_id):
     })
 
 
+@motion_blueprint.route('/motion_patterns/<pattern_id>', methods=['DELETE'])
+def delete_motion_pattern_route(pattern_id):
+    web = _web()
+    record = web._motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    if record.readonly or record.source == "fixed":
+        return jsonify({
+            "status": "error",
+            "message": "Built-in patterns cannot be deleted. Disable them instead.",
+        }), 400
+    try:
+        deleted = web.motion_pattern_library.delete_pattern(record.pattern_id)
+    except web.PatternValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not deleted:
+        return jsonify({"status": "error", "message": "Pattern file not found."}), 404
+    web.settings.motion_pattern_enabled.pop(deleted.pattern_id, None)
+    web.settings.motion_pattern_feedback.pop(deleted.pattern_id, None)
+    web.settings.motion_pattern_weights.pop(deleted.pattern_id, None)
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "message": f"Deleted {deleted.name}.",
+        "pattern": _pattern_summary(web, deleted, include_actions=True),
+        "motion_patterns": web._motion_pattern_catalog_payload(),
+        "motion_preferences": web._motion_preference_payload(),
+    })
+
+
 @motion_blueprint.route('/motion_patterns/<pattern_id>/feedback/reset', methods=['POST'])
 def reset_motion_pattern_feedback_route(pattern_id):
     web = _web()

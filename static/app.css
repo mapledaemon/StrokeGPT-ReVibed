@@ -432,7 +432,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 2px; }
 .motion-program-list { max-height: 220px; }
 .motion-program-empty { padding: 10px; border: 1px dashed #37404c; border-radius: 6px; color: var(--comment); background: rgba(20, 23, 30, 0.58); font-size: 0.85rem; line-height: 1.35; }
-.motion-pattern-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); }
+.motion-pattern-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; padding-right: 2.25rem; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); }
 .motion-pattern-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .motion-pattern-main input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; }
 .motion-pattern-text { min-width: 0; }
@@ -441,8 +441,9 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-pattern-description { margin-top: 4px; color: var(--foreground); font-size: 0.85rem; opacity: 0.86; overflow-wrap: anywhere; }
 .motion-pattern-row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; min-width: 104px; }
 .motion-pattern-play, .motion-pattern-export, .motion-pattern-feedback-reset { width: auto; min-width: 96px; min-height: 34px; padding: 7px 10px; font-size: 0.86rem; }
+.motion-pattern-delete { position: absolute; top: 6px; right: 6px; z-index: 1; }
 .motion-program-row .motion-pattern-row-actions { grid-template-columns: repeat(3, minmax(76px, 1fr)) 1.65rem; align-items: center; }
-.motion-program-delete { justify-self: end; }
+.motion-program-delete { position: static; justify-self: end; }
 .motion-program-box { width: min(980px, 100%); display: flex; flex-direction: column; gap: 12px; }
 .motion-program-player-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }
 .motion-program-player-toolbar .my-button { width: auto; min-width: 132px; }
