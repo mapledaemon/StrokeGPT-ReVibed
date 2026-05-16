@@ -681,8 +681,12 @@
                     </div>
                     <div id="motion-studio-panel" class="motion-studio-panel" hidden>
                         <div id="motion-studio-draw-controls" class="motion-studio-actions" hidden>
-                            <button id="motion-studio-draw-toggle-btn" class="my-button" type="button" disabled>Draw Off</button>
+                            <span class="motion-studio-tool-label" id="motion-studio-tool-label">Tool:</span>
+                            <button id="motion-studio-tool-edit-btn" class="my-button motion-studio-tool-btn" type="button" disabled aria-pressed="true" title="Click a point to drag it; click empty space to insert">Edit</button>
+                            <button id="motion-studio-tool-draw-btn" class="my-button motion-studio-tool-btn" type="button" disabled aria-pressed="false" title="Drag once across the Edited graph to record a fresh shape; reverts to Edit after one stroke">Draw</button>
+                            <button id="motion-studio-delete-point-btn" class="my-button" type="button" disabled title="Delete the selected interior point">Delete Point</button>
                             <button id="motion-studio-clear-drawing-btn" class="my-button" type="button" disabled>Clear Drawing</button>
+                            <span id="motion-studio-tool-hint" class="motion-studio-tool-hint">Drag a point to move it. Click empty space to add. Select an interior point to delete.</span>
                         </div>
                         <div id="motion-studio-source-status" class="motion-studio-status">Start a new pattern or import a funscript to crop.</div>
                         <div id="motion-studio-crop-panel" class="motion-studio-crop-panel" hidden>

@@ -266,13 +266,45 @@ export function updateMotionTrainingEditButtons() {
     ].forEach(button => {
         if (button) button.disabled = !hasEditable;
     });
-    const drawFlowActive = state.motionStudioFlow === 'draw';
-    if (el.motionStudioDrawToggleBtn) {
-        el.motionStudioDrawToggleBtn.disabled = !hasEditable || !drawFlowActive;
-        el.motionStudioDrawToggleBtn.textContent = state.motionStudioDrawingEnabled ? 'Draw On' : 'Draw Off';
-        el.motionStudioDrawToggleBtn.classList.toggle('active', Boolean(state.motionStudioDrawingEnabled));
+    const toolsAvailable = hasEditable && Boolean(state.motionStudioFlow);
+    const tool = state.motionStudioTool === 'draw' ? 'draw' : 'edit';
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    const selectedIndex = Number.isInteger(state.motionStudioSelectedPointIndex)
+        ? state.motionStudioSelectedPointIndex
+        : -1;
+    const selectedPointDeletable = toolsAvailable && tool === 'edit' && studioCanDeleteActionAt(actions, selectedIndex);
+    if (el.motionStudioDrawControls) {
+        el.motionStudioDrawControls.hidden = !toolsAvailable;
     }
-    if (el.motionStudioClearDrawingBtn) el.motionStudioClearDrawingBtn.disabled = !hasEditable || !drawFlowActive;
+    if (el.motionStudioToolEditBtn) {
+        el.motionStudioToolEditBtn.disabled = !toolsAvailable;
+        el.motionStudioToolEditBtn.classList.toggle('active', toolsAvailable && tool === 'edit');
+        el.motionStudioToolEditBtn.setAttribute('aria-pressed', String(toolsAvailable && tool === 'edit'));
+    }
+    if (el.motionStudioToolDrawBtn) {
+        el.motionStudioToolDrawBtn.disabled = !toolsAvailable;
+        el.motionStudioToolDrawBtn.classList.toggle('active', toolsAvailable && tool === 'draw');
+        el.motionStudioToolDrawBtn.setAttribute('aria-pressed', String(toolsAvailable && tool === 'draw'));
+    }
+    if (el.motionStudioToolHint) {
+        if (!toolsAvailable) {
+            el.motionStudioToolHint.textContent = '';
+        } else if (tool === 'draw') {
+            el.motionStudioToolHint.textContent = 'Drag once across the Edited graph to record a fresh shape. Reverts to Edit after one stroke.';
+        } else if (selectedPointDeletable) {
+            el.motionStudioToolHint.textContent = 'Drag the selected point to move it, or use Delete Point to remove it.';
+        } else {
+            el.motionStudioToolHint.textContent = 'Drag a point to move it. Click empty space to add. Select an interior point to delete.';
+        }
+    }
+    if (el.motionStudioDeletePointBtn) {
+        el.motionStudioDeletePointBtn.disabled = !selectedPointDeletable;
+    }
+    if (el.motionTrainingPreviewCanvas) {
+        el.motionTrainingPreviewCanvas.classList.toggle('studio-tool-edit', toolsAvailable && tool === 'edit');
+        el.motionTrainingPreviewCanvas.classList.toggle('studio-tool-draw', toolsAvailable && tool === 'draw');
+    }
+    if (el.motionStudioClearDrawingBtn) el.motionStudioClearDrawingBtn.disabled = !toolsAvailable;
     if (el.motionTransformResetBtn) el.motionTransformResetBtn.disabled = !hasEditable || !dirty;
     if (el.saveMotionTrainingPatternBtn) el.saveMotionTrainingPatternBtn.disabled = !hasEditable || !dirty;
     if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.disabled = !hasEditable;
@@ -328,9 +360,13 @@ export function refreshMotionTrainingDetail(message = '') {
 
 function setEditedPatternActions(actions, message) {
     if (!state.motionTrainingEditedPattern) return;
+    const nextActions = normalizedActions(actions);
+    if (state.motionStudioSelectedPointIndex >= nextActions.length) {
+        state.motionStudioSelectedPointIndex = -1;
+    }
     state.motionTrainingEditedPattern = updatePatternStats({
         ...state.motionTrainingEditedPattern,
-        actions: normalizedActions(actions),
+        actions: nextActions,
     });
     state.motionTrainingDirty = true;
     refreshMotionTrainingDetail(message);
@@ -343,6 +379,8 @@ function setStudioEditedPattern(pattern, message, {dirty = true, sourcePattern =
     state.motionTrainingPreviewPattern = cleanPattern;
     state.motionTrainingDirty = Boolean(dirty);
     state.motionTrainingSelectedPatternId = '';
+    state.motionStudioSelectedPointIndex = -1;
+    state.motionStudioDragPointIndex = -1;
     if (el.motionTrainingSaveNameInput && cleanPattern) el.motionTrainingSaveNameInput.value = patternDisplayName(cleanPattern);
     syncRangeInputsFromPattern(cleanPattern);
     refreshMotionTrainingDetail(message);
@@ -543,8 +581,16 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
     });
     previewCtx.stroke();
 
-    previewCtx.fillStyle = pointColor;
-    actions.forEach(action => {
+    const selectedPointIndex = Number.isInteger(options.selectedPointIndex) ? options.selectedPointIndex : -1;
+    actions.forEach((action, index) => {
+        if (index === selectedPointIndex) {
+            previewCtx.strokeStyle = 'rgba(189, 147, 249, 0.96)';
+            previewCtx.lineWidth = 2;
+            previewCtx.beginPath();
+            previewCtx.arc(xFor(action), yFor(action), 7, 0, Math.PI * 2);
+            previewCtx.stroke();
+        }
+        previewCtx.fillStyle = index === selectedPointIndex ? 'rgba(189, 147, 249, 0.98)' : pointColor;
         previewCtx.beginPath();
         previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
         previewCtx.fill();
@@ -577,6 +623,9 @@ export function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewP
         el.motionTrainingPreviewCanvas,
         pattern,
         state.motionTrainingOriginalPattern ? 'Edited preview appears here.' : 'Select a pattern to preview.',
+        '#7fb7a3',
+        '#d8b66a',
+        {selectedPointIndex: state.motionStudioTool === 'edit' ? state.motionStudioSelectedPointIndex : -1},
     );
     drawStudioCropTimeline();
     updateStudioTimelineHandles();
@@ -588,18 +637,22 @@ export function setMotionTrainingDetail(pattern) {
     state.motionTrainingEditedPattern = updatePatternStats(clonePattern(pattern));
     state.motionTrainingPreviewPattern = state.motionTrainingEditedPattern || null;
     state.motionTrainingDirty = false;
-    if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
-        drawMotionTrainingPreview(state.motionTrainingPreviewPattern);
-        updateMotionTrainingEditButtons();
-        return;
-    }
+    state.motionStudioSelectedPointIndex = -1;
     if (!pattern) {
-        el.motionTrainingPatternTitle.textContent = 'No pattern selected';
-        el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
+        if (el.motionTrainingPatternTitle) el.motionTrainingPatternTitle.textContent = 'No pattern selected';
+        if (el.motionTrainingPatternMeta) el.motionTrainingPatternMeta.textContent = 'Select a pattern to preview its shape.';
         if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.value = '';
         setMotionEditStatus('Select a pattern to edit a temporary copy.');
         updateMotionTrainingTimingReadouts(null);
         drawMotionTrainingPreview(null);
+        updateMotionTrainingEditButtons();
+        return;
+    }
+    showStudioFlow('edit');
+    setStudioTool('edit', {announce: false});
+    setStudioStatus('Editing an unsaved copy. Use Edit to nudge points or Draw to replace the shape.', 'var(--comment)');
+    if (!el.motionTrainingPatternTitle || !el.motionTrainingPatternMeta) {
+        drawMotionTrainingPreview(state.motionTrainingPreviewPattern);
         updateMotionTrainingEditButtons();
         return;
     }
@@ -624,7 +677,7 @@ function showStudioFlow(flow) {
     state.motionStudioFlow = flow || '';
     const active = Boolean(state.motionStudioFlow);
     if (el.motionStudioPanel) el.motionStudioPanel.hidden = !active;
-    if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = state.motionStudioFlow !== 'draw';
+    if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = !active || !state.motionTrainingEditedPattern;
     if (el.motionStudioCropPanel) el.motionStudioCropPanel.hidden = state.motionStudioFlow !== 'import';
     updateMotionTrainingEditButtons();
 }
@@ -643,6 +696,8 @@ function closeStudioFlow() {
     state.motionStudioDrawingEnabled = false;
     state.motionStudioDrawingActive = false;
     state.motionStudioDrawBuffer = [];
+    state.motionStudioDragPointIndex = -1;
+    state.motionStudioSelectedPointIndex = -1;
     if (el.motionStudioPanel) el.motionStudioPanel.hidden = true;
     if (el.motionStudioDrawControls) el.motionStudioDrawControls.hidden = true;
     if (el.motionStudioCropPanel) el.motionStudioCropPanel.hidden = true;
@@ -960,6 +1015,9 @@ function applyStudioCrop() {
             `Loaded ${formatPatternDuration(cropped.duration_ms)} crop as an unsaved pattern.`,
             {dirty: true, sourcePattern: state.motionStudioSourcePattern},
         );
+        showStudioFlow('edit');
+        setStudioTool('edit', {announce: false});
+        setStudioStatus('Crop loaded as an unsaved copy. Use Edit to nudge points or Draw to replace the shape.', 'var(--cyan)');
     } catch (error) {
         setStudioStatus(error.message || 'Could not crop imported pattern.', 'var(--yellow)');
     }
@@ -995,33 +1053,140 @@ async function importStudioPatternFile(file) {
     }
 }
 
+// Pixel tolerance for hit-testing the cursor against an existing point in
+// Edit mode. A 12 px ring around each point picks up casual aim while still
+// leaving plenty of empty area between adjacent points (the preview pad is
+// 34 px and built-in patterns rarely have points closer than 30 ms apart).
+export const STUDIO_EDIT_HIT_TOLERANCE_PX = 12;
+
+function studioCanvasMetrics(actions, width, height) {
+    const pad = 34;
+    const start = actions[0]?.at ?? 0;
+    const end = actions[actions.length - 1]?.at ?? start;
+    const duration = Math.max(1, end - start);
+    const innerWidth = Math.max(1, width - pad * 2);
+    const innerHeight = Math.max(1, height - pad * 2);
+    return {pad, start, end, duration, width, height, innerWidth, innerHeight};
+}
+
+export function studioActionAtPixel(actions, x, y, metrics, tolerancePx = STUDIO_EDIT_HIT_TOLERANCE_PX) {
+    if (!Array.isArray(actions) || actions.length === 0) return -1;
+    const toleranceSq = tolerancePx * tolerancePx;
+    let bestIndex = -1;
+    let bestDistSq = toleranceSq;
+    for (let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        const ax = metrics.pad + ((action.at - metrics.start) / metrics.duration) * metrics.innerWidth;
+        const ay = metrics.pad + ((100 - clampNumber(action.pos, 0, 100, 50)) / 100) * metrics.innerHeight;
+        const dx = ax - x;
+        const dy = ay - y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) {
+            bestIndex = i;
+            bestDistSq = distSq;
+        }
+    }
+    return bestIndex;
+}
+
+export function studioActionFromPixel(x, y, metrics) {
+    const at = Math.round(metrics.start + (clampNumber(x, metrics.pad, metrics.width - metrics.pad, metrics.pad) - metrics.pad) / metrics.innerWidth * metrics.duration);
+    const pos = clampNumber(100 - ((clampNumber(y, metrics.pad, metrics.height - metrics.pad, metrics.pad) - metrics.pad) / metrics.innerHeight) * 100, 0, 100, 50);
+    return {at, pos};
+}
+
+export function studioInsertSortedAction(actions, action) {
+    const next = Array.isArray(actions) ? [...actions, action] : [action];
+    next.sort((a, b) => a.at - b.at);
+    return normalizedActions(next);
+}
+
+export function studioCanDeleteActionAt(actions, index) {
+    return Array.isArray(actions)
+        && actions.length > 2
+        && Number.isInteger(index)
+        && index > 0
+        && index < actions.length - 1;
+}
+
+export function studioDeleteActionAt(actions, index) {
+    if (!studioCanDeleteActionAt(actions, index)) return actions;
+    return actions.filter((_, i) => i !== index);
+}
+
+export function studioMoveActionAt(actions, index, newAt, newPos) {
+    if (!Array.isArray(actions) || index < 0 || index >= actions.length) return actions;
+    const isFirst = index === 0;
+    const isLast = index === actions.length - 1;
+    // Endpoint anchors keep their authored `at` so cycle duration is stable;
+    // only their pos value follows the drag. Interior points move freely on
+    // both axes and are clamped so they cannot leap past their neighbors.
+    const updated = actions.map((action, i) => {
+        if (i !== index) return action;
+        if (isFirst) return {at: action.at, pos: clampNumber(newPos, 0, 100, action.pos)};
+        if (isLast) return {at: action.at, pos: clampNumber(newPos, 0, 100, action.pos)};
+        const prevAt = actions[i - 1].at + 1;
+        const nextAt = actions[i + 1].at - 1;
+        const clampedAt = Math.round(clampNumber(newAt, prevAt, nextAt, action.at));
+        return {at: clampedAt, pos: clampNumber(newPos, 0, 100, action.pos)};
+    });
+    return normalizedActions(updated);
+}
+
+function setStudioTool(tool, {announce = true} = {}) {
+    const next = tool === 'draw' ? 'draw' : 'edit';
+    state.motionStudioTool = next;
+    state.motionStudioDrawingEnabled = next === 'draw';
+    state.motionStudioDrawingActive = false;
+    state.motionStudioDrawBuffer = [];
+    state.motionStudioDragPointIndex = -1;
+    if (next === 'draw') state.motionStudioSelectedPointIndex = -1;
+    updateMotionTrainingEditButtons();
+    if (announce && state.motionTrainingEditedPattern) {
+        if (next === 'draw') {
+            setMotionEditStatus('Draw mode: drag once across the Edited graph to record a fresh shape.', 'var(--cyan)');
+        } else {
+            setMotionEditStatus('Edit mode: drag a point to move it, click empty space to add, then use Delete Point for selected interior points.');
+        }
+    }
+}
+
 function startNewDrawnPattern() {
     clearStudioImportSource();
     showStudioFlow('draw');
-    state.motionStudioDrawingEnabled = true;
     const pattern = createBlankStudioPattern();
-    setStudioEditedPattern(pattern, 'Draw mode is on. Drag across the Edited graph to create a pattern.', {dirty: true});
-    setStudioStatus('Drawing a new unsaved pattern. Drag across the Edited graph, then save it.', 'var(--cyan)');
+    setStudioEditedPattern(pattern, 'Draw mode is on. Drag once across the Edited graph to record the shape.', {dirty: true});
+    setStudioStatus('Drawing a new unsaved pattern. Drag once across the Edited graph, then refine in Edit mode.', 'var(--cyan)');
+    setStudioTool('draw', {announce: false});
 }
 
 function clearStudioDrawing() {
     if (!state.motionTrainingEditedPattern) return;
     setEditedPatternActions(createBlankStudioPattern(state.motionTrainingEditedPattern.duration_ms || DEFAULT_DRAW_DURATION_MS).actions, 'Cleared the drawing.');
+    setStudioTool('draw', {announce: false});
 }
 
-function canvasActionFromEvent(canvas, event) {
-    const pattern = state.motionTrainingEditedPattern || createBlankStudioPattern();
-    const actions = normalizedActions(pattern.actions);
-    const duration = actions.length > 1 ? actions[actions.length - 1].at - actions[0].at : DEFAULT_DRAW_DURATION_MS;
+function studioCanvasMetricsFromCanvas(canvas) {
+    const pattern = state.motionTrainingEditedPattern;
+    const actions = normalizedActions(pattern?.actions);
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, rect.width || canvas.width || 1);
     const height = Math.max(1, rect.height || canvas.height || 1);
-    const x = clampNumber((event.clientX ?? 0) - rect.left, 0, width, 0);
-    const y = clampNumber((event.clientY ?? 0) - rect.top, 0, height, 0);
-    return {
-        at: Math.round((x / width) * duration),
-        pos: clampNumber(100 - ((y / height) * 100), 0, 100, 50),
-    };
+    if (actions.length < 2) {
+        return {
+            actions,
+            rect,
+            metrics: studioCanvasMetrics([{at: 0, pos: 50}, {at: DEFAULT_DRAW_DURATION_MS, pos: 50}], width, height),
+        };
+    }
+    return {actions, rect, metrics: studioCanvasMetrics(actions, width, height)};
+}
+
+function canvasActionFromEvent(canvas, event) {
+    const {metrics, rect} = studioCanvasMetricsFromCanvas(canvas);
+    const x = clampNumber((event.clientX ?? 0) - rect.left, metrics.pad, metrics.width - metrics.pad, metrics.pad);
+    const y = clampNumber((event.clientY ?? 0) - rect.top, metrics.pad, metrics.height - metrics.pad, metrics.pad);
+    return studioActionFromPixel(x, y, metrics);
 }
 
 function pushDrawAction(action) {
@@ -1036,7 +1201,13 @@ function finishStudioDrawing() {
     state.motionStudioDrawingActive = false;
     const buffer = normalizedActions(state.motionStudioDrawBuffer);
     state.motionStudioDrawBuffer = [];
-    if (buffer.length < 2 || !state.motionTrainingEditedPattern) return;
+    if (buffer.length < 2 || !state.motionTrainingEditedPattern) {
+        // Empty / single-point stroke: fall back to Edit so the user can
+        // place individual points instead of being stuck in Draw with
+        // nothing recorded.
+        setStudioTool('edit');
+        return;
+    }
     const duration = Math.max(
         DEFAULT_DRAW_DURATION_MS,
         state.motionTrainingEditedPattern.duration_ms || DEFAULT_DRAW_DURATION_MS,
@@ -1048,10 +1219,12 @@ function finishStudioDrawing() {
         actions.push({at: duration, pos: actions[actions.length - 1].pos});
     }
     setEditedPatternActions(actions, `Drew ${actions.length} points on the temporary pattern.`);
+    // Auto-revert to Edit so the next pointer interaction refines the
+    // freshly drawn shape instead of accidentally overwriting it.
+    setStudioTool('edit');
 }
 
-function handleStudioCanvasPointer(event) {
-    if (!state.motionStudioDrawingEnabled || !state.motionTrainingEditedPattern || !el.motionTrainingPreviewCanvas) return;
+function handleStudioDrawPointer(event) {
     event.preventDefault?.();
     if (event.type === 'pointerdown') {
         state.motionStudioDrawingActive = true;
@@ -1062,6 +1235,115 @@ function handleStudioCanvasPointer(event) {
     pushDrawAction(canvasActionFromEvent(el.motionTrainingPreviewCanvas, event));
     if (event.type === 'pointerup' || event.type === 'pointercancel' || event.type === 'pointerleave') {
         finishStudioDrawing();
+    }
+}
+
+function commitStudioEditPointer(message = '') {
+    const pattern = state.motionTrainingEditedPattern;
+    if (!pattern) return;
+    setEditedPatternActions(normalizedActions(pattern.actions), message);
+}
+
+function selectStudioPoint(index, {redraw = true} = {}) {
+    state.motionStudioSelectedPointIndex = Number.isInteger(index) && index >= 0 ? index : -1;
+    updateMotionTrainingEditButtons();
+    if (redraw) drawMotionTrainingPreview();
+}
+
+function deleteSelectedStudioPoint() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    const index = state.motionStudioSelectedPointIndex;
+    if (!studioCanDeleteActionAt(actions, index)) {
+        updateMotionTrainingEditButtons();
+        return;
+    }
+    state.motionStudioSelectedPointIndex = -1;
+    state.motionStudioDragPointIndex = -1;
+    setEditedPatternActions(studioDeleteActionAt(actions, index), 'Removed a point.');
+}
+
+function handleStudioEditPointer(event) {
+    const canvas = el.motionTrainingPreviewCanvas;
+    if (!canvas) return;
+    const {actions, rect, metrics} = studioCanvasMetricsFromCanvas(canvas);
+    const x = (event.clientX ?? 0) - rect.left;
+    const y = (event.clientY ?? 0) - rect.top;
+
+    if (event.type === 'pointerdown') {
+        if (event.button === 2) {
+            // Right-click deletes the point under the cursor, skipping the
+            // first and last anchors so cycle duration / start position stay
+            // stable.
+            event.preventDefault?.();
+            const hit = studioActionAtPixel(actions, x, y, metrics);
+            if (hit > 0 && hit < actions.length - 1) {
+                state.motionStudioSelectedPointIndex = hit;
+                deleteSelectedStudioPoint();
+            }
+            return;
+        }
+        if (event.button !== undefined && event.button !== 0) return;
+        event.preventDefault?.();
+        const hit = studioActionAtPixel(actions, x, y, metrics);
+        if (hit >= 0) {
+            state.motionStudioDragPointIndex = hit;
+            selectStudioPoint(hit);
+            canvas.setPointerCapture?.(event.pointerId);
+            return;
+        }
+        // Empty area: insert a new point at the click position, then grab
+        // it so the same gesture can keep refining without releasing.
+        const action = studioActionFromPixel(
+            clampNumber(x, metrics.pad, metrics.width - metrics.pad, metrics.pad),
+            clampNumber(y, metrics.pad, metrics.height - metrics.pad, metrics.pad),
+            metrics,
+        );
+        const next = studioInsertSortedAction(actions, action);
+        const insertedIndex = next.findIndex(candidate => candidate.at === action.at && candidate.pos === action.pos);
+        state.motionStudioSelectedPointIndex = insertedIndex >= 0 ? insertedIndex : -1;
+        state.motionStudioDragPointIndex = state.motionStudioSelectedPointIndex;
+        setEditedPatternActions(next, 'Added a point.');
+        if (state.motionStudioDragPointIndex >= 0) {
+            canvas.setPointerCapture?.(event.pointerId);
+        }
+        return;
+    }
+
+    if (event.type === 'pointermove') {
+        if (state.motionStudioDragPointIndex < 0) return;
+        event.preventDefault?.();
+        const moved = studioActionFromPixel(x, y, metrics);
+        const next = studioMoveActionAt(actions, state.motionStudioDragPointIndex, moved.at, moved.pos);
+        if (next === actions) return;
+        state.motionStudioDragPointIndex = Math.min(state.motionStudioDragPointIndex, next.length - 1);
+        state.motionStudioSelectedPointIndex = state.motionStudioDragPointIndex;
+        setEditedPatternActions(next, '');
+        return;
+    }
+
+    if (event.type === 'pointerup' || event.type === 'pointercancel' || event.type === 'pointerleave') {
+        if (state.motionStudioDragPointIndex >= 0) {
+            state.motionStudioDragPointIndex = -1;
+            commitStudioEditPointer('Moved a point.');
+        }
+    }
+}
+
+function handleStudioCanvasContextMenu(event) {
+    // Suppress the OS context menu over the studio canvas so right-click
+    // can be reserved for deleting points in Edit mode without surprising
+    // the user with a browser menu.
+    if (!state.motionStudioFlow || !state.motionTrainingEditedPattern || state.motionStudioTool !== 'edit') return;
+    event.preventDefault?.();
+}
+
+function handleStudioCanvasPointer(event) {
+    if (!state.motionStudioFlow || !state.motionTrainingEditedPattern || !el.motionTrainingPreviewCanvas) return;
+    const tool = state.motionStudioTool === 'draw' ? 'draw' : 'edit';
+    if (tool === 'draw') {
+        handleStudioDrawPointer(event);
+    } else {
+        handleStudioEditPointer(event);
     }
 }
 
@@ -1166,17 +1448,11 @@ export function bindMotionPatternStudioControls() {
     el.motionStudioImportBtn?.addEventListener('click', () => el.motionStudioImportInput?.click());
     el.motionStudioImportInput?.addEventListener('change', event => importStudioPatternFile(event.target.files?.[0]));
     el.motionStudioApplyCropBtn?.addEventListener('click', applyStudioCrop);
-    el.motionStudioDrawToggleBtn?.addEventListener('click', () => {
-        state.motionStudioDrawingEnabled = !state.motionStudioDrawingEnabled;
-        updateMotionTrainingEditButtons();
-        setStudioStatus(
-            state.motionStudioDrawingEnabled
-                ? 'Draw mode is on. Drag across the Edited graph to replace the temporary pattern.'
-                : 'Draw mode is off.',
-            state.motionStudioDrawingEnabled ? 'var(--cyan)' : 'var(--comment)',
-        );
-    });
+    el.motionStudioToolEditBtn?.addEventListener('click', () => setStudioTool('edit'));
+    el.motionStudioToolDrawBtn?.addEventListener('click', () => setStudioTool('draw'));
+    el.motionStudioDeletePointBtn?.addEventListener('click', deleteSelectedStudioPoint);
     el.motionStudioClearDrawingBtn?.addEventListener('click', clearStudioDrawing);
+    el.motionTrainingPreviewCanvas?.addEventListener('contextmenu', handleStudioCanvasContextMenu);
     el.motionStudioZoomSlider?.addEventListener('input', event => {
         setStudioTimelineZoom(Number(event.target?.value) || 1);
     });

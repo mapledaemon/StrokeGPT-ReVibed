@@ -1,3 +1,4 @@
+import re
 import unittest
 
 from tests._web_support import WebTestCase
@@ -306,6 +307,28 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('class="motion-studio-entry-actions"', page)
             self.assertIn('id="motion-studio-panel" class="motion-studio-panel" hidden', page)
             self.assertIn('id="motion-studio-draw-controls" class="motion-studio-actions" hidden', page)
+            self.assertIn('id="motion-studio-tool-edit-btn"', page)
+            self.assertIn('id="motion-studio-tool-draw-btn"', page)
+            self.assertIn('id="motion-studio-delete-point-btn"', page)
+            self.assertIn('id="motion-studio-tool-hint"', page)
+            # The default tool is Edit so users land in the safe
+            # point-manipulation mode rather than the destructive sweep
+            # mode when they open the studio. The runtime JS may flip
+            # ``aria-pressed`` later; the source HTML pins the initial
+            # state.
+            edit_btn_match = re.search(
+                r'<button[^>]*id="motion-studio-tool-edit-btn"[^>]*>Edit</button>',
+                page,
+            )
+            self.assertIsNotNone(edit_btn_match, "edit tool button missing")
+            self.assertIn('aria-pressed="true"', edit_btn_match.group(0))
+            draw_btn_match = re.search(
+                r'<button[^>]*id="motion-studio-tool-draw-btn"[^>]*>Draw</button>',
+                page,
+            )
+            self.assertIsNotNone(draw_btn_match, "draw tool button missing")
+            self.assertIn('aria-pressed="false"', draw_btn_match.group(0))
+            self.assertIn('Delete Point', page)
             self.assertIn('id="motion-studio-crop-panel" class="motion-studio-crop-panel" hidden', page)
             self.assertIn("Import Funscript", page)
             self.assertIn('id="motion-studio-import-btn"', page)
@@ -1225,6 +1248,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("export function setMotionTrainingDetail", training_editor_script)
             self.assertIn("export function setMotionTrainingLoadingDetail", training_editor_script)
             self.assertIn("export function drawOpenMotionTrainingPreview", training_editor_script)
+            self.assertIn("showStudioFlow('edit')", training_editor_script)
+            self.assertIn("el.motionStudioDeletePointBtn?.addEventListener('click', deleteSelectedStudioPoint)", training_editor_script)
             self.assertIn("motionTrainingEditedPattern", training_editor_script)
             self.assertIn("motionTrainingPreviewCanvas", training_editor_script)
             self.assertIn("motionTrainingOriginalPreviewCanvas", training_editor_script)

@@ -187,7 +187,10 @@ export const el = {
     motionStudioPanel: D.getElementById('motion-studio-panel'),
     motionStudioDrawControls: D.getElementById('motion-studio-draw-controls'),
     motionStudioNewPatternBtn: D.getElementById('motion-studio-new-pattern-btn'),
-    motionStudioDrawToggleBtn: D.getElementById('motion-studio-draw-toggle-btn'),
+    motionStudioToolEditBtn: D.getElementById('motion-studio-tool-edit-btn'),
+    motionStudioToolDrawBtn: D.getElementById('motion-studio-tool-draw-btn'),
+    motionStudioDeletePointBtn: D.getElementById('motion-studio-delete-point-btn'),
+    motionStudioToolHint: D.getElementById('motion-studio-tool-hint'),
     motionStudioClearDrawingBtn: D.getElementById('motion-studio-clear-drawing-btn'),
     motionStudioImportBtn: D.getElementById('motion-studio-import-btn'),
     motionStudioImportInput: D.getElementById('motion-studio-import-input'),
@@ -400,6 +403,14 @@ export const state = {
     motionStudioDrawingEnabled: false,
     motionStudioDrawingActive: false,
     motionStudioDrawBuffer: [],
+    // Active studio tool. ``edit`` allows drag/insert/delete on existing
+    // points and is the default whenever an editable pattern is loaded.
+    // ``draw`` records one freehand sweep that replaces the pattern's
+    // actions and then auto-reverts to ``edit`` so accidental sweeps do
+    // not wipe carefully-tweaked patterns.
+    motionStudioTool: 'edit',
+    motionStudioDragPointIndex: -1,
+    motionStudioSelectedPointIndex: -1,
     motionStudioCropDragHandle: '',
     motionStudioFlow: '',
     motionObservability: null,
