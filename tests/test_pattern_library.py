@@ -151,6 +151,25 @@ class PatternLibraryTests(unittest.TestCase):
             self.assertEqual(first.pattern_id, "repeat-me")
             self.assertEqual(second.pattern_id, "repeat-me-2")
 
+    def test_library_deletes_user_pattern_files_by_record_id(self):
+        with temporary_pattern_dir() as temp_dir:
+            library = PatternLibrary(temp_dir)
+            library.import_payload(
+                {
+                    "id": "delete-me",
+                    "name": "Delete Me",
+                    "actions": [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}],
+                },
+                filename="delete-me.json",
+            )
+
+            deleted = library.delete_pattern("delete-me")
+
+            self.assertIsNotNone(deleted)
+            self.assertEqual(deleted.pattern_id, "delete-me")
+            self.assertFalse((Path(temp_dir) / f"delete-me{PATTERN_FILE_SUFFIX}").exists())
+            self.assertIsNone(library.delete_pattern("delete-me"))
+
     def test_library_can_save_trained_pattern_source(self):
         with temporary_pattern_dir() as temp_dir:
             library = PatternLibrary(temp_dir)
@@ -504,7 +523,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual([action.at for action in calls[0]["pattern"].actions], [0, 100, 900])
         self.assertEqual([action.pos for action in calls[0]["pattern"].actions], [50.0, 95.0, 100.0])
         self.assertEqual(calls[0]["target"].depth, 50)
-        self.assertEqual(calls[0]["target"].stroke_range, 80)
+        self.assertEqual(calls[0]["target"].stroke_range, 100)
 
     def test_training_preview_uses_authored_shape_without_forcing_full_range(self):
         calls = []
@@ -543,7 +562,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertTrue(calls[0]["preserve_timing"])
         self.assertEqual([action.pos for action in calls[0]["pattern"].actions], [45.0, 55.0, 45.0])
         self.assertEqual(calls[0]["target"].depth, 50)
-        self.assertEqual(calls[0]["target"].stroke_range, 80)
+        self.assertEqual(calls[0]["target"].stroke_range, 100)
 
     def test_save_generated_pattern_writes_trained_pattern_file(self):
         response = self.client.post("/motion_patterns/save_generated", json={
@@ -561,6 +580,38 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(data["pattern"]["source"], "trained")
         self.assertTrue((Path(self.temp_dir.name) / f"edited-copy{PATTERN_FILE_SUFFIX}").exists())
         self.assertIn("edited-copy", {pattern["id"] for pattern in data["motion_patterns"]["patterns"]})
+
+    def test_delete_motion_pattern_removes_user_file_and_overrides(self):
+        record = self.web.motion_pattern_library.import_payload(
+            {
+                "id": "delete-copy",
+                "name": "Delete Copy",
+                "actions": [{"at": 0, "pos": 10}, {"at": 250, "pos": 90}],
+            },
+            filename="delete-copy.json",
+            source_override="trained",
+        )
+        self.web.settings.motion_pattern_enabled[record.pattern_id] = False
+        self.web.settings.motion_pattern_feedback[record.pattern_id] = {"thumbs_up": 1, "neutral": 0, "thumbs_down": 0}
+        self.web.settings.motion_pattern_weights[record.pattern_id] = 42
+
+        response = self.client.delete(f"/motion_patterns/{record.pattern_id}")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["id"], "delete-copy")
+        self.assertFalse((Path(self.temp_dir.name) / f"delete-copy{PATTERN_FILE_SUFFIX}").exists())
+        self.assertNotIn(record.pattern_id, self.web.settings.motion_pattern_enabled)
+        self.assertNotIn(record.pattern_id, self.web.settings.motion_pattern_feedback)
+        self.assertNotIn(record.pattern_id, self.web.settings.motion_pattern_weights)
+        self.assertNotIn("delete-copy", {pattern["id"] for pattern in data["motion_patterns"]["patterns"]})
+
+    def test_delete_motion_pattern_rejects_builtin_patterns(self):
+        response = self.client.delete("/motion_patterns/stroke")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Built-in", response.get_json()["message"])
 
     def test_training_start_uses_selected_pattern_shape(self):
         calls = []
@@ -590,17 +641,17 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertNotEqual(calls[0], calls[1])
 
-    def test_training_target_does_not_collapse_after_position_preview(self):
+    def test_training_target_uses_full_centered_authored_preview_window(self):
         record = self.web.motion_pattern_library.get_record("stroke")
         self.web.handy.last_relative_speed = 0
-        self.web.handy.last_depth_pos = 50
+        self.web.handy.last_depth_pos = 82
         self.web.handy.last_stroke_range = 5
 
         target = self.web._training_target_for_record(record)
 
         self.assertEqual(target.speed, 35)
         self.assertEqual(target.depth, 50)
-        self.assertEqual(target.stroke_range, 50)
+        self.assertEqual(target.stroke_range, 100)
 
     def test_training_stop_calls_motion_stop(self):
         response = self.client.post("/motion_training/stop")

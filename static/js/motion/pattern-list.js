@@ -1,5 +1,7 @@
 import { D, apiCall, clampNumber, el, markRequiresBackend, reportSaveFailure, state } from '../context.js';
 
+const TRASH_ICON = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm3 0v7h2v-7h-2Z"></path></svg>';
+
 let renderMotionPatternsCallback = () => {};
 let setMotionTrainingDetailCallback = () => {};
 
@@ -108,6 +110,25 @@ export function createPatternFeedbackResetButton(pattern) {
         resetMotionPatternFeedback(pattern.id);
     });
     return resetButton;
+}
+
+export function createPatternDeleteButton(pattern) {
+    const deleteButton = D.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'my-button ollama-model-action ollama-model-delete motion-pattern-delete';
+    deleteButton.innerHTML = TRASH_ICON;
+    markRequiresBackend(deleteButton);
+    const readonly = Boolean(pattern.readonly || pattern.source === 'fixed');
+    deleteButton.disabled = readonly;
+    deleteButton.title = readonly
+        ? 'Built-in patterns can be disabled, not deleted.'
+        : `Delete ${patternDisplayName(pattern)}`;
+    deleteButton.setAttribute('aria-label', `Delete ${patternDisplayName(pattern)}`);
+    deleteButton.addEventListener('click', event => {
+        event.stopPropagation();
+        deleteMotionPattern(pattern);
+    });
+    return deleteButton;
 }
 
 function createPatternWeightControl(pattern) {
@@ -227,6 +248,7 @@ export function renderCompactMotionPatternList(patterns) {
         if (pattern.source === 'fixed') actions.append(createPatternWeightControl(pattern));
         if (patternHasFeedbackState(pattern)) actions.append(createPatternFeedbackResetButton(pattern));
         actions.append(createPatternExportButton(pattern));
+        actions.append(createPatternDeleteButton(pattern));
         main.append(checkbox, text);
         row.append(main, actions);
         el.motionPatternList.appendChild(row);
@@ -276,5 +298,24 @@ export async function resetMotionPatternFeedback(patternId) {
         el.statusText.textContent = data.message || 'Pattern feedback reset.';
     } else {
         reportSaveFailure(el.motionPatternStatus, data, 'Could not reset pattern feedback.');
+    }
+}
+
+export async function deleteMotionPattern(pattern) {
+    const patternId = String(pattern?.id || '').trim();
+    const name = patternDisplayName(pattern || {});
+    if (!patternId) return;
+    if (!window.confirm(`Delete ${name} from Motion Patterns?`)) return;
+
+    const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}`, {method: 'DELETE'});
+    if (data && data.status === 'success') {
+        renderMotionPatternsCallback(data.motion_patterns);
+        if (state.motionTrainingSelectedPatternId === patternId) {
+            state.motionTrainingSelectedPatternId = '';
+            setMotionTrainingDetailCallback(null);
+        }
+        el.statusText.textContent = data.message || `Deleted ${name}.`;
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, `Could not delete ${name}.`);
     }
 }

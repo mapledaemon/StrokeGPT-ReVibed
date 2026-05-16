@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - Unreleased - Improve Pattern Studio Deletion And Preview Range
+---------------------------------------------------------------------------
+
+Branch: gpt-pattern-studio-delete-preview
+
+- Added confirmed delete controls for user-created Motion Patterns in the
+  pattern lists, with built-in patterns kept visible but protected from file
+  deletion.
+- Updated Motion Training and Studio preview targets to use the full centered
+  authored motion window so full-range patterns are not compressed into the
+  previously-commanded stroke window.
+- Tightened finite preview buffering so repeated short previews send points
+  across the whole minimum preview duration.
+
+
 2026-05-16 - PR #232 - Fix Motion Training Playback Shape
 ----------------------------------------------------------
 
