@@ -18,6 +18,9 @@ Branch: gpt-freestyle-smooth-legacy-labels
   run window instead of reapplying jittered targets every short auto interval.
 - Reduced routine Freestyle target jitter so continuous mode feels closer to a
   chat-selected pattern running until the next meaningful mode decision.
+- Capped Continuous HSP point batches and added HSP startup exception trace
+  records so chat and Freestyle do not silently stall on oversized startup
+  payloads.
 
 
 2026-05-16 - PR #234 - Stretch Built-In Motion Pattern Durations

@@ -16,6 +16,7 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
+    CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
@@ -205,6 +206,19 @@ class AppendFailStreamingFakeHandy(StreamingFakeHandy):
             "error": "append failed",
         }
         return False
+
+
+class StartRaiseStreamingFakeHandy(StreamingFakeHandy):
+    def start_continuous_stream(
+        self,
+        points,
+        *,
+        stream_id=None,
+        start_time_ms=0,
+        tail_point_stream_index=None,
+        tail_point_threshold=None,
+    ):
+        raise RuntimeError("start failed")
 
 
 class SpeedLimitStreamingFakeHandy(StreamingFakeHandy):
@@ -919,6 +933,22 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_startup_batches_stay_small_enough_for_device_start(self):
+        for label in ("stroke", "milk", "flutter", "deep waves"):
+            with self.subTest(label=label):
+                handy = StreamingFakeHandy()
+                controller = MotionController(handy, step_delay=0.16)
+                try:
+                    controller.apply_continuous_target(MotionTarget(80, 50, 80, label), source="unit test")
+                    self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+                    points = handy.stream_starts[0]["points"]
+                    self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
+                    self.assertLessEqual(len(points), 40)
+                    self.assertGreater(points[-1]["t"], 2500)
+                finally:
+                    controller.stop()
+
     def test_continuous_hsp_stream_preserves_timed_pattern_slopes(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -1238,6 +1268,34 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("handy_ok") is False
             ]
             self.assertTrue(failure_points)
+            self.assertEqual(handy.position_moves, [])
+            self.assertTrue(self.wait_until(lambda: not controller.observability_snapshot()["playback_active"]))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_start_exception_records_failed_trace(self):
+        handy = StartRaiseStreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(80, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous_error") == "continuous_hsp_start_failed"
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                ),
+                controller.observability_snapshot()["trace"],
+            )
+
+            point = next(
+                point
+                for point in reversed(controller.observability_snapshot()["trace"])
+                if point.get("continuous_error") == "continuous_hsp_start_failed"
+            )
+            self.assertFalse(point["handy_ok"])
+            self.assertIn("start failed", point["handy_error"])
             self.assertEqual(handy.position_moves, [])
             self.assertTrue(self.wait_until(lambda: not controller.observability_snapshot()["playback_active"]))
         finally:
