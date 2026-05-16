@@ -113,6 +113,7 @@ class PatternRecord:
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
+    duration_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
     repeat: int = 1
@@ -125,7 +126,7 @@ class PatternRecord:
 
     @property
     def duration_ms(self):
-        return max(0, self.actions[-1].at - self.actions[0].at) if self.actions else 0
+        return self.to_motion_pattern().duration_ms if self.actions else 0
 
     @property
     def action_count(self):
@@ -138,6 +139,7 @@ class PatternRecord:
             window_scale=self.window_scale,
             speed_scale=self.speed_scale,
             tempo_scale=self.tempo_scale,
+            duration_scale=self.duration_scale,
             depth_jitter=self.depth_jitter,
             range_jitter=self.range_jitter,
             repeat=self.repeat,
@@ -160,6 +162,7 @@ class PatternRecord:
                 "window_scale": self.window_scale,
                 "speed_scale": self.speed_scale,
                 "tempo_scale": self.tempo_scale,
+                "duration_scale": self.duration_scale,
                 "depth_jitter": self.depth_jitter,
                 "range_jitter": self.range_jitter,
                 "repeat": self.repeat,
@@ -211,6 +214,7 @@ def _style_from_payload(payload):
         "window_scale": _clamp_float(style.get("window_scale", payload.get("window_scale")), 0.05, 1.0, 0.3),
         "speed_scale": _clamp_float(style.get("speed_scale", payload.get("speed_scale")), 0.1, 2.0, 1.0),
         "tempo_scale": _clamp_float(style.get("tempo_scale", payload.get("tempo_scale")), 0.25, 4.0, 1.0),
+        "duration_scale": _clamp_float(style.get("duration_scale", payload.get("duration_scale")), 0.1, 20.0, 1.0),
         "depth_jitter": _clamp_float(style.get("depth_jitter", payload.get("depth_jitter")), 0.0, 30.0, 0.0),
         "range_jitter": _clamp_float(style.get("range_jitter", payload.get("range_jitter")), 0.0, 30.0, 0.0),
         "repeat": _clamp_int(style.get("repeat", payload.get("repeat")), 1, 20, 1),
@@ -238,6 +242,7 @@ def record_from_motion_pattern(pattern_id, pattern):
         window_scale=pattern.window_scale,
         speed_scale=pattern.speed_scale,
         tempo_scale=pattern.tempo_scale,
+        duration_scale=pattern.duration_scale,
         depth_jitter=pattern.depth_jitter,
         range_jitter=pattern.range_jitter,
         repeat=pattern.repeat,
