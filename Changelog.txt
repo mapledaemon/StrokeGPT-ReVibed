@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-16 - PR #237 - Extend Curated Library Roadmap
+------------------------------------------------------
+
+Branch: gpt-roadmap-library-export-tags
+
+- Added roadmap coverage for LLM-curated playback, anchor-loop Freestyle
+  repositioning, one-click customized library export, and pattern/program tags
+  that can be surfaced to the local model for better script selection.
+
+
 2026-05-16 - PR #236 - Stream Authored Funscripts Through HSP
 ---------------------------------------------------------------
 
