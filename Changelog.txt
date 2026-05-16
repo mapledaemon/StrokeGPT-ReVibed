@@ -16,6 +16,8 @@ Branch: gpt-authored-hsp-funscript-playback
 - Added an HSP-authored playback path for imported/trained Motion Patterns
   and Programs so authored funscript timestamps and positions bypass the
   cyclic continuous pattern sampler.
+- Kept the slow Continuous HSP twitch filter so stretched built-in patterns
+  drop redundant same-integer stream points before the device visibly steps.
 - Kept built-in/generated Continuous patterns on the existing smoothing,
   morphing, and twitch-filtered path.
 - Routed Continuous Program playback through authored HSP streaming instead of
