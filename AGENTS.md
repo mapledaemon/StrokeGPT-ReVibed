@@ -142,7 +142,7 @@ behavior, and route motion changes through the shared controller path.
 The sidebar should stay sparse:
 
 - Control Actions
-- Preset Modes
+- Legacy Modes
 - Standalone emergency stop
 
 The upper-right profile image opens a compact menu with Settings and About.

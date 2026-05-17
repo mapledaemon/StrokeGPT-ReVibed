@@ -132,15 +132,15 @@
             <h3>Control Actions</h3>
             <div class="control-action-stack">
                 <button id="pause-resume-btn" class="my-button" title="Hotkey: Play/Pause media key" data-requires-backend>Resume/Pause</button>
-                <button id="start-auto-btn" class="my-button" title="Start the legacy scripted Auto loop. Use Freestyle for adaptive patterning." data-requires-backend>Legacy Auto</button>
-                <button id="stop-auto-btn" class="my-button" title="Hotkey: Stop media key" data-requires-backend>Stop Auto</button>
                 <button id="toggle-memory-btn" class="my-button" data-requires-backend>Memories: ON</button>
                 <button id="im-close-btn" class="my-button sidebar-button milking" style="display: none;" title="Hotkey: double-tap Shift" data-requires-backend>I'm Close!</button>
             </div>
         </div>
         <div class="setting-section">
-            <h3>Preset Modes</h3>
+            <h3>Legacy Modes</h3>
             <div class="preset-mode-stack">
+                <button id="start-auto-btn" class="my-button sidebar-button legacy-auto" title="Start the legacy scripted Auto loop. Use Freestyle for adaptive patterning." data-requires-backend><span class="preset-mode-label">Legacy Auto</span><span class="preset-mode-legacy-label">Legacy</span></button>
+                <button id="stop-auto-btn" class="my-button sidebar-button legacy-stop" title="Stop the legacy scripted Auto loop. Hotkey: Stop media key" data-requires-backend><span class="preset-mode-label">Stop Auto</span><span class="preset-mode-legacy-label">Legacy</span></button>
                 <button id="edging-mode-btn" class="my-button sidebar-button edging" data-requires-backend><span class="preset-mode-label">Edge Me</span><span class="preset-mode-legacy-label">Legacy</span></button>
                 <button id="milking-mode-btn" class="my-button sidebar-button milking" data-requires-backend><span class="preset-mode-label">Milk Me</span><span class="preset-mode-legacy-label">Legacy</span></button>
             </div>
