@@ -8,6 +8,30 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #241 - Stabilize HSP Anchor-Loop Replacements
+---------------------------------------------------------------
+
+Branch: codex/hsp-anchor-loop-stutter
+
+- Split the motion controller's stable semantic target from its live sampled
+  continuous position so LLM and Freestyle decisions no longer inherit an
+  instantaneous HSP anchor-loop phase as the next command center.
+- Recomputed HSP replacement morph timing from the selected replacement phase
+  sample instead of the stale pre-selection sample, keeping morph duration
+  aligned with the actual first replacement point.
+- Added regression coverage for implicit-depth anchor-loop replacement,
+  stable semantic targets during active HSP playback, replacement point gaps,
+  and selected-phase morph timing.
+- Made HSP replacement lead and append timing account for recent controller-
+  observed HSP command latency, so slow `hsp/add` / replacement calls around
+  one to three seconds do not schedule the first replacement points in the
+  past.
+- Plan generated HSP curves at a denser cadence while keeping `hsp/add`
+  payloads inside the Handy API's integer `0..100` point schema, addressing
+  device reports that sparse HSP points felt like micro-stepped motion without
+  reintroducing transport 400s.
+
+
 2026-05-17 - PR #240 - Stabilize Continuous Motion Trace Tests
 ---------------------------------------------------------------
 

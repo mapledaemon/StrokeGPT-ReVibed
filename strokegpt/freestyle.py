@@ -42,6 +42,11 @@ class FreestyleChoice:
 _slug_pattern_id = _slugify_motion_pattern_id
 
 
+def _semantic_target(motion_controller):
+    getter = getattr(motion_controller, "semantic_target", None)
+    return getter() if callable(getter) else motion_controller.current_target()
+
+
 def _freestyle_milk_style_target(decision):
     intensity = decision.intensity
     if intensity is None:
@@ -87,7 +92,7 @@ def _edge_reaction_steps(motion_controller, edge_count, intensity=None, rng=None
         rng=rng,
         continuous_patterns=_timed_pattern_backend(motion_controller),
     )
-    steps = [planner.next_step(motion_controller.current_target(), edge_count=edge_count)]
+    steps = [planner.next_step(_semantic_target(motion_controller), edge_count=edge_count)]
     while planner.steps:
         steps.append(planner.steps.popleft())
 
@@ -132,7 +137,7 @@ def _apply_freestyle_edge_reaction(
     recent_ids=(),
 ):
     edge_steps = _edge_reaction_steps(motion_controller, edge_count, intensity=intensity, rng=rng)
-    current = edge_steps[-1].target if edge_steps else motion_controller.current_target()
+    current = edge_steps[-1].target if edge_steps else _semantic_target(motion_controller)
     resume_choices = _freestyle_choice_chain(
         resume_candidates,
         current,
@@ -482,7 +487,7 @@ def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=Non
     preserve_timing = backend == "position"
     frames, _current = _freestyle_choice_frames(
         choices,
-        motion_controller.current_target(),
+        _semantic_target(motion_controller),
         rng,
         preserve_timing=preserve_timing,
         base_step_seconds=getattr(motion_controller, "step_delay", 0.25),
