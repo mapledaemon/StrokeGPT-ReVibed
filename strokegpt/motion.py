@@ -738,7 +738,7 @@ class MotionController:
         enabled = bool(enabled)
         if enabled != self.reverse_direction:
             self.reverse_direction = enabled
-            label = "reverse phase" if enabled else "forward phase"
+            label = "reverse orientation" if enabled else "normal orientation"
             self._record_current_state(source="settings", label=label)
         else:
             self.reverse_direction = enabled
@@ -767,13 +767,43 @@ class MotionController:
     def _hardware_target(self, label: str = "current") -> MotionTarget:
         return MotionTarget(
             self.handy.last_relative_speed,
-            self.handy.last_depth_pos,
+            self._semantic_depth_from_output(self.handy.last_depth_pos),
             getattr(self.handy, "last_stroke_range", 50),
             label=label,
         ).clamped()
 
     def _set_semantic_target(self, target: MotionTarget) -> None:
         self._semantic_target = target.clamped()
+
+    def _output_depth(self, depth: float) -> float:
+        depth = _clamp(float(depth or 0.0))
+        if not self.reverse_direction:
+            return depth
+        return _clamp(100.0 - depth)
+
+    def _semantic_depth_from_output(self, depth: float) -> float:
+        return self._output_depth(depth)
+
+    def _output_target(self, target: MotionTarget) -> MotionTarget:
+        target = target.clamped()
+        return MotionTarget(
+            target.speed,
+            self._output_depth(target.depth),
+            target.stroke_range,
+            label=target.label,
+            motion_program=target.motion_program,
+        ).clamped()
+
+    def _orientation_trace_extras(self, semantic_target: MotionTarget, output_target: MotionTarget) -> dict[str, Any]:
+        extras: dict[str, Any] = {"reverse_direction": bool(self.reverse_direction)}
+        if self.reverse_direction:
+            extras.update(
+                {
+                    "semantic_depth": int(round(semantic_target.clamped().depth)),
+                    "output_depth": int(round(output_target.clamped().depth)),
+                }
+            )
+        return extras
 
     def _estimated_continuous_target(self) -> Optional[MotionTarget]:
         try:
@@ -1099,9 +1129,12 @@ class MotionController:
 
     def _apply_step(self, target: MotionTarget, source: str = "target") -> None:
         target = target.rounded()
-        result = self.handy.move(target.speed, target.depth, target.stroke_range)
+        output_target = self._output_target(target).rounded()
+        result = self.handy.move(output_target.speed, output_target.depth, output_target.stroke_range)
         self._record_target(target, source=source)
-        self._augment_last_trace(self._handy_command_trace_extras(result))
+        extras = self._orientation_trace_extras(target, output_target)
+        extras.update(self._handy_command_trace_extras(result))
+        self._augment_last_trace(extras)
 
     def _handy_command_trace_extras(self, result: Any) -> dict[str, Any]:
         last_command = None
@@ -1369,6 +1402,7 @@ class MotionController:
         source: str = "position",
     ) -> bool:
         target = target.rounded()
+        output_target = self._output_target(target).rounded()
         if hasattr(self.handy, "move_to_depth"):
             kwargs: dict[str, Any] = {
                 "stop_on_target": stop_on_target,
@@ -1379,14 +1413,16 @@ class MotionController:
             if duration_ms is not None and self._supports_move_to_depth_duration_ms():
                 kwargs["duration_ms"] = duration_ms
             result = self.handy.move_to_depth(
-                target.speed,
-                target.depth,
+                output_target.speed,
+                output_target.depth,
                 **kwargs,
             )
         else:
-            result = self.handy.move(target.speed, target.depth, target.stroke_range)
+            result = self.handy.move(output_target.speed, output_target.depth, output_target.stroke_range)
         self._record_target(target, source=source)
-        self._augment_last_trace(self._handy_command_trace_extras(result))
+        extras = self._orientation_trace_extras(target, output_target)
+        extras.update(self._handy_command_trace_extras(result))
+        self._augment_last_trace(extras)
         return result is not False
 
     def _supports_move_to_depth_intent_speed(self) -> bool:
@@ -1434,7 +1470,7 @@ class MotionController:
             plan,
             target,
             elapsed_seconds,
-            reverse_phase=self.reverse_direction,
+            reverse_phase=False,
         )
 
     def apply_continuous_target(
@@ -1514,7 +1550,10 @@ class MotionController:
             return False
 
         started_at = time.monotonic()
-        authored_state_points = tuple((float(point["t"]) / 1000.0, float(point["x"])) for point in points)
+        authored_state_points = tuple(
+            (float(point["t"]) / 1000.0, float(point.get("semantic_x", point["x"])))
+            for point in points
+        )
         self._set_semantic_target(target)
         with self._lock:
             self._generation += 1
@@ -1558,10 +1597,12 @@ class MotionController:
         source_points: list[dict[str, Any]] = []
         for action in normalized:
             point_time_ms = max(0, int(round(action.at - start_at)))
+            semantic_depth = _clamp(float(action.pos))
             point = {
                 "t": point_time_ms,
                 "logical_t": point_time_ms,
-                "x": _clamp(float(action.pos)),
+                "x": self._output_depth(semantic_depth),
+                "semantic_x": semantic_depth,
                 "speed": target.speed,
                 "intent_speed": target.speed,
                 "range": 100,
@@ -1574,7 +1615,7 @@ class MotionController:
                 "effective_duration_seconds": 0.0,
                 "phase_interval_seconds": 0.0,
                 "sample_interval_seconds": 0.0,
-                "reverse_direction": False,
+                "reverse_direction": self.reverse_direction,
             }
             if source_points and point["t"] == source_points[-1]["t"]:
                 source_points[-1] = point
@@ -1665,7 +1706,7 @@ class MotionController:
                 plan,
                 target,
                 base_step_seconds=self.step_delay,
-                reverse_phase=self.reverse_direction,
+                reverse_phase=False,
             ) if plan is not None else []
             if stop_after:
                 frames = self._repeat_frames_for_min_duration(frames)
@@ -2348,10 +2389,13 @@ class MotionController:
                 else max(0.001, point_stream_seconds - previous_point_time_seconds)
             )
             stream_index += 1
+            semantic_depth = _clamp(float(sample.target.depth))
+            output_depth = self._output_depth(semantic_depth)
             point = {
                 "t": int(round(point_stream_seconds * 1000.0)),
                 "logical_t": int(round(point_seconds * 1000.0)),
-                "x": sample.target.depth,
+                "x": output_depth,
+                "semantic_x": semantic_depth,
                 "speed": sample.target.speed,
                 "intent_speed": sample.intent_speed,
                 "range": target.stroke_range,
@@ -2513,9 +2557,10 @@ class MotionController:
                 stream_wall_zero = send_ended_wall - play_start_stream_seconds
             for point in points:
                 scheduled_wall_time = stream_wall_zero + (point["t"] / 1000.0)
+                semantic_depth = point.get("semantic_x", point["x"])
                 stream_target = MotionTarget(
                     point["speed"],
-                    point["x"],
+                    semantic_depth,
                     point["range"],
                     label=point.get("label") or plan_name,
                     motion_program=target.motion_program,
@@ -2554,6 +2599,7 @@ class MotionController:
                     "sample_range": int(round(point["sample_range"])),
                     "sample_phase": round(point["phase"], 4),
                     "reverse_direction": bool(point.get("reverse_direction")),
+                    "output_depth": int(round(point["x"])),
                     "sample_position_per_second": round(point["position_per_second"], 1),
                     "sample_tempo_scale": round(point["tempo_scale"], 3),
                     "effective_cycle_ms": round(point["effective_duration_seconds"] * 1000.0, 1),
@@ -2815,9 +2861,10 @@ class MotionController:
                 stream_wall_zero = send_ended_wall
             for point in points:
                 scheduled_wall_time = stream_wall_zero + (float(point["t"]) / 1000.0)
+                semantic_depth = point.get("semantic_x", point["x"])
                 stream_target = MotionTarget(
                     point["intent_speed"],
-                    point["x"],
+                    semantic_depth,
                     100,
                     label=point.get("label") or target_label,
                 )
@@ -2838,6 +2885,8 @@ class MotionController:
                     "sample_speed": int(round(point["speed"])),
                     "sample_range": 100,
                     "sample_phase": round(point["phase"], 4),
+                    "reverse_direction": bool(point.get("reverse_direction")),
+                    "output_depth": int(round(point["x"])),
                     "sample_position_per_second": round(point["position_per_second"], 1),
                     "sample_tempo_scale": 1.0,
                     "effective_cycle_ms": round(duration_seconds * 1000.0, 1),

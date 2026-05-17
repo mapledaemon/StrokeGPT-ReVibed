@@ -225,6 +225,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   HAMP. If HSP is unavailable, HAMP remains the selectable legacy backend.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
+  Motion Direction is a physical orientation setting, not a pattern phase
+  reversal. When Reverse is selected, preserve semantic LLM/app targets but
+  invert outgoing device depths at the transport boundary so tip/base commands
+  work with inverted mounting across HSP, HDSP/Flexible Position, and HAMP.
 - Handy firmware selection is persisted as `handy_firmware_version`, and REST
   v3 authentication uses the persisted `handy_api_v3_key` public Application
   ID plus the normal Handy connection key. Firmware v4 with both values

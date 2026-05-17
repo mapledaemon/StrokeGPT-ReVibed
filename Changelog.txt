@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #244 - Fix Reverse Direction Orientation
+--------------------------------------------------------
+
+Branch: codex/reverse-direction-orientation
+
+- Change Motion Direction from a phase-reversal checkbox into a Normal/Reverse
+  orientation selector.
+- Make Reverse invert outgoing device depths across HSP timed points,
+  authored HSP playback, HDSP/Flexible Position moves, and HAMP commands while
+  preserving semantic LLM targets for motion reasoning and trace labels.
+
+
 2026-05-17 - PR #243 - Replace Legacy Area Focus Transport
 ----------------------------------------------------------
 
