@@ -601,6 +601,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"as fast as you can on the base"', prompt)
         self.assertIn('"as fast as you can on the base": `{"sp": 80, "dp": 66, "rng": 82', prompt)
         self.assertIn("touch, pace, pressure", prompt)
+        self.assertIn("vary the sentence shape", prompt)
+        self.assertIn("stock compliment", prompt)
         self.assertIn("adjust the motion", prompt)
 
     def test_llm_prompt_separates_user_anatomy_from_partner_persona(self):
@@ -758,6 +760,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("Autospeak is enabled", prompt)
         self.assertIn("Include top-level `autospeak_seconds` in every JSON response", prompt)
         self.assertIn("Prefer natural conversational pacing over back-to-back lines", prompt)
+        self.assertIn("do not repeat the previous chat line", prompt)
         self.assertIn("shortest natural pause", prompt)
         self.assertIn("Autospeak can be chat-only", prompt)
         self.assertIn("This request is an Autospeak follow-up", prompt)

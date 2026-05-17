@@ -8,6 +8,19 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #248 - Fix Startup Chat Echo And Autospeak Repetition
+----------------------------------------------------------------------
+
+Branch: codex/startup-chat-autospeak-variety
+
+- Mark streamed/direct chat replies as already seen by the initiating browser
+  tab so startup polling cannot echo the same assistant line a second time.
+- Add compact autospeak and default prompt guidance to vary erotic wording and
+  avoid repeating recent sentence frames while keeping the prompt load small.
+- Attach the generating Ollama model, prompt mode, thinking state, and run
+  timing details to each LLM chat bubble profile image tooltip.
+
+
 2026-05-17 - PR #247 - Stabilize Continuous HSP Latency Reserve
 ----------------------------------------------------------------
 

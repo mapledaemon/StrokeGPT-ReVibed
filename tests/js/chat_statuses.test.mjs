@@ -61,6 +61,16 @@ function occurrenceCount(text, needle) {
     return String(text).split(needle).length - 1;
 }
 
+function findFirstTag(node, tagName) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.tagName === tagName) return node;
+    for (const child of node.children || []) {
+        const found = findFirstTag(child, tagName);
+        if (found) return found;
+    }
+    return null;
+}
+
 function endpointUrl(endpoint) {
     return new NodeURL(String(endpoint), 'http://strokegpt.test');
 }
@@ -193,13 +203,15 @@ describe('chat action statuses', () => {
     it('renders streamed assistant deltas without waiting for the final chat payload', async () => {
         state.chatStreamingEnabled = true;
         const calls = [];
-        globalThis.fetch = async endpoint => {
+        const requestBodies = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
             calls.push(endpointPath(endpoint));
+            if (options.body) requestBodies.push(JSON.parse(options.body));
             if (endpointPath(endpoint) === '/send_message_stream') return streamResponse([
                 '{"type":"status","status":"generating"}\n',
                 '{"type":"delta","text":"Visible "}\n',
                 '{"type":"delta","text":"as it arrives."}\n',
-                '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":true}}\n',
+                '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":true,"llm_message_metadata":{"model":"local/test:latest","prompt_mode":"revibed","thinking_enabled":false,"streamed":true,"timings":{"llm_ms":42,"request_ms":75}}}}\n',
             ]);
             if (endpointPath(endpoint) === '/get_updates') return jsonResponse(200, { messages: ['Visible as it arrives.'] });
             return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
@@ -211,8 +223,47 @@ describe('chat action statuses', () => {
         assert.strictEqual(result.handled, true);
         assert.strictEqual(result.streamed, true);
         assert.deepStrictEqual(calls, ['/send_message_stream', '/get_updates']);
+        assert.strictEqual(requestBodies[0].client_id, 'test-client');
         assert.strictEqual(occurrenceCount(chatText, 'Visible as it arrives.'), 1);
+        const pfp = findFirstTag(getStubElement('chat-messages-container'), 'IMG');
+        assert.match(pfp?.title || '', /Model: local\/test:latest/);
+        assert.match(pfp?.title || '', /LLM 42ms/);
+        assert.match(pfp?.title || '', /Total 75ms/);
         assert.strictEqual(state.pendingQueuedBotEcho, '');
+    });
+
+    it('applies polled LLM metadata to the specific bot profile tooltip', async () => {
+        globalThis.fetch = async endpoint => {
+            assert.strictEqual(endpointPath(endpoint), '/get_updates');
+            assert.strictEqual(endpointParam(endpoint, 'client_id'), 'test-client');
+            return jsonResponse(200, {
+                messages: ['Polled model line.'],
+                message_records: [{
+                    text: 'Polled model line.',
+                    metadata: {
+                        model: 'compare/model:8b',
+                        prompt_mode: 'revibed',
+                        thinking_enabled: true,
+                        streamed: false,
+                        timings: {llm_ms: 120, motion_apply_ms: 9, request_ms: 150},
+                    },
+                }],
+                audio_ready: false,
+                chat_audio_warning: '',
+            });
+        };
+
+        await pollChatUpdates();
+
+        const chatText = collectText(getStubElement('chat-messages-container'));
+        assert.strictEqual(occurrenceCount(chatText, 'Polled model line.'), 1);
+        const pfp = findFirstTag(getStubElement('chat-messages-container'), 'IMG');
+        assert.match(pfp?.title || '', /Model: compare\/model:8b/);
+        assert.match(pfp?.title || '', /Thinking: on/);
+        assert.match(pfp?.title || '', /Streamed: no/);
+        assert.match(pfp?.title || '', /LLM 120ms/);
+        assert.match(pfp?.title || '', /Motion 9ms/);
+        assert.match(pfp?.title || '', /Total 150ms/);
     });
 
     it('renders model transport errors as direct system errors without polling updates', async () => {

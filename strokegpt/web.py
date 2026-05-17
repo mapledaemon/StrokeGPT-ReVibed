@@ -1737,15 +1737,35 @@ def _is_llm_transport_error_text(text):
     clean = str(text or "").strip().lower()
     return clean.startswith(("llm connection error:", "llm request failed:"))
 
-def add_message_to_queue(text, add_to_history=True, queue_message=True, generate_audio=True, streamed_to_client=False):
+def _clean_ui_client_id(client_id):
+    return re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
+
+
+def add_message_to_queue(
+    text,
+    add_to_history=True,
+    queue_message=True,
+    generate_audio=True,
+    streamed_to_client=False,
+    seen_by_client_id=None,
+    metadata=None,
+):
     with app_state.lock:
         if queue_message:
             app_state.messages_for_ui.append(text)
             app_state.ui_message_next_id += 1
+            message_id = app_state.ui_message_next_id
             app_state.ui_message_log.append({
-                "id": app_state.ui_message_next_id,
+                "id": message_id,
                 "text": text,
+                "metadata": metadata if isinstance(metadata, dict) else {},
             })
+            cleaned_client_id = _clean_ui_client_id(seen_by_client_id)
+            if cleaned_client_id:
+                app_state.ui_client_cursors[cleaned_client_id] = max(
+                    int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0),
+                    message_id,
+                )
         if add_to_history:
             clean_text = re.sub(r'<[^>]+>', '', text).strip()
             if clean_text:
@@ -1792,11 +1812,14 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
                 app_state.chat_audio_warning = warning_for_ui
         threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
 
-def _messages_for_ui_client(client_id):
-    cleaned_client_id = re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
+def _message_records_for_ui_client(client_id):
+    cleaned_client_id = _clean_ui_client_id(client_id)
     with app_state.lock:
         if not cleaned_client_id:
-            return [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
+            return [
+                {"text": app_state.messages_for_ui.popleft(), "metadata": {}}
+                for _ in range(len(app_state.messages_for_ui))
+            ]
         last_seen = int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0)
         records = [record for record in app_state.ui_message_log if int(record.get("id", 0)) > last_seen]
         if records:
@@ -1805,10 +1828,20 @@ def _messages_for_ui_client(client_id):
         elif app_state.ui_message_log:
             latest_id = int(app_state.ui_message_log[-1].get("id", 0) or 0)
             app_state.ui_client_cursors.setdefault(cleaned_client_id, latest_id)
-        return [str(record.get("text", "")) for record in records]
+        return [
+            {
+                "text": str(record.get("text", "")),
+                "metadata": record.get("metadata") if isinstance(record.get("metadata"), dict) else {},
+            }
+            for record in records
+        ]
+
+
+def _messages_for_ui_client(client_id):
+    return [record["text"] for record in _message_records_for_ui_client(client_id)]
 
 def has_pending_ui_messages(client_id=None):
-    cleaned_client_id = re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
+    cleaned_client_id = _clean_ui_client_id(client_id)
     with app_state.lock:
         if not cleaned_client_id:
             return bool(app_state.messages_for_ui)
@@ -1854,13 +1887,26 @@ def _standalone_autospeak_current(token):
         )
 
 
+def _llm_message_metadata(timings, *, streamed_to_client=False):
+    return {
+        "source": "llm",
+        "model": normalize_ollama_model(getattr(llm, "model", "") or ""),
+        "prompt_mode": str(getattr(settings, "llm_prompt_mode", "") or ""),
+        "thinking_enabled": bool(getattr(llm, "thinking_enabled", False)),
+        "streamed": bool(streamed_to_client),
+        "timings": timings if isinstance(timings, dict) else {},
+    }
+
+
 def _standalone_autospeak_user_message():
     min_seconds, max_seconds = _autospeak_timing_pair()
     return (
         "Autospeak is due. Keep the conversation going with one short "
         "in-character chat line. Use move:null when no motion change is "
         "needed, or include move only if you deliberately want to change "
-        "motion. Choose autospeak_seconds between "
+        "motion. Do not repeat the previous chat line or reuse the same "
+        "sentence frame; vary the erotic wording naturally. Choose "
+        "autospeak_seconds between "
         f"{min_seconds:g} and {max_seconds:g}. If the range allows 0, "
         "0 means the shortest natural pause, not an immediate loop."
     )
@@ -2367,6 +2413,7 @@ def _finalize_llm_chat_response(
     request_started,
     timings,
     streamed_to_client=False,
+    ui_client_id="",
     mode_actions_allowed=False,
     relay_active_mode_on_no_action=False,
 ):
@@ -2388,6 +2435,7 @@ def _finalize_llm_chat_response(
         print(f"[WARN] LLM response did not include chat text: {llm_response!r}")
         chat_text = "The local model returned movement data but no chat text. Check Ollama model status and try again."
     is_llm_transport_error = _is_llm_transport_error_text(chat_text)
+    message_metadata = _llm_message_metadata(timings, streamed_to_client=streamed_to_client)
 
     if is_llm_transport_error:
         timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
@@ -2397,6 +2445,7 @@ def _finalize_llm_chat_response(
             "chat": chat_text,
             "chat_queued": False,
             "chat_streamed": bool(streamed_to_client),
+            "llm_message_metadata": message_metadata,
             "motion_applied": False,
             "motion_repaired": False,
             "timings": timings,
@@ -2418,6 +2467,8 @@ def _finalize_llm_chat_response(
         queue_message=True,
         generate_audio=True,
         streamed_to_client=streamed_to_client,
+        seen_by_client_id=ui_client_id,
+        metadata=message_metadata,
     )
     if new_mood := llm_response.get("new_mood"):
         with app_state.lock:
@@ -2457,6 +2508,7 @@ def _finalize_llm_chat_response(
         "chat": chat_text,
         "chat_queued": True,
         "chat_streamed": bool(streamed_to_client),
+        "llm_message_metadata": message_metadata,
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
         "mode_action": mode_action,
@@ -2473,6 +2525,7 @@ def handle_user_message():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
+    ui_client_id = data.get("client_id") or data.get("ui_client_id") or ""
     mode_actions_allowed, mode_action_source = _request_mode_action_context(data)
     handsfree_mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
@@ -2522,6 +2575,7 @@ def handle_user_message():
         current_before_llm=current_before_llm,
         request_started=request_started,
         timings=timings,
+        ui_client_id=ui_client_id,
         mode_actions_allowed=mode_actions_allowed,
         relay_active_mode_on_no_action=active_mode_before_llm,
     ))
@@ -2532,6 +2586,7 @@ def handle_user_message_stream():
     request_started = time.perf_counter()
     data = _request_json()
     user_input = data.get('message', '').strip()
+    ui_client_id = data.get("client_id") or data.get("ui_client_id") or ""
     mode_actions_allowed, mode_action_source = _request_mode_action_context(data)
     handsfree_mode_actions_allowed = _request_allows_handsfree_mode_actions(data)
 
@@ -2607,6 +2662,7 @@ def handle_user_message_stream():
             request_started=request_started,
             timings=timings,
             streamed_to_client=stream_extractor.has_streamed_text(),
+            ui_client_id=ui_client_id,
             mode_actions_allowed=mode_actions_allowed,
             relay_active_mode_on_no_action=active_mode_before_llm,
         )
@@ -2663,7 +2719,8 @@ def persist_local_voice_settings():
 
 @app.route('/get_updates')
 def get_ui_updates_route():
-    messages = _messages_for_ui_client(request.args.get("client_id", ""))
+    message_records = _message_records_for_ui_client(request.args.get("client_id", ""))
+    messages = [record["text"] for record in message_records]
     with app_state.lock:
         mode_status_message = app_state.mode_status_message
         app_state.mode_status_message = ""
@@ -2671,6 +2728,7 @@ def get_ui_updates_route():
         app_state.chat_audio_warning = ""
     return jsonify({
         "messages": messages,
+        "message_records": message_records,
         "audio_ready": audio.has_audio(),
         "audio_error": audio.consume_last_error(),
         "mode_status_message": mode_status_message,

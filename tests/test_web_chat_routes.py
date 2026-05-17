@@ -50,12 +50,21 @@ class WebChatRouteTests(WebTestCase):
 
         original_key = handy.handy_key
         original_settings_key = settings.handy_key
+        original_model = llm.model
+        original_thinking = llm.thinking_enabled
+        original_prompt_mode = settings.llm_prompt_mode
         spoken = []
         app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
         app_state.chat_history.clear()
         try:
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
+            llm.model = "local/direct-model:latest"
+            llm.thinking_enabled = True
+            settings.llm_prompt_mode = "revibed"
             with mock.patch.object(llm, "get_chat_response", return_value={
                 "chat": "This text should be visible and spoken.",
                 "move": None,
@@ -77,18 +86,32 @@ class WebChatRouteTests(WebTestCase):
             self.assertIn("llm_ms", data["timings"])
             self.assertIn("motion_repair_ms", data["timings"])
             self.assertIn("motion_apply_ms", data["timings"])
+            self.assertEqual(data["llm_message_metadata"]["model"], "local/direct-model:latest")
+            self.assertTrue(data["llm_message_metadata"]["thinking_enabled"])
 
-            updates = self.client.get("/get_updates")
+            updates = self.client.get("/get_updates?client_id=tab-b")
             try:
-                queued = updates.get_json()["messages"]
+                payload = updates.get_json()
+                queued = payload["messages"]
+                records = payload["message_records"]
             finally:
                 updates.close()
             self.assertEqual(queued, ["This text should be visible and spoken."])
+            self.assertEqual(records[0]["text"], "This text should be visible and spoken.")
+            self.assertEqual(records[0]["metadata"]["model"], "local/direct-model:latest")
+            self.assertEqual(records[0]["metadata"]["prompt_mode"], "revibed")
+            self.assertTrue(records[0]["metadata"]["thinking_enabled"])
             self.assertEqual(spoken, ["This text should be visible and spoken."])
         finally:
             handy.handy_key = original_key
             settings.handy_key = original_settings_key
+            llm.model = original_model
+            llm.thinking_enabled = original_thinking
+            settings.llm_prompt_mode = original_prompt_mode
             app_state.messages_for_ui.clear()
+            app_state.ui_message_log.clear()
+            app_state.ui_message_next_id = 0
+            app_state.ui_client_cursors.clear()
             app_state.chat_history.clear()
 
     def test_send_message_schedules_standalone_autospeak_followup(self):
@@ -257,6 +280,14 @@ class WebChatRouteTests(WebTestCase):
         sleep.assert_called_once_with(web.STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS)
         run_turn.assert_called_once_with(123)
 
+    def test_standalone_autospeak_prompt_asks_for_wording_variety(self):
+        import strokegpt.web as web
+
+        message = web._standalone_autospeak_user_message()
+
+        self.assertIn("Do not repeat the previous chat line", message)
+        self.assertIn("vary the erotic wording naturally", message)
+
     def test_send_message_stream_renders_deltas_without_queue_duplicate(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -311,6 +342,74 @@ class WebChatRouteTests(WebTestCase):
             handy.handy_key = original_key
             settings.handy_key = original_settings_key
             app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_streamed_chat_marks_initiating_client_seen(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_model = llm.model
+        original_thinking = llm.thinking_enabled
+        original_prompt_mode = settings.llm_prompt_mode
+        app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            llm.model = "local/stream-model:latest"
+            llm.thinking_enabled = True
+            settings.llm_prompt_mode = "revibed"
+            chunks = iter([
+                '{"chat":"Already visible in the sending tab.","move":null,"new_mood":null}',
+            ])
+            with mock.patch.object(llm, "iter_chat_response_content", return_value=chunks), \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message_stream", json={
+                    "message": "say something",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "client_id": "tab-a",
+                }, buffered=True)
+            self.assertEqual(response.status_code, 200)
+            events = [
+                json.loads(line)
+                for line in response.get_data(as_text=True).splitlines()
+                if line.strip()
+            ]
+            final = [event["data"] for event in events if event["type"] == "final"][-1]
+            self.assertEqual(final["llm_message_metadata"]["model"], "local/stream-model:latest")
+            self.assertTrue(final["llm_message_metadata"]["thinking_enabled"])
+
+            same_tab = self.client.get("/get_updates?client_id=tab-a")
+            try:
+                self.assertEqual(same_tab.get_json()["messages"], [])
+            finally:
+                same_tab.close()
+
+            other_tab = self.client.get("/get_updates?client_id=tab-b")
+            try:
+                payload = other_tab.get_json()
+                self.assertEqual(payload["messages"], ["Already visible in the sending tab."])
+                self.assertEqual(payload["message_records"][0]["text"], "Already visible in the sending tab.")
+                self.assertEqual(payload["message_records"][0]["metadata"]["model"], "local/stream-model:latest")
+                self.assertEqual(payload["message_records"][0]["metadata"]["prompt_mode"], "revibed")
+                self.assertTrue(payload["message_records"][0]["metadata"]["thinking_enabled"])
+            finally:
+                other_tab.close()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            llm.model = original_model
+            llm.thinking_enabled = original_thinking
+            settings.llm_prompt_mode = original_prompt_mode
+            app_state.messages_for_ui.clear()
+            app_state.ui_message_log.clear()
+            app_state.ui_message_next_id = 0
+            app_state.ui_client_cursors.clear()
             app_state.chat_history.clear()
 
     def test_streaming_chat_extractor_parses_incremental_escapes(self):
