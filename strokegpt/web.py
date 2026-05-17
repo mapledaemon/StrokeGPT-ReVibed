@@ -1644,6 +1644,9 @@ def reset_runtime_state():
     with app_state.lock:
         app_state.chat_history.clear()
         app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
         app_state.mode_status_message = ""
         app_state.mode_message_queue.clear()
         app_state.user_signal_event.clear()
@@ -1735,12 +1738,18 @@ def _is_llm_transport_error_text(text):
     return clean.startswith(("llm connection error:", "llm request failed:"))
 
 def add_message_to_queue(text, add_to_history=True, queue_message=True, generate_audio=True, streamed_to_client=False):
-    if queue_message:
-        app_state.messages_for_ui.append(text)
-    if add_to_history:
-        clean_text = re.sub(r'<[^>]+>', '', text).strip()
-        if clean_text:
-            app_state.chat_history.append({"role": "assistant", "content": clean_text})
+    with app_state.lock:
+        if queue_message:
+            app_state.messages_for_ui.append(text)
+            app_state.ui_message_next_id += 1
+            app_state.ui_message_log.append({
+                "id": app_state.ui_message_next_id,
+                "text": text,
+            })
+        if add_to_history:
+            clean_text = re.sub(r'<[^>]+>', '', text).strip()
+            if clean_text:
+                app_state.chat_history.append({"role": "assistant", "content": clean_text})
     if generate_audio:
         # Bug-triage diagnostic for KNOWN_PROBLEMS
         # "Local LLM Chat Text Sometimes Missing While Voice Plays". The
@@ -1782,6 +1791,29 @@ def add_message_to_queue(text, add_to_history=True, queue_message=True, generate
             with app_state.lock:
                 app_state.chat_audio_warning = warning_for_ui
         threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
+
+def _messages_for_ui_client(client_id):
+    cleaned_client_id = re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
+    with app_state.lock:
+        if not cleaned_client_id:
+            return [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
+        last_seen = int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0)
+        records = [record for record in app_state.ui_message_log if int(record.get("id", 0)) > last_seen]
+        if records:
+            app_state.ui_client_cursors[cleaned_client_id] = int(records[-1]["id"])
+            app_state.messages_for_ui.clear()
+        elif app_state.ui_message_log:
+            latest_id = int(app_state.ui_message_log[-1].get("id", 0) or 0)
+            app_state.ui_client_cursors.setdefault(cleaned_client_id, latest_id)
+        return [str(record.get("text", "")) for record in records]
+
+def has_pending_ui_messages(client_id=None):
+    cleaned_client_id = re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
+    with app_state.lock:
+        if not cleaned_client_id:
+            return bool(app_state.messages_for_ui)
+        last_seen = int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0)
+        return any(int(record.get("id", 0)) > last_seen for record in app_state.ui_message_log)
 
 def add_mode_status_message(text):
     clean_text = re.sub(r'<[^>]+>', '', str(text or "")).strip()
@@ -2631,7 +2663,7 @@ def persist_local_voice_settings():
 
 @app.route('/get_updates')
 def get_ui_updates_route():
-    messages = [app_state.messages_for_ui.popleft() for _ in range(len(app_state.messages_for_ui))]
+    messages = _messages_for_ui_client(request.args.get("client_id", ""))
     with app_state.lock:
         mode_status_message = app_state.mode_status_message
         app_state.mode_status_message = ""

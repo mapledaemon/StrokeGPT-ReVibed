@@ -219,6 +219,15 @@ waits for final JSON validation before applying motion or starting TTS; the
 existing `/send_message` path remains the fallback for browsers without
 readable fetch streams.
 
+The follow-up voice-ordering fix prevents `/get_audio` from returning queued
+audio while unread chat messages are still waiting in that browser client's
+`/get_updates` cursor. Browser tabs now read from a shared message log with
+per-client cursors instead of destructively draining one global queue, and
+Chatterbox playback uses a browser-local lease so multiple tabs cannot speak
+queued clips at the same time. If this issue recurs, check whether a specific
+reply path is bypassing `add_message_to_queue` or whether the browser is
+dropping rendered bubbles after receiving them.
+
 Follow-up work:
 
 - Verify the chat-emit path runs in lockstep with the TTS-enqueue path across

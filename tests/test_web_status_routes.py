@@ -32,6 +32,126 @@ class WebStatusRouteTests(WebTestCase):
         finally:
             audio_response.close()
 
+    def test_get_audio_waits_until_pending_chat_has_been_polled(self):
+        from strokegpt.web import app_state, audio
+
+        app_state.messages_for_ui.clear()
+        audio.clear_audio_queue()
+        try:
+            app_state.messages_for_ui.append("visible before voice")
+            audio._enqueue_audio_chunk(b"RIFFheld", "audio/wav")
+
+            audio_response = self.client.get("/get_audio")
+            try:
+                self.assertEqual(audio_response.status_code, 204)
+                self.assertTrue(audio.has_audio())
+            finally:
+                audio_response.close()
+
+            updates = self.client.get("/get_updates")
+            try:
+                self.assertEqual(updates.status_code, 200)
+                self.assertEqual(updates.get_json()["messages"], ["visible before voice"])
+            finally:
+                updates.close()
+
+            audio_response = self.client.get("/get_audio")
+            try:
+                self.assertEqual(audio_response.status_code, 200)
+                self.assertEqual(audio_response.mimetype, "audio/wav")
+                self.assertEqual(audio_response.data, b"RIFFheld")
+            finally:
+                audio_response.close()
+        finally:
+            app_state.messages_for_ui.clear()
+            audio.clear_audio_queue()
+
+    def test_updates_are_cursor_based_per_browser_client(self):
+        from strokegpt.web import add_message_to_queue, app_state
+
+        app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
+        try:
+            add_message_to_queue(
+                "seen by every active browser",
+                add_to_history=False,
+                generate_audio=False,
+            )
+
+            first_tab = self.client.get("/get_updates?client_id=tab-a")
+            try:
+                self.assertEqual(first_tab.status_code, 200)
+                self.assertEqual(first_tab.get_json()["messages"], ["seen by every active browser"])
+            finally:
+                first_tab.close()
+
+            second_tab = self.client.get("/get_updates?client_id=tab-b")
+            try:
+                self.assertEqual(second_tab.status_code, 200)
+                self.assertEqual(second_tab.get_json()["messages"], ["seen by every active browser"])
+            finally:
+                second_tab.close()
+
+            first_tab_again = self.client.get("/get_updates?client_id=tab-a")
+            try:
+                self.assertEqual(first_tab_again.status_code, 200)
+                self.assertEqual(first_tab_again.get_json()["messages"], [])
+            finally:
+                first_tab_again.close()
+
+            self.assertEqual(list(app_state.messages_for_ui), [])
+        finally:
+            app_state.messages_for_ui.clear()
+            app_state.ui_message_log.clear()
+            app_state.ui_message_next_id = 0
+            app_state.ui_client_cursors.clear()
+
+    def test_get_audio_waits_for_that_browser_client_to_poll_chat(self):
+        from strokegpt.web import add_message_to_queue, app_state, audio
+
+        app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
+        audio.clear_audio_queue()
+        try:
+            add_message_to_queue(
+                "visible before client voice",
+                add_to_history=False,
+                generate_audio=False,
+            )
+            audio._enqueue_audio_chunk(b"RIFFclient", "audio/wav")
+
+            audio_response = self.client.get("/get_audio?client_id=tab-a")
+            try:
+                self.assertEqual(audio_response.status_code, 204)
+                self.assertTrue(audio.has_audio())
+            finally:
+                audio_response.close()
+
+            updates = self.client.get("/get_updates?client_id=tab-a")
+            try:
+                self.assertEqual(updates.status_code, 200)
+                self.assertEqual(updates.get_json()["messages"], ["visible before client voice"])
+            finally:
+                updates.close()
+
+            audio_response = self.client.get("/get_audio?client_id=tab-a")
+            try:
+                self.assertEqual(audio_response.status_code, 200)
+                self.assertEqual(audio_response.mimetype, "audio/wav")
+                self.assertEqual(audio_response.data, b"RIFFclient")
+            finally:
+                audio_response.close()
+        finally:
+            app_state.messages_for_ui.clear()
+            app_state.ui_message_log.clear()
+            app_state.ui_message_next_id = 0
+            app_state.ui_client_cursors.clear()
+            audio.clear_audio_queue()
+
     def test_get_audio_can_briefly_wait_for_generated_audio(self):
         from strokegpt.web import audio
 

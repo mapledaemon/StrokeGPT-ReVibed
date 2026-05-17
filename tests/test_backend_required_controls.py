@@ -197,7 +197,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
 
     def test_direct_fetch_paths_update_connection_state(self):
         self.assertIn("fetchWithConnectionState('/upload_local_tts_sample'", self.audio_js)
-        self.assertIn("fetchWithConnectionState('/get_audio'", self.audio_js)
+        self.assertIn("fetchWithConnectionState(endpoint)", self.audio_js)
+        self.assertIn("appendQueryParams('/get_audio'", self.audio_js)
         self.assertIn("fetchWithConnectionState('/transcribe_voice'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState('/set_voice_input'", self.voice_input_js)
         self.assertIn("fetchWithConnectionState('/preload_voice_input_model'", self.voice_input_js)

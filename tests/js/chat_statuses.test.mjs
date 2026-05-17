@@ -5,6 +5,7 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { URL as NodeURL } from 'node:url';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
 import { pollChatUpdates, scrollChatToLatest, sendUserMessage } from '../../static/js/chat.js';
@@ -60,6 +61,18 @@ function occurrenceCount(text, needle) {
     return String(text).split(needle).length - 1;
 }
 
+function endpointUrl(endpoint) {
+    return new NodeURL(String(endpoint), 'http://strokegpt.test');
+}
+
+function endpointPath(endpoint) {
+    return endpointUrl(endpoint).pathname;
+}
+
+function endpointParam(endpoint, name) {
+    return endpointUrl(endpoint).searchParams.get(name);
+}
+
 describe('chat action statuses', () => {
     let originalFetch;
     let originalQuerySelector;
@@ -91,6 +104,7 @@ describe('chat action statuses', () => {
         state.chatModelBlockedMessage = '';
         state.pendingQueuedBotEcho = '';
         state.chatStreamingEnabled = false;
+        state.uiClientId = 'test-client';
     });
 
     afterEach(() => {
@@ -102,9 +116,9 @@ describe('chat action statuses', () => {
     function installChatResponses(sendPayload) {
         const calls = [];
         globalThis.fetch = async endpoint => {
-            calls.push(endpoint);
-            if (endpoint === '/send_message') return jsonResponse(200, sendPayload);
-            if (endpoint === '/get_updates') return jsonResponse(200, { messages: [] });
+            calls.push(endpointPath(endpoint));
+            if (endpointPath(endpoint) === '/send_message') return jsonResponse(200, sendPayload);
+            if (endpointPath(endpoint) === '/get_updates') return jsonResponse(200, { messages: [] });
             return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
         };
         return calls;
@@ -154,13 +168,13 @@ describe('chat action statuses', () => {
     it('renders queued ok chat from the send response and skips the matching update echo', async () => {
         const calls = [];
         globalThis.fetch = async endpoint => {
-            calls.push(endpoint);
-            if (endpoint === '/send_message') return jsonResponse(200, {
+            calls.push(endpointPath(endpoint));
+            if (endpointPath(endpoint) === '/send_message') return jsonResponse(200, {
                 status: 'ok',
                 chat: 'Visible assistant reply.',
                 chat_queued: true,
             });
-            if (endpoint === '/get_updates') return jsonResponse(200, {
+            if (endpointPath(endpoint) === '/get_updates') return jsonResponse(200, {
                 messages: ['Visible assistant reply.', 'Background mode note.'],
             });
             return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
@@ -180,14 +194,14 @@ describe('chat action statuses', () => {
         state.chatStreamingEnabled = true;
         const calls = [];
         globalThis.fetch = async endpoint => {
-            calls.push(endpoint);
-            if (endpoint === '/send_message_stream') return streamResponse([
+            calls.push(endpointPath(endpoint));
+            if (endpointPath(endpoint) === '/send_message_stream') return streamResponse([
                 '{"type":"status","status":"generating"}\n',
                 '{"type":"delta","text":"Visible "}\n',
                 '{"type":"delta","text":"as it arrives."}\n',
                 '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":true}}\n',
             ]);
-            if (endpoint === '/get_updates') return jsonResponse(200, { messages: ['Visible as it arrives.'] });
+            if (endpointPath(endpoint) === '/get_updates') return jsonResponse(200, { messages: ['Visible as it arrives.'] });
             return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
         };
 
@@ -279,7 +293,8 @@ describe('chat action statuses', () => {
 
     it('surfaces backend chat/TTS divergence warnings from updates', async () => {
         globalThis.fetch = async endpoint => {
-            assert.strictEqual(endpoint, '/get_updates');
+            assert.strictEqual(endpointPath(endpoint), '/get_updates');
+            assert.strictEqual(endpointParam(endpoint, 'client_id'), 'test-client');
             return jsonResponse(200, {
                 messages: [],
                 audio_ready: false,
@@ -295,9 +310,66 @@ describe('chat action statuses', () => {
         assert.strictEqual(statusText.style.color, 'var(--yellow)');
     });
 
+    it('does not block future chat polling on queued audio playback', async () => {
+        const originalAudio = globalThis.Audio;
+        const originalUrl = globalThis.URL;
+        const calls = [];
+        let getAudioCalls = 0;
+        let playStarted = false;
+        let finishAudio;
+        globalThis.fetch = async endpoint => {
+            calls.push(endpointPath(endpoint));
+            if (endpointPath(endpoint) === '/get_updates') return jsonResponse(200, {
+                messages: ['Text before voice.'],
+                audio_ready: true,
+                chat_audio_warning: '',
+            });
+            if (endpointPath(endpoint) === '/get_audio') {
+                getAudioCalls += 1;
+                return jsonResponse(getAudioCalls === 1 ? 200 : 204, null);
+            }
+            return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
+        };
+        globalThis.URL = {
+            createObjectURL() { return 'blob:queued-audio'; },
+            revokeObjectURL() {},
+        };
+        globalThis.Audio = class StubAudio {
+            play() {
+                playStarted = true;
+                return new Promise(resolve => {
+                    finishAudio = () => {
+                        this.onended?.();
+                        resolve();
+                    };
+                });
+            }
+        };
+
+        try {
+            await pollChatUpdates();
+
+            const chatText = collectText(getStubElement('chat-messages-container'));
+            assert.strictEqual(occurrenceCount(chatText, 'Text before voice.'), 1);
+            assert.deepStrictEqual(calls, ['/get_updates']);
+            assert.strictEqual(playStarted, false);
+
+            await new Promise(resolve => setTimeout(resolve, 0));
+            assert.strictEqual(playStarted, true);
+            assert.strictEqual(occurrenceCount(collectText(getStubElement('chat-messages-container')), 'Text before voice.'), 1);
+
+            finishAudio();
+            await new Promise(resolve => setTimeout(resolve, 0));
+        } finally {
+            globalThis.Audio = originalAudio;
+            globalThis.URL = originalUrl;
+        }
+    });
+
     it('surfaces mode narration as status instead of chat messages', async () => {
         globalThis.fetch = async endpoint => {
-            assert.strictEqual(endpoint, '/get_updates');
+            assert.strictEqual(endpointPath(endpoint), '/get_updates');
+            assert.strictEqual(endpointParam(endpoint, 'client_id'), 'test-client');
             return jsonResponse(200, {
                 messages: [],
                 audio_ready: false,
