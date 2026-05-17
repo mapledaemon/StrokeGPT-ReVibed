@@ -43,6 +43,31 @@ function refreshStartupOllamaStatus(data = {}) {
     });
 }
 
+const COMPACT_SIDEBAR_QUERY = '(max-width: 760px)';
+
+function storedSidebarCollapsedPreference() {
+    try {
+        return globalThis.localStorage?.getItem('sidebar_collapsed') ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function isCompactSidebarViewport() {
+    try {
+        return Boolean(globalThis.window?.matchMedia?.(COMPACT_SIDEBAR_QUERY)?.matches);
+    } catch {
+        return false;
+    }
+}
+
+export function applyInitialSidebarState() {
+    const stored = storedSidebarCollapsedPreference();
+    const shouldCollapse = stored === 'true' || (stored === null && isCompactSidebarViewport());
+    if (shouldCollapse) D.body.classList.add('sidebar-collapsed');
+    else D.body.classList.remove('sidebar-collapsed');
+}
+
 export function renderSetup(isReturningUser = false, data = {}) {
     el.setupOverlay.style.display = 'flex';
     let step = isReturningUser ? 2 : 1;
@@ -178,6 +203,7 @@ export function renderSetup(isReturningUser = false, data = {}) {
 
 export async function startupCheck() {
     const data = await apiCall('/check_settings');
+    applyInitialSidebarState();
     if (data && data.configured) {
         el.statusText.textContent = 'Welcome back! Settings loaded.';
         state.myHandyKey = data.handy_key;
@@ -207,9 +233,6 @@ export async function startupCheck() {
             el.elevenLabsKeyInput.value = data.elevenlabs_key;
             el.elevenLabsVoiceSelect.dataset.savedVoiceId = data.elevenlabs_voice_id || '';
             el.setElevenLabsKeyButton.click();
-        }
-        if (localStorage.getItem('sidebar_collapsed') === 'true') {
-            D.body.classList.add('sidebar-collapsed');
         }
         D.getElementById('splash-screen').style.display = 'none';
         renderSetup(true, data);
