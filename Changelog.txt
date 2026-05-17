@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #258 - Smooth Milk Speed Changes And Chat Intensity Arc
+------------------------------------------------------------------------
+
+Branch: codex/milk-hsp-jitter-buffering
+
+- Preserve continuous HSP phase ratio when the LLM changes speed on the same
+  fixed pattern, so `llm+milk` can vary speed without jumping to a different
+  point in the cycle.
+- Keep same-pattern speed changes meaningful in chat routing while still
+  filtering small depth/range drift from repeated fixed-pattern LLM outputs.
+- Add a compact top-bar intensity arc control for steady/ramp-up/ramp-down/
+  variable chat guidance, and feed the normal-chat elapsed timer plus an
+  explicit `arc` variable into the LLM context once a chat session has begun.
+- Guard ordinary chat responses from turning unrequested tight/local LLM moves
+  such as `tip+flutter` into abrupt area-focus replacements; preserve the
+  current broad pattern and apply only the intended speed change unless the
+  user explicitly asked for that focus.
+- Add more HSP latency reserve for continuous replacements and expand buffered
+  point spacing after slow Handy commands, reducing expired `buf 0.0ms`
+  replacement batches that could starve or restart motion.
+
+
 2026-05-17 - PR #257 - Fix Motion Log Sizing And Continuous Chat-Mode Replacements
 ----------------------------------------------------------------------------------
 

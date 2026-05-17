@@ -95,6 +95,10 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 .top-bar-actions { grid-area: actions; justify-self: end; display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .top-bar-actions .top-bar-toggle-button { width: auto; min-width: 5.75rem; min-height: var(--top-bar-button-size); padding: 0.45rem 0.7rem; flex: 0 0 auto; border-color: #2d333d; font-size: 0.85rem; white-space: nowrap; box-shadow: none; }
 .top-bar-actions .top-bar-toggle-button.is-on { border-color: rgba(127, 183, 163, 0.7); background: #26322f; color: var(--cyan); }
+.top-bar-actions .top-bar-intensity-guide { min-width: 6rem; }
+.top-bar-actions .top-bar-intensity-guide.is-ramp-up { border-color: rgba(79, 192, 109, 0.72); background: #203326; color: var(--green); }
+.top-bar-actions .top-bar-intensity-guide.is-ramp-down { border-color: rgba(216, 182, 106, 0.72); background: #332d20; color: var(--yellow); }
+.top-bar-actions .top-bar-intensity-guide.is-variable { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
 .top-bar-actions .top-bar-autospeak-toggle { min-width: 5.25rem; }
 .top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
 #toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size); background: var(--background-lighter); border: 1px solid #2d333d; color: var(--foreground); width: var(--top-bar-button-size); height: var(--top-bar-button-size); border-radius: 50%; cursor: pointer; transition: transform 0.3s ease-in-out, background-color 0.2s ease; font-size: 1.2em; display: flex; align-items: center; justify-content: center; }
@@ -611,6 +615,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     #mood-display { max-width: 100%; padding-inline: 10px; font-size: 0.84rem; }
     .top-bar-actions { gap: var(--space-1); }
     .top-bar-actions .top-bar-toggle-button { min-width: 4.75rem; padding-inline: 0.5rem; font-size: 0.8rem; }
+    .top-bar-actions .top-bar-intensity-guide { min-width: 5.25rem; }
     .top-bar-actions .top-bar-voice-toggle { min-width: 5rem; }
     .top-bar-actions .top-bar-autospeak-toggle { min-width: 4.75rem; }
     #chat-view, #bottom-input-area { padding: var(--space-2); }

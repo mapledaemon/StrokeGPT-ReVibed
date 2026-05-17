@@ -463,6 +463,7 @@ def get_status_route():
     motion_observability = web.motion.observability_snapshot(diagnostics)
     motion_observability["diagnostics_level"] = web.settings.motion_diagnostics_level
     active_mode = web._active_mode_snapshot()
+    chat_session = web._chat_session_snapshot()
     return jsonify({
         "mood": web.app_state.current_mood,
         "speed": diagnostics["physical_speed"],
@@ -476,6 +477,7 @@ def get_status_route():
         "motion_diagnostics_level": web.settings.motion_diagnostics_level,
         "motion_training": web._motion_training_snapshot(),
         "motion_observability": motion_observability,
+        **chat_session,
     })
 
 

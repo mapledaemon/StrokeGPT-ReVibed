@@ -1226,6 +1226,72 @@ function activeModeDisplayName(modeName) {
     }[modeName] || modeName || '';
 }
 
+function normalizeChatIntensityGuide(guide) {
+    const normalized = String(guide || '').trim().toLowerCase().replace(/-/g, '_');
+    return ['steady', 'ramp_up', 'ramp_down', 'variable'].includes(normalized) ? normalized : 'steady';
+}
+
+function chatIntensityGuideLabel(guide) {
+    return {
+        steady: 'Arc Steady',
+        ramp_up: 'Arc Up',
+        ramp_down: 'Arc Down',
+        variable: 'Arc Variable',
+    }[normalizeChatIntensityGuide(guide)];
+}
+
+function nextChatIntensityGuide(guide) {
+    return {
+        steady: 'ramp_up',
+        ramp_up: 'ramp_down',
+        ramp_down: 'variable',
+        variable: 'steady',
+    }[normalizeChatIntensityGuide(guide)];
+}
+
+export function updateChatIntensityGuideUi(guide, countDirection = 'steady') {
+    const normalized = normalizeChatIntensityGuide(guide);
+    state.chatIntensityGuide = normalized;
+    state.chatIntensityCountDirection = countDirection || 'steady';
+    const button = el.topBarIntensityGuideBtn;
+    if (!button) return;
+    button.textContent = chatIntensityGuideLabel(normalized);
+    button.classList.remove('is-on', 'is-ramp-up', 'is-ramp-down', 'is-variable');
+    if (normalized === 'ramp_up') button.classList.add('is-on', 'is-ramp-up');
+    if (normalized === 'ramp_down') button.classList.add('is-on', 'is-ramp-down');
+    if (normalized === 'variable') button.classList.add('is-on', 'is-variable');
+    button.setAttribute('aria-pressed', normalized === 'steady' ? 'false' : 'true');
+    button.setAttribute('aria-label', `Intensity arc ${normalized.replace('_', ' ')}`);
+    button.title = normalized === 'steady'
+        ? 'LLM intensity arc: steady'
+        : `LLM intensity arc: ${normalized.replace('_', ' ')}`;
+}
+
+export function updateChatSessionTimer(elapsedSeconds, guide = state.chatIntensityGuide, countDirection = state.chatIntensityCountDirection) {
+    updateChatIntensityGuideUi(guide, countDirection);
+    const numericElapsed = Number(elapsedSeconds);
+    if (Number.isFinite(numericElapsed)) {
+        state.chatSessionElapsedSeconds = Math.max(0, Math.round(numericElapsed));
+    } else {
+        state.chatSessionElapsedSeconds = null;
+    }
+    if (state.activeModeName || !el.edgingTimer || state.chatSessionElapsedSeconds === null) return;
+
+    const elapsed = formatClockElapsed(state.chatSessionElapsedSeconds);
+    const guideLabel = chatIntensityGuideLabel(state.chatIntensityGuide).replace('Arc ', '');
+    if (el.activeModeStatus) {
+        el.activeModeStatus.hidden = false;
+        el.activeModeStatus.classList.remove('paused');
+        el.activeModeStatus.title = `Chat active for ${elapsed}; intensity guide ${guideLabel}`;
+    }
+    if (el.activeModeLabel) {
+        el.activeModeLabel.textContent = 'Chat';
+        el.activeModeLabel.title = `Chat intensity guide: ${guideLabel}`;
+    }
+    el.edgingTimer.textContent = elapsed;
+    el.edgingTimer.title = `Chat active for ${elapsed}`;
+}
+
 export function updateActiveModeTimer(modeName, elapsedSeconds, paused = state.motionPaused) {
     if (!el.edgingTimer) return;
     const normalizedMode = modeName || '';
@@ -1305,6 +1371,11 @@ export async function pollMotionStatus() {
     state.motionPaused = Boolean(data.motion_paused);
     updatePauseResumeUi(state.motionPaused);
     updateActiveModeTimer(data.active_mode, data.active_mode_elapsed_seconds, Boolean(data.active_mode_paused));
+    updateChatSessionTimer(
+        data.chat_elapsed_seconds,
+        data.arc || data.chat_arc || data.chat_intensity_guide,
+        data.chat_intensity_count_direction,
+    );
     state.motionObservability = data.motion_observability || {
         backend: state.motionBackend,
         source: 'status',
@@ -1421,6 +1492,28 @@ async function saveAutospeakToggle(enabled) {
     }
 }
 
+async function saveChatIntensityGuide(guide) {
+    const previousGuide = state.chatIntensityGuide;
+    const normalizedGuide = normalizeChatIntensityGuide(guide);
+    updateChatIntensityGuideUi(normalizedGuide);
+    const data = await apiCall('/set_chat_intensity_guide', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({guide: normalizedGuide}),
+    });
+    if (data && data.status === 'success') {
+        updateChatSessionTimer(
+            data.chat_elapsed_seconds,
+            data.arc || data.chat_arc || data.chat_intensity_guide,
+            data.chat_intensity_count_direction,
+        );
+        el.statusText.textContent = `Intensity arc set to ${chatIntensityGuideLabel(state.chatIntensityGuide).replace('Arc ', '')}.`;
+    } else {
+        updateChatIntensityGuideUi(previousGuide);
+        reportSaveFailure(el.statusText, data, 'Could not update intensity arc.');
+    }
+}
+
 async function startFreestyleMode() {
     el.statusText.textContent = 'Starting Freestyle...';
     const data = await apiCall('/start_freestyle_mode', {method: 'POST'});
@@ -1462,6 +1555,9 @@ export function initMotionControls({sendUserMessage}) {
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);
     el.topBarAutospeakToggleBtn?.addEventListener('click', async () => {
         await saveAutospeakToggle(!state.autospeakEnabled);
+    });
+    el.topBarIntensityGuideBtn?.addEventListener('click', async () => {
+        await saveChatIntensityGuide(nextChatIntensityGuide(state.chatIntensityGuide));
     });
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     if (el.motionFeedbackAutoDisableCheckbox) {

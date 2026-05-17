@@ -1738,6 +1738,42 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreater(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
         self.assertGreaterEqual(threshold, 3.6)
 
+    def test_continuous_hsp_buffer_and_sampling_expand_after_slow_command_latency(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+
+        controller._observe_hsp_command_seconds(5.0)
+
+        target_buffer = controller._continuous_target_buffer_seconds()
+        threshold = controller._continuous_append_threshold_seconds()
+        point_interval = controller._continuous_hsp_point_interval_seconds()
+
+        self.assertGreaterEqual(target_buffer, 7.0)
+        self.assertGreaterEqual(threshold, 6.0)
+        self.assertGreater(point_interval, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+
+    def test_continuous_hsp_replacement_uses_default_latency_reserve(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "wave"), source="second")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+
+            replacement_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+                and point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+            ]
+            self.assertTrue(replacement_points)
+            self.assertGreaterEqual(replacement_points[0]["hsp_replacement_lead_ms"], 900.0)
+        finally:
+            controller.stop()
+
     def test_continuous_transition_phase_starts_new_pattern_near_current_depth(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
         plan = continuous_motion_plan("stroke")
@@ -2058,6 +2094,40 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(second_points)
             self.assertGreater(second_points[0]["phase_offset_ms"], 0)
             self.assertLess(second_points[0]["phase_offset_ms"], second_points[0]["cycle_ms"])
+        finally:
+            controller.stop()
+
+    def test_continuous_backend_preserves_phase_ratio_on_same_pattern_speed_update(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        plan = continuous_motion_plan("milk")
+        first = MotionTarget(80, 50, 82, "milk")
+        second = MotionTarget(20, 50, 82, "milk")
+        old_duration = sample_continuous_motion(plan, first, 0.0).effective_duration_seconds
+
+        try:
+            controller.apply_generated_target(first, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            with (
+                mock.patch("strokegpt.motion.CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS", 1.0),
+                mock.patch("strokegpt.motion.CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS", 1.0),
+            ):
+                controller.apply_generated_target(second, source="second")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+
+            second_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp" and point.get("source") == "second"
+            ]
+            self.assertTrue(second_points)
+            first_point = second_points[0]
+            replacement_lead = first_point["hsp_replacement_lead_ms"] / 1000.0
+            expected_phase = replacement_lead / old_duration
+
+            self.assertAlmostEqual(first_point["sample_phase"], expected_phase, delta=0.04)
+            self.assertAlmostEqual(first_point["output_depth"], first_point["morph_start_depth"], delta=2.0)
         finally:
             controller.stop()
 

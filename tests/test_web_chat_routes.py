@@ -8,6 +8,51 @@ from tests._web_support import WebTestCase
 
 
 class WebChatRouteTests(WebTestCase):
+    def test_unrequested_tight_llm_focus_preserves_current_pattern(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_from_llm_response_move
+
+        current = MotionTarget(27, 50, 95, "llm+milk")
+        response = {
+            "move": {
+                "sp": 21,
+                "dp": 0,
+                "rng": 36,
+                "zone": "tip",
+                "pattern": "flutter",
+            }
+        }
+
+        target = _target_from_llm_response_move(response, current, user_input="fuck me")
+
+        self.assertEqual(target.label, "llm+milk")
+        self.assertEqual(target.speed, 21)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 95)
+        self.assertIsNone(target.motion_program)
+
+    def test_explicit_tight_llm_focus_request_is_preserved(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_from_llm_response_move
+
+        current = MotionTarget(27, 50, 95, "llm+milk")
+        response = {
+            "move": {
+                "sp": 21,
+                "dp": 0,
+                "rng": 36,
+                "zone": "tip",
+                "pattern": "flutter",
+            }
+        }
+
+        target = _target_from_llm_response_move(response, current, user_input="flutter at the tip")
+
+        self.assertEqual(target.label, "llm+tip+flutter")
+        self.assertEqual(target.speed, 21)
+        self.assertEqual(target.depth, 0)
+        self.assertEqual(target.stroke_range, 36)
+
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -1195,7 +1240,7 @@ class WebChatRouteTests(WebTestCase):
         from strokegpt.web import _target_has_motion_effect
 
         current = MotionTarget(26, 50, 90, "llm+milk continuous")
-        target = MotionTarget(30, 56, 95, "llm+milk")
+        target = MotionTarget(26, 56, 95, "llm+milk")
 
         self.assertFalse(_target_has_motion_effect(current, target))
 
@@ -1204,13 +1249,15 @@ class WebChatRouteTests(WebTestCase):
         from strokegpt.web import _target_has_motion_effect
 
         current = MotionTarget(26, 50, 90, "llm+milk continuous")
-        target = MotionTarget(33, 50, 90, "llm+milk")
+        target = MotionTarget(28, 50, 90, "llm+milk")
         deeper = MotionTarget(26, 59, 90, "llm+milk")
-        wider = MotionTarget(26, 50, 98, "llm+milk")
+        wider = MotionTarget(26, 50, 99, "llm+milk")
+        speed_flutter = MotionTarget(28, 50, 82, "llm+milk")
 
         self.assertTrue(_target_has_motion_effect(current, target))
         self.assertTrue(_target_has_motion_effect(current, deeper))
         self.assertTrue(_target_has_motion_effect(current, wider))
+        self.assertTrue(_target_has_motion_effect(MotionTarget(34, 50, 82, "llm+milk"), speed_flutter))
 
     def test_different_fixed_pattern_target_applies(self):
         from strokegpt.motion import MotionTarget
@@ -1237,6 +1284,59 @@ class WebChatRouteTests(WebTestCase):
         finally:
             settings.min_speed = original_min_speed
             settings.max_speed = original_max_speed
+
+    def test_normal_chat_starts_session_timer_before_llm_context(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_state = (
+            app_state.chat_session_started_at,
+            app_state.chat_intensity_guide,
+            app_state.chat_intensity_guide_started_at,
+        )
+        captured_contexts = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            app_state.chat_session_started_at = None
+            app_state.chat_intensity_guide = "ramp_up"
+            app_state.chat_intensity_guide_started_at = None
+
+            def fake_chat_response(_history, context):
+                captured_contexts.append(dict(context))
+                return {"chat": "Timer noted.", "move": None, "new_mood": None}
+
+            with mock.patch.object(llm, "get_chat_response", side_effect=fake_chat_response), \
+                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                response = self.client.post("/send_message", json={
+                    "message": "start",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(captured_contexts)
+            context = captured_contexts[-1]
+            self.assertEqual(context["arc"], "ramp_up")
+            self.assertEqual(context["chat_arc"], "ramp_up")
+            self.assertEqual(context["chat_intensity_guide"], "ramp_up")
+            self.assertEqual(context["chat_intensity_count_direction"], "up")
+            self.assertIsNotNone(context["chat_elapsed_seconds"])
+            self.assertIsNotNone(context["chat_elapsed_time"])
+            self.assertEqual(context["chat_intensity_target_seconds"], 600)
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            (
+                app_state.chat_session_started_at,
+                app_state.chat_intensity_guide,
+                app_state.chat_intensity_guide_started_at,
+            ) = original_state
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
 
 
 if __name__ == "__main__":

@@ -40,10 +40,12 @@ CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
-CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.12
+CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
-CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 3.2
+CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
+CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
+CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS = 0.085
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -2045,10 +2047,39 @@ class MotionController:
         observed_seconds = self._recent_hsp_command_latency_seconds()
         if observed_seconds > 0:
             threshold = max(threshold, observed_seconds + CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS)
+        target_buffer_seconds = self._continuous_target_buffer_seconds()
         return _clamp(
             threshold,
             CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
-            max(CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS - 0.25),
+            max(CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS, target_buffer_seconds - 0.25),
+        )
+
+    def _continuous_target_buffer_seconds(self) -> float:
+        buffer_seconds = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
+        observed_seconds = self._recent_hsp_command_latency_seconds()
+        if observed_seconds > 0:
+            buffer_seconds = max(
+                buffer_seconds,
+                observed_seconds
+                + CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS
+                + CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS,
+            )
+        max_buffer_seconds = (
+            max(1, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1)
+            * CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS
+        )
+        return _clamp(buffer_seconds, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS, max_buffer_seconds)
+
+    def _continuous_hsp_point_interval_seconds(self) -> float:
+        observed_seconds = self._recent_hsp_command_latency_seconds()
+        if observed_seconds <= 0:
+            return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+        target_buffer_seconds = self._continuous_target_buffer_seconds()
+        required_interval = target_buffer_seconds / max(1, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1)
+        return _clamp(
+            required_interval,
+            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+            CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS,
         )
 
     def _continuous_sample_interval(self) -> float:
@@ -2220,7 +2251,7 @@ class MotionController:
         points = continuous_plan_timed_phase_points(
             plan,
             effective_duration_seconds,
-            target_interval_seconds=CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+            target_interval_seconds=self._continuous_hsp_point_interval_seconds(),
         )
         return self._coalesce_hsp_stream_phase_points(points, effective_duration_seconds)
 
@@ -2333,6 +2364,7 @@ class MotionController:
 
         base_interval = self._continuous_sample_interval()
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
+        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
         initial_sample = self._sample_continuous_motion(
             plan,
             target,
@@ -2340,11 +2372,32 @@ class MotionController:
             sample_continuous_motion,
         )
         effective_duration_seconds = max(0.1, float(initial_sample.effective_duration_seconds or 0.1))
+        preserved_play_start_phase_seconds = None
+        if replacing_active_stream and preserve_replacement_phase and replacement_phase_state is not None:
+            old_plan = getattr(replacement_phase_state, "plan", None)
+            old_target = getattr(replacement_phase_state, "target", None)
+            if old_plan is not None and old_target is not None:
+                try:
+                    old_sample = self._sample_continuous_motion(
+                        old_plan,
+                        old_target,
+                        0.0,
+                        sample_continuous_motion,
+                    )
+                    old_duration_seconds = max(0.1, float(old_sample.effective_duration_seconds or 0.1))
+                    old_phase_rate = max(0.0, float(getattr(replacement_phase_state, "phase_rate", 1.0)))
+                    old_play_start_phase_seconds = phase_offset_seconds + (
+                        replacement_lead_seconds * old_phase_rate
+                    )
+                    phase_ratio = (old_play_start_phase_seconds / old_duration_seconds) % 1.0
+                    preserved_play_start_phase_seconds = phase_ratio * effective_duration_seconds
+                    phase_offset_seconds = preserved_play_start_phase_seconds
+                except (TypeError, ValueError, AttributeError):
+                    preserved_play_start_phase_seconds = None
         hsp_phase_points = self._hsp_stream_phase_points(plan, effective_duration_seconds)
         if not hsp_phase_points:
             return False
         stream_duration_seconds = effective_duration_seconds
-        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
         hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else 0.0
         play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds if replacing_active_stream else 0.0
         morph_start_target = start_target.clamped()
@@ -2366,9 +2419,12 @@ class MotionController:
                 effective_duration_seconds,
                 sample_continuous_motion,
             )
-        logical_start_seconds = phase_offset_seconds + (
-            replacement_lead_seconds if preserve_replacement_phase else 0.0
-        )
+        if preserved_play_start_phase_seconds is not None:
+            logical_start_seconds = preserved_play_start_phase_seconds
+        else:
+            logical_start_seconds = phase_offset_seconds + (
+                replacement_lead_seconds if preserve_replacement_phase else 0.0
+            )
         play_start_seconds = logical_start_seconds % effective_duration_seconds
         initial_sample = self._sample_continuous_motion(
             plan,
@@ -2630,6 +2686,7 @@ class MotionController:
             self._observe_hsp_command_seconds(command_seconds)
             recent_command_ms = round(self._recent_hsp_command_latency_seconds() * 1000.0, 1)
             append_threshold_ms = round(self._continuous_append_threshold_seconds() * 1000.0, 1)
+            target_buffer_ms = round(self._continuous_target_buffer_seconds() * 1000.0, 1)
             first_point_late_ms = 0.0
             if replacing_active_stream and kind == "replace":
                 first_point_late_ms = round(
@@ -2705,6 +2762,7 @@ class MotionController:
                     "base_interval_ms": round(base_interval * 1000.0, 1),
                     "hsp_recent_command_ms": recent_command_ms,
                     "hsp_append_threshold_ms": append_threshold_ms,
+                    "hsp_target_buffer_ms": target_buffer_ms,
                     "hsp_buffer_after_command_ms": buffer_after_command_ms,
                     "hsp_batch_span_ms": batch_span_ms,
                     "phase_interval_ms": round(point["phase_interval_seconds"] * 1000.0, 1),
@@ -2747,6 +2805,7 @@ class MotionController:
                 previous_recorded_point = point
 
         try:
+            target_buffer_seconds = self._continuous_target_buffer_seconds()
             initial_min_points = (
                 1
                 if finite_stop_stream_seconds is not None
@@ -2755,7 +2814,10 @@ class MotionController:
             initial_until = (
                 finite_stop_stream_seconds
                 if finite_stop_stream_seconds is not None
-                else play_start_stream_seconds + CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS
+                else play_start_stream_seconds + max(
+                    CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS,
+                    target_buffer_seconds,
+                )
             )
             initial_points = build_batch(initial_until, min_points=initial_min_points)
             if not initial_points:
@@ -2825,7 +2887,7 @@ class MotionController:
                 can_append = finite_stop_stream_seconds is None or stream_seconds < finite_stop_stream_seconds - 0.001
                 append_threshold_seconds = self._continuous_append_threshold_seconds()
                 if buffer_remaining <= append_threshold_seconds and can_append:
-                    until = hsp_elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
+                    until = hsp_elapsed + self._continuous_target_buffer_seconds()
                     if finite_stop_stream_seconds is not None:
                         until = min(until, finite_stop_stream_seconds)
                     points = build_batch(until) if until > stream_seconds + 0.001 else []

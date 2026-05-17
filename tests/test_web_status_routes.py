@@ -325,6 +325,75 @@ class WebStatusRouteTests(WebTestCase):
                 web.app_state.edging_start_time,
             ) = original_state
 
+    def test_status_payload_reports_chat_session_timer_and_intensity_guide(self):
+        import strokegpt.web as web
+
+        original_state = (
+            web.app_state.chat_session_started_at,
+            web.app_state.chat_intensity_guide,
+            web.app_state.chat_intensity_guide_started_at,
+        )
+        try:
+            now = time.time()
+            web.app_state.chat_session_started_at = now - 42.4
+            web.app_state.chat_intensity_guide = "ramp_down"
+            web.app_state.chat_intensity_guide_started_at = now - 12.0
+
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["chat_intensity_guide"], "ramp_down")
+            self.assertEqual(payload["arc"], "ramp_down")
+            self.assertEqual(payload["chat_arc"], "ramp_down")
+            self.assertEqual(payload["chat_intensity_count_direction"], "down")
+            self.assertGreaterEqual(payload["chat_elapsed_seconds"], 42)
+            self.assertEqual(payload["chat_intensity_target_seconds"], 600)
+            self.assertLessEqual(payload["chat_intensity_count_seconds"], 588)
+        finally:
+            (
+                web.app_state.chat_session_started_at,
+                web.app_state.chat_intensity_guide,
+                web.app_state.chat_intensity_guide_started_at,
+            ) = original_state
+
+    def test_set_chat_intensity_guide_route_normalizes_without_starting_timer(self):
+        import strokegpt.web as web
+
+        original_state = (
+            web.app_state.chat_session_started_at,
+            web.app_state.chat_intensity_guide,
+            web.app_state.chat_intensity_guide_started_at,
+        )
+        try:
+            web.app_state.chat_session_started_at = None
+            web.app_state.chat_intensity_guide = "steady"
+            web.app_state.chat_intensity_guide_started_at = None
+
+            response = self.client.post("/set_chat_intensity_guide", json={"arc": "variable"})
+            try:
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+            finally:
+                response.close()
+
+            self.assertEqual(payload["status"], "success")
+            self.assertEqual(payload["chat_intensity_guide"], "variable")
+            self.assertEqual(payload["arc"], "variable")
+            self.assertEqual(payload["chat_arc"], "variable")
+            self.assertEqual(payload["chat_intensity_count_direction"], "variable")
+            self.assertIsNone(payload["chat_elapsed_seconds"])
+            self.assertIsNone(web.app_state.chat_session_started_at)
+        finally:
+            (
+                web.app_state.chat_session_started_at,
+                web.app_state.chat_intensity_guide,
+                web.app_state.chat_intensity_guide_started_at,
+            ) = original_state
+
     def test_status_payload_reports_motion_pause_state_and_frozen_timer(self):
         import strokegpt.web as web
 

@@ -691,6 +691,53 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("CHAT EDGE PERMISSION", prompt)
         self.assertIn("Do not choose edge-specific fixed `move.pattern` ids", prompt)
 
+    def test_llm_prompt_includes_chat_session_arc_when_started(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "",
+            "chat_elapsed_time": "2m 5s",
+            "chat_intensity_guide": "ramp_up",
+            "chat_intensity_count_direction": "up",
+            "chat_intensity_count_time": "2m 5s",
+            "chat_intensity_target_time": "10m 0s",
+        })
+
+        self.assertIn("CHAT SESSION ARC", prompt)
+        self.assertIn("Chat time: 2m 5s", prompt)
+        self.assertIn("arc=ramp_up", prompt)
+        self.assertIn("counting up", prompt)
+        self.assertIn("10m 0s arc", prompt)
+
+    def test_llm_prompt_includes_variable_chat_arc(self):
+        service = LLMService(url="http://localhost:11434/api/chat")
+
+        prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "min_speed": 10,
+            "max_speed": 80,
+            "motion_preferences": "",
+            "chat_elapsed_time": "4m 1s",
+            "arc": "variable",
+            "chat_intensity_guide": "variable",
+            "chat_intensity_count_direction": "variable",
+        })
+
+        self.assertIn("CHAT SESSION ARC", prompt)
+        self.assertIn("arc=variable", prompt)
+        self.assertIn("Vary intensity organically", prompt)
+
     def test_llm_prompt_includes_mode_action_schema_only_when_enabled(self):
         service = LLMService(url="http://localhost:11434/api/chat")
         base_context = {
