@@ -35,14 +35,14 @@ CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS = 0.08
 CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
 CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
-CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.8
-CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
+CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 3.4
+CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
-CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
+CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.12
-CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.45
-CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 0.65
+CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
+CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 3.2
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
@@ -982,33 +982,107 @@ class MotionController:
         return (
             str(program.get("type") or "").strip().lower() == "anchor_loop"
             and not bool(program.get("generated_area_focus"))
+            and self._anchor_program_local_focus_zone(target) is None
         )
 
     def _should_use_hsp_area_focus_for_generated_target(self, target: MotionTarget) -> bool:
         if not self._supports_continuous_streaming():
             return False
+        program = target.motion_program
+        if isinstance(program, dict) and str(program.get("type") or "").strip().lower() == "anchor_loop":
+            return (
+                bool(program.get("generated_area_focus"))
+                or self._anchor_program_local_focus_zone(target) is not None
+            )
         if self._pattern_from_label(target.label):
             return False
-        program = target.motion_program
         if program is None:
             return True
+        return False
+
+    def _anchor_program_local_focus_zone(self, target: MotionTarget) -> Optional[str]:
+        program = target.motion_program
         if not isinstance(program, dict):
-            return False
-        return (
-            str(program.get("type") or "").strip().lower() == "anchor_loop"
-            and bool(program.get("generated_area_focus"))
-        )
+            return None
+        if str(program.get("type") or "").strip().lower() != "anchor_loop":
+            return None
+        anchors = program.get("anchors")
+        if not isinstance(anchors, (list, tuple)):
+            return None
+        labels = {
+            str(anchor.get("label") or "").strip().lower()
+            for anchor in anchors
+            if isinstance(anchor, dict)
+        }
+        labels.discard("")
+        if not labels:
+            return None
+        if "tip" in labels and labels <= {"tip", "upper", "lower"}:
+            return "tip"
+        if "base" in labels and labels <= {"upper", "lower", "base"}:
+            return "base"
+        return None
+
+    def _area_focus_zone(self, target: MotionTarget) -> Optional[str]:
+        local_anchor_zone = self._anchor_program_local_focus_zone(target)
+        if local_anchor_zone is not None:
+            return local_anchor_zone
+        label = _normalize_text(target.label).replace("+", " ")
+        if re.search(r"\b(?:tip|head|shallow)\b", label):
+            return "tip"
+        if re.search(r"\b(?:base|root|bottom|deep)\b", label):
+            return "base"
+        if re.search(r"\bupper\b", label):
+            return "upper"
+        if re.search(r"\b(?:middle|mid|shaft|center|centre)\b", label):
+            return "middle"
+        program = target.motion_program
+        if isinstance(program, dict) and program.get("generated_area_focus"):
+            if target.depth <= 42.0:
+                return "tip"
+            if target.depth >= 58.0:
+                return "base"
+            return "middle"
+        return None
+
+    def _localized_area_focus_range(self, target: MotionTarget, zone: str) -> float:
+        requested_range = float(target.stroke_range)
+        if zone in {"tip", "base"}:
+            return min(requested_range, max(22.0, min(36.0, requested_range * 0.42)))
+        if zone == "upper":
+            return min(requested_range, max(26.0, min(42.0, requested_range * 0.48)))
+        return min(requested_range, max(34.0, min(58.0, requested_range * 0.62)))
+
+    def _area_focus_transport_target(self, target: MotionTarget) -> tuple[MotionTarget, Optional[str]]:
+        target = target.clamped()
+        zone = self._area_focus_zone(target)
+        if zone is None:
+            return MotionTarget(target.speed, target.depth, target.stroke_range, target.label).clamped(), None
+
+        stroke_range = self._localized_area_focus_range(target, zone)
+        if zone == "tip":
+            depth = stroke_range / 2.0
+        elif zone == "base":
+            depth = 100.0 - (stroke_range / 2.0)
+        elif zone == "upper":
+            depth = _clamp(max(stroke_range / 2.0, min(target.depth, 38.0)))
+        else:
+            depth = _clamp(target.depth, stroke_range / 2.0, 100.0 - (stroke_range / 2.0))
+
+        return MotionTarget(target.speed, depth, stroke_range, target.label).clamped(), zone
 
     def _apply_hsp_area_focus_target(self, target: MotionTarget, *, source: str) -> bool:
-        plan = self._hsp_area_focus_plan(target)
+        clean_target, focus_zone = self._area_focus_transport_target(target)
+        plan = self._hsp_area_focus_plan(clean_target)
         if plan is None:
             return False
-        clean_target = MotionTarget(
-            target.speed,
-            target.depth,
-            target.stroke_range,
-            target.label,
-        ).clamped()
+        requested_motion_program = ""
+        if isinstance(target.motion_program, dict):
+            requested_motion_program = (
+                "generated_area_focus"
+                if target.motion_program.get("generated_area_focus")
+                else "localized_anchor_loop"
+            )
         return self._apply_continuous_plan(
             plan,
             clean_target,
@@ -1016,10 +1090,14 @@ class MotionController:
             trace_metadata={
                 "continuous_plan_kind": "area_focus",
                 "continuous_area_focus": True,
+                "continuous_area_focus_localized": focus_zone is not None,
+                "continuous_area_focus_zone": focus_zone or "",
+                "continuous_area_focus_requested_depth": round(float(target.depth), 3),
+                "continuous_area_focus_requested_range": round(float(target.stroke_range), 3),
+                "continuous_area_focus_transport_depth": round(float(clean_target.depth), 3),
+                "continuous_area_focus_transport_range": round(float(clean_target.stroke_range), 3),
                 "legacy_hamp_replaced": True,
-                "requested_motion_program": "generated_area_focus"
-                if isinstance(target.motion_program, dict)
-                else "",
+                "requested_motion_program": requested_motion_program,
             },
         )
 
@@ -2550,6 +2628,15 @@ class MotionController:
             if previous_command_ended_at is not None:
                 batch_gap_ms = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
             previous_command_ended_at = send_ended_at
+            command_end_hsp_elapsed = hsp_clock_start_seconds + max(0.0, send_ended_at - started_at)
+            buffer_after_command_ms = round(
+                max(0.0, stream_seconds - command_end_hsp_elapsed) * 1000.0,
+                1,
+            )
+            batch_span_ms = round(
+                max(0.0, (points[-1]["t"] - points[0]["t"]) if points else 0.0),
+                1,
+            )
             wall_now = time.time()
             mono_now = time.monotonic()
             send_ended_wall = wall_now - max(0.0, mono_now - send_ended_at)
@@ -2606,6 +2693,8 @@ class MotionController:
                     "base_interval_ms": round(base_interval * 1000.0, 1),
                     "hsp_recent_command_ms": recent_command_ms,
                     "hsp_append_threshold_ms": append_threshold_ms,
+                    "hsp_buffer_after_command_ms": buffer_after_command_ms,
+                    "hsp_batch_span_ms": batch_span_ms,
                     "phase_interval_ms": round(point["phase_interval_seconds"] * 1000.0, 1),
                     "sample_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
                     "transport_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),

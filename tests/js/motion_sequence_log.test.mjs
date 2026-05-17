@@ -16,6 +16,7 @@ describe('motion sequence diagnostics formatting', () => {
                 frame_index: 0,
                 frame_count: 1,
                 command_ms: 12.5,
+                hsp_buffer_after_command_ms: 1875.5,
                 handy_ok: false,
                 handy_path: 'hdsp/xava',
                 handy_status: 503,
@@ -23,5 +24,6 @@ describe('motion sequence diagnostics formatting', () => {
         }, 'debug');
 
         assert.match(text, /Handy hdsp\/xava 503 failed/);
+        assert.match(text, /buf 1875\.5ms/);
     });
 });
