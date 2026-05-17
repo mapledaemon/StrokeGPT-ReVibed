@@ -1,4 +1,10 @@
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from tests._web_support import WebTestCase
@@ -438,6 +444,37 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.motion_reverse_direction = original_setting
             motion.set_reverse_direction(original_controller)
+
+    def test_loaded_motion_direction_is_applied_on_startup(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        startup_script = (
+            "import strokegpt.web as web\n"
+            "assert web.settings.motion_reverse_direction is True\n"
+            "assert web.motion.reverse_direction is True, web.motion.reverse_direction\n"
+            "assert web.settings.motion_backend == 'position'\n"
+            "assert web.motion.backend == 'position', web.motion.backend\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings_path = Path(temp_dir) / "my_settings.json"
+            settings_path.write_text(
+                json.dumps({
+                    "motion_reverse_direction": True,
+                    "motion_backend": "position",
+                }),
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
+            result = subprocess.run(
+                [sys.executable, "-c", startup_script],
+                cwd=temp_dir,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=20,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_check_settings_uses_fast_startup_payload(self):
         with mock.patch("strokegpt.web._ollama_installed_models", side_effect=AssertionError("live Ollama probe")), \
