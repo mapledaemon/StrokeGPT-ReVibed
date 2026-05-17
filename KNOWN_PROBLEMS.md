@@ -182,7 +182,7 @@ Follow-up work:
 
 ## Local LLM Chat Text Sometimes Missing While Voice Plays
 
-Status: Partial / Watch
+Status: Watch
 
 The local LLM occasionally emits a reply that the TTS path speaks normally while
 the chat panel never displays the matching text. The voice model receives the
@@ -191,11 +191,12 @@ divergence appears to be between the chat-emit path and the TTS-enqueue path
 rather than a model failure.
 
 The initiating browser now renders the `chat` text returned by `/send_message`
-immediately when the backend also reports `chat_queued: true`, then skips the
-matching queued echo from the next `/get_updates` response. That removes the
-known queue-drain race where the reply was spoken and returned to the caller,
-but the caller waited for a later update poll that another tab could consume
-first.
+or `/send_message_stream` immediately when the backend also reports
+`chat_queued: true`, then skips the matching queued echo from the next
+`/get_updates` response. Streamed replies are also queued as canonical chat
+updates before TTS starts. That removes the known queue-drain race where the
+reply was spoken and returned to the caller, but the caller waited for a later
+update poll that another tab could consume first.
 
 A backend diagnostic now logs `[WARN] TTS enqueued without chat-emit ...` or
 `[WARN] TTS enqueued with empty chat text ...` from

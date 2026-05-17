@@ -15,6 +15,7 @@ class AudioService:
     LOCAL_ENGINE_CHATTERBOX = "chatterbox"
     LOCAL_ENGINE_CHATTERBOX_TURBO = "chatterbox_turbo"
     LOCAL_ENGINE_DEFAULT = LOCAL_ENGINE_CHATTERBOX_TURBO
+    LOCAL_TTS_FIRST_CHUNK_CHARS = 150
     LOCAL_TTS_CHUNK_CHARS = 220
     LOCAL_TTS_TAIL_PADDING_MS = 120
     LOCAL_ENGINE_LABELS = {
@@ -110,10 +111,12 @@ class AudioService:
         self._local_generation_error = ""
         self._local_generation_started_at = None
         self._local_warmup_done = False
+        self._local_prompt_conditionals_signature = None
         self.last_generation_seconds = None
         self.last_error = ""
 
         self.audio_output_queue = deque()
+        self._audio_queue_condition = threading.Condition()
 
     def set_provider(self, provider, enabled=None):
         if provider not in {"elevenlabs", "local"}:
@@ -181,6 +184,7 @@ class AudioService:
                 self._local_model_engine = None
                 self._local_model_device = ""
                 self._local_warmup_done = False
+                self._local_prompt_conditionals_signature = None
             self.local_engine = next_engine
             self._local_preload_status = "idle"
             self._local_preload_phase = "idle"
@@ -204,13 +208,48 @@ class AudioService:
         )
         return True, "Local voice settings updated."
 
-    def local_status(self):
-        runtime = self._local_runtime_info()
+    def local_status(self, *, lightweight=False):
         engines = self._local_engine_options()
         selected = next((engine for engine in engines if engine["id"] == self.local_engine), None)
+        prompt_problem = self._local_prompt_path_problem()
+        model_loaded = self.local_model_loaded()
+        if lightweight:
+            message = "Local voice status will refresh after startup."
+            if self.provider == "local" or self.is_on:
+                message = "Checking local Chatterbox voice after the app opens so startup is not blocked by Torch/CUDA scans."
+            return {
+                "status": "unchecked",
+                "engine": self.local_engine,
+                "engine_label": self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine),
+                "engines": engines,
+                "available": False,
+                "message": message,
+                "style_presets": self.CHATTERBOX_STYLE_PRESETS,
+                "torch": {
+                    "unchecked": True,
+                    "torch_available": None,
+                    "cuda_available": None,
+                    "device": "",
+                    "device_name": "",
+                },
+                "device": self._local_model_device,
+                "cuda_available": None,
+                "model_loaded": model_loaded,
+                "preload_status": self._local_preload_status,
+                "preload_phase": self._local_preload_phase,
+                "preload_error": self._local_preload_error,
+                "preload_elapsed_seconds": self._elapsed_seconds(self._local_preload_started_at),
+                "preload_progress_percent": self._local_preload_progress_percent(),
+                "generation_status": self._local_generation_status,
+                "generation_error": self._local_generation_error,
+                "generation_elapsed_seconds": self._elapsed_seconds(self._local_generation_started_at),
+                "last_generation_seconds": self.last_generation_seconds,
+                "prompt_path": self.local_prompt_path,
+            }
+
+        runtime = self._local_runtime_info()
         engine_available = bool(selected and selected["available"])
         torch_available = bool(runtime["torch_available"])
-        prompt_problem = self._local_prompt_path_problem()
         available = engine_available and torch_available and not runtime.get("error") and not prompt_problem
 
         if not engine_available:
@@ -232,7 +271,6 @@ class AudioService:
             message = f"{selected['label']} is available, but Torch is CPU-only. Local voice will be slow until CUDA PyTorch is installed."
             status = "cpu_only"
 
-        model_loaded = self.local_model_loaded()
         if model_loaded:
             message += f" Model loaded on {self._local_model_device or runtime['device']}."
         elif self._local_preload_status == "loading":
@@ -345,12 +383,31 @@ class AudioService:
             self._generate_elevenlabs_audio(text)
 
     def get_next_audio_chunk(self):
-        if self.audio_output_queue:
+        return self.wait_for_audio_chunk(0.0)
+
+    def wait_for_audio_chunk(self, wait_seconds=0.0):
+        deadline = time.monotonic() + max(0.0, float(wait_seconds or 0.0))
+        with self._audio_queue_condition:
+            while not self.audio_output_queue:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self._audio_queue_condition.wait(timeout=remaining)
             return self.audio_output_queue.popleft()
+
+    def _enqueue_audio_chunk(self, audio_bytes, mimetype):
+        with self._audio_queue_condition:
+            self.audio_output_queue.append({"bytes": audio_bytes, "mimetype": mimetype})
+            self._audio_queue_condition.notify_all()
+
+    def clear_audio_queue(self):
+        with self._audio_queue_condition:
+            self.audio_output_queue.clear()
         return None
 
     def has_audio(self):
-        return bool(self.audio_output_queue)
+        with self._audio_queue_condition:
+            return bool(self.audio_output_queue)
 
     def consume_last_error(self):
         error = self.last_error
@@ -377,7 +434,7 @@ class AudioService:
             )
 
             audio_bytes_data = b"".join(audio_stream)
-            self.audio_output_queue.append({"bytes": audio_bytes_data, "mimetype": "audio/mpeg"})
+            self._enqueue_audio_chunk(audio_bytes_data, "audio/mpeg")
             self.last_error = ""
             print("[OK] ElevenLabs audio ready.")
 
@@ -400,10 +457,7 @@ class AudioService:
                 with self._local_generation_lock:
                     model = self._get_chatterbox_model()
                     generated_audio = self._generate_local_waveform(model, chunk)
-                    self.audio_output_queue.append({
-                        "bytes": self._encode_wav_bytes(generated_audio, model.sr),
-                        "mimetype": "audio/wav",
-                    })
+                    self._enqueue_audio_chunk(self._encode_wav_bytes(generated_audio, model.sr), "audio/wav")
                 self.last_generation_seconds = round(time.perf_counter() - started_at, 3)
                 print(f"[OK] Local audio chunk ready in {self.last_generation_seconds}s.")
             self._local_generation_status = "idle"
@@ -500,6 +554,7 @@ class AudioService:
             self._local_model_engine = None
             self._local_model_device = ""
             self._local_warmup_done = False
+            self._local_prompt_conditionals_signature = None
         self._empty_cuda_cache()
 
     def _empty_cuda_cache(self):
@@ -586,6 +641,10 @@ class AudioService:
         if not callable(prepare):
             return False
 
+        signature = self._chatterbox_prompt_conditionals_signature(model, generation_kwargs)
+        if signature and self._local_prompt_conditionals_signature == signature:
+            return True
+
         prepare_kwargs = {}
         try:
             parameters = inspect.signature(prepare).parameters
@@ -604,7 +663,30 @@ class AudioService:
                 raise
             prepare(self.local_prompt_path)
         self._coerce_chatterbox_conditionals_to_float32(model)
+        self._local_prompt_conditionals_signature = signature
         return True
+
+    def _chatterbox_prompt_conditionals_signature(self, model, generation_kwargs):
+        if not self.local_prompt_path:
+            return None
+        path = Path(self.local_prompt_path)
+        try:
+            resolved_path = str(path.resolve(strict=False))
+        except Exception:
+            resolved_path = str(path)
+        try:
+            stat = path.stat()
+            file_signature = (int(stat.st_mtime_ns), int(stat.st_size))
+        except OSError:
+            file_signature = None
+        return (
+            id(model),
+            self.local_engine,
+            resolved_path,
+            file_signature,
+            round(float(generation_kwargs.get("exaggeration", self.local_exaggeration)), 4),
+            True,
+        )
 
     def _coerce_chatterbox_conditionals_to_float32(self, model):
         try:
@@ -822,18 +904,20 @@ class AudioService:
         if len(text) <= self.LOCAL_TTS_CHUNK_CHARS:
             return [text]
 
-        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+        sentences = self._local_tts_text_segments(text)
         chunks = []
         current = ""
         for sentence in sentences:
-            if len(sentence) > self.LOCAL_TTS_CHUNK_CHARS:
+            max_chars = self.LOCAL_TTS_FIRST_CHUNK_CHARS if not chunks and not current else self.LOCAL_TTS_CHUNK_CHARS
+            if len(sentence) > max_chars:
                 if current:
                     chunks.append(current)
                     current = ""
-                chunks.extend(self._hard_split_text(sentence, self.LOCAL_TTS_CHUNK_CHARS))
+                hard_chunks = self._hard_split_text(sentence, max_chars)
+                chunks.extend(hard_chunks)
                 continue
             candidate = f"{current} {sentence}".strip()
-            if current and len(candidate) > self.LOCAL_TTS_CHUNK_CHARS:
+            if current and len(candidate) > max_chars:
                 chunks.append(current)
                 current = sentence
             else:
@@ -841,6 +925,20 @@ class AudioService:
         if current:
             chunks.append(current)
         return chunks
+
+    def _local_tts_text_segments(self, text):
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+        segments = []
+        for sentence in sentences:
+            if len(sentence) <= self.LOCAL_TTS_CHUNK_CHARS:
+                segments.append(sentence)
+                continue
+            clauses = [part.strip() for part in re.split(r"(?<=[,;:])\s+", sentence) if part.strip()]
+            if len(clauses) <= 1:
+                segments.append(sentence)
+            else:
+                segments.extend(clauses)
+        return segments
 
     def _hard_split_text(self, text, max_chars):
         words = text.split()

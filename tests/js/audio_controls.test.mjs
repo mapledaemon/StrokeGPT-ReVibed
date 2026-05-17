@@ -2,7 +2,7 @@ import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { initAudioControls, populateAudioSettings } from '../../static/js/audio.js';
+import { initAudioControls, playQueuedAudio, populateAudioSettings } from '../../static/js/audio.js';
 
 
 function jsonResponse(httpStatus, body) {
@@ -31,9 +31,13 @@ async function flushAsyncHandlers() {
 
 describe('audio controls', () => {
     let originalFetch;
+    let originalAudio;
+    let originalUrl;
 
     before(() => {
         originalFetch = globalThis.fetch;
+        originalAudio = globalThis.Audio;
+        originalUrl = globalThis.URL;
         initAudioControls();
     });
 
@@ -68,6 +72,8 @@ describe('audio controls', () => {
 
     afterEach(() => {
         globalThis.fetch = originalFetch;
+        globalThis.Audio = originalAudio;
+        globalThis.URL = originalUrl;
     });
 
     it('mirrors saved audio enabled state into the top-bar voice toggle', () => {
@@ -116,5 +122,37 @@ describe('audio controls', () => {
         assert.strictEqual(getStubElement('top-bar-voice-toggle-btn').getAttribute('aria-pressed'), 'false');
         assert.strictEqual(getStubElement('status-text').textContent, 'A voice must be selected to enable ElevenLabs audio.');
         assert.strictEqual(getStubElement('status-text').style.color, 'var(--yellow)');
+    });
+
+    it('drains queued audio chunks after the first waited fetch', async () => {
+        const endpoints = [];
+        const responses = [200, 200, 204];
+        globalThis.fetch = async endpoint => {
+            endpoints.push(endpoint);
+            const status = responses.shift();
+            return jsonResponse(status, status === 204 ? null : {audio: true});
+        };
+        let plays = 0;
+        globalThis.URL = {
+            createObjectURL() { return `blob:audio-${plays}`; },
+            revokeObjectURL() {},
+        };
+        globalThis.Audio = class StubAudio {
+            play() {
+                plays += 1;
+                queueMicrotask(() => this.onended?.());
+                return Promise.resolve();
+            }
+        };
+
+        const played = await playQueuedAudio({waitMs: 1200, followupWaitMs: 400});
+
+        assert.strictEqual(played, true);
+        assert.strictEqual(plays, 2);
+        assert.deepStrictEqual(endpoints, [
+            '/get_audio?wait_ms=1200',
+            '/get_audio?wait_ms=400',
+            '/get_audio?wait_ms=400',
+        ]);
     });
 });

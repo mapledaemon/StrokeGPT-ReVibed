@@ -795,8 +795,9 @@ def settings_payload(
     voice_input_status,
     motion_programs=None,
     motion_preferences=None,
+    local_tts_status=None,
 ):
-    local_tts_status = audio.local_status()
+    local_tts_status = local_tts_status or audio.local_status()
     payload = {
         "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
         "persona": settings.persona_desc,

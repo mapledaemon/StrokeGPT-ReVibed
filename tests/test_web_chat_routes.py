@@ -294,14 +294,14 @@ class WebChatRouteTests(WebTestCase):
             self.assertEqual(final["status"], "ok")
             self.assertEqual(final["chat"], "Visible as it arrives.")
             self.assertTrue(final["chat_streamed"])
-            self.assertFalse(final["chat_queued"])
+            self.assertTrue(final["chat_queued"])
 
             updates = self.client.get("/get_updates")
             try:
                 queued = updates.get_json()["messages"]
             finally:
                 updates.close()
-            self.assertEqual(queued, [])
+            self.assertEqual(queued, ["Visible as it arrives."])
             self.assertEqual(list(app_state.chat_history), [
                 {"role": "user", "content": "say something"},
                 {"role": "assistant", "content": "Visible as it arrives."},

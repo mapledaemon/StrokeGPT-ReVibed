@@ -1,5 +1,5 @@
 import { D, apiCall, el, state } from './context.js';
-import { populateAudioSettings, populateLocalEngineOptions, populateLocalStyleOptions, updateAudioProviderUi, updateLocalTtsStatus } from './audio.js';
+import { populateAudioSettings, populateLocalEngineOptions, populateLocalStyleOptions, refreshLocalTtsStatus, updateAudioProviderUi, updateLocalTtsStatus } from './audio.js';
 import { applyHandyConnectionResult, markHandyConnectionKeySaved, populateDeviceSettings } from './device-control.js';
 import { populateMotionSettings } from './motion-control.js';
 import { populateVoiceInputSettings } from './voice-input.js';
@@ -44,6 +44,13 @@ function refreshStartupOllamaStatus(data = {}) {
 }
 
 const COMPACT_SIDEBAR_QUERY = '(max-width: 760px)';
+const STARTUP_SPLASH_STEPS = [
+    {delayMs: 0, progress: 8, message: 'Starting browser UI...'},
+    {delayMs: 500, progress: 22, message: 'Checking saved settings...'},
+    {delayMs: 1800, progress: 46, message: 'Checking local voice settings. Chatterbox and Torch checks can take a moment.'},
+    {delayMs: 4500, progress: 68, message: 'Still waiting on startup checks. Local voice dependency scans may be slow on first run.'},
+    {delayMs: 9000, progress: 84, message: 'Almost ready. StrokeGPT will open as soon as the backend responds.'},
+];
 
 function storedSidebarCollapsedPreference() {
     try {
@@ -66,6 +73,40 @@ export function applyInitialSidebarState() {
     const shouldCollapse = stored === 'true' || (stored === null && isCompactSidebarViewport());
     if (shouldCollapse) D.body.classList.add('sidebar-collapsed');
     else D.body.classList.remove('sidebar-collapsed');
+}
+
+export function setSplashLoadingStatus(progress, message) {
+    const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+    if (el.splashStatus) el.splashStatus.textContent = message || '';
+    if (el.splashProgressBar) el.splashProgressBar.style.width = `${safeProgress}%`;
+    if (el.splashProgressText) el.splashProgressText.textContent = `${safeProgress}%`;
+}
+
+function startSplashLoadingStatus() {
+    const timers = [];
+    STARTUP_SPLASH_STEPS.forEach(step => {
+        timers.push(window.setTimeout(() => {
+            setSplashLoadingStatus(step.progress, step.message);
+        }, step.delayMs));
+    });
+    return () => timers.forEach(timer => window.clearTimeout(timer));
+}
+
+function hideSplashScreen() {
+    if (el.splashScreen) el.splashScreen.style.display = 'none';
+}
+
+function fadeSplashToSetup(data) {
+    if (el.splashPrompt) el.splashPrompt.textContent = 'Press Enter to Begin';
+    setSplashLoadingStatus(100, 'Startup checks complete. Press Enter to begin setup.');
+    const startHandler = event => {
+        if (event.key === 'Enter') {
+            D.removeEventListener('keydown', startHandler);
+            el.splashScreen?.classList.add('hidden');
+            setTimeout(() => renderSetup(false, data || {}), 1000);
+        }
+    };
+    D.addEventListener('keydown', startHandler);
 }
 
 export function renderSetup(isReturningUser = false, data = {}) {
@@ -202,9 +243,13 @@ export function renderSetup(isReturningUser = false, data = {}) {
 }
 
 export async function startupCheck() {
+    if (el.splashPrompt) el.splashPrompt.textContent = 'Loading app...';
+    const stopSplashLoading = startSplashLoadingStatus();
     const data = await apiCall('/check_settings');
+    stopSplashLoading();
     applyInitialSidebarState();
     if (data && data.configured) {
+        setSplashLoadingStatus(100, 'Settings loaded. Opening chat...');
         el.statusText.textContent = 'Welcome back! Settings loaded.';
         state.myHandyKey = data.handy_key;
         state.myPersonaDescription = data.persona || '';
@@ -234,10 +279,12 @@ export async function startupCheck() {
             el.elevenLabsVoiceSelect.dataset.savedVoiceId = data.elevenlabs_voice_id || '';
             el.setElevenLabsKeyButton.click();
         }
-        D.getElementById('splash-screen').style.display = 'none';
+        hideSplashScreen();
         renderSetup(true, data);
         refreshStartupOllamaStatus(data);
+        refreshLocalTtsStatus();
     } else {
+        setSplashLoadingStatus(92, 'Preparing first-run setup...');
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
         populateOllamaThinkingSetting(data && data.ollama_thinking_enabled);
@@ -256,13 +303,7 @@ export async function startupCheck() {
         updateAudioProviderUi();
         populateVoiceInputSettings(data || {});
         refreshStartupOllamaStatus(data || {});
-        const startHandler = event => {
-            if (event.key === 'Enter') {
-                D.removeEventListener('keydown', startHandler);
-                D.getElementById('splash-screen').classList.add('hidden');
-                setTimeout(() => renderSetup(false, data || {}), 1000);
-            }
-        };
-        D.addEventListener('keydown', startHandler);
+        refreshLocalTtsStatus();
+        fadeSplashToSetup(data || {});
     }
 }
