@@ -83,6 +83,7 @@ class ModeCallbacks(TypedDict, total=False):
     autospeak_range: Callable[[], tuple[float, float]]
     consume_autospeak_wake: Callable[[], bool]
     set_mode_name: Callable[[str], None]
+    should_finalize_on_exit: Callable[[], bool]
     mode_decision: ModeDecisionProvider
     pause_event: threading.Event
 

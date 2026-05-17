@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .motion import MotionTarget
-from .motion_patterns import PATTERNS, expand_anchor_program, expand_pattern
+from .motion_patterns import (
+    PATTERNS,
+    continuous_anchor_motion_plan,
+    continuous_motion_plan_from_pattern,
+    expand_anchor_program,
+    expand_pattern,
+)
 
 
 def _slug_label(value):
@@ -21,6 +27,37 @@ class ScriptStep:
     mood: str = "Curious"
     message: Optional[str] = None
     delay_factor: float = 1.0
+    hold_seconds_floor: float = 0.0
+
+
+CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER = 1.15
+
+
+def _continuous_hold_floor_for_pattern(pattern_id):
+    pattern = PATTERNS.get(pattern_id)
+    if not pattern:
+        return 0.0
+    plan = continuous_motion_plan_from_pattern(pattern)
+    if plan is None:
+        return 0.0
+    return max(0.0, float(plan.duration_seconds or 0.0) * CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER)
+
+
+def _continuous_hold_floor_for_target(target, pattern_id=None):
+    if not isinstance(target, MotionTarget):
+        return 0.0
+    if target.motion_program:
+        plan = continuous_anchor_motion_plan(target.motion_program)
+        if plan is not None:
+            return max(0.0, float(plan.duration_seconds or 0.0) * CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER)
+    if pattern_id:
+        return _continuous_hold_floor_for_pattern(pattern_id)
+    clean_label = (target.label or "").lower()
+    slug_label = _slug_label(target.label)
+    for candidate in sorted(PATTERNS, key=len, reverse=True):
+        if candidate in clean_label or slug_label == candidate or slug_label.startswith(f"{candidate}-"):
+            return _continuous_hold_floor_for_pattern(candidate)
+    return 0.0
 
 
 AUTO_ARCS = (
@@ -138,7 +175,14 @@ class MotionScriptPlanner:
             label=label,
         ).clamped()
         if self.continuous_patterns and pattern:
-            return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.85, 1.15))]
+            return [
+                ScriptStep(
+                    target,
+                    mood=mood,
+                    delay_factor=self.rng.uniform(0.85, 1.15),
+                    hold_seconds_floor=_continuous_hold_floor_for_pattern(pattern_id),
+                )
+            ]
         frames = expand_pattern(pattern_id, current, target, rng=self.rng)
         if not frames:
             return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.75, 1.15))]
@@ -169,6 +213,17 @@ class MotionScriptPlanner:
         if pattern:
             return self._pattern_feedback_steps(current, target, pattern)
 
+        if self.continuous_patterns:
+            return [
+                ScriptStep(
+                    target,
+                    mood="Confident",
+                    message="Adjusting.",
+                    delay_factor=1.0,
+                    hold_seconds_floor=_continuous_hold_floor_for_target(target),
+                )
+            ]
+
         midpoint = MotionTarget(
             (current.speed + target.speed) / 2,
             (current.depth + target.depth) / 2,
@@ -197,17 +252,17 @@ class MotionScriptPlanner:
             (current.stroke_range + target.stroke_range) / 2,
             label=f"{target.label} bridge",
         ).clamped()
-        steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         if self.continuous_patterns:
-            bridge = MotionTarget(
-                bridge.speed,
-                bridge.depth,
-                bridge.stroke_range,
-                label="feedback bridge",
-            ).clamped()
-            steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
-            steps.append(ScriptStep(target, mood="Confident", delay_factor=0.9))
-            return steps
+            return [
+                ScriptStep(
+                    target,
+                    mood="Confident",
+                    message="Adjusting.",
+                    delay_factor=1.0,
+                    hold_seconds_floor=_continuous_hold_floor_for_pattern(pattern),
+                )
+            ]
+        steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         mood_by_pattern = {
             "flick": "Playful",
             "flutter": "Playful",
@@ -234,17 +289,17 @@ class MotionScriptPlanner:
             (current.stroke_range + target.stroke_range) / 2,
             label=f"{target.label} bridge",
         ).clamped()
-        steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         if self.continuous_patterns:
-            bridge = MotionTarget(
-                bridge.speed,
-                bridge.depth,
-                bridge.stroke_range,
-                label="feedback bridge",
-            ).clamped()
-            steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
-            steps.append(ScriptStep(target, mood="Intimate", delay_factor=0.9))
-            return steps
+            return [
+                ScriptStep(
+                    target,
+                    mood="Intimate",
+                    message="Adjusting.",
+                    delay_factor=1.0,
+                    hold_seconds_floor=_continuous_hold_floor_for_target(target),
+                )
+            ]
+        steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         frames = expand_anchor_program(current, target, target.motion_program, rng=self.rng)
         steps.extend(
             ScriptStep(frame.target, mood="Intimate", delay_factor=frame.delay_factor)

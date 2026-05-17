@@ -97,16 +97,30 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].target.label, PATTERNS["milking-full-drive"].name)
         self.assertGreater(steps[0].delay_factor, 0)
+        self.assertGreater(steps[0].hold_seconds_floor, 0)
 
-    def test_continuous_feedback_bridge_does_not_restart_pattern_basis(self):
+    def test_continuous_feedback_uses_single_pattern_replacement(self):
         planner = MotionScriptPlanner("auto", rng=random.Random(4), continuous_patterns=True)
         current = MotionTarget(25, 25, 25)
         feedback = MotionTarget(60, 70, 35, "milk")
 
         steps = planner._pattern_feedback_steps(current, feedback, "milk")
 
-        self.assertEqual(steps[0].target.label, "feedback bridge")
-        self.assertEqual(steps[1].target.label, "milk")
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].message, "Adjusting.")
+        self.assertEqual(steps[0].target.label, "milk")
+        self.assertGreater(steps[0].hold_seconds_floor, 0)
+
+    def test_continuous_plain_feedback_skips_legacy_bridge_sequence(self):
+        planner = MotionScriptPlanner("auto", rng=random.Random(4), continuous_patterns=True)
+        current = MotionTarget(25, 25, 25)
+        feedback = MotionTarget(60, 70, 35, "deeper")
+
+        steps = planner._feedback_steps(current, feedback)
+
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].message, "Adjusting.")
+        self.assertEqual(steps[0].target.label, "deeper")
 
     def test_continuous_motion_plan_samples_pattern_as_cycle(self):
         plan = continuous_motion_plan("stroke")

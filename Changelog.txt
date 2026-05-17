@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #257 - Fix Motion Log Sizing And Continuous Chat-Mode Replacements
+----------------------------------------------------------------------------------
+
+Branch: codex/fix-motion-log-and-chat-stutter
+
+- Restore the bottom motion log/status strip to a fixed-size scrolling layout;
+  long backend diagnostics now scroll inside the current-status panel instead
+  of expanding the whole bottom bar.
+- Reduce continuous-backend stutter during chat-directed active modes by
+  avoiding extra legacy bridge replacements and holding scripted continuous
+  patterns for at least their planned cycle before the next automatic swap.
+- Reduce `llm+milk` chat-mode jitter by keeping broad milk commands centered
+  and skipping repeated same-pattern LLM replacements caused by small numeric
+  noise.
+- Prevent a replaced background-mode thread from stopping newer motion or
+  clearing the active-mode state if its old cleanup runs late after a slow
+  model/device call.
+- Stabilize the HSP transport-slope regression test by waiting for trace rows
+  to cover the accepted fake-HSP batch before asserting trace-derived rates.
+
+
 2026-05-17 - PR #256 - Track App-Local SSE Follow-Up
 -----------------------------------------------------
 

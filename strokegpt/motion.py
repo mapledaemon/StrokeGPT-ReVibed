@@ -351,6 +351,18 @@ def _cue_base_speed(current_speed: float, cues: MotionCues, *, preserve_current_
     return next_speed
 
 
+def _explicit_depth_allowed(cues: MotionCues, depth: Optional[float]) -> bool:
+    if depth is None:
+        return False
+    # Broad milk should stay centered on the full stroke envelope. Small local
+    # models often emit noisy dp values with "milk" even when no area was
+    # requested, causing repeated chat turns to replace the HSP stream around
+    # arbitrary centers.
+    if cues.pattern == "milk" and (not cues.zone or cues.zone == "full"):
+        return False
+    return True
+
+
 def _target_from_cues(
     current: MotionTarget,
     cues: MotionCues,
@@ -438,7 +450,7 @@ def _target_from_cues(
 
     if speed is not None:
         next_speed = speed
-    if depth is not None:
+    if _explicit_depth_allowed(cues, depth):
         next_depth = depth
     if stroke_range is not None:
         next_range = stroke_range
