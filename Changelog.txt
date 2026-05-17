@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #256 - Track App-Local SSE Follow-Up
+-----------------------------------------------------
+
+Branch: codex/roadmap-app-local-sse
+
+- Add a scoped roadmap note for evaluating app-local browser SSE as a future
+  chat/status/audio-ready transport improvement while preserving the existing
+  polling fallback, streamed chat response, and separate audio endpoint.
+
+
 2026-05-17 - PR #255 - Surface Handy SSE Device Health Events
 --------------------------------------------------------------
 

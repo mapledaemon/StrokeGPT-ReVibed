@@ -270,6 +270,18 @@ watch items after recent regressions.
   Missing While Voice Plays"), especially when motion repair replaces streamed
   draft text, slow models delay final JSON validation, or a browser falls back
   to the non-streaming path.
+- Evaluate an app-local browser event stream as a follow-up to the current
+  `/get_updates` and `/get_status` polling loops. This would be useful for
+  faster chat/status delivery, audio-ready wakeups, mode-status messages,
+  setup/download progress, and coalesced motion-observability pushes, but it
+  should be framed as a browser-state transport refactor rather than a Handy
+  device-sync fix. Preserve the existing HTTP polling fallback, per-client
+  chat cursors, streamed `/send_message_stream` response path, separate
+  `/get_audio` audio-byte endpoint, and browser-local no-overlap audio lease.
+  If implemented, start by mirroring `/get_updates` events and audio-ready
+  notifications before considering a bounded-rate status/observability
+  stream; do not move large audio bytes or long LLM generation onto the app
+  SSE channel.
 - Continue investigating provider-specific or rapid-mode TTS cutoffs after the
   local Chatterbox WAV encoder's trailing silence cushion has been validated
   during real playback.
