@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #255 - Surface Handy SSE Device Health Events
+--------------------------------------------------------------
+
+Branch: codex/handy-sse-device-health
+
+- Expand the Handy REST v3 SSE listener to subscribe to device status,
+  disconnects, device errors, blocked slider, temperature, low-memory, stroke
+  changes, and HAMP/HDSP state-change events.
+- Cache sanitized recent Handy SSE events in diagnostics so real-device stops
+  and firmware-side problems are visible without waiting for another command.
+- Widen the lower current-status and composer status areas just enough for the
+  longer backend/device state text added by SSE diagnostics, and let the
+  motion status strip grow only while diagnostics are visible.
+
+
 2026-05-17 - PR #254 - Subscribe To Handy HSP SSE State Events
 ---------------------------------------------------------------
 
