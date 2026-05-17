@@ -46,7 +46,34 @@ class MotionTransportCaptureRouteTests(WebTestCase):
         before_commands = [{"path": "slide", "ok": True}]
         after_commands = [
             *before_commands,
-            {"path": "hsp/add", "ok": True, "body": {"points": 12, "flush": True}},
+            {
+                "path": "hsp/add",
+                "ok": True,
+                "elapsed_ms": 115.4,
+                "body": {
+                    "points": 16,
+                    "points_preview": [
+                        {"t": 0, "x": 50},
+                        {"t": 50, "x": 56},
+                        {"t": 100, "x": 63},
+                    ],
+                    "points_tail_preview": [
+                        {"t": 650, "x": 44},
+                        {"t": 700, "x": 50},
+                    ],
+                    "points_truncated": True,
+                    "flush": True,
+                    "tail_point_stream_index": 16,
+                },
+                "response": {
+                    "hsp_state": {
+                        "current_time_ms": 25,
+                        "current_point": 1,
+                        "points": 16,
+                        "play_state": "playing",
+                    }
+                },
+            },
             {"path": "hsp/play", "ok": True, "body": {"start_time": 0, "playback_rate": 1}},
         ]
         before_trace = [{"label": "old", "depth": 50}]
@@ -72,8 +99,16 @@ class MotionTransportCaptureRouteTests(WebTestCase):
         capture = payload["capture"]
         self.assertEqual(capture["summary"]["status"], "ok")
         self.assertEqual(capture["summary"]["hsp_commands"], 2)
+        self.assertEqual(capture["summary"]["hsp_add_batches"], 1)
+        self.assertEqual(capture["summary"]["hsp_add_max_preview_gap_ms"], 550)
+        self.assertEqual(capture["summary"]["hsp_add_max_preview_delta"], 19)
         self.assertEqual(capture["summary"]["path_counts"], {"hsp/add": 1, "hsp/play": 1})
         self.assertEqual([command["path"] for command in capture["handy_command_history"]], ["hsp/add", "hsp/play"])
+        self.assertEqual(capture["hsp_add_stats"][0]["point_count"], 16)
+        self.assertTrue(capture["hsp_add_stats"][0]["preview_partial"])
+        self.assertTrue(capture["hsp_add_stats"][0]["flush"])
+        self.assertEqual(capture["hsp_add_stats"][0]["preview_max_gap_ms"], 550)
+        self.assertEqual(capture["hsp_add_stats"][0]["hsp_state"]["current_time_ms"], 25)
         self.assertEqual(len(capture["motion_trace"]), 1)
         self.assertEqual(capture["motion_trace"][0]["continuous_schema"], "hsp")
         self.assertNotIn("command_history", capture["before"])

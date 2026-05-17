@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #242 - Diagnose HSP Replacement Morph Starts
+--------------------------------------------------------------
+
+Branch: codex/hsp-morph-start-diagnostics
+
+- Predict the active stream position at the scheduled HSP replacement time
+  before computing replacement phase selection and morph timing, so delayed
+  replacements no longer morph from the stale apply-time sampled target.
+- Add replacement trace fields for morph-start depth/range, prediction source,
+  selected phase, and apply-time delta to make remaining stutter reports easier
+  to inspect.
+- Extend motion transport capture with bounded HSP add point stats and HSP
+  response-state summaries for real-device replacement debugging.
+- Route generated LLM anchor-loop continuous targets through live stroke
+  control instead of HSP timed-point streaming, with explicit trace metadata,
+  because real-device HSP anchor loops still felt micro-stepped after the
+  planner-side fixes.
+- Tighten base-lick chat commands into a short deep live-stroke target and
+  reschedule standalone autospeak after deterministic motion commands so a
+  manual adjustment does not leave the voice loop silent.
+
+
 2026-05-17 - PR #241 - Stabilize HSP Anchor-Loop Replacements
 ---------------------------------------------------------------
 

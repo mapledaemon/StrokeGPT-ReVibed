@@ -714,6 +714,98 @@ def _motion_transport_snapshot():
     }
 
 
+def _hsp_point_stat_value(point, key):
+    if not isinstance(point, dict):
+        return None
+    try:
+        return float(point[key])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _hsp_add_points_for_stats(body):
+    if not isinstance(body, dict):
+        return []
+    raw_points = body.get("points")
+    if isinstance(raw_points, list):
+        candidates = raw_points
+    else:
+        candidates = list(body.get("points_preview") or [])
+        candidates.extend(body.get("points_tail_preview") or [])
+    points = []
+    seen = set()
+    for point in candidates:
+        t_value = _hsp_point_stat_value(point, "t")
+        x_value = _hsp_point_stat_value(point, "x")
+        if t_value is None or x_value is None:
+            continue
+        key = (t_value, x_value)
+        if key in seen:
+            continue
+        seen.add(key)
+        points.append({"t": t_value, "x": x_value})
+    points.sort(key=lambda item: item["t"])
+    return points
+
+
+def _hsp_add_command_stats(command_history):
+    stats = []
+    for index, command in enumerate(command_history):
+        if not isinstance(command, dict) or command.get("path") != "hsp/add":
+            continue
+        body = command.get("body") if isinstance(command.get("body"), dict) else {}
+        points = _hsp_add_points_for_stats(body)
+        point_count = body.get("points")
+        if isinstance(point_count, list):
+            point_count = len(point_count)
+        try:
+            point_count = int(point_count)
+        except (TypeError, ValueError):
+            point_count = len(points)
+        entry = {
+            "command_index": index,
+            "ok": command.get("ok"),
+            "status_code": command.get("status_code"),
+            "elapsed_ms": command.get("elapsed_ms"),
+            "point_count": point_count,
+            "preview_point_count": len(points),
+            "preview_partial": bool(point_count and len(points) < point_count),
+            "flush": bool(body.get("flush")),
+            "tail_point_stream_index": body.get("tail_point_stream_index"),
+        }
+        if points:
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            deltas = [abs(right["x"] - left["x"]) for left, right in zip(points, points[1:])]
+            entry.update({
+                "first_point_time_ms": int(round(points[0]["t"])),
+                "last_preview_point_time_ms": int(round(points[-1]["t"])),
+                "first_x": round(points[0]["x"], 3),
+                "last_preview_x": round(points[-1]["x"], 3),
+            })
+            if intervals:
+                entry["preview_max_gap_ms"] = round(max(intervals), 1)
+                entry["preview_mean_gap_ms"] = round(sum(intervals) / len(intervals), 1)
+            if deltas:
+                entry["preview_max_delta"] = round(max(deltas), 3)
+        response = command.get("response") if isinstance(command.get("response"), dict) else {}
+        hsp_state = response.get("hsp_state") if isinstance(response, dict) else None
+        if isinstance(hsp_state, dict):
+            entry["hsp_state"] = {
+                key: hsp_state.get(key)
+                for key in (
+                    "current_time_ms",
+                    "current_point",
+                    "points",
+                    "tail_point_stream_index",
+                    "tail_point_stream_index_threshold",
+                    "play_state",
+                )
+                if key in hsp_state
+            }
+        stats.append(entry)
+    return stats
+
+
 def _motion_transport_summary(motion_trace, command_history, diagnostics=None):
     diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
     paths = [str(command.get("path") or "") for command in command_history if isinstance(command, dict)]
@@ -740,6 +832,17 @@ def _motion_transport_summary(motion_trace, command_history, diagnostics=None):
             if isinstance(point, dict) and point.get("continuous_schema")
         }
     )
+    hsp_add_stats = _hsp_add_command_stats(command_history)
+    hsp_add_preview_gaps = [
+        stat["preview_max_gap_ms"]
+        for stat in hsp_add_stats
+        if isinstance(stat.get("preview_max_gap_ms"), (int, float))
+    ]
+    hsp_add_preview_deltas = [
+        stat["preview_max_delta"]
+        for stat in hsp_add_stats
+        if isinstance(stat.get("preview_max_delta"), (int, float))
+    ]
 
     if failed_count:
         status = "error"
@@ -781,6 +884,9 @@ def _motion_transport_summary(motion_trace, command_history, diagnostics=None):
         "hamp_or_mode_commands": hamp_count,
         "failed_commands": failed_count,
         "continuous_schemas": schemas,
+        "hsp_add_batches": len(hsp_add_stats),
+        "hsp_add_max_preview_gap_ms": max(hsp_add_preview_gaps) if hsp_add_preview_gaps else None,
+        "hsp_add_max_preview_delta": max(hsp_add_preview_deltas) if hsp_add_preview_deltas else None,
         "api_v3_enabled": bool(diagnostics.get("api_v3_enabled")),
         "api_v3_key_configured": bool(diagnostics.get("api_v3_key_configured")),
         "api_v3_auth_failed": bool(diagnostics.get("api_v3_auth_failed")),
@@ -861,6 +967,7 @@ def motion_transport_capture_payload(action="snapshot"):
             "motion": snapshot["motion"],
             "motion_trace": motion_trace,
             "handy_command_history": command_history,
+            "hsp_add_stats": _hsp_add_command_stats(command_history),
         }
         capture["summary"] = _motion_transport_summary(motion_trace, command_history, capture["after"])
         return {
@@ -878,6 +985,7 @@ def motion_transport_capture_payload(action="snapshot"):
         "motion": snapshot["motion"],
         "motion_trace": snapshot["motion_trace"],
         "handy_command_history": snapshot["handy_command_history"],
+        "hsp_add_stats": _hsp_add_command_stats(snapshot["handy_command_history"]),
     }
     capture["summary"] = _motion_transport_summary(
         capture["motion_trace"],
@@ -1933,7 +2041,12 @@ def _handle_chat_commands(text, allow_motion=True):
         motion.apply_generated_target(intent.target, source=f"chat command: {intent.matched or 'move'}")
         _remember_motion_pattern_from_target(intent.target)
         add_mode_status_message("Adjusting.")
-        return True, jsonify({"status": "move_applied", "matched": intent.matched})
+        autospeak_scheduled = _schedule_standalone_autospeak(0)
+        return True, jsonify({
+            "status": "move_applied",
+            "matched": intent.matched,
+            "autospeak_scheduled": autospeak_scheduled,
+        })
     return False, None
 
 def _queue_message_to_active_mode(user_input):

@@ -138,6 +138,55 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_direct_motion_command_reschedules_autospeak(self):
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        captured_targets = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 2
+            settings.autospeak_max_seconds = 30
+            with mock.patch.object(
+                motion,
+                "apply_generated_target",
+                side_effect=lambda target, **_kwargs: captured_targets.append(target),
+            ), mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                response = self.client.post("/send_message", json={
+                    "message": "lick the base",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "move_applied")
+            self.assertTrue(data["autospeak_scheduled"])
+            schedule_autospeak.assert_called_once_with(0)
+            self.assertEqual(len(captured_targets), 1)
+            self.assertEqual(captured_targets[0].depth, 88)
+            self.assertEqual(captured_targets[0].stroke_range, 24)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_standalone_autospeak_turn_emits_chat_and_reschedules(self):
         import strokegpt.web as web
         from strokegpt.web import app_state, audio, handy, llm, settings
