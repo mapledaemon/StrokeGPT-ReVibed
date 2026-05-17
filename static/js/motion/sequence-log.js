@@ -62,6 +62,7 @@ export function formatMotionTraceTiming(point = {}) {
     if (point.batch_gap_ms !== undefined) parts.push(`batch ${observationNumber(point.batch_gap_ms, 0).toFixed(1)}ms`);
     if (point.gap_ms !== undefined) parts.push(`gap ${observationNumber(point.gap_ms, 0).toFixed(1)}ms`);
     if (point.command_ms !== undefined) parts.push(`cmd ${observationNumber(point.command_ms, 0).toFixed(1)}ms`);
+    if (point.hsp_buffer_after_command_ms !== undefined) parts.push(`buf ${observationNumber(point.hsp_buffer_after_command_ms, 0).toFixed(1)}ms`);
     return parts;
 }
 

@@ -15,6 +15,7 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
+    CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND,
     ContinuousPhaseState,
     IntentMatcher,
     MotionController,
@@ -1190,6 +1191,30 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_batches_use_full_api_capacity_for_latency_reserve(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "milk"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            self.assertEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
+            self.assertLessEqual(len(points), 100)
+            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 4500)
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertTrue(hsp_points)
+            self.assertGreaterEqual(hsp_points[-1]["hsp_buffer_after_command_ms"], 4400.0)
+            self.assertGreaterEqual(hsp_points[-1]["hsp_batch_span_ms"], 4500.0)
+        finally:
+            controller.stop()
+
     def test_continuous_hsp_stream_filters_authored_subsample_chatter(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -1648,6 +1673,7 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(second_points)
             self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 2700.0)
+            self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 3200.0)
             self.assertEqual(second_points[0]["hsp_first_point_late_estimate_ms"], 0.0)
             replacement = handy.stream_replacements[0]
             self.assertEqual(replacement["points"][0]["t"], replacement["start_time_ms"])
@@ -1658,11 +1684,11 @@ class MotionControllerTests(unittest.TestCase):
     def test_continuous_hsp_append_threshold_scales_with_observed_command_latency(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
 
-        controller._observe_hsp_command_seconds(2.296)
+        controller._observe_hsp_command_seconds(2.5)
 
         threshold = controller._continuous_append_threshold_seconds()
         self.assertGreater(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
-        self.assertGreaterEqual(threshold, 2.9)
+        self.assertGreaterEqual(threshold, 3.6)
 
     def test_continuous_transition_phase_starts_new_pattern_near_current_depth(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
@@ -2088,13 +2114,63 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
             points = handy.stream_starts[0]["points"]
             self.assertGreater(max(point["x"] for point in points), 90)
-            self.assertLess(min(point["x"] for point in points), 35)
+            steady_points = [point for point in points if point["t"] >= 1800]
+            self.assertTrue(steady_points, points)
+            self.assertGreater(min(point["semantic_x"] for point in steady_points), 60)
             trace = controller.observability_snapshot()["trace"]
             self.assertTrue(
                 any(
                     point.get("continuous_schema") == "hsp"
                     and point.get("continuous_plan_kind") == "area_focus"
                     and point.get("continuous_area_focus")
+                    and point.get("continuous_area_focus_localized")
+                    and point.get("continuous_area_focus_zone") == "base"
+                    for point in trace
+                ),
+                trace,
+            )
+            self.assertTrue(all(point.get("continuous_schema") != "hamp_live_anchor" for point in trace))
+        finally:
+            controller.stop()
+
+    def test_continuous_backend_localizes_tip_anchor_loop_area_focus(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            target = controller.sanitizer.from_llm_move(
+                {
+                    "zone": "tip",
+                    "pattern": "pulse",
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "upper", "lower", "upper"],
+                    "sp": 33,
+                    "rng": 75,
+                },
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(target)
+            self.assertTrue(controller._should_use_hsp_area_focus_for_generated_target(target))
+            self.assertFalse(controller._should_use_live_stroke_for_generated_target(target))
+
+            controller.apply_generated_target(target, source="llm")
+
+            self.assertEqual(handy.moves, [])
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            points = handy.stream_starts[0]["points"]
+            steady_points = [point for point in points if point["t"] >= 1800]
+            self.assertTrue(steady_points, points)
+            self.assertLessEqual(max(point["semantic_x"] for point in steady_points), 38)
+            self.assertLessEqual(min(point["semantic_x"] for point in steady_points), 5)
+            trace = controller.observability_snapshot()["trace"]
+            self.assertTrue(
+                any(
+                    point.get("continuous_schema") == "hsp"
+                    and point.get("continuous_plan_kind") == "area_focus"
+                    and point.get("continuous_area_focus_localized")
+                    and point.get("continuous_area_focus_zone") == "tip"
+                    and point.get("continuous_area_focus_requested_range") == 75
+                    and point.get("continuous_area_focus_transport_range") < 36
                     for point in trace
                 ),
                 trace,

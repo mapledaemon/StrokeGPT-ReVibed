@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #247 - Stabilize Continuous HSP Latency Reserve
+----------------------------------------------------------------
+
+Branch: codex/hsp-jitter-latency-buffering
+
+- Increase Continuous HSP append reserve and point batch capacity so observed
+  one-to-two second Handy API calls are less likely to starve the timed-point
+  stream and cause visible jitter.
+- Localize HSP area-focus transport for tip/base/shaft requests, including
+  endpoint-local LLM anchor loops, so wide semantic ranges do not make a
+  "tip" or "base" command swing through the middle of the device.
+- Add remaining HSP buffer timing to debug motion sequence logs so future
+  real-device reports show whether the stream was close to running dry.
+
+
 2026-05-17 - PR #246 - Keep Chat Ahead Of Voice Playback
 --------------------------------------------------------
 

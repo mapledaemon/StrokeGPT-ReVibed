@@ -104,7 +104,14 @@ Follow-up work:
   new-pattern replacements should start near the current sampled depth/range
   before morphing instead of always jumping to phase zero. HAMP should be
   compared as the legacy stroke-window adapter rather than as a timed-point
-  transport.
+  transport. Debug motion logs now include remaining HSP buffer after each
+  command as `buf ...ms`; values near zero alongside one-to-two second
+  `cmd ...ms` rows indicate transport starvation risk rather than a spatial
+  curve problem. Tip/base/shaft HSP area-focus commands now project wide
+  semantic requests into localized transport windows; if `buf` stays healthy
+  but motion still leaves the requested region, inspect
+  `continuous_area_focus_requested_*` versus
+  `continuous_area_focus_transport_*` in the trace.
 - Before changing sampler math for fixed-speed Continuous reports, confirm that
   firmware v4 actually entered HSP. Motion transport captures now include
   `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`,
