@@ -210,7 +210,7 @@ LENGTH_PATTERNS = _compile_groups(
     ("full", (r"\bfull\s+(?:stroke|range|length|sweep|travel|strokes)\b", r"\ball\s+the\s+way\b", r"\bwhole\s+(?:thing|length)\b")),
     ("half", (r"\bhalf\b(?:\s+(?:stroke|range|length|way))?", r"\bhalfway\b")),
     ("tiny", (r"\btiny\b", r"\bmicro\b", r"\btwitch(?:y|ing)?\b")),
-    ("short", (r"\bshort\s+(?:stroke|range|strokes)?\b", r"\bsmall\s+(?:stroke|range|strokes)?\b", r"\btight\s+(?:stroke|range|strokes)?\b")),
+    ("short", (r"\bshort\s+(?:stroke|range|strokes)?\b", r"\bsmall\s+(?:stroke|range|strokes)?\b", r"\btight\s+(?:stroke|range|strokes)?\b", r"\blick(?:ing)?\b")),
     ("long", (r"\blong\s+(?:stroke|range|strokes)?\b", r"\bbig\s+(?:stroke|range|strokes)?\b", r"\bwide\s+(?:stroke|range|strokes)?\b")),
 )
 
@@ -808,6 +808,47 @@ class MotionController:
         except Exception:
             return None
 
+    def _estimated_continuous_target_at_stream_time(
+        self,
+        state: Optional[ContinuousPhaseState],
+        stream_seconds: float,
+        sample_continuous_motion=None,
+    ) -> Optional[MotionTarget]:
+        if state is None or state.target is None:
+            return None
+        try:
+            stream_seconds = max(0.0, float(stream_seconds or 0.0))
+        except (TypeError, ValueError):
+            return None
+        if state.authored_points:
+            return self._estimated_authored_target(state, stream_seconds)
+        if state.plan is None:
+            return None
+        if sample_continuous_motion is None:
+            from .motion_patterns import sample_continuous_motion as sample_continuous_motion_func
+        else:
+            sample_continuous_motion_func = sample_continuous_motion
+        try:
+            stream_offset = max(0.0, float(state.stream_offset_seconds or 0.0))
+            phase_offset = max(0.0, float(state.offset_seconds or 0.0))
+            phase_rate = max(0.0, float(state.phase_rate))
+        except (TypeError, ValueError):
+            return None
+        phase_seconds = phase_offset + max(0.0, stream_seconds - stream_offset) * phase_rate
+        sample = self._sample_continuous_motion(
+            state.plan,
+            state.target,
+            phase_seconds,
+            sample_continuous_motion_func,
+        )
+        return MotionTarget(
+            sample.intent_speed,
+            sample.target.depth,
+            sample.target.stroke_range,
+            label=sample.target.label,
+            motion_program=sample.target.motion_program,
+        ).clamped()
+
     def _estimated_authored_target(self, state: ContinuousPhaseState, elapsed_seconds: float) -> Optional[MotionTarget]:
         points = state.authored_points
         target = state.target
@@ -879,6 +920,9 @@ class MotionController:
             return
 
         if self.backend == "continuous":
+            if self._should_use_live_stroke_for_generated_target(target):
+                if self._apply_live_stroke_continuous_target(target, source=source):
+                    return
             if self.apply_continuous_target(target, source=source):
                 return
             self.apply_target(target, source=source)
@@ -895,9 +939,53 @@ class MotionController:
         else:
             self.apply_target(target, source=source)
 
+    def _should_use_live_stroke_for_generated_target(self, target: MotionTarget) -> bool:
+        program = target.motion_program
+        if not isinstance(program, dict):
+            return False
+        return str(program.get("type") or "").strip().lower() == "anchor_loop"
+
+    def _apply_live_stroke_continuous_target(self, target: MotionTarget, *, source: str) -> bool:
+        target = target.clamped()
+        if target.speed <= 0:
+            self.stop()
+            return True
+        start_target = self.current_target()
+        self._set_semantic_target(target)
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+            self._continuous_phase_state = None
+        self._set_frame_playback_active(True)
+        extras = {
+            "continuous": True,
+            "continuous_schema": "hamp_live_anchor",
+            "continuous_hsp_bypassed": True,
+            "continuous_hsp_bypass_reason": "generated_anchor_loop_hsp_microstutter",
+            "morph_start_depth": round(float(start_target.depth), 1),
+            "morph_start_range": round(float(start_target.stroke_range), 1),
+            "morph_start_source": "live_stroke_current_target",
+        }
+        try:
+            for step in self.sanitizer.transition_path(start_target, target):
+                with self._lock:
+                    if generation != self._generation:
+                        return False
+                if not self._wait_for_resume(generation):
+                    return False
+                self._apply_step(step, source=source)
+                self._augment_last_trace(extras)
+                if not self._sleep_with_pause(self.step_delay, generation):
+                    return False
+        except Exception:
+            self._set_frame_playback_active(False)
+            raise
+        return True
+
     def stop(self) -> None:
         with self._lock:
             self._generation += 1
+            self._continuous_phase_state = None
         self._pause_event.clear()
         self._set_frame_playback_active(False)
         self.handy.stop()
@@ -1579,10 +1667,13 @@ class MotionController:
             return True
 
         self._set_semantic_target(clamped_target)
+        replacement_phase_state = None
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
             stream_offset_seconds = self._continuous_stream_offset_seconds(started_at)
             replacing_active_stream = stream_offset_seconds is not None and self._is_frame_playback_active()
+            if replacing_active_stream:
+                replacement_phase_state = self._continuous_phase_state
             preserve_replacement_phase = (
                 replacing_active_stream
                 and self._continuous_phase_state is not None
@@ -1614,6 +1705,7 @@ class MotionController:
             replacing_active_stream,
             preserve_replacement_phase,
             start_target,
+            replacement_phase_state,
         )
         kwargs = {
             "trace_metadata": trace_metadata,
@@ -1880,6 +1972,7 @@ class MotionController:
         replacing_active_stream: bool,
         preserve_replacement_phase: bool,
         start_target: MotionTarget,
+        replacement_phase_state: Optional[ContinuousPhaseState],
         trace_metadata: Optional[dict[str, Any]] = None,
         stop_after: bool = False,
         finite_cycles: Optional[float] = None,
@@ -1903,6 +1996,7 @@ class MotionController:
             replacing_active_stream,
             preserve_replacement_phase,
             start_target,
+            replacement_phase_state,
             trace_metadata=trace_metadata,
             stop_after=stop_after,
             finite_cycles=finite_cycles,
@@ -2023,6 +2117,7 @@ class MotionController:
         replacing_active_stream: bool,
         preserve_replacement_phase: bool,
         start_target: MotionTarget,
+        replacement_phase_state: Optional[ContinuousPhaseState],
         trace_metadata: Optional[dict[str, Any]] = None,
         stop_after: bool = False,
         finite_cycles: Optional[float] = None,
@@ -2051,15 +2146,28 @@ class MotionController:
         if not hsp_phase_points:
             return False
         stream_duration_seconds = effective_duration_seconds
+        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
+        hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else 0.0
+        play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds if replacing_active_stream else 0.0
+        morph_start_target = start_target.clamped()
+        morph_start_source = "apply_current_target"
+        if replacing_active_stream:
+            predicted_start = self._estimated_continuous_target_at_stream_time(
+                replacement_phase_state,
+                play_start_stream_seconds,
+                sample_continuous_motion,
+            )
+            if predicted_start is not None:
+                morph_start_target = predicted_start
+                morph_start_source = "predicted_active_stream"
         if replacing_active_stream and not preserve_replacement_phase:
             phase_offset_seconds = self._continuous_transition_phase_seconds(
                 plan,
                 target,
-                start_target,
+                morph_start_target,
                 effective_duration_seconds,
                 sample_continuous_motion,
             )
-        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
         logical_start_seconds = phase_offset_seconds + (
             replacement_lead_seconds if preserve_replacement_phase else 0.0
         )
@@ -2070,10 +2178,7 @@ class MotionController:
             play_start_seconds,
             sample_continuous_motion,
         )
-        hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else play_start_seconds
-        if replacing_active_stream:
-            play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds
-        else:
+        if not replacing_active_stream:
             play_start_stream_seconds = play_start_seconds
         finite_stop_stream_seconds = None
         if finite_cycles is not None:
@@ -2085,7 +2190,7 @@ class MotionController:
                 finite_stop_stream_seconds = play_start_stream_seconds + (
                     effective_duration_seconds * finite_cycles
                 )
-        morph_seconds = self._continuous_morph_seconds(start_target, initial_sample.target)
+        morph_seconds = self._continuous_morph_seconds(morph_start_target, initial_sample.target)
         stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
@@ -2107,6 +2212,11 @@ class MotionController:
         play_start_ms = round(play_start_stream_seconds * 1000.0, 1)
         stream_cycle_ms = round(stream_duration_seconds * 1000.0, 1)
         morph_ms = round(morph_seconds * 1000.0, 1)
+        morph_start_depth = round(float(morph_start_target.depth), 1)
+        morph_start_range = round(float(morph_start_target.stroke_range), 1)
+        morph_start_delta_depth = round(float(morph_start_target.depth) - float(start_target.depth), 1)
+        morph_start_delta_range = round(float(morph_start_target.stroke_range) - float(start_target.stroke_range), 1)
+        morph_start_prediction_lead_ms = round(replacement_lead_seconds * 1000.0, 1)
         start_phase = play_start_seconds / effective_duration_seconds
         phase_epsilon = 0.000001
         start_point_authored = any(
@@ -2146,7 +2256,7 @@ class MotionController:
                 amount = self._continuous_morph_amount(stream_elapsed / morph_seconds)
                 sample = sample.with_target(
                     self._interpolate_continuous_spatial_target(
-                        start_target,
+                        morph_start_target,
                         sample.target,
                         amount,
                         f"{sample.target.label or plan_name} morph",
@@ -2356,6 +2466,7 @@ class MotionController:
                     "hsp_stream_index": point["stream_index"],
                     "cycle_ms": cycle_ms,
                     "phase_offset_ms": phase_offset_ms,
+                    "hsp_selected_phase_ms": phase_offset_ms,
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_replacement_lead_ms": round(replacement_lead_seconds * 1000.0, 1),
                     "hsp_stream_cycle_ms": stream_cycle_ms,
@@ -2365,6 +2476,12 @@ class MotionController:
                     ),
                     "hsp_authored_point": bool(point.get("authored_point")),
                     "morph_ms": morph_ms,
+                    "morph_start_depth": morph_start_depth,
+                    "morph_start_range": morph_start_range,
+                    "morph_start_source": morph_start_source,
+                    "morph_start_delta_from_apply_depth": morph_start_delta_depth,
+                    "morph_start_delta_from_apply_range": morph_start_delta_range,
+                    "morph_start_prediction_lead_ms": morph_start_prediction_lead_ms,
                     "intent_speed": int(round(point["intent_speed"])),
                     "sample_speed": int(round(point["speed"])),
                     "sample_range": int(round(point["sample_range"])),

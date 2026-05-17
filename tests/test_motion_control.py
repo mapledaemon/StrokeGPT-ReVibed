@@ -15,6 +15,7 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
+    ContinuousPhaseState,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
@@ -462,6 +463,16 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.kind, "move")
         self.assertEqual(intent.target.depth, 75)
         self.assertEqual(intent.target.stroke_range, 50)
+
+    def test_lick_base_maps_to_tight_deep_live_stroke_target(self):
+        intent = self.matcher.parse("lick the base", self.current)
+
+        self.assertEqual(intent.kind, "move")
+        self.assertIn("base", intent.matched)
+        self.assertIn("short", intent.matched)
+        self.assertEqual(intent.target.depth, 88)
+        self.assertEqual(intent.target.stroke_range, 24)
+        self.assertIsNone(intent.target.motion_program)
 
     def test_hold_at_tip_is_motion_pattern_not_stop(self):
         intent = self.matcher.parse("hold at the tip", self.current)
@@ -1639,6 +1650,7 @@ class MotionControllerTests(unittest.TestCase):
             True,
             False,
             start_target,
+            None,
             finite_cycles=0.04,
         )
 
@@ -1651,6 +1663,75 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(hsp_points)
         self.assertAlmostEqual(hsp_points[0]["phase_offset_ms"], selected_seconds * 1000.0, delta=1.0)
         self.assertAlmostEqual(hsp_points[0]["morph_ms"], selected_morph * 1000.0, delta=1.0)
+
+    def test_continuous_replacement_morph_uses_predicted_stream_start_target(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        old_plan = continuous_motion_plan("stroke")
+        new_plan = continuous_motion_plan("wave")
+        old_target = MotionTarget(50, 50, 80, "stroke")
+        new_target = MotionTarget(50, 50, 80, "wave")
+        apply_start = sample_continuous_motion(old_plan, old_target, 0.0).target
+        old_duration = sample_continuous_motion(old_plan, old_target, 0.0).effective_duration_seconds
+        replacement_lead = old_duration * 0.25
+        predicted_start = sample_continuous_motion(old_plan, old_target, replacement_lead).target
+        self.assertGreater(abs(predicted_start.depth - apply_start.depth), 5.0)
+        old_state = ContinuousPhaseState(
+            key=controller._continuous_plan_key(old_plan),
+            generation=controller._generation,
+            started_at=time.monotonic(),
+            offset_seconds=0.0,
+            stream_offset_seconds=0.0,
+            phase_rate=1.0,
+            plan=old_plan,
+            target=old_target,
+        )
+
+        with mock.patch.object(
+            controller,
+            "_continuous_replacement_lead_seconds",
+            return_value=replacement_lead,
+        ):
+            result = controller._run_continuous_stream_plan(
+                new_plan,
+                new_target,
+                "unit test",
+                controller._generation,
+                time.monotonic(),
+                0.0,
+                0.0,
+                True,
+                False,
+                apply_start,
+                old_state,
+                finite_cycles=0.04,
+            )
+
+        self.assertTrue(result)
+        hsp_points = [
+            point
+            for point in controller.observability_snapshot()["trace"]
+            if point.get("continuous_schema") == "hsp"
+        ]
+        self.assertTrue(hsp_points)
+        first = hsp_points[0]
+        expected_phase = controller._continuous_transition_phase_seconds(
+            new_plan,
+            new_target,
+            predicted_start,
+            sample_continuous_motion(new_plan, new_target, 0.0).effective_duration_seconds,
+            sample_continuous_motion,
+        )
+        self.assertEqual(first["morph_start_source"], "predicted_active_stream")
+        self.assertAlmostEqual(first["morph_start_depth"], predicted_start.depth, delta=0.1)
+        self.assertAlmostEqual(first["depth"], predicted_start.depth, delta=0.5)
+        self.assertAlmostEqual(
+            first["morph_start_delta_from_apply_depth"],
+            predicted_start.depth - apply_start.depth,
+            delta=0.1,
+        )
+        self.assertAlmostEqual(first["morph_start_prediction_lead_ms"], replacement_lead * 1000.0, delta=1.0)
+        self.assertAlmostEqual(first["hsp_selected_phase_ms"], expected_phase * 1000.0, delta=1.0)
 
     def test_continuous_backend_keeps_sample_speed_out_of_current_intent(self):
         handy = StreamingFakeHandy()
@@ -1949,7 +2030,7 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(target.depth, 50)
         self.assertEqual(target.stroke_range, 70)
 
-    def test_continuous_anchor_loop_keeps_stable_semantic_target_during_hsp(self):
+    def test_continuous_anchor_loop_uses_live_stroke_bypass(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
 
@@ -1966,13 +2047,22 @@ class MotionControllerTests(unittest.TestCase):
             self.assertIsNotNone(target)
 
             controller.apply_generated_target(target, source="llm")
-            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
-            time.sleep(0.12)
+            self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
 
             semantic = controller.semantic_target()
             self.assertEqual(semantic.depth, 50)
             self.assertEqual(semantic.stroke_range, 70)
             self.assertEqual(semantic.motion_program, target.motion_program)
+            self.assertEqual(handy.stream_starts, [])
+            self.assertEqual(handy.stream_replacements, [])
+            self.assertTrue(controller.observability_snapshot()["playback_active"])
+            live_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hamp_live_anchor"
+            ]
+            self.assertTrue(live_points)
+            self.assertTrue(all(point["continuous_hsp_bypassed"] for point in live_points))
         finally:
             controller.stop()
 
@@ -1992,10 +2082,9 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertIsNotNone(first)
             controller.apply_generated_target(first, source="first")
-            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
-            time.sleep(0.12)
+            self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
 
-            sampled_depth = controller.current_target().depth
+            current_depth = controller.current_target().depth
             second = controller.apply_llm_move(
                 {
                     "motion": "anchor_loop",
@@ -2005,30 +2094,20 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertIsNotNone(second)
             self.assertEqual(second.depth, 50)
-            self.assertNotEqual(round(sampled_depth), round(second.depth))
-            self.assertTrue(
-                self.wait_until(lambda: len(handy.stream_replacements) == 1),
-                handy.stream_replacements,
+            self.assertEqual(round(current_depth), round(second.depth))
+            self.assertEqual(handy.stream_starts, [])
+            self.assertEqual(handy.stream_replacements, [])
+            self.assertTrue(self.wait_until(lambda: len(handy.moves) >= 2), handy.moves)
+            live_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hamp_live_anchor"
+            ]
+            self.assertTrue(live_points)
+            self.assertEqual(
+                live_points[-1]["continuous_hsp_bypass_reason"],
+                "generated_anchor_loop_hsp_microstutter",
             )
-
-            replacement = handy.stream_replacements[0]
-            points = replacement["points"]
-            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
-
-            self.assertTrue(intervals)
-            self.assertLessEqual(
-                max(intervals),
-                int(
-                    round(
-                        (
-                            CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
-                            + CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
-                        )
-                        * 1000.0
-                    )
-                ),
-            )
-            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in points))
         finally:
             controller.stop()
 

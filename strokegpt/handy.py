@@ -154,6 +154,19 @@ class HandyController:
                 preview.append(safe_point)
         return preview
 
+    def _safe_points_tail_preview(self, points):
+        tail = []
+        for point in points[-3:]:
+            if not isinstance(point, dict):
+                continue
+            safe_point = {}
+            for key in ("t", "x", "at", "pos"):
+                if key in point:
+                    safe_point[key] = point[key]
+            if safe_point:
+                tail.append(safe_point)
+        return tail
+
     def _safe_command_body(self, body):
         if not isinstance(body, dict):
             return {}
@@ -192,6 +205,7 @@ class HandyController:
             result["points"] = len(body["points"])
             result["points_preview"] = self._safe_points_preview(body["points"])
             if len(body["points"]) > HANDY_COMMAND_POINTS_PREVIEW:
+                result["points_tail_preview"] = self._safe_points_tail_preview(body["points"])
                 result["points_truncated"] = True
         if "add" in body and isinstance(body["add"], dict):
             add = body["add"]
@@ -200,6 +214,7 @@ class HandyController:
                 safe_add["points"] = len(add["points"])
                 safe_add["points_preview"] = self._safe_points_preview(add["points"])
                 if len(add["points"]) > HANDY_COMMAND_POINTS_PREVIEW:
+                    safe_add["points_tail_preview"] = self._safe_points_tail_preview(add["points"])
                     safe_add["points_truncated"] = True
             for key in ("flush", "tail_point_stream_index", "tail_point_threshold"):
                 if key in add:

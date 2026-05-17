@@ -554,6 +554,11 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(len(body["points_preview"]), 12)
         self.assertEqual(body["points_preview"][0], {"t": 0, "x": 0})
         self.assertEqual(body["points_preview"][-1], {"t": 880, "x": 11})
+        self.assertEqual(body["points_tail_preview"], [
+            {"t": 1040, "x": 13},
+            {"t": 1120, "x": 14},
+            {"t": 1200, "x": 15},
+        ])
         self.assertTrue(body["points_truncated"])
         self.assertNotIn("test", str(diagnostics))
 
