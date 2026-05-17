@@ -441,13 +441,16 @@ class WebSettingsRouteTests(WebTestCase):
 
     def test_check_settings_uses_fast_startup_payload(self):
         with mock.patch("strokegpt.web._ollama_installed_models", side_effect=AssertionError("live Ollama probe")), \
-                mock.patch("strokegpt.web._ollama_running_models", side_effect=AssertionError("live Ollama probe")):
+                mock.patch("strokegpt.web._ollama_running_models", side_effect=AssertionError("live Ollama probe")), \
+                mock.patch("strokegpt.web.audio._local_runtime_info", side_effect=AssertionError("live Chatterbox probe")):
             response = self.client.get("/check_settings")
 
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data["ollama_status"]["unchecked"])
         self.assertIsNone(data["ollama_status"]["available"])
+        self.assertEqual(data["local_tts_status"]["status"], "unchecked")
+        self.assertTrue(data["local_tts_status"]["torch"]["unchecked"])
         self.assertIn("ollama_thinking_enabled", data)
         self.assertIn("thinking_enabled", data["ollama_status"])
         self.assertNotIn("motion_preferences", data)

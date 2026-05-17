@@ -52,6 +52,12 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('src="/static/app.js"', page)
             self.assertIn('src="/static/strokegpt-revibed-logo.svg" alt="StrokeGPT-ReVibed"', page)
             self.assertNotIn('/static/splash.jpg', page)
+            self.assertIn('id="splash-prompt"', page)
+            self.assertIn('class="splash-loading" role="status" aria-live="polite"', page)
+            self.assertIn('id="splash-status"', page)
+            self.assertIn('class="splash-progress-track" aria-hidden="true"', page)
+            self.assertIn('id="splash-progress-bar" class="splash-progress-bar"', page)
+            self.assertIn('id="splash-progress-text" class="splash-progress-text"', page)
             self.assertIn('type="module"', page)
             self.assertIn('id="like-this-move-btn"', page)
             self.assertIn('id="dislike-this-move-btn"', page)
@@ -1010,6 +1016,27 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("el.sendChatBtn.disabled = blocked", script)
         self.assertIn("el.userChatInput.placeholder = blocked ? message : 'Type a message or command...'", script)
         self.assertIn("updateChatModelAvailability(status)", script)
+
+    def test_frontend_js_updates_startup_splash_status(self):
+        page_response = self.client.get("/")
+        css_response = self.client.get("/static/app.css")
+        try:
+            page = page_response.get_data(as_text=True)
+            styles = css_response.get_data(as_text=True)
+        finally:
+            page_response.close()
+            css_response.close()
+        script = self.frontend_scripts()
+
+        self.assertIn('id="splash-status"', page)
+        self.assertIn('id="splash-progress-bar"', page)
+        self.assertIn('id="splash-progress-text"', page)
+        self.assertIn(".splash-loading", styles)
+        self.assertIn(".splash-progress-track", styles)
+        self.assertIn(".splash-progress-bar", styles)
+        self.assertIn("export function setSplashLoadingStatus", script)
+        self.assertIn("Checking local voice settings. Chatterbox and Torch checks can take a moment.", script)
+        self.assertIn("Still waiting on startup checks. Local voice dependency scans may be slow on first run.", script)
 
     def test_frontend_js_handles_motion_pattern_list_controls(self):
         script = self.frontend_scripts()

@@ -1,5 +1,5 @@
 import { D, apiCall, el, fetchWithConnectionState, setStatusMessage, state } from './context.js';
-import { playQueuedAudio } from './audio.js';
+import { playQueuedAudio, voiceOutputEnabled } from './audio.js';
 
 function appendPlainMessageText(parent, text) {
     const parts = String(text || '').split('\n');
@@ -344,7 +344,10 @@ async function sendUserMessageStream(requestOptions, startedAt) {
     }
     if (!streamEntry) {
         const handled = handleSendMessageStatus(finalData);
-        if (handled) await pollChatUpdates();
+        if (handled) {
+            await pollChatUpdates();
+            await waitForReplyAudio();
+        }
         return {
             data: finalData,
             handled,
@@ -375,8 +378,9 @@ async function sendUserMessageStream(requestOptions, startedAt) {
         };
     }
     clearTypingIndicator();
-    state.pendingQueuedBotEcho = '';
+    state.pendingQueuedBotEcho = finalData.chat_queued === true && finalData.chat ? String(finalData.chat) : '';
     await pollChatUpdates();
+    await waitForReplyAudio();
     return {
         data: finalData,
         handled: true,
@@ -424,7 +428,10 @@ export async function sendUserMessage(message, {source = 'chat'} = {}) {
         }
         const data = await apiCall('/send_message', requestOptions);
         const handled = handleSendMessageStatus(data);
-        if (handled) await pollChatUpdates();
+        if (handled) {
+            await pollChatUpdates();
+            await waitForReplyAudio();
+        }
         return {
             data,
             handled,
@@ -432,6 +439,11 @@ export async function sendUserMessage(message, {source = 'chat'} = {}) {
         };
     }
     return {data: null, handled: false, elapsed_ms: 0, skipped: true};
+}
+
+async function waitForReplyAudio() {
+    if (!voiceOutputEnabled()) return;
+    await playQueuedAudio({waitMs: 5000, followupWaitMs: 1000});
 }
 
 export async function pollChatUpdates() {

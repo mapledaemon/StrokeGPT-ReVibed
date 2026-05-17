@@ -14,6 +14,10 @@ export function updateVoiceOutputToggleUi(enabled = el.enableAudioCheckbox.check
     else el.topBarVoiceToggleBtn.classList.remove('is-on');
 }
 
+export function voiceOutputEnabled() {
+    return Boolean(lastKnownAudioEnabled || el.enableAudioCheckbox?.checked);
+}
+
 export function updateAudioProviderUi() {
     const provider = el.audioProviderSelect.value;
     el.elevenLabsPanel.style.display = provider === 'elevenlabs' ? 'flex' : 'none';
@@ -243,33 +247,41 @@ async function setupElevenLabsKey() {
     }
 }
 
-export async function playQueuedAudio() {
-    if (state.audioFetchInProgress) return;
+export async function playQueuedAudio({waitMs = 0, followupWaitMs = 350} = {}) {
+    if (state.audioFetchInProgress) return false;
     state.audioFetchInProgress = true;
+    let playedAny = false;
     try {
-        const response = await fetchWithConnectionState('/get_audio');
-        if (response.status === 204) return;
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const audioUrl = URL.createObjectURL(await response.blob());
-        const audio = new Audio(audioUrl);
-        await new Promise((resolve, reject) => {
-            let settled = false;
-            const finish = (error = null) => {
-                if (settled) return;
-                settled = true;
-                URL.revokeObjectURL(audioUrl);
-                if (error) reject(error);
-                else resolve();
-            };
-            audio.onended = () => finish();
-            audio.onerror = () => finish(new Error('Browser could not play the generated audio.'));
-            const playback = audio.play();
-            if (playback && typeof playback.catch === 'function') playback.catch(finish);
-        });
+        let nextWaitMs = Math.max(0, Number(waitMs) || 0);
+        while (true) {
+            const query = nextWaitMs > 0 ? `?wait_ms=${Math.round(nextWaitMs)}` : '';
+            const response = await fetchWithConnectionState('/get_audio' + query);
+            if (response.status === 204) return playedAny;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const audioUrl = URL.createObjectURL(await response.blob());
+            const audio = new Audio(audioUrl);
+            await new Promise((resolve, reject) => {
+                let settled = false;
+                const finish = (error = null) => {
+                    if (settled) return;
+                    settled = true;
+                    URL.revokeObjectURL(audioUrl);
+                    if (error) reject(error);
+                    else resolve();
+                };
+                audio.onended = () => finish();
+                audio.onerror = () => finish(new Error('Browser could not play the generated audio.'));
+                const playback = audio.play();
+                if (playback && typeof playback.catch === 'function') playback.catch(finish);
+            });
+            playedAny = true;
+            nextWaitMs = Math.max(0, Number(followupWaitMs) || 0);
+        }
     } catch (error) {
         console.error('Audio playback failed:', error);
         el.localTtsStatus.textContent = `Audio playback failed: ${error.message}`;
         el.localTtsStatus.style.color = 'var(--yellow)';
+        return playedAny;
     } finally {
         state.audioFetchInProgress = false;
     }

@@ -185,9 +185,9 @@ describe('chat action statuses', () => {
                 '{"type":"status","status":"generating"}\n',
                 '{"type":"delta","text":"Visible "}\n',
                 '{"type":"delta","text":"as it arrives."}\n',
-                '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":false}}\n',
+                '{"type":"final","data":{"status":"ok","chat":"Visible as it arrives.","chat_streamed":true,"chat_queued":true}}\n',
             ]);
-            if (endpoint === '/get_updates') return jsonResponse(200, { messages: [] });
+            if (endpoint === '/get_updates') return jsonResponse(200, { messages: ['Visible as it arrives.'] });
             return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
         };
 

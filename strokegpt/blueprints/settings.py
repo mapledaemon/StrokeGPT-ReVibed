@@ -18,6 +18,7 @@ def check_settings_route():
     return jsonify(web.settings_payload(
         include_live_ollama_status=False,
         include_motion_preferences=False,
+        include_live_local_tts_status=False,
     ))
 
 

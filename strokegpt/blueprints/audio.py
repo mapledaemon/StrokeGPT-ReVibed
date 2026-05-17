@@ -184,7 +184,12 @@ def test_local_tts_voice_route():
 @audio_blueprint.route('/get_audio')
 def get_audio_route():
     web = _web()
-    audio_chunk = web.audio.get_next_audio_chunk()
+    try:
+        wait_ms = int(request.args.get("wait_ms", "0") or 0)
+    except (TypeError, ValueError):
+        wait_ms = 0
+    wait_seconds = max(0.0, min(5.0, wait_ms / 1000.0))
+    audio_chunk = web.audio.wait_for_audio_chunk(wait_seconds)
     if not audio_chunk:
         return ("", 204)
     return send_file(io.BytesIO(audio_chunk["bytes"]), mimetype=audio_chunk["mimetype"])

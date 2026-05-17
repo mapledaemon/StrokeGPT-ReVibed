@@ -615,7 +615,12 @@ def _start_ollama_pull(model):
 def get_persona_prompts_for_ui():
     return payloads.persona_prompts_for_ui(settings)
 
-def settings_payload(*, include_live_ollama_status=True, include_motion_preferences=True):
+def settings_payload(
+    *,
+    include_live_ollama_status=True,
+    include_motion_preferences=True,
+    include_live_local_tts_status=True,
+):
     # Service-bound adapter for ``payloads.settings_payload()``: bundles the
     # runtime ``settings``/``llm``/``audio`` services and composed helpers so
     # blueprint routes can fetch the full settings dialog payload in one call.
@@ -634,6 +639,7 @@ def settings_payload(*, include_live_ollama_status=True, include_motion_preferen
         motion_preferences=_motion_preference_payload() if include_motion_preferences else None,
         diagnostics_levels=_diagnostics_level_options(),
         voice_input_status=voice_input_status_payload(),
+        local_tts_status=audio.local_status(lightweight=not include_live_local_tts_status),
     )
 
 def voice_input_status_payload(status="success"):
@@ -1039,7 +1045,7 @@ def apply_settings_to_services():
     audio.voice_id = ""
     audio.client = None
     audio.available_voices = {}
-    audio.audio_output_queue.clear()
+    audio.clear_audio_queue()
     audio.last_error = ""
     if settings.elevenlabs_api_key:
         if audio.set_api_key(settings.elevenlabs_api_key):
@@ -2377,7 +2383,7 @@ def _finalize_llm_chat_response(
     add_message_to_queue(
         chat_text,
         add_to_history=bool(str(raw_chat_text or "").strip()),
-        queue_message=not streamed_to_client,
+        queue_message=True,
         generate_audio=True,
         streamed_to_client=streamed_to_client,
     )
@@ -2417,7 +2423,7 @@ def _finalize_llm_chat_response(
     return {
         "status": "ok",
         "chat": chat_text,
-        "chat_queued": not streamed_to_client,
+        "chat_queued": True,
         "chat_streamed": bool(streamed_to_client),
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,

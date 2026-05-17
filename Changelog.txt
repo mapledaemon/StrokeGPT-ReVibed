@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #245 - Reduce Voice Output Latency
+--------------------------------------------------
+
+Branch: codex/chatterbox-latency-speedups
+
+- Cache prepared local Chatterbox reference-sample conditionals across reply
+  chunks so a cloned voice does not reload and re-embed the same sample before
+  every generated WAV.
+- Let `/get_audio` briefly wait for newly rendered audio, then have the browser
+  drain follow-up audio chunks instead of waiting for the next chat polling
+  interval between clips.
+- Split oversized first local-TTS chunks more aggressively so playback can
+  start from a shorter first Chatterbox generation.
+- Queue streamed assistant replies as the canonical chat update even when the
+  initiating browser already rendered the stream, preventing local voice from
+  speaking a reply that never appears in chat.
+- Keep startup `/check_settings` on a lightweight local-voice status path, then
+  refresh real Chatterbox/Torch status after the splash screen is gone.
+- Add splash-screen progress and status text so slow startup probes explain
+  what the app is waiting on instead of leaving "Press Enter" stuck onscreen.
+
+
 2026-05-17 - PR #244 - Fix Reverse Direction Orientation
 --------------------------------------------------------
 

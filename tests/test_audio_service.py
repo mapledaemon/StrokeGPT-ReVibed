@@ -3,6 +3,9 @@ import importlib.machinery
 import io
 from pathlib import Path
 import sys
+import tempfile
+import threading
+import time
 import types
 import unittest
 import warnings
@@ -118,6 +121,23 @@ class AudioServiceTests(unittest.TestCase):
         self.assertIsInstance(status["preload_progress_percent"], int)
         self.assertGreater(status["preload_progress_percent"], 1)
         self.assertLess(status["preload_progress_percent"], 100)
+
+    def test_lightweight_local_status_skips_runtime_probe(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_runtime_info = mock.Mock(side_effect=AssertionError("runtime probe"))
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+
+        status = service.local_status(lightweight=True)
+
+        self.assertEqual(status["status"], "unchecked")
+        self.assertTrue(status["torch"]["unchecked"])
+        self.assertIsNone(status["cuda_available"])
+        self.assertIn("after the app opens", status["message"])
+        service._local_runtime_info.assert_not_called()
 
     def test_elevenlabs_generation_errors_are_reported(self):
         class FailingTextToSpeech:
@@ -255,6 +275,23 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_generation_status, "idle")
         self.assertFalse(service.audio_output_queue)
 
+    def test_audio_queue_waits_for_late_chunk(self):
+        service = AudioService()
+
+        def enqueue_later():
+            time.sleep(0.02)
+            service._enqueue_audio_chunk(b"RIFFlater", "audio/wav")
+
+        thread = threading.Thread(target=enqueue_later)
+        thread.start()
+        try:
+            chunk = service.wait_for_audio_chunk(0.5)
+        finally:
+            thread.join(timeout=1)
+
+        self.assertEqual(chunk, {"bytes": b"RIFFlater", "mimetype": "audio/wav"})
+        self.assertIsNone(service.get_next_audio_chunk())
+
     def test_local_preload_failure_resets_cached_model_state(self):
         service = AudioService()
         service._local_model = object()
@@ -369,6 +406,39 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(model.ve.input_dtype, np.float32)
         self.assertNotIn("audio_prompt_path", model.generate_kwargs)
 
+    def test_chatterbox_prompt_conditionals_are_cached_between_chunks(self):
+        class DummyModel:
+            sr = 24000
+            device = "cpu"
+
+            def __init__(self):
+                self.prepare_calls = 0
+                self.generate_kwargs = []
+                self.conds = object()
+
+            def prepare_conditionals(self, _path, **_kwargs):
+                self.prepare_calls += 1
+                self.conds = object()
+
+            def generate(self, _text, **kwargs):
+                self.generate_kwargs.append(kwargs)
+                return object()
+
+        service = AudioService()
+        model = DummyModel()
+        with tempfile.NamedTemporaryFile(suffix=".wav") as sample:
+            sample.write(b"sample")
+            sample.flush()
+            service.local_prompt_path = sample.name
+
+            service._generate_local_waveform(model, "First.")
+            service._generate_local_waveform(model, "Second.")
+
+        self.assertEqual(model.prepare_calls, 1)
+        self.assertEqual(len(model.generate_kwargs), 2)
+        self.assertNotIn("audio_prompt_path", model.generate_kwargs[0])
+        self.assertNotIn("audio_prompt_path", model.generate_kwargs[1])
+
     def test_local_tts_text_is_split_for_lower_first_audio_latency(self):
         service = AudioService()
         text = "First sentence is short. " + ("This sentence has enough words to make the local text to speech splitter create more than one chunk. " * 5)
@@ -377,6 +447,20 @@ class AudioServiceTests(unittest.TestCase):
 
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(len(chunk) <= service.LOCAL_TTS_CHUNK_CHARS for chunk in chunks))
+
+    def test_local_tts_splits_long_first_sentence_for_lower_first_latency(self):
+        service = AudioService()
+        text = (
+            "This opening sentence is deliberately long and filled with enough descriptive clauses, "
+            "because local Chatterbox should be able to start rendering a short first clip before "
+            "waiting on the entire reply to finish as one large audio chunk. "
+            "The second sentence can use the normal chunk size."
+        )
+
+        chunks = service._split_text_for_local_tts(text)
+
+        self.assertGreater(len(chunks), 1)
+        self.assertLessEqual(len(chunks[0]), service.LOCAL_TTS_FIRST_CHUNK_CHARS)
 
     @unittest.skipIf(importlib.util.find_spec("torch") is None, "torch not installed")
     def test_local_wav_encoder_uses_stdlib_wav(self):

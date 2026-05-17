@@ -1,4 +1,5 @@
 import time
+import threading
 import unittest
 from unittest import mock
 
@@ -11,9 +12,9 @@ class WebStatusRouteTests(WebTestCase):
 
         app_state.messages_for_ui.clear()
         app_state.chat_audio_warning = ""
-        audio.audio_output_queue.clear()
+        audio.clear_audio_queue()
         app_state.messages_for_ui.append("hello")
-        audio.audio_output_queue.append({"bytes": b"RIFFtest", "mimetype": "audio/wav"})
+        audio._enqueue_audio_chunk(b"RIFFtest", "audio/wav")
 
         updates = self.client.get("/get_updates")
         try:
@@ -30,6 +31,28 @@ class WebStatusRouteTests(WebTestCase):
             self.assertEqual(audio_response.data, b"RIFFtest")
         finally:
             audio_response.close()
+
+    def test_get_audio_can_briefly_wait_for_generated_audio(self):
+        from strokegpt.web import audio
+
+        audio.clear_audio_queue()
+
+        def enqueue_later():
+            time.sleep(0.02)
+            audio._enqueue_audio_chunk(b"RIFFwait", "audio/wav")
+
+        thread = threading.Thread(target=enqueue_later)
+        thread.start()
+        try:
+            response = self.client.get("/get_audio?wait_ms=500")
+            try:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "audio/wav")
+                self.assertEqual(response.data, b"RIFFwait")
+            finally:
+                response.close()
+        finally:
+            thread.join(timeout=1)
 
     def test_updates_surface_and_consume_chat_audio_warning(self):
         from strokegpt.web import add_message_to_queue, app_state, audio

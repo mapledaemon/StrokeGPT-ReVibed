@@ -9,7 +9,14 @@
 <body>
     <div id="splash-screen">
         <img src="/static/strokegpt-revibed-logo.svg" alt="StrokeGPT-ReVibed">
-        <p>Press Enter to Begin</p>
+        <p id="splash-prompt">Press Enter to Begin</p>
+        <div class="splash-loading" role="status" aria-live="polite">
+            <div id="splash-status">Starting StrokeGPT-ReVibed...</div>
+            <div class="splash-progress-track" aria-hidden="true">
+                <div id="splash-progress-bar" class="splash-progress-bar"></div>
+            </div>
+            <div id="splash-progress-text" class="splash-progress-text">0%</div>
+        </div>
     </div>
     <div id="connection-lost-banner" role="alert" aria-live="assertive" hidden>
         Connection lost - the StrokeGPT backend is not responding. Changes made now will not be saved.
