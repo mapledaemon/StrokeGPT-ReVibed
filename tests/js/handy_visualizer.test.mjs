@@ -145,6 +145,231 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-range').style.height, '84%');
     });
 
+    it('tracks HSP from reported firmware time and output depth', () => {
+        Date.now = () => 10_000;
+        const payload = continuousPayload({
+            received_at: 10,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hamp_started: false,
+                hsp_streaming: true,
+                hsp_state_observed_at: 10,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 1000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {
+                    t: 9990,
+                    hsp_point_time_ms: 1000,
+                    depth: 85,
+                    output_depth: 15,
+                    continuous: true,
+                    continuous_schema: 'hsp',
+                    program_range: {min: 8, max: 92},
+                },
+                {
+                    t: 9991,
+                    hsp_point_time_ms: 1100,
+                    depth: 55,
+                    output_depth: 45,
+                    continuous: true,
+                    continuous_schema: 'hsp',
+                    program_range: {min: 8, max: 92},
+                },
+            ],
+        });
+
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '15%');
+
+        Date.now = () => 10_050;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '30%');
+    });
+
+    it('treats Handy enum-style HSP playing states as advancing', () => {
+        Date.now = () => 20_000;
+        const payload = continuousPayload({
+            received_at: 20,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hsp_streaming: true,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'HSP_STATE_PLAYING',
+                    current_time_ms: 1000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 19990, hsp_point_time_ms: 1000, depth: 20, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 19991, hsp_point_time_ms: 1100, depth: 80, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        Date.now = () => 20_050;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '50%');
+    });
+
+    it('accepts camelCase HSP playbackRate while extrapolating firmware time', () => {
+        Date.now = () => 25_000;
+        const payload = continuousPayload({
+            received_at: 25,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hsp_streaming: true,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 1000,
+                    playbackRate: 2,
+                },
+            },
+            trace: [
+                {t: 24990, hsp_point_time_ms: 1000, depth: 20, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 24991, hsp_point_time_ms: 1100, depth: 80, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        Date.now = () => 25_050;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '80%');
+    });
+
+    it('shows the active visualizer clock source in debug diagnostics', () => {
+        Date.now = () => 26_000;
+        state.motionDiagnosticsLevel = 'debug';
+        const payload = continuousPayload({
+            diagnostics_level: 'debug',
+            received_at: 26,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hsp_streaming: true,
+                hsp_state_age_ms: 120,
+                hsp_state: {
+                    play_state: 'HSP_STATE_PLAYING',
+                    current_time_ms: 1000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 25990, hsp_point_time_ms: 1000, depth: 20, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 25991, hsp_point_time_ms: 1100, depth: 80, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        Date.now = () => 26_050;
+        updateMotionObservability(payload);
+
+        const debugText = getStubElement('motion-diagnostics-panel').textContent;
+        assert.match(debugText, /Visualizer hsp-state/);
+        assert.match(debugText, /clock 1170ms/);
+        assert.match(debugText, /state age 120ms/);
+    });
+
+    it('falls back to planned continuous animation when HSP clock is outside the trace window', () => {
+        Date.now = () => 30_000;
+        const payload = continuousPayload({
+            received_at: 30,
+            snapshot_time: 30,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hsp_streaming: true,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 6000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 30.00, hsp_point_time_ms: 1000, depth: 20, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 30.10, hsp_point_time_ms: 1100, depth: 80, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        Date.now = () => 30_050;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '50%');
+    });
+
+    it('uses scheduled HSP wall times when firmware time is before the visible trace window', () => {
+        Date.now = () => 40_050;
+        const payload = continuousPayload({
+            received_at: 40,
+            snapshot_time: 140,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hsp_streaming: true,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 1000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 140.00, hsp_point_time_ms: 5000, depth: 20, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 140.10, hsp_point_time_ms: 5100, depth: 80, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '50%');
+
+        Date.now = () => 40_100;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '80%');
+    });
+
     it('keeps the static track fixed during finite position playback', () => {
         Date.now = () => 3_000_000;
 

@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #250 - Map Handy Visualizer To HSP Playback Clock
+------------------------------------------------------------------
+
+Branch: codex/handy-visualizer-position
+
+- Drive the sidebar Handy position indicator from reported HSP firmware time
+  and actual output depth when available, so the purple line follows device
+  playback instead of replaying semantic plan points from browser poll time.
+- Keep the visualizer animated when Handy reports enum-style HSP play states or
+  a firmware clock that cannot be mapped to the current trace window.
+- Fall back to the scheduled HSP wall-clock trace while buffered motion is
+  still active, preventing the position line from freezing between appends.
+- Refresh HSP state during the normal motion status poll while streaming, and
+  show the visualizer clock source in debug motion diagnostics so real-device
+  sync failures expose whether the browser is using firmware time or a trace
+  fallback.
+- Keep the HSP state refresh read-only and outside the Handy command history so
+  visualizer polling cannot masquerade as a motion command or issue fallback
+  state commands while streaming.
+
+
 2026-05-17 - PR #249 - Group Legacy Sidebar Modes
 --------------------------------------------------
 
