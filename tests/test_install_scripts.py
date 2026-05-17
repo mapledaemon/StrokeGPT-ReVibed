@@ -160,6 +160,8 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('$ErrorActionPreference = "SilentlyContinue"', script)
         self.assertIn('Test-PythonCommand @("py", "-3.11") -MinimumMinor 11', script)
         self.assertIn('Test-PythonCommand @("python")', script)
+        self.assertIn("$command = @($script:PythonCommand)", script)
+        self.assertIn("$script:PythonCommand = @(Find-Python)", script)
         self.assertIn('$TorchIndexUrl = "https://download.pytorch.org/whl/cu128"', script)
         self.assertNotIn("/whl/cu121", script)
         self.assertIn("--force-reinstall --index-url $TorchIndexUrl torch torchvision torchaudio", script)

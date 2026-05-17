@@ -53,10 +53,11 @@ function Find-Python {
 function Invoke-SelectedPython {
     param([string[]]$Arguments)
 
-    $exe = $script:PythonCommand[0]
+    $command = @($script:PythonCommand)
+    $exe = $command[0]
     $prefix = @()
-    if ($script:PythonCommand.Count -gt 1) {
-        $prefix = $script:PythonCommand[1..($script:PythonCommand.Count - 1)]
+    if ($command.Count -gt 1) {
+        $prefix = $command[1..($command.Count - 1)]
     }
 
     & $exe @prefix @Arguments
@@ -65,7 +66,7 @@ function Invoke-SelectedPython {
 Write-Host "== StrokeGPT-ReVibed NVIDIA Parakeet installer =="
 Write-Host "This creates .venv-parakeet so NeMo dependencies do not conflict with the main app environment."
 
-$script:PythonCommand = Find-Python
+$script:PythonCommand = @(Find-Python)
 Write-Host "Using Python command: $($script:PythonCommand -join ' ')"
 
 if (-not (Test-Path $VenvPython)) {
