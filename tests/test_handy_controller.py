@@ -449,6 +449,30 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
         self.assertEqual(handy.diagnostics()["depth"], 0)
 
+    def test_start_continuous_stream_rounds_hsp_points_to_api_integer_schema(self):
+        handy = RecordingV3HandyController()
+
+        result = handy.start_continuous_stream(
+            [
+                {"t": 0, "x": 50.125, "intent_speed": 30, "range": 80},
+                {"t": 40, "x": 50.875, "intent_speed": 30, "range": 80},
+                {"t": 80, "x": 51.0, "intent_speed": 30, "range": 80},
+            ],
+            tail_point_stream_index=3,
+            tail_point_threshold=1,
+        )
+
+        self.assertTrue(result)
+        add = next(body for path, body in handy.v3_commands if path == "hsp/add")
+        self.assertEqual(
+            add["points"],
+            [
+                {"t": 0, "x": 50},
+                {"t": 40, "x": 51},
+                {"t": 80, "x": 51},
+            ],
+        )
+
     def test_hsp_server_time_estimate_uses_servertime_offset(self):
         handy = HandyController(handy_key="test")
 

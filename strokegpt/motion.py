@@ -37,14 +37,13 @@ CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.8
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 80
-CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.08
-CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.06
+CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
+CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 1.35
-CONTINUOUS_HSP_MIN_DEPTH_DELTA = 0.5
-CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS = 0.25
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 0.12
-CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.2
-CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 0.65
+CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.45
+CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 0.65
+CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 3.2
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -715,6 +714,8 @@ class MotionController:
         self._last_position_command_ended_at = None
         self._last_position_batch_ended_at = None
         self._continuous_phase_state: Optional[ContinuousPhaseState] = None
+        self._semantic_target: Optional[MotionTarget] = None
+        self._recent_hsp_command_seconds = 0.0
         self._move_to_depth_accepts_intent_speed: Optional[bool] = None
         self._move_to_depth_accepts_duration_ms: Optional[bool] = None
         self._pause_event = threading.Event()
@@ -751,12 +752,25 @@ class MotionController:
         estimated = self._estimated_continuous_target()
         if estimated is not None:
             return estimated.clamped()
+        return self._hardware_target()
+
+    def semantic_target(self) -> MotionTarget:
+        """Return the last user/LLM target, not the live sampled phase."""
+        target = self._semantic_target
+        if target is not None:
+            return target.clamped()
+        return self._hardware_target(label="semantic current")
+
+    def _hardware_target(self, label: str = "current") -> MotionTarget:
         return MotionTarget(
             self.handy.last_relative_speed,
             self.handy.last_depth_pos,
             getattr(self.handy, "last_stroke_range", 50),
-            label="current",
+            label=label,
         ).clamped()
+
+    def _set_semantic_target(self, target: MotionTarget) -> None:
+        self._semantic_target = target.clamped()
 
     def _estimated_continuous_target(self) -> Optional[MotionTarget]:
         try:
@@ -826,6 +840,7 @@ class MotionController:
         if target.speed <= 0:
             self.stop()
             return
+        self._set_semantic_target(target)
 
         if smooth and self.backend == "position":
             self.apply_position_frames(self._direct_position_frames(target), source=source)
@@ -853,7 +868,7 @@ class MotionController:
                 return
 
     def apply_llm_move(self, move: Any) -> Optional[MotionTarget]:
-        target = self.sanitizer.from_llm_move(move, self.current_target())
+        target = self.sanitizer.from_llm_move(move, self.semantic_target())
         if target:
             self.apply_generated_target(target, source="llm")
         return target
@@ -886,6 +901,7 @@ class MotionController:
         self._pause_event.clear()
         self._set_frame_playback_active(False)
         self.handy.stop()
+        self._set_semantic_target(self._hardware_target(label="stopped"))
         self._record_current_state(source="stop", label="stopped")
 
     def pause(self) -> None:
@@ -1344,6 +1360,7 @@ class MotionController:
 
         started_at = time.monotonic()
         authored_state_points = tuple((float(point["t"]) / 1000.0, float(point["x"])) for point in points)
+        self._set_semantic_target(target)
         with self._lock:
             self._generation += 1
             generation = self._generation
@@ -1561,6 +1578,7 @@ class MotionController:
             )
             return True
 
+        self._set_semantic_target(clamped_target)
         with self._lock:
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
             stream_offset_seconds = self._continuous_stream_offset_seconds(started_at)
@@ -1700,20 +1718,48 @@ class MotionController:
 
     def _continuous_replacement_lead_seconds(self) -> float:
         lead = CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS
-        last_command = None
+        observed_seconds = self._recent_hsp_command_latency_seconds()
+        if observed_seconds > 0:
+            lead = max(lead, observed_seconds + CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS)
+        return _clamp(lead, CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
+
+    def _recent_hsp_command_latency_seconds(self) -> float:
+        observed_seconds = 0.0
         if hasattr(self.handy, "last_command_result"):
             try:
                 last_command = self.handy.last_command_result()
             except Exception:
                 last_command = None
+        else:
+            last_command = None
         if isinstance(last_command, dict) and str(last_command.get("path") or "").startswith("hsp/"):
             try:
-                elapsed_seconds = max(0.0, float(last_command.get("elapsed_ms")) / 1000.0)
+                observed_seconds = max(observed_seconds, max(0.0, float(last_command.get("elapsed_ms")) / 1000.0))
             except (TypeError, ValueError):
-                elapsed_seconds = 0.0
-            if elapsed_seconds > 0:
-                lead = max(lead, elapsed_seconds + CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS)
-        return _clamp(lead, CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
+                pass
+        with self._observability_lock:
+            observed_seconds = max(observed_seconds, float(self._recent_hsp_command_seconds or 0.0))
+        return observed_seconds
+
+    def _observe_hsp_command_seconds(self, seconds: float) -> None:
+        try:
+            seconds = max(0.0, float(seconds or 0.0))
+        except (TypeError, ValueError):
+            return
+        with self._observability_lock:
+            previous = max(0.0, float(self._recent_hsp_command_seconds or 0.0))
+            self._recent_hsp_command_seconds = max(seconds, previous * 0.72)
+
+    def _continuous_append_threshold_seconds(self) -> float:
+        threshold = CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS
+        observed_seconds = self._recent_hsp_command_latency_seconds()
+        if observed_seconds > 0:
+            threshold = max(threshold, observed_seconds + CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS)
+        return _clamp(
+            threshold,
+            CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
+            max(CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS - 0.25),
+        )
 
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
@@ -2018,6 +2064,12 @@ class MotionController:
             replacement_lead_seconds if preserve_replacement_phase else 0.0
         )
         play_start_seconds = logical_start_seconds % effective_duration_seconds
+        initial_sample = self._sample_continuous_motion(
+            plan,
+            target,
+            play_start_seconds,
+            sample_continuous_motion,
+        )
         hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else play_start_seconds
         if replacing_active_stream:
             play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds
@@ -2043,7 +2095,6 @@ class MotionController:
         previous_stream_point = None
         previous_point_time_seconds = None
         previous_phase_time_seconds = None
-        pending_hsp_twitch_filtered_points = 0
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
         sync_count = 0
@@ -2111,7 +2162,6 @@ class MotionController:
             sample,
             phase_interval: float,
             hsp_interval_limited_points: int = 0,
-            hsp_twitch_filtered_points: int = 0,
         ) -> None:
             nonlocal previous_point_time_seconds, previous_phase_time_seconds
             nonlocal previous_stream_point, sample_index, stream_index, stream_seconds
@@ -2143,8 +2193,6 @@ class MotionController:
             }
             if hsp_interval_limited_points:
                 point["hsp_interval_limited_points"] = int(hsp_interval_limited_points)
-            if hsp_twitch_filtered_points:
-                point["hsp_twitch_filtered_points"] = int(hsp_twitch_filtered_points)
             phase_schedule.append((point_stream_seconds, point_seconds))
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
@@ -2152,37 +2200,6 @@ class MotionController:
             previous_stream_point = point
             sample_index += 1
             stream_seconds = point_stream_seconds
-
-        def should_filter_hsp_twitch(point_stream_seconds: float, sample) -> bool:
-            if previous_stream_point is None:
-                return False
-            try:
-                previous_depth = float(previous_stream_point["x"])
-                previous_seconds = float(previous_stream_point["t"]) / 1000.0
-                current_depth = float(sample.target.depth)
-                elapsed_since_previous = point_stream_seconds - previous_seconds
-            except (KeyError, TypeError, ValueError):
-                return False
-            if elapsed_since_previous >= CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS:
-                return False
-            # HSP transports ``x`` as an integer 0..100; two consecutive
-            # samples that round to the same integer produce no device
-            # motion but make the firmware visibly hold-then-snap between
-            # accepted neighbors. Stretched-cycle patterns (built-ins
-            # carry ``duration_scale: 5.0``) spend many consecutive
-            # samples at the same integer near the slow regions of the
-            # curve; the previous float-only filter let those duplicates
-            # through and the user felt each 1-unit jump as a discrete
-            # tick. Drop redundant same-integer candidates within the
-            # keepalive window so the firmware sees a sparser stream of
-            # meaningful integer steps and interpolates smoothly between
-            # them.
-            if int(round(current_depth)) == int(round(previous_depth)):
-                return True
-            # Backstop: also drop sub-fractional float oscillations that
-            # happen to flip across an integer boundary (e.g. 26.49 ->
-            # 26.51 rounds to 26 -> 27 but is essentially noise).
-            return abs(current_depth - previous_depth) < CONTINUOUS_HSP_MIN_DEPTH_DELTA
 
         def phase_at_stream_time(elapsed_seconds: float) -> tuple[float, float]:
             if not phase_schedule:
@@ -2210,7 +2227,7 @@ class MotionController:
             return previous_phase, 1.0
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
-            nonlocal start_point_pending, pending_hsp_twitch_filtered_points
+            nonlocal start_point_pending
             if finite_stop_stream_seconds is not None:
                 until_seconds = min(until_seconds, finite_stop_stream_seconds)
             points: list[dict[str, Any]] = []
@@ -2251,10 +2268,6 @@ class MotionController:
 
                 sample = sample_stream_point(point_seconds, point_stream_seconds)
                 interval_limited_points = int(phase_point.get("hsp_interval_limited_points") or 0)
-                if should_filter_hsp_twitch(point_stream_seconds, sample):
-                    pending_hsp_twitch_filtered_points += 1 + interval_limited_points
-                    advance_phase_cursor()
-                    continue
                 append_stream_point(
                     points,
                     point_seconds,
@@ -2263,9 +2276,7 @@ class MotionController:
                     sample,
                     phase_interval,
                     interval_limited_points,
-                    pending_hsp_twitch_filtered_points,
                 )
-                pending_hsp_twitch_filtered_points = 0
                 advance_phase_cursor()
             if finite_stop_stream_seconds is not None and until_seconds >= finite_stop_stream_seconds:
                 last_stream_seconds = (
@@ -2291,9 +2302,7 @@ class MotionController:
                         False,
                         sample,
                         phase_interval,
-                        hsp_twitch_filtered_points=pending_hsp_twitch_filtered_points,
                     )
-                    pending_hsp_twitch_filtered_points = 0
             return points
 
         def record_batch(
@@ -2306,6 +2315,16 @@ class MotionController:
         ) -> None:
             nonlocal previous_command_ended_at, previous_recorded_point, stream_wall_zero
             command_extras = self._handy_command_trace_extras(result)
+            command_seconds = max(0.0, send_ended_at - send_started_at)
+            self._observe_hsp_command_seconds(command_seconds)
+            recent_command_ms = round(self._recent_hsp_command_latency_seconds() * 1000.0, 1)
+            append_threshold_ms = round(self._continuous_append_threshold_seconds() * 1000.0, 1)
+            first_point_late_ms = 0.0
+            if replacing_active_stream and kind == "replace":
+                first_point_late_ms = round(
+                    max(0.0, command_seconds - replacement_lead_seconds) * 1000.0,
+                    1,
+                )
             batch_gap_ms = None
             if previous_command_ended_at is not None:
                 batch_gap_ms = round((send_started_at - previous_command_ended_at) * 1000.0, 1)
@@ -2355,15 +2374,17 @@ class MotionController:
                     "sample_tempo_scale": round(point["tempo_scale"], 3),
                     "effective_cycle_ms": round(point["effective_duration_seconds"] * 1000.0, 1),
                     "base_interval_ms": round(base_interval * 1000.0, 1),
+                    "hsp_recent_command_ms": recent_command_ms,
+                    "hsp_append_threshold_ms": append_threshold_ms,
                     "phase_interval_ms": round(point["phase_interval_seconds"] * 1000.0, 1),
                     "sample_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
                     "transport_interval_ms": round(point["sample_interval_seconds"] * 1000.0, 1),
-                    "command_ms": round((send_ended_at - send_started_at) * 1000.0, 1),
+                    "command_ms": round(command_seconds * 1000.0, 1),
                 }
+                if replacing_active_stream and kind == "replace":
+                    extras["hsp_first_point_late_estimate_ms"] = first_point_late_ms
                 if point.get("hsp_interval_limited_points"):
                     extras["hsp_interval_limited_points"] = int(point["hsp_interval_limited_points"])
-                if point.get("hsp_twitch_filtered_points"):
-                    extras["hsp_twitch_filtered_points"] = int(point["hsp_twitch_filtered_points"])
                 if previous_recorded_point is not None:
                     dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
                     if dt_seconds > 0:
@@ -2471,7 +2492,8 @@ class MotionController:
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
                 can_append = finite_stop_stream_seconds is None or stream_seconds < finite_stop_stream_seconds - 0.001
-                if buffer_remaining <= CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS and can_append:
+                append_threshold_seconds = self._continuous_append_threshold_seconds()
+                if buffer_remaining <= append_threshold_seconds and can_append:
                     until = hsp_elapsed + CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
                     if finite_stop_stream_seconds is not None:
                         until = min(until, finite_stop_stream_seconds)
@@ -2534,7 +2556,7 @@ class MotionController:
                     sync_count += 1
                     next_sync_elapsed = elapsed + CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS
 
-                sleep_seconds = max(0.02, min(0.08, buffer_remaining - CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS))
+                sleep_seconds = max(0.02, min(0.08, buffer_remaining - append_threshold_seconds))
                 if not self._sleep_with_pause(sleep_seconds, generation):
                     return True
         finally:
@@ -2904,6 +2926,9 @@ class MotionController:
         if not frames:
             return False
         program_range = self._depth_range_for_targets(frames)
+        final_target = getattr(frames[-1], "target", None)
+        if isinstance(final_target, MotionTarget):
+            self._set_semantic_target(final_target)
 
         with self._lock:
             self._generation += 1
@@ -2940,6 +2965,7 @@ class MotionController:
                         return False
                     self._generation += 1
                 self.handy.stop()
+                self._set_semantic_target(self._hardware_target(label="preview stopped"))
                 self._record_current_state(source=source, label="preview stopped")
             return True
         finally:
@@ -2959,6 +2985,7 @@ class MotionController:
         if not playback_frames:
             return False
         program_range = self._depth_range_for_targets(playback_frames)
+        self._set_semantic_target(playback_frames[-1].target)
 
         with self._lock:
             self._generation += 1
@@ -3035,6 +3062,7 @@ class MotionController:
                         return False
                     self._generation += 1
                 self.handy.stop()
+                self._set_semantic_target(self._hardware_target(label="preview stopped"))
                 self._record_current_state(source=source, label="preview stopped")
             return True
         finally:

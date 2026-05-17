@@ -148,10 +148,15 @@ def _check_for_user_message(queue, message_event=None):
     return None
 
 
+def _semantic_target(motion_controller):
+    getter = getattr(motion_controller, "semantic_target", None)
+    return getter() if callable(getter) else motion_controller.current_target()
+
+
 def _feedback_target(stop_event, motion_controller, user_message):
     if not user_message:
         return None
-    intent = INTENT_MATCHER.parse(user_message, motion_controller.current_target())
+    intent = INTENT_MATCHER.parse(user_message, _semantic_target(motion_controller))
     if intent.kind == "stop":
         stop_event.set()
         return None
@@ -392,7 +397,7 @@ def _run_scripted_mode(
             callbacks,
             mode,
             "start",
-            current_target=motion_controller.current_target(),
+            current_target=_semantic_target(motion_controller),
         )
         _send_background_decision_message(callbacks, send_message, decision)
         autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
@@ -414,7 +419,7 @@ def _run_scripted_mode(
             mode,
             autospeak_interval,
             next_autospeak_at,
-            current_target=motion_controller.current_target(),
+            current_target=_semantic_target(motion_controller),
         )
         if mode == "milking" and user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
@@ -422,7 +427,7 @@ def _run_scripted_mode(
                 callbacks,
                 mode,
                 "close_signal",
-                current_target=motion_controller.current_target(),
+                current_target=_semantic_target(motion_controller),
             )
             _send_background_decision_message(callbacks, send_message, decision)
             autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
@@ -442,7 +447,7 @@ def _run_scripted_mode(
         if stop_event.is_set():
             break
 
-        step = planner.next_step(motion_controller.current_target(), feedback_target=feedback_target)
+        step = planner.next_step(_semantic_target(motion_controller), feedback_target=feedback_target)
         if step.message:
             send_message(step.message)
         update_mood(step.mood)
@@ -460,7 +465,7 @@ def _run_scripted_mode(
             next_autospeak_at,
             wake_event=message_event,
             pause_event=pause_event,
-            current_target=motion_controller.current_target,
+            current_target=lambda: _semantic_target(motion_controller),
         )
 
 
@@ -498,7 +503,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             autospeak_interval,
             next_autospeak_at,
             edge_count=close_count,
-            current_target=motion_controller.current_target(),
+            current_target=_semantic_target(motion_controller),
         )
         if user_signal_event and user_signal_event.is_set():
             user_signal_event.clear()
@@ -508,7 +513,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 "freestyle",
                 "close_signal",
                 edge_count=close_count,
-                current_target=motion_controller.current_target(),
+                current_target=_semantic_target(motion_controller),
             )
             decision_thread.join(timeout=FREESTYLE_DECISION_GRACE_SECONDS)
             candidates = tuple(freestyle_candidates())
@@ -594,7 +599,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
         continuous_freestyle = _uses_continuous_motion(motion_controller)
         choices = freestyle_helpers._freestyle_choice_chain(
             tuple(freestyle_candidates()),
-            motion_controller.current_target(),
+            _semantic_target(motion_controller),
             feedback_target,
             tuple(recent_ids),
             rng,
@@ -647,7 +652,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             wake_event=message_event,
             pause_event=pause_event,
             edge_count=close_count,
-            current_target=motion_controller.current_target,
+            current_target=lambda: _semantic_target(motion_controller),
         )
 
 
@@ -686,7 +691,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         "edging",
         "start",
         edge_count=edge_count,
-        current_target=motion_controller.current_target(),
+        current_target=_semantic_target(motion_controller),
     )
     _send_background_decision_message(callbacks, send_message, start_decision)
     autospeak_interval = _autospeak_interval_from_decision(callbacks, start_decision, autospeak_interval)
@@ -722,7 +727,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
             autospeak_interval,
             next_autospeak_at,
             edge_count=edge_count,
-            current_target=motion_controller.current_target(),
+            current_target=_semantic_target(motion_controller),
         )
         step = None
 
@@ -732,7 +737,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                 "edging",
                 "progress",
                 edge_count=edge_count,
-                current_target=motion_controller.current_target(),
+                current_target=_semantic_target(motion_controller),
             )
             _send_background_decision_message(callbacks, send_message, decision)
             autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
@@ -760,7 +765,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
             )
             if decision.action in {"hold_then_resume", "pull_back"}:
                 step = planner.next_step(
-                    motion_controller.current_target(),
+                    _semantic_target(motion_controller),
                     edge_count=max(1, edge_count),
                 )
                 if decision.duration_seconds is not None:
@@ -785,7 +790,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                     "edging",
                     "close_signal",
                     edge_count=edge_count,
-                    current_target=motion_controller.current_target(),
+                    current_target=_semantic_target(motion_controller),
                 )
                 _send_background_decision_message(callbacks, send_message, decision)
                 autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
@@ -806,14 +811,14 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                         initial_intensity=mode_intensity,
                     )
                     return
-                step = planner.next_step(motion_controller.current_target(), edge_count=edge_count)
+                step = planner.next_step(_semantic_target(motion_controller), edge_count=edge_count)
                 if decision.duration_seconds is not None:
                     reaction_steps_remaining = max(
                         0,
                         mode_decision_helpers._step_limit_for_duration(decision, edging_min, edging_max, len(planner.steps) + 1) - 1,
                     )
             else:
-                step = planner.next_step(motion_controller.current_target(), feedback_target=feedback_target)
+                step = planner.next_step(_semantic_target(motion_controller), feedback_target=feedback_target)
 
         if step.message:
             send_message(step.message)
@@ -833,7 +838,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
             wake_event=message_event,
             pause_event=pause_event,
             edge_count=edge_count,
-            current_target=motion_controller.current_target,
+            current_target=lambda: _semantic_target(motion_controller),
         )
         if reaction_steps_remaining is not None:
             reaction_steps_remaining -= 1

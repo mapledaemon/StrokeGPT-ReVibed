@@ -11,18 +11,16 @@ from strokegpt.motion import (
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
-    CONTINUOUS_HSP_MIN_DEPTH_DELTA,
     CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS,
-    CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
+    CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
     IntentMatcher,
     MotionController,
     MotionSanitizer,
     MotionTarget,
     MOTION_PATTERN_PREVIEW_MIN_SECONDS,
     PositionFrame,
-    POSITION_MAX_DEPTH_STEP,
     POSITION_PASS_THROUGH_MIN_SECONDS,
 )
 from strokegpt.motion_patterns import (
@@ -899,20 +897,17 @@ class MotionControllerTests(unittest.TestCase):
             intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
 
             self.assertGreater(len(points), 12)
-            # A run of same-integer candidates can be coalesced for up to
-            # one keepalive window before the keepalive forces a refresh,
-            # plus the trailing target interval that finally accepts a
-            # different integer. The added half MIN_POINT_INTERVAL keeps a
-            # small slack for the densifier's rounding tolerance.
             self.assertLessEqual(
                 max(intervals),
                 int(
                     round(
-                        (CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS
-                         + CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+                        (
+                            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                        )
                         * 1000.0
                     )
-                ) + int(round(CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS * 500.0)),
+                ),
             )
 
             hsp_points = [
@@ -938,17 +933,14 @@ class MotionControllerTests(unittest.TestCase):
             depths = [point["x"] for point in points]
 
             self.assertGreater(len(points), 30)
-            # The integer-equality twitch filter may coalesce a short run
-            # of same-integer candidates; the cap therefore tracks the
-            # keepalive window plus the target interval so the test pins
-            # the smooth-cadence guarantee without re-hardcoding the
-            # legacy 220 ms number.
             self.assertLessEqual(
                 max(intervals),
                 int(
                     round(
-                        (CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS
-                         + CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+                        (
+                            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                        )
                         * 1000.0
                     )
                 ),
@@ -980,14 +972,12 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
             points = handy.stream_starts[0]["points"]
-            segment_depths = [abs(right["x"] - left["x"]) for left, right in zip(points, points[1:])]
             segment_rates = [
                 abs(right["x"] - left["x"]) / ((right["t"] - left["t"]) / 1000.0)
                 for left, right in zip(points, points[1:])
                 if right["t"] > left["t"]
             ]
 
-            self.assertGreater(max(segment_depths), POSITION_MAX_DEPTH_STEP)
             self.assertGreater(max(segment_rates), 120.0)
             trace_rates = [
                 point["hsp_segment_depth_per_second"]
@@ -998,7 +988,147 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_hsp_filters_tiny_high_frequency_transport_points(self):
+    def test_continuous_hsp_preserves_fractional_high_frequency_transport_points(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            fractional_depths = [
+                point["x"]
+                for point in points
+                if abs(float(point["x"]) - round(float(point["x"]))) > 0.001
+            ]
+            same_integer_fractional_steps = [
+                (left, right)
+                for left, right in zip(points, points[1:])
+                if int(round(float(left["x"]))) == int(round(float(right["x"])))
+                and abs(float(left["x"]) - float(right["x"])) > 0.001
+            ]
+
+            self.assertTrue(intervals)
+            self.assertLessEqual(
+                max(intervals),
+                int(
+                    round(
+                        (
+                            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                        )
+                        * 1000.0
+                    )
+                ),
+            )
+            self.assertTrue(fractional_depths)
+            self.assertTrue(same_integer_fractional_steps)
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in hsp_points))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_slow_patterns_keep_fractional_sweep_points(self):
+        """Regression: slow built-ins can spend many samples inside the same
+        integer bucket. Those points still carry fractional movement and should
+        be streamed so firmware can interpolate a continuous sweep instead of a
+        sparse hold-then-step sequence.
+        """
+
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(
+                MotionTarget(20, 50, 80, "tease"),
+                source="unit test",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            same_integer_fractional_steps = [
+                (left, right)
+                for left, right in zip(points, points[1:])
+                if int(round(float(left["x"]))) == int(round(float(right["x"])))
+                and abs(float(left["x"]) - float(right["x"])) > 0.001
+            ]
+
+            self.assertTrue(intervals)
+            self.assertLessEqual(
+                max(intervals),
+                int(
+                    round(
+                        (
+                            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                        )
+                        * 1000.0
+                    )
+                ),
+            )
+            self.assertTrue(same_integer_fractional_steps)
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in hsp_points))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_generated_streams_keep_dense_fractional_cadence(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(
+                MotionTarget(25, 50, 80, "stroke"),
+                source="unit test",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            fractional_depths = [
+                point["x"]
+                for point in points
+                if abs(float(point["x"]) - round(float(point["x"]))) > 0.001
+            ]
+            self.assertGreater(len(points), 60)
+            self.assertTrue(intervals)
+            self.assertLessEqual(
+                max(intervals),
+                int(
+                    round(
+                        (
+                            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                        )
+                        * 1000.0
+                    )
+                ),
+            )
+            self.assertTrue(fractional_depths)
+
+            hsp_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in hsp_points))
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_generated_streams_preserve_same_integer_fractional_steps(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
 
@@ -1008,80 +1138,18 @@ class MotionControllerTests(unittest.TestCase):
 
             points = handy.stream_starts[0]["points"]
             for left, right in zip(points, points[1:]):
-                dt_seconds = (right["t"] - left["t"]) / 1000.0
-                depth_delta = abs(right["x"] - left["x"])
-                if dt_seconds < CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS:
-                    # Inside the keepalive window the filter only accepts
-                    # candidates that actually change the device-visible
-                    # integer position; consecutive same-integer points
-                    # would make the firmware hold-then-snap and the user
-                    # feel each jump as a discrete tick.
-                    self.assertNotEqual(
-                        int(round(float(right["x"]))),
-                        int(round(float(left["x"]))),
-                        f"two consecutive HSP points share integer x within {CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS:.2f}s keepalive: {left} -> {right}",
-                    )
-                    self.assertGreaterEqual(depth_delta + 0.001, CONTINUOUS_HSP_MIN_DEPTH_DELTA)
+                if int(round(float(left["x"]))) == int(round(float(right["x"]))):
+                    self.assertNotEqual(float(left["x"]), float(right["x"]))
+                    break
+            else:
+                self.fail("expected at least one generated fractional step inside the same integer bucket")
 
             hsp_points = [
                 point
                 for point in controller.observability_snapshot()["trace"]
                 if point.get("continuous_schema") == "hsp"
             ]
-            self.assertTrue(any(point.get("hsp_twitch_filtered_points") for point in hsp_points))
-        finally:
-            controller.stop()
-
-    def test_continuous_hsp_slow_patterns_avoid_stepped_repeated_integer_points(self):
-        """Regression: built-in patterns carry ``duration_scale: 5.0`` so
-        cycles run 3-12 s long. At low effective velocities the per-sample
-        depth delta is well under 1 pos unit; the previous float-only
-        twitch filter let many same-integer samples through and the user
-        felt each held integer followed by a 1-unit jump as a discrete
-        step. The integer-equality filter must drop those redundant
-        same-integer candidates so the firmware sees a sparser stream of
-        meaningful integer changes.
-        """
-
-        handy = StreamingFakeHandy()
-        controller = MotionController(handy, step_delay=0.16)
-
-        try:
-            # Tease is one of the slowest built-ins and is the worst case
-            # for the bug: long mid-cycle hold around the same integer.
-            controller.apply_continuous_target(
-                MotionTarget(20, 50, 80, "tease"),
-                source="unit test",
-            )
-            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
-
-            points = handy.stream_starts[0]["points"]
-
-            # No two consecutive accepted points within the keepalive
-            # window may share the same integer x; that pattern is what
-            # produces the "held, then 1-unit step" feel.
-            keepalive_ms = int(round(CONTINUOUS_HSP_TWITCH_KEEPALIVE_SECONDS * 1000.0))
-            for left, right in zip(points, points[1:]):
-                dt_ms = right["t"] - left["t"]
-                if dt_ms >= keepalive_ms:
-                    continue
-                self.assertNotEqual(
-                    int(round(float(right["x"]))),
-                    int(round(float(left["x"]))),
-                    f"consecutive HSP points held the same integer inside keepalive: {left} -> {right}",
-                )
-
-            # And the filter must actually drop something for the stretched
-            # slow cycle: otherwise the regression has crept back in.
-            hsp_points = [
-                point
-                for point in controller.observability_snapshot()["trace"]
-                if point.get("continuous_schema") == "hsp"
-            ]
-            self.assertTrue(
-                any(point.get("hsp_twitch_filtered_points") for point in hsp_points),
-                "tease pattern should produce filtered same-integer candidates",
-            )
+            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in hsp_points))
         finally:
             controller.stop()
 
@@ -1476,6 +1544,44 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_hsp_replacement_lead_uses_controller_observed_command_latency(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            handy._last_command["elapsed_ms"] = 5.0
+            controller._observe_hsp_command_seconds(2.296)
+
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="second")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+
+            second_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+                and point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+            ]
+            self.assertTrue(second_points)
+            self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 2700.0)
+            self.assertEqual(second_points[0]["hsp_first_point_late_estimate_ms"], 0.0)
+            replacement = handy.stream_replacements[0]
+            self.assertEqual(replacement["points"][0]["t"], replacement["start_time_ms"])
+            self.assertLess(replacement["start_time_ms"], handy.stream_starts[0]["points"][-1]["t"])
+        finally:
+            controller.stop()
+
+    def test_continuous_hsp_append_threshold_scales_with_observed_command_latency(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+
+        controller._observe_hsp_command_seconds(2.296)
+
+        threshold = controller._continuous_append_threshold_seconds()
+        self.assertGreater(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
+        self.assertGreaterEqual(threshold, 2.9)
+
     def test_continuous_transition_phase_starts_new_pattern_near_current_depth(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
         plan = continuous_motion_plan("stroke")
@@ -1497,6 +1603,54 @@ class MotionControllerTests(unittest.TestCase):
             abs(transition_sample.target.depth - start_target.depth),
             abs(zero_sample.target.depth - start_target.depth),
         )
+
+    def test_continuous_replacement_morph_uses_selected_phase_sample(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        plan = continuous_motion_plan("stroke")
+        target = MotionTarget(50, 50, 80, "stroke")
+        start_target = MotionTarget(50, 90, 80, "current high point")
+        duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
+        selected_seconds = controller._continuous_transition_phase_seconds(
+            plan,
+            target,
+            start_target,
+            duration,
+            sample_continuous_motion,
+        )
+        selected_morph = controller._continuous_morph_seconds(
+            start_target,
+            sample_continuous_motion(plan, target, selected_seconds).target,
+        )
+        stale_morph = controller._continuous_morph_seconds(
+            start_target,
+            sample_continuous_motion(plan, target, 0.0).target,
+        )
+        self.assertNotAlmostEqual(selected_morph, stale_morph, places=2)
+
+        result = controller._run_continuous_stream_plan(
+            plan,
+            target,
+            "unit test",
+            controller._generation,
+            time.monotonic(),
+            0.0,
+            0.0,
+            True,
+            False,
+            start_target,
+            finite_cycles=0.04,
+        )
+
+        self.assertTrue(result)
+        hsp_points = [
+            point
+            for point in controller.observability_snapshot()["trace"]
+            if point.get("continuous_schema") == "hsp"
+        ]
+        self.assertTrue(hsp_points)
+        self.assertAlmostEqual(hsp_points[0]["phase_offset_ms"], selected_seconds * 1000.0, delta=1.0)
+        self.assertAlmostEqual(hsp_points[0]["morph_ms"], selected_morph * 1000.0, delta=1.0)
 
     def test_continuous_backend_keeps_sample_speed_out_of_current_intent(self):
         handy = StreamingFakeHandy()
@@ -1768,6 +1922,113 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
             self.assertTrue(controller.observability_snapshot()["playback_active"])
+        finally:
+            controller.stop()
+
+    def test_llm_anchor_loop_uses_semantic_target_not_sampled_phase(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        semantic = MotionTarget(42, 50, 70, "semantic anchor")
+        sampled = MotionTarget(42, 16, 70, "sampled anchor floor")
+        controller._set_semantic_target(semantic)
+
+        with (
+            mock.patch.object(controller, "current_target", return_value=sampled) as current_target,
+            mock.patch.object(controller, "apply_generated_target") as apply_generated_target,
+        ):
+            target = controller.apply_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "shaft", "base", "shaft"],
+                    "rng": 70,
+                }
+            )
+
+        current_target.assert_not_called()
+        apply_generated_target.assert_called_once()
+        self.assertIsNotNone(target)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 70)
+
+    def test_continuous_anchor_loop_keeps_stable_semantic_target_during_hsp(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            target = controller.sanitizer.from_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "shaft", "base", "shaft"],
+                    "dp": 50,
+                    "rng": 70,
+                },
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(target)
+
+            controller.apply_generated_target(target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            time.sleep(0.12)
+
+            semantic = controller.semantic_target()
+            self.assertEqual(semantic.depth, 50)
+            self.assertEqual(semantic.stroke_range, 70)
+            self.assertEqual(semantic.motion_program, target.motion_program)
+        finally:
+            controller.stop()
+
+    def test_repeated_llm_anchor_loop_replacement_does_not_collapse_to_sampled_phase(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            first = controller.sanitizer.from_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "shaft", "base", "shaft"],
+                    "dp": 50,
+                    "rng": 70,
+                },
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(first)
+            controller.apply_generated_target(first, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            time.sleep(0.12)
+
+            sampled_depth = controller.current_target().depth
+            second = controller.apply_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["base", "shaft", "tip", "shaft"],
+                    "rng": 70,
+                }
+            )
+            self.assertIsNotNone(second)
+            self.assertEqual(second.depth, 50)
+            self.assertNotEqual(round(sampled_depth), round(second.depth))
+            self.assertTrue(
+                self.wait_until(lambda: len(handy.stream_replacements) == 1),
+                handy.stream_replacements,
+            )
+
+            replacement = handy.stream_replacements[0]
+            points = replacement["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+
+            self.assertTrue(intervals)
+            self.assertLessEqual(
+                max(intervals),
+                int(
+                    round(
+                        (
+                            CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS
+                            + CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+                        )
+                        * 1000.0
+                    )
+                ),
+            )
+            self.assertFalse(any("hsp_twitch_filtered_points" in point for point in points))
         finally:
             controller.stop()
 

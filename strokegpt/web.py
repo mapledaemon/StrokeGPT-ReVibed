@@ -1572,6 +1572,11 @@ SNAKE_ASCII = """
 
 # ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────────────────────────────
 
+def _motion_semantic_target():
+    getter = getattr(motion, "semantic_target", None)
+    return getter() if callable(getter) else motion.current_target()
+
+
 def get_current_context():
     with app_state.lock:
         current_mood = app_state.current_mood
@@ -1579,6 +1584,7 @@ def get_current_context():
         edging_start_time = app_state.edging_start_time
         special_persona_mode = app_state.special_persona_mode
         active_mode_name = _active_mode_name()
+    semantic_target = _motion_semantic_target()
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
@@ -1588,8 +1594,8 @@ def get_current_context():
         'motion_preferences': _motion_preference_payload()["prompt"],
         'motion_style': settings.motion_style,
         'motion_reverse_direction': settings.motion_reverse_direction,
-        'rules': settings.rules, 'last_stroke_speed': handy.last_relative_speed,
-        'last_depth_pos': handy.last_depth_pos, 'last_stroke_range': handy.last_stroke_range,
+        'rules': settings.rules, 'last_stroke_speed': semantic_target.speed,
+        'last_depth_pos': semantic_target.depth, 'last_stroke_range': semantic_target.stroke_range,
         'min_speed': settings.min_speed, 'max_speed': settings.max_speed,
         'use_long_term_memory': use_long_term_memory,
         'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,
@@ -1724,7 +1730,7 @@ def _run_standalone_autospeak_turn(token):
 
     context = get_current_context()
     context["autospeak_event"] = True
-    current_before_llm = motion.current_target()
+    current_before_llm = _motion_semantic_target()
     autospeak_user_input = _standalone_autospeak_user_message()
     messages = history_snapshot + [{"role": "user", "content": autospeak_user_input}]
     request_started = time.perf_counter()
@@ -1886,7 +1892,7 @@ def _konami_code_action():
     add_message_to_queue(message)
 
 def _handle_chat_commands(text, allow_motion=True):
-    intent = intent_matcher.parse(text, motion.current_target())
+    intent = intent_matcher.parse(text, _motion_semantic_target())
     if intent.kind == "stop":
         _clear_motion_pause_state()
         if app_state.auto_mode_active_task:
@@ -2344,7 +2350,7 @@ def handle_user_message():
     context["mode_actions_enabled"] = mode_actions_allowed
     context["mode_action_request_source"] = mode_action_source
     context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
-    current_before_llm = motion.current_target()
+    current_before_llm = _motion_semantic_target()
     timings = {}
     try:
         llm_started = time.perf_counter()
@@ -2412,7 +2418,7 @@ def handle_user_message_stream():
         context["mode_actions_enabled"] = mode_actions_allowed
         context["mode_action_request_source"] = mode_action_source
         context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
-        current_before_llm = motion.current_target()
+        current_before_llm = _motion_semantic_target()
         timings = {}
         stream_extractor = _StreamingChatTextExtractor()
         try:
