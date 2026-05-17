@@ -57,8 +57,10 @@ and planner/control fixes, not more basic instrumentation.
   and the final Handy command metadata instead of treating any one of those
   fields as "the speed."
 - Include non-pattern LLM and Legacy Auto targets in that validation. Their
-  default-backend path should stay on live stroke control, while named patterns
-  and anchor programs use the continuous position/script transport.
+  default-backend path should use HSP area-focus streaming when available and
+  fall back only through explicit legacy backend selection, while named
+  patterns and explicit anchor programs use the continuous position/script
+  transport.
 - Treat regular Freestyle stops, end-of-sequence stalls, and the
   Auto-to-Freestyle no-action case as the current major reliability bug
   cluster. Reproduce the cases where the motion indicator advances but the

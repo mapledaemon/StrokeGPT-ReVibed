@@ -218,10 +218,11 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Motion backend selection is persisted as `motion_backend`. `continuous` is
   the recommended app-motion default: fixed patterns and anchor programs are
   phase-sampled as live position control until the next command or stop.
-  Plain generated targets that do not resolve to a fixed pattern or anchor
-  program should stay on live stroke control so LLM/direct commands still
-  apply velocity and stroke-window changes as continuous motion, not as a
-  one-shot position move.
+  Plain generated targets that do not resolve to a fixed pattern or explicit
+  anchor program should use the HSP area-focus stroke path when HSP streaming
+  is available, so LLM/direct zone commands still apply velocity and
+  stroke-window changes as continuous motion without falling back to legacy
+  HAMP. If HSP is unavailable, HAMP remains the selectable legacy backend.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
 - Handy firmware selection is persisted as `handy_firmware_version`, and REST

@@ -322,7 +322,7 @@ def _range_with_broad_default(current: MotionTarget, depth: float, stroke_range:
 def _regional_motion_program(cues: MotionCues, existing_program: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     if existing_program or not cues.zone or cues.zone == "full" or _explicit_tight_request(cues):
         return existing_program
-    return coerce_anchor_program_dict(
+    program = coerce_anchor_program_dict(
         {
             "motion": "anchor_loop",
             "tempo": 0.75,
@@ -334,6 +334,9 @@ def _regional_motion_program(cues: MotionCues, existing_program: Optional[dict[s
         length=cues.length,
         require_request=False,
     )
+    if program:
+        program["generated_area_focus"] = True
+    return program
 
 
 def _cue_base_speed(current_speed: float, cues: MotionCues, *, preserve_current_speed: bool) -> float:
@@ -920,6 +923,9 @@ class MotionController:
             return
 
         if self.backend == "continuous":
+            if self._should_use_hsp_area_focus_for_generated_target(target):
+                if self._apply_hsp_area_focus_target(target, source=source):
+                    return
             if self._should_use_live_stroke_for_generated_target(target):
                 if self._apply_live_stroke_continuous_target(target, source=source):
                     return
@@ -943,7 +949,68 @@ class MotionController:
         program = target.motion_program
         if not isinstance(program, dict):
             return False
-        return str(program.get("type") or "").strip().lower() == "anchor_loop"
+        return (
+            str(program.get("type") or "").strip().lower() == "anchor_loop"
+            and not bool(program.get("generated_area_focus"))
+        )
+
+    def _should_use_hsp_area_focus_for_generated_target(self, target: MotionTarget) -> bool:
+        if not self._supports_continuous_streaming():
+            return False
+        if self._pattern_from_label(target.label):
+            return False
+        program = target.motion_program
+        if program is None:
+            return True
+        if not isinstance(program, dict):
+            return False
+        return (
+            str(program.get("type") or "").strip().lower() == "anchor_loop"
+            and bool(program.get("generated_area_focus"))
+        )
+
+    def _apply_hsp_area_focus_target(self, target: MotionTarget, *, source: str) -> bool:
+        plan = self._hsp_area_focus_plan(target)
+        if plan is None:
+            return False
+        clean_target = MotionTarget(
+            target.speed,
+            target.depth,
+            target.stroke_range,
+            target.label,
+        ).clamped()
+        return self._apply_continuous_plan(
+            plan,
+            clean_target,
+            source=source,
+            trace_metadata={
+                "continuous_plan_kind": "area_focus",
+                "continuous_area_focus": True,
+                "legacy_hamp_replaced": True,
+                "requested_motion_program": "generated_area_focus"
+                if isinstance(target.motion_program, dict)
+                else "",
+            },
+        )
+
+    def _hsp_area_focus_plan(self, target: MotionTarget):
+        from .motion_patterns import ContinuousMotionPlan, FrameStyle, PatternAction
+
+        target = target.clamped()
+        speed = _clamp(float(target.speed or 0.0))
+        stroke_range = _clamp(float(target.stroke_range or 0.0))
+        cycle_seconds = _clamp(0.48 + (stroke_range / 100.0) * 1.35 - (speed / 100.0) * 0.42, 0.55, 2.2)
+        return ContinuousMotionPlan(
+            name="area_focus",
+            actions=(
+                PatternAction(0, 0.0),
+                PatternAction(500, 100.0),
+                PatternAction(1000, 0.0),
+            ),
+            style=FrameStyle(name="area_focus", window_scale=0.45),
+            duration_seconds=cycle_seconds,
+            normalized_range=(0.0, 100.0),
+        )
 
     def _apply_live_stroke_continuous_target(self, target: MotionTarget, *, source: str) -> bool:
         target = target.clamped()
