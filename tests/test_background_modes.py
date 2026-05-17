@@ -10,6 +10,7 @@ from strokegpt.background_modes import AutoModeThread, _sleep_with_stop
 from strokegpt.mode_contracts import ModeCallbacks, ModeServices
 from strokegpt.motion import MotionTarget
 from strokegpt.motion_patterns import MotionPattern, PatternAction
+from strokegpt.motion_scripts import ScriptStep
 
 
 class FakeMotionController:
@@ -102,6 +103,7 @@ class ModeContractTests(unittest.TestCase):
             "autospeak_range",
             "consume_autospeak_wake",
             "set_mode_name",
+            "should_finalize_on_exit",
             "mode_decision",
             "pause_event",
         }.issubset(callback_keys))
@@ -377,6 +379,34 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertFalse(mode_called)
         self.assertTrue(motion.stopped)
         self.assertTrue(cleanup_called)
+
+    def test_stale_mode_thread_exit_does_not_stop_newer_motion(self):
+        messages = []
+        cleanup_called = []
+        motion = FakeMotionController()
+
+        def mode_func(_stop_event, _services, _callbacks):
+            pass
+
+        thread = AutoModeThread(
+            mode_func,
+            "Starting.",
+            {"motion": motion},
+            {
+                "send_message": messages.append,
+                "on_stop": lambda: cleanup_called.append(True),
+                "should_finalize_on_exit": lambda: False,
+            },
+            initial_delay=0,
+        )
+
+        thread.start()
+        thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(motion.stopped)
+        self.assertEqual(cleanup_called, [])
+        self.assertEqual(messages, ["Starting."])
 
     def test_auto_mode_thread_pause_and_resume_stop_motion_without_stopping_thread(self):
         motion = FakeMotionController()
@@ -819,6 +849,35 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertEqual(motion.generated, [(target, "milking mode")])
         self.assertEqual(motion.position_frames, [])
+
+    def test_scripted_continuous_mode_honors_step_hold_floor(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        step = ScriptStep(
+            MotionTarget(42, 50, 70, label="Milking Full Drive"),
+            mood="Passionate",
+            hold_seconds_floor=5.4,
+        )
+        stop_event = threading.Event()
+        sleep_seconds = []
+        callbacks = {
+            "get_timings": lambda _mode: (1.0, 1.0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+        }
+
+        def stop_after_iteration(event, seconds, *_args, **_kwargs):
+            sleep_seconds.append(seconds)
+            event.set()
+
+        with mock.patch.object(background_modes.MotionScriptPlanner, "next_step", return_value=step):
+            with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_iteration):
+                background_modes._run_scripted_mode(stop_event, {"motion": motion}, callbacks, "milking")
+
+        self.assertEqual(sleep_seconds, [5.4])
+        self.assertEqual(motion.generated, [(step.target, "milking mode")])
 
     def test_freestyle_position_uses_timed_position_frames(self):
         motion = FakeMotionController()

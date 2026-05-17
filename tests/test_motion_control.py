@@ -535,6 +535,30 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.depth, 50)
         self.assertGreaterEqual(target.stroke_range, 92)
 
+    def test_llm_broad_milk_ignores_noisy_depth_center(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(26, 36, 90, "llm+milk")
+        target = sanitizer.from_llm_move({"pattern": "milk", "sp": 26, "dp": 96, "rng": 90}, current)
+
+        self.assertIsNotNone(target)
+        self.assertIn("milk", target.label)
+        self.assertEqual(target.speed, 26)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 90)
+
+    def test_llm_area_milk_preserves_area_depth(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 50, 90, "llm+milk")
+        target = sanitizer.from_llm_move(
+            {"pattern": "milk", "zone": "base", "dp": 75, "rng": 70},
+            current,
+        )
+
+        self.assertIsNotNone(target)
+        self.assertIn("milk", target.label)
+        self.assertEqual(target.depth, 75)
+        self.assertEqual(target.stroke_range, 70)
+
     def test_llm_bare_endpoint_cues_keep_more_range(self):
         sanitizer = MotionSanitizer()
         current = MotionTarget(35, 45, 55)
@@ -999,6 +1023,17 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
             points = handy.stream_starts[0]["points"]
+            def hsp_trace_rows():
+                return [
+                    point
+                    for point in controller.observability_snapshot()["trace"]
+                    if point.get("continuous_schema") == "hsp"
+                ]
+
+            self.assertTrue(
+                self.wait_until(lambda: len(hsp_trace_rows()) >= len(points)),
+                hsp_trace_rows(),
+            )
             segment_rates = [
                 abs(right["x"] - left["x"]) / ((right["t"] - left["t"]) / 1000.0)
                 for left, right in zip(points, points[1:])
@@ -1008,8 +1043,8 @@ class MotionControllerTests(unittest.TestCase):
             self.assertGreater(max(segment_rates), 120.0)
             trace_rates = [
                 point["hsp_segment_depth_per_second"]
-                for point in controller.observability_snapshot()["trace"]
-                if point.get("continuous_schema") == "hsp" and "hsp_segment_depth_per_second" in point
+                for point in hsp_trace_rows()
+                if "hsp_segment_depth_per_second" in point
             ]
             self.assertGreater(max(trace_rates), 120.0)
         finally:

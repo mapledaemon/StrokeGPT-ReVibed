@@ -1207,6 +1207,10 @@ CHAT_MOTION_CLAIM_PATTERNS = (
     r"\b(?:switching|changing|adjusting|moving|stroking|speeding|slowing)\b",
 )
 
+FIXED_PATTERN_NOISE_SPEED_DELTA = 6
+FIXED_PATTERN_NOISE_DEPTH_DELTA = 8
+FIXED_PATTERN_NOISE_RANGE_DELTA = 8
+
 def _looks_like_motion_request(text):
     clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
     if not clean:
@@ -1220,13 +1224,24 @@ def _chat_claims_motion_change(text):
     clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
     return any(re.search(pattern, clean) for pattern in CHAT_MOTION_CLAIM_PATTERNS)
 
+def _target_numeric_delta_exceeds_noise(current, target):
+    current = current.rounded()
+    target = target.rounded()
+    return (
+        abs(current.speed - target.speed) >= FIXED_PATTERN_NOISE_SPEED_DELTA
+        or abs(current.depth - target.depth) >= FIXED_PATTERN_NOISE_DEPTH_DELTA
+        or abs(current.stroke_range - target.stroke_range) >= FIXED_PATTERN_NOISE_RANGE_DELTA
+    )
+
 def _target_has_motion_effect(current, target):
     if not target:
         return False
     if target.motion_program:
         return True
-    if _fixed_pattern_id_from_target(target):
-        return True
+    target_pattern = _fixed_pattern_id_from_target(target)
+    if target_pattern:
+        current_pattern = _fixed_pattern_id_from_target(current)
+        return current_pattern != target_pattern or _target_numeric_delta_exceeds_noise(current, target)
     current = current.rounded()
     target = target.rounded()
     return (
@@ -1998,8 +2013,16 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
     app_state.mode_message_queue.clear()
     _set_runtime_active_mode(mode_name, reset_timer=True)
 
+    task = None
+
+    def is_current_mode_task() -> bool:
+        with app_state.lock:
+            return app_state.auto_mode_active_task is task
+
     def on_stop():
         with app_state.lock:
+            if app_state.auto_mode_active_task is not task:
+                return
             app_state.auto_mode_active_task = None
         _set_runtime_active_mode("")
 
@@ -2052,6 +2075,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'autospeak_range': lambda: (settings.autospeak_min_seconds, settings.autospeak_max_seconds),
         'consume_autospeak_wake': consume_autospeak_wake,
         'set_mode_name': set_mode_name,
+        'should_finalize_on_exit': is_current_mode_task,
         'mode_decision': mode_decision,
         'send_chat': add_message_to_queue,
     }

@@ -31,7 +31,7 @@ from .mode_decisions import (
 )
 from .mode_contracts import ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher
-from .motion_scripts import MotionScriptPlanner
+from .motion_scripts import MotionScriptPlanner, ScriptStep
 
 
 INTENT_MATCHER = IntentMatcher()
@@ -102,14 +102,22 @@ class AutoModeThread(threading.Thread):
         except Exception as e:
             print(f"Auto mode crashed: {e}")
         finally:
-            if motion_controller:
+            finalize_callback = self._callbacks.get("should_finalize_on_exit")
+            should_finalize = True
+            if finalize_callback:
+                try:
+                    should_finalize = bool(finalize_callback())
+                except Exception:
+                    should_finalize = True
+
+            if motion_controller and should_finalize:
                 motion_controller.stop()
 
             stop_callback = self._callbacks.get("on_stop")
-            if stop_callback:
+            if stop_callback and should_finalize:
                 stop_callback()
 
-            if message_callback:
+            if message_callback and should_finalize:
                 message_callback("Okay, you're in control now.")
 
     def stop(self):
@@ -367,6 +375,17 @@ def _apply_mode_motion(motion_controller, target, source):
         motion_controller.apply_target(target, source=source)
 
 
+def _mode_step_sleep_seconds(base_seconds: float, step: ScriptStep, motion_controller) -> float:
+    sleep_seconds = max(0.0, float(base_seconds or 0.0))
+    if not _uses_continuous_motion(motion_controller):
+        return sleep_seconds
+    try:
+        hold_floor = max(0.0, float(getattr(step, "hold_seconds_floor", 0.0) or 0.0))
+    except (TypeError, ValueError):
+        hold_floor = 0.0
+    return max(sleep_seconds, hold_floor)
+
+
 def _run_scripted_mode(
     stop_event: threading.Event,
     services: ModeServices,
@@ -455,7 +474,11 @@ def _run_scripted_mode(
         _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
         remember_pattern(target)
         step_count += 1
-        sleep_seconds = random.uniform(min_time, max_time) * step.delay_factor
+        sleep_seconds = _mode_step_sleep_seconds(
+            random.uniform(min_time, max_time) * step.delay_factor,
+            step,
+            motion_controller,
+        )
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
             stop_event,
             sleep_seconds,
@@ -827,7 +850,11 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
         _apply_mode_motion(motion_controller, target, source="edging mode")
         remember_pattern(target)
         step_count += 1
-        sleep_seconds = random.uniform(edging_min, edging_max) * step.delay_factor
+        sleep_seconds = _mode_step_sleep_seconds(
+            random.uniform(edging_min, edging_max) * step.delay_factor,
+            step,
+            motion_controller,
+        )
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
             stop_event,
             sleep_seconds,

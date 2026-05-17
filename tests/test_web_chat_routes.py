@@ -1064,6 +1064,54 @@ class WebChatRouteTests(WebTestCase):
             app_state.mode_message_queue.clear()
             app_state.mode_message_event.clear()
 
+    def test_replaced_background_mode_cannot_clear_newer_active_mode(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state
+
+        original_task = app_state.auto_mode_active_task
+        created = []
+
+        class FakeModeTask:
+            def __init__(self, _mode_logic, initial_message, _services, callbacks, mode_name="auto", **_kwargs):
+                self.initial_message = initial_message
+                self._callbacks = callbacks
+                self.name = mode_name
+                self.stopped = False
+                self.join_timeouts = []
+                created.append(self)
+
+            def start(self):
+                pass
+
+            def stop(self):
+                self.stopped = True
+
+            def join(self, timeout=None):
+                self.join_timeouts.append(timeout)
+
+        try:
+            app_state.auto_mode_active_task = None
+            with mock.patch.object(web, "AutoModeThread", FakeModeTask):
+                web.start_background_mode(lambda *_args: None, "First.", mode_name="freestyle")
+                first = created[-1]
+                web.start_background_mode(lambda *_args: None, "Second.", mode_name="milking")
+                second = created[-1]
+
+            self.assertTrue(first.stopped)
+            self.assertEqual(first.join_timeouts, [5])
+            self.assertIs(app_state.auto_mode_active_task, second)
+            self.assertFalse(first._callbacks["should_finalize_on_exit"]())
+            first._callbacks["on_stop"]()
+            self.assertIs(app_state.auto_mode_active_task, second)
+
+            self.assertTrue(second._callbacks["should_finalize_on_exit"]())
+            second._callbacks["on_stop"]()
+            self.assertIsNone(app_state.auto_mode_active_task)
+        finally:
+            app_state.auto_mode_active_task = original_task
+            app_state.mode_message_queue.clear()
+            app_state.mode_message_event.clear()
+
     def test_autospeak_enabled_mode_decision_chat_queues_visible_spoken_chat(self):
         import strokegpt.web as web
         from strokegpt import background_modes
@@ -1141,6 +1189,37 @@ class WebChatRouteTests(WebTestCase):
         from strokegpt.web import _looks_like_motion_request
 
         self.assertTrue(_looks_like_motion_request("slowly focus on the tip"))
+
+    def test_same_fixed_pattern_target_without_meaningful_delta_is_noop(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(26, 50, 90, "llm+milk continuous")
+        target = MotionTarget(30, 56, 95, "llm+milk")
+
+        self.assertFalse(_target_has_motion_effect(current, target))
+
+    def test_same_fixed_pattern_target_with_meaningful_delta_applies(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(26, 50, 90, "llm+milk continuous")
+        target = MotionTarget(33, 50, 90, "llm+milk")
+        deeper = MotionTarget(26, 59, 90, "llm+milk")
+        wider = MotionTarget(26, 50, 98, "llm+milk")
+
+        self.assertTrue(_target_has_motion_effect(current, target))
+        self.assertTrue(_target_has_motion_effect(current, deeper))
+        self.assertTrue(_target_has_motion_effect(current, wider))
+
+    def test_different_fixed_pattern_target_applies(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(26, 50, 90, "llm+milk continuous")
+        target = MotionTarget(26, 50, 90, "llm+wave")
+
+        self.assertTrue(_target_has_motion_effect(current, target))
 
     def test_llm_context_includes_configured_speed_limits(self):
         from strokegpt.web import get_current_context, settings
