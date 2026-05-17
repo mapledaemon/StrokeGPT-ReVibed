@@ -535,7 +535,99 @@ class HandyControllerTests(unittest.TestCase):
             diagnostics["last_command"]["response"],
             {"hsp_state": hsp_state},
         )
+        self.assertIsInstance(diagnostics["hsp_state_observed_at"], float)
+        self.assertIsInstance(diagnostics["hsp_state_age_ms"], float)
         self.assertNotIn("secret", str(diagnostics))
+
+    def test_v3_command_extracts_nested_hsp_response_state(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        payload = {
+            "result": {
+                "responseHspStateGet": {
+                    "state": {
+                        "playState": "playing",
+                        "currentTime": 1240,
+                        "currentPoint": 8,
+                        "streamId": 4,
+                    }
+                }
+            }
+        }
+
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=200, payload=payload),
+            create=True,
+        ):
+            self.assertTrue(handy._send_v3_command("hsp/state", {}))
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 1240)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 8)
+        self.assertEqual(diagnostics["hsp_state"]["stream_id"], 4)
+        self.assertIsInstance(diagnostics["hsp_state_observed_at"], float)
+        self.assertIsInstance(diagnostics["hsp_state_age_ms"], float)
+
+    def test_refresh_hsp_state_polls_current_state_while_streaming(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+        payload = {
+            "result": {
+                "responseHspStateGet": {
+                    "state": {
+                        "playState": "HSP_STATE_PLAYING",
+                        "currentTime": 1480,
+                        "currentPoint": 11,
+                        "streamId": 6,
+                        "playbackRate": 1.0,
+                    }
+                }
+            }
+        }
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload=payload),
+            create=True,
+        ) as get:
+            self.assertTrue(handy.refresh_hsp_state(max_age_seconds=0))
+
+        get.assert_called_once()
+        self.assertIn("hsp/state", get.call_args.args[0])
+        self.assertEqual(get.call_args.kwargs["timeout"], handy_module.HSP_STATE_REFRESH_TIMEOUT_SECONDS)
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["play_state"], "HSP_STATE_PLAYING")
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 1480)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 11)
+        self.assertEqual(diagnostics["hsp_state"]["stream_id"], 6)
+        self.assertEqual(diagnostics["hsp_state"]["playback_rate"], 1)
+        self.assertIsNone(diagnostics["last_command"])
+        self.assertEqual(diagnostics["command_history"], [])
+
+    def test_refresh_hsp_state_does_not_send_command_fallback_on_poll_failure(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            side_effect=RuntimeError("state endpoint unavailable"),
+            create=True,
+        ) as get, mock.patch.object(handy, "_send_v3_command", return_value=True) as send:
+            self.assertFalse(handy.refresh_hsp_state(max_age_seconds=0))
+
+        get.assert_called_once()
+        send.assert_not_called()
+        self.assertIsNone(handy.diagnostics()["last_command"])
+
+    def test_diagnostics_can_refresh_hsp_state(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        with mock.patch.object(handy, "refresh_hsp_state", return_value=True) as refresh:
+            handy.diagnostics(refresh_hsp_state=True)
+
+        refresh.assert_called_once()
 
     def test_diagnostics_include_hsp_point_preview_without_secret_values(self):
         handy = RecordingV3HandyController()

@@ -149,6 +149,8 @@ export {
     updateMotionTrainingTimingReadouts,
 } from './motion/training-editor.js';
 
+let lastCylinderDebug = {source: 'init'};
+
 function normalizeMotionSpeedLimits() {
     const a = parseInt(el.motionSpeedMinSlider.value, 10);
     const b = parseInt(el.motionSpeedMaxSlider.value, 10);
@@ -781,6 +783,12 @@ function observationNumber(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function finiteObservation(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 function clampPercent(value, fallback = 0) {
     return Math.max(0, Math.min(100, observationNumber(value, fallback)));
 }
@@ -826,6 +834,16 @@ function updateMotionDiagnosticsPanel(payload = {}) {
             `depth/range ${Math.round(clampPercent(diagnostics.depth, 50))}%/${Math.round(clampPercent(diagnostics.range, 50))}%`,
             `HAMP ${diagnostics.hamp_started ? 'started' : 'stopped'}`,
         ].join(' | '));
+        const visualizer = lastCylinderDebug || {};
+        const visualizerParts = [
+            `Visualizer ${visualizer.source || 'unknown'}`,
+            Number.isFinite(visualizer.depth) ? `depth ${visualizer.depth.toFixed(1)}%` : '',
+            Number.isFinite(visualizer.clock_ms) ? `clock ${Math.round(visualizer.clock_ms)}ms` : '',
+            Number.isFinite(visualizer.first_point_ms) ? `window ${Math.round(visualizer.first_point_ms)}-${Math.round(Number.isFinite(visualizer.latest_point_ms) ? visualizer.latest_point_ms : visualizer.first_point_ms)}ms` : '',
+            Number.isFinite(visualizer.hsp_state_age_ms) ? `state age ${Math.round(visualizer.hsp_state_age_ms)}ms` : '',
+            visualizer.play_state !== undefined && visualizer.play_state !== null ? `state ${visualizer.play_state}` : '',
+        ].filter(Boolean);
+        if (visualizerParts.length) lines.push(visualizerParts.join(' | '));
     }
     el.motionDiagnosticsPanel.hidden = false;
     el.motionDiagnosticsPanel.textContent = lines.join('\n');
@@ -885,10 +903,27 @@ function fullTravelMm(diagnostics = {}) {
     return Math.max(1, observationNumber(diagnostics.full_travel_mm, 110));
 }
 
+function tracePointDepthPercent(point = {}, diagnostics = {}) {
+    return physicalDepthPercent(point.output_depth ?? point.depth, diagnostics);
+}
+
 function setHandyCylinderPosition(depth) {
     if (el.handyCylinderPosition) {
-        el.handyCylinderPosition.style.top = `${clampPercent(depth, 50)}%`;
+        const roundedDepth = Math.round(clampPercent(depth, 50) * 1000) / 1000;
+        el.handyCylinderPosition.style.top = `${roundedDepth}%`;
     }
+}
+
+function setCylinderDebug(details = {}) {
+    lastCylinderDebug = {
+        source: details.source || 'unknown',
+        depth: finiteObservation(details.depth),
+        clock_ms: finiteObservation(details.clock_ms),
+        first_point_ms: finiteObservation(details.first_point_ms),
+        latest_point_ms: finiteObservation(details.latest_point_ms),
+        hsp_state_age_ms: finiteObservation(details.hsp_state_age_ms),
+        play_state: details.play_state,
+    };
 }
 
 function positionBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
@@ -897,12 +932,12 @@ function positionBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds
 
     const latest = trace[trace.length - 1] || {};
     if (observationNumber(latest.speed, diagnostics.relative_speed) <= 0 || String(latest.label || '').includes('stopped')) {
-        return physicalDepthPercent(latest.depth ?? diagnostics.depth, diagnostics);
+        return tracePointDepthPercent(latest, diagnostics);
     }
 
     const previous = trace[trace.length - 2] || {};
-    const startDepth = physicalDepthPercent(previous.depth, diagnostics);
-    const endDepth = physicalDepthPercent(latest.depth, diagnostics);
+    const startDepth = tracePointDepthPercent(previous, diagnostics);
+    const endDepth = tracePointDepthPercent(latest, diagnostics);
     const distanceMm = fullTravelMm(diagnostics) * Math.abs(endDepth - startDepth) / 100;
     const velocity = Math.max(1, observationNumber(latest.physical_speed, diagnostics.physical_speed || 1));
     const duration = Math.max(0.08, distanceMm / velocity);
@@ -911,53 +946,180 @@ function positionBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds
     return startDepth + (endDepth - startDepth) * progress;
 }
 
-function recentContinuousTracePoints(payload = {}) {
+function payloadServerTimeToBrowserTime(payload = {}, serverTime) {
+    const rawTime = finiteObservation(serverTime);
+    if (rawTime === null) return null;
+    const snapshotTime = finiteObservation(payload.snapshot_time);
+    const receivedAt = finiteObservation(payload.received_at);
+    if (snapshotTime !== null && receivedAt !== null) return rawTime + (receivedAt - snapshotTime);
+    return rawTime;
+}
+
+function tracePointTime(point = {}, timeKey = 't', payload = {}) {
+    const rawTime = finiteObservation(point[timeKey]);
+    if (rawTime === null) return null;
+    return timeKey === 't' ? payloadServerTimeToBrowserTime(payload, rawTime) : rawTime;
+}
+
+function continuousTracePoints(payload = {}) {
     const trace = Array.isArray(payload.trace) ? payload.trace : [];
-    const continuous = trace.filter(point => (
-        point
-        && point.continuous
-        && Number.isFinite(Number(point.t))
-        && Number.isFinite(Number(point.depth))
-    ));
+    return trace
+        .filter(point => (
+            point
+            && point.continuous
+            && Number.isFinite(Number(point.t))
+            && Number.isFinite(Number(point.output_depth ?? point.depth))
+        ))
+        .slice()
+        .sort((left, right) => Number(left.t) - Number(right.t));
+}
+
+function recentContinuousTracePoints(payload = {}) {
+    const continuous = continuousTracePoints(payload);
     if (continuous.length <= 2) return continuous;
     const latestTime = Number(continuous.at(-1).t);
     const recent = continuous.filter(point => latestTime - Number(point.t) <= 0.9);
     return recent.length >= 2 ? recent : continuous.slice(-2);
 }
 
-function traceDepthAt(points, visualTime, diagnostics = {}) {
+function traceDepthAt(points, visualTime, diagnostics = {}, timeKey = 't', payload = {}) {
     if (!points.length) return physicalDepthPercent(diagnostics.depth, diagnostics);
-    if (points.length === 1) return physicalDepthPercent(points[0].depth ?? diagnostics.depth, diagnostics);
+    if (points.length === 1) return tracePointDepthPercent(points[0], diagnostics);
     const first = points[0];
-    if (visualTime <= Number(first.t)) return physicalDepthPercent(first.depth, diagnostics);
+    const firstTime = tracePointTime(first, timeKey, payload);
+    if (firstTime === null || visualTime <= firstTime) return tracePointDepthPercent(first, diagnostics);
 
     for (let index = 1; index < points.length; index += 1) {
         const previous = points[index - 1];
         const next = points[index];
-        const previousTime = Number(previous.t);
-        const nextTime = Number(next.t);
+        const previousTime = tracePointTime(previous, timeKey, payload);
+        const nextTime = tracePointTime(next, timeKey, payload);
+        if (previousTime === null || nextTime === null) continue;
         if (visualTime <= nextTime) {
             const duration = Math.max(0.001, nextTime - previousTime);
             const progress = Math.max(0, Math.min(1, (visualTime - previousTime) / duration));
-            const startDepth = physicalDepthPercent(previous.depth, diagnostics);
-            const endDepth = physicalDepthPercent(next.depth, diagnostics);
+            const startDepth = tracePointDepthPercent(previous, diagnostics);
+            const endDepth = tracePointDepthPercent(next, diagnostics);
             return startDepth + (endDepth - startDepth) * progress;
         }
     }
 
     const latest = points.at(-1);
-    return physicalDepthPercent(latest.depth ?? diagnostics.depth, diagnostics);
+    return tracePointDepthPercent(latest, diagnostics);
+}
+
+function hspTracePoints(payload = {}) {
+    const trace = Array.isArray(payload.trace) ? payload.trace : [];
+    return trace
+        .filter(point => (
+            point
+            && Number.isFinite(Number(point.hsp_point_time_ms))
+            && Number.isFinite(Number(point.output_depth ?? point.depth))
+        ))
+        .slice()
+        .sort((left, right) => Number(left.hsp_point_time_ms) - Number(right.hsp_point_time_ms));
+}
+
+function hspStateObservedAtSeconds(payload = {}, diagnostics = {}) {
+    const ageMs = finiteObservation(diagnostics.hsp_state_age_ms);
+    const receivedAt = finiteObservation(payload.received_at);
+    if (ageMs !== null && receivedAt !== null) return receivedAt - (ageMs / 1000);
+    return finiteObservation(diagnostics.hsp_state_observed_at);
+}
+
+function hspPlayStateIsAdvancing(playState, payload = {}) {
+    const numericState = finiteObservation(playState);
+    if (numericState !== null) return numericState === 1;
+
+    const stateText = String(playState ?? '').trim().toLowerCase();
+    if (!stateText) return Boolean(payload.playback_active);
+    if (stateText.includes('playing')) return true;
+    if (
+        stateText.includes('paused')
+        || stateText.includes('stopped')
+        || stateText.includes('starving')
+        || stateText.includes('not_initialized')
+        || stateText.includes('not initialized')
+    ) {
+        return false;
+    }
+    return Boolean(payload.playback_active);
+}
+
+function hspPlaybackClockMs(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
+    const hspState = diagnostics.hsp_state || {};
+    const currentTimeMs = finiteObservation(hspState.current_time_ms);
+    if (currentTimeMs === null) return null;
+
+    const observedAt = hspStateObservedAtSeconds(payload, diagnostics);
+    const isPlaying = hspPlayStateIsAdvancing(hspState.play_state, payload);
+    const playbackRate = Math.max(0, finiteObservation(hspState.playbackRate ?? hspState.playback_rate) ?? 1);
+    if (!isPlaying || observedAt === null || nowSeconds <= observedAt) return Math.max(0, currentTimeMs);
+    return Math.max(0, currentTimeMs + ((nowSeconds - observedAt) * 1000 * playbackRate));
+}
+
+function hspBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
+    if (!diagnostics.hsp_streaming) return null;
+    const clockMs = hspPlaybackClockMs(payload, diagnostics, nowSeconds);
+    if (clockMs === null) return null;
+    const points = hspTracePoints(payload);
+    if (!points.length) return null;
+    const firstPointTime = Number(points[0].hsp_point_time_ms);
+    const latestPointTime = Number(points.at(-1).hsp_point_time_ms);
+    if (Number.isFinite(firstPointTime) && clockMs < firstPointTime - 250) return null;
+    if (Number.isFinite(latestPointTime) && clockMs > latestPointTime + 250) return null;
+    const depth = traceDepthAt(points, clockMs, diagnostics, 'hsp_point_time_ms');
+    setCylinderDebug({
+        source: 'hsp-state',
+        depth,
+        clock_ms: clockMs,
+        first_point_ms: firstPointTime,
+        latest_point_ms: latestPointTime,
+        hsp_state_age_ms: diagnostics.hsp_state_age_ms,
+        play_state: (diagnostics.hsp_state || {}).play_state,
+    });
+    return depth;
+}
+
+function liveContinuousTraceDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000, points = null) {
+    const tracePoints = points || continuousTracePoints(payload);
+    if (tracePoints.length < 2) return null;
+    const firstTime = tracePointTime(tracePoints[0], 't', payload);
+    const latestTime = tracePointTime(tracePoints.at(-1), 't', payload);
+    if (firstTime === null || latestTime === null) return null;
+    if (nowSeconds < firstTime - 0.25 || nowSeconds > latestTime + 0.25) return null;
+    return traceDepthAt(tracePoints, nowSeconds, diagnostics, 't', payload);
 }
 
 function continuousBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
+    const hspDepth = hspBackendAnimatedDepth(payload, diagnostics, nowSeconds);
+    if (hspDepth !== null) return hspDepth;
+
+    const livePoints = continuousTracePoints(payload);
+    const liveDepth = liveContinuousTraceDepth(payload, diagnostics, nowSeconds, livePoints);
+    if (liveDepth !== null) {
+        setCylinderDebug({source: 'trace-wall-time', depth: liveDepth, hsp_state_age_ms: diagnostics.hsp_state_age_ms});
+        return liveDepth;
+    }
+
     const points = recentContinuousTracePoints(payload);
     const latest = points.at(-1);
-    if (!latest) return physicalDepthPercent(diagnostics.depth, diagnostics);
+    if (!latest) {
+        const depth = physicalDepthPercent(diagnostics.depth, diagnostics);
+        setCylinderDebug({source: 'diagnostic-depth', depth, hsp_state_age_ms: diagnostics.hsp_state_age_ms});
+        return depth;
+    }
 
     const lastCommandTime = observationNumber(payload.last_command_time ?? latest.t, nowSeconds);
-    const latestDepth = physicalDepthPercent(latest.depth ?? diagnostics.depth, diagnostics);
-    if (!payload.playback_active || nowSeconds - lastCommandTime > 1.5) return latestDepth;
-    if (points.length < 2) return latestDepth;
+    const latestDepth = tracePointDepthPercent(latest, diagnostics);
+    if (!payload.playback_active || nowSeconds - lastCommandTime > 1.5) {
+        setCylinderDebug({source: 'latest-trace-depth', depth: latestDepth, hsp_state_age_ms: diagnostics.hsp_state_age_ms});
+        return latestDepth;
+    }
+    if (points.length < 2) {
+        setCylinderDebug({source: 'latest-trace-depth', depth: latestDepth, hsp_state_age_ms: diagnostics.hsp_state_age_ms});
+        return latestDepth;
+    }
 
     const firstTime = Number(points[0].t);
     const latestTime = Number(latest.t);
@@ -965,7 +1127,9 @@ function continuousBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSecon
     const receivedAt = observationNumber(payload.received_at, nowSeconds);
     const elapsedSinceReceipt = Math.max(0, nowSeconds - receivedAt);
     const visualTime = firstTime + Math.min(elapsedSinceReceipt, traceDuration);
-    return traceDepthAt(points, visualTime, diagnostics);
+    const depth = traceDepthAt(points, visualTime, diagnostics);
+    setCylinderDebug({source: 'trace-receipt-time', depth, hsp_state_age_ms: diagnostics.hsp_state_age_ms});
+    return depth;
 }
 
 function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
@@ -974,11 +1138,21 @@ function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
     const physicalSpeed = Math.max(0, observationNumber(diagnostics.physical_speed, 0));
     if (payload.backend === 'continuous') return continuousBackendAnimatedDepth(payload, diagnostics, nowSeconds);
     const isPositionBackend = payload.backend === 'position';
-    if (isPositionBackend) return positionBackendAnimatedDepth(payload, diagnostics, nowSeconds);
-    if (physicalSpeed <= 0 || !diagnostics.hamp_started) return restingPosition;
+    if (isPositionBackend) {
+        const depth = positionBackendAnimatedDepth(payload, diagnostics, nowSeconds);
+        setCylinderDebug({source: 'position-plan', depth});
+        return depth;
+    }
+    if (physicalSpeed <= 0 || !diagnostics.hamp_started) {
+        setCylinderDebug({source: 'diagnostic-depth', depth: restingPosition});
+        return restingPosition;
+    }
 
     const active = activeStrokeZone(diagnostics);
-    if (active.width < 2) return restingPosition;
+    if (active.width < 2) {
+        setCylinderDebug({source: 'diagnostic-depth', depth: restingPosition});
+        return restingPosition;
+    }
 
     const travelMm = Math.max(1, fullTravelMm(diagnostics) * (active.width / 100));
     const lastCommandTime = observationNumber(payload.last_command_time, nowSeconds);
@@ -988,7 +1162,9 @@ function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
     const startingOffset = startingPosition - active.min;
     const travelled = (startingOffset + Math.max(0, nowSeconds - lastCommandTime) * percentPerSecond) % percentPerCycle;
     const phase = travelled <= active.width ? travelled : percentPerCycle - travelled;
-    return active.min + phase;
+    const depth = active.min + phase;
+    setCylinderDebug({source: 'hamp-estimate', depth});
+    return depth;
 }
 
 function updateHandyCylinder(payload = {}) {
@@ -1000,8 +1176,8 @@ export function updateMotionObservability(payload = {}) {
     const diagnostics = payload.diagnostics || {};
     updateMotionMeters(diagnostics);
     updateMotionSequenceIndicator(payload);
-    updateMotionDiagnosticsPanel(payload);
     updateHandyCylinder(payload);
+    updateMotionDiagnosticsPanel(payload);
     updateHandyConnectionStatusFromMotion(payload);
 }
 
@@ -1283,6 +1459,9 @@ export function initMotionControls({sendUserMessage}) {
         closeMotionTrainingWorkspace,
     });
     window.addEventListener('resize', drawOpenMotionTrainingPreview);
+    D.addEventListener?.('visibilitychange', () => {
+        if (!D.hidden) pollMotionStatus();
+    });
     el.motionTransformSmoothBtn?.addEventListener('click', smoothEditedPattern);
     el.motionTransformHarshenBtn?.addEventListener('click', harshenEditedPattern);
     el.motionTransformDurationDownBtn?.addEventListener('click', () => setEditedPatternDuration(0.85, 'Shortened the temporary copy.'));

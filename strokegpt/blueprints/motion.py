@@ -459,7 +459,7 @@ def test_depth_range_route():
 @motion_blueprint.route('/get_status')
 def get_status_route():
     web = _web()
-    diagnostics = web.handy.diagnostics()
+    diagnostics = web.handy.diagnostics(refresh_hsp_state=True)
     motion_observability = web.motion.observability_snapshot(diagnostics)
     motion_observability["diagnostics_level"] = web.settings.motion_diagnostics_level
     active_mode = web._active_mode_snapshot()

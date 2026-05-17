@@ -3411,6 +3411,7 @@ class MotionController:
             "backend": self.backend,
             "source": source,
             "label": label,
+            "snapshot_time": time.time(),
             "last_command_time": last_command_time,
             "playback_active": playback_active,
             "diagnostics": handy_diagnostics,
