@@ -80,6 +80,7 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "milking-mode-btn",
             "freestyle-mode-btn",
             "emergency-stop-all-btn",
+            "top-bar-intensity-guide-btn",
             "top-bar-voice-toggle-btn",
             "top-bar-autospeak-toggle-btn",
             "audio-provider-select",

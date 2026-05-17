@@ -16,7 +16,11 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { updateActiveModeTimer } from '../../static/js/motion-control.js';
+import {
+    updateActiveModeTimer,
+    updateChatIntensityGuideUi,
+    updateChatSessionTimer,
+} from '../../static/js/motion-control.js';
 import {
     updateMotionSequenceIndicator,
     resetMotionSequenceLog,
@@ -42,12 +46,16 @@ describe('updateActiveModeTimer + sequence log (Backlog #13 proof test)', () => 
         // mutable contents of the stub elements those bindings point at.
         state.activeModeName = '';
         state.activeModeElapsedSeconds = null;
+        state.chatSessionElapsedSeconds = null;
+        state.chatIntensityGuide = 'steady';
+        state.chatIntensityCountDirection = 'steady';
         state.motionPaused = false;
         state.motionDiagnosticsLevel = 'compact';
         state.motionBackend = 'hamp';
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
+        resetStubElement('top-bar-intensity-guide-btn');
         resetStubElement('motion-sequence-indicator');
         resetMotionSequenceLog();
     });
@@ -79,6 +87,51 @@ describe('updateActiveModeTimer + sequence log (Backlog #13 proof test)', () => 
             false,
             'the timer chip should not include the mode label',
         );
+    });
+
+    it('renders normal chat elapsed time when no preset mode is active', () => {
+        updateActiveModeTimer('', null, false);
+        updateChatSessionTimer(125, 'ramp_up', 'up');
+
+        const status = getStubElement('active-mode-status');
+        const label = getStubElement('active-mode-label');
+        const timer = getStubElement('edging-timer');
+
+        assert.strictEqual(status.hidden, false);
+        assert.strictEqual(label.textContent, 'Chat');
+        assert.strictEqual(timer.textContent, '02:05');
+        assert.strictEqual(state.chatSessionElapsedSeconds, 125);
+    });
+
+    it('does not replace an active preset timer with the chat timer', () => {
+        updateActiveModeTimer('milking', 42, false);
+        updateChatSessionTimer(125, 'ramp_down', 'down');
+
+        const label = getStubElement('active-mode-label');
+        const timer = getStubElement('edging-timer');
+
+        assert.strictEqual(label.textContent, 'Milk');
+        assert.strictEqual(timer.textContent, '00:42');
+    });
+
+    it('cycles the chat intensity guide button state without extra text', () => {
+        updateChatIntensityGuideUi('ramp_down', 'down');
+        const button = getStubElement('top-bar-intensity-guide-btn');
+
+        assert.strictEqual(button.textContent, 'Arc Down');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
+        assert.strictEqual(button.classList.contains('is-ramp-down'), true);
+
+        updateChatIntensityGuideUi('variable', 'variable');
+        assert.strictEqual(button.textContent, 'Arc Variable');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
+        assert.strictEqual(button.classList.contains('is-variable'), true);
+        assert.strictEqual(button.classList.contains('is-ramp-down'), false);
+
+        updateChatIntensityGuideUi('steady', 'steady');
+        assert.strictEqual(button.textContent, 'Arc Steady');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'false');
+        assert.strictEqual(button.classList.contains('is-variable'), false);
     });
 
     it('freezes elapsed seconds on stop instead of resetting to null/00:00', () => {

@@ -477,6 +477,32 @@ Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
 Session time: {context.get('edging_elapsed_time')}. Mention it only occasionally and naturally to praise, tease, or challenge me.
 """
 
+        if context.get('chat_elapsed_time'):
+            guide = context.get('arc') or context.get('chat_arc') or context.get('chat_intensity_guide') or 'steady'
+            direction = context.get('chat_intensity_count_direction') or 'steady'
+            count_time = context.get('chat_intensity_count_time') or context.get('chat_elapsed_time')
+            target_time = context.get('chat_intensity_target_time') or '10m 0s'
+            if guide == 'steady':
+                arc_text = (
+                    f"Chat time: {context.get('chat_elapsed_time')}. arc=steady. "
+                    "Keep intensity responsive to my wording; do not escalate only because time passes."
+                )
+            elif guide == 'variable':
+                arc_text = (
+                    f"Chat time: {context.get('chat_elapsed_time')}. arc=variable. "
+                    "Vary intensity organically over time, including speed changes when motion fits, while obeying explicit requests and configured limits."
+                )
+            else:
+                arc_text = (
+                    f"Chat time: {context.get('chat_elapsed_time')}. arc={guide}, "
+                    f"counting {direction} at {count_time} of a {target_time} arc. "
+                    "Let wording and motion intensity trend gradually with this guide while obeying explicit requests and configured limits."
+                )
+            prompt_text += f"""
+### CHAT SESSION ARC
+{arc_text}
+"""
+
         if context.get('use_long_term_memory') and context.get('user_profile'):
             prompt_text += "\n### ABOUT ME (Your Memory of Me):\n"
             prompt_text += json.dumps(context.get('user_profile'), separators=(",", ":"))

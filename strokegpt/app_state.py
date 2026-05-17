@@ -49,6 +49,9 @@ class AppState:
     active_mode_started_at: float | None = None
     active_mode_paused_at: float | None = None
     active_mode_paused_total: float = 0.0
+    chat_session_started_at: float | None = None
+    chat_intensity_guide: str = "steady"
+    chat_intensity_guide_started_at: float | None = None
     motion_pause_active: bool = False
     edging_start_time: float | None = None
     depth_test_lock: threading.Lock = field(default_factory=threading.Lock)

@@ -77,6 +77,8 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
+CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
+CHAT_INTENSITY_ARC_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -379,6 +381,89 @@ def _active_mode_snapshot():
         "active_mode_elapsed_seconds": elapsed,
         "active_mode_paused": paused,
         "motion_paused": paused,
+    }
+
+
+def _format_elapsed_time(elapsed_seconds):
+    elapsed_seconds = max(0, int(elapsed_seconds or 0))
+    minutes, seconds = divmod(elapsed_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m {seconds}s"
+    return f"{minutes}m {seconds}s"
+
+
+def _normalize_chat_intensity_guide(value):
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    return normalized if normalized in CHAT_INTENSITY_GUIDES else "steady"
+
+
+def _ensure_chat_session_started(now=None):
+    now = time.time() if now is None else float(now)
+    with app_state.lock:
+        started_now = app_state.chat_session_started_at is None
+        if app_state.chat_session_started_at is None:
+            app_state.chat_session_started_at = now
+        if started_now or app_state.chat_intensity_guide_started_at is None:
+            app_state.chat_intensity_guide_started_at = now
+        return app_state.chat_session_started_at
+
+
+def _set_chat_intensity_guide(value):
+    guide = _normalize_chat_intensity_guide(value)
+    now = time.time()
+    with app_state.lock:
+        changed = app_state.chat_intensity_guide != guide
+        app_state.chat_intensity_guide = guide
+        if app_state.chat_session_started_at is None:
+            app_state.chat_intensity_guide_started_at = None
+        elif changed or app_state.chat_intensity_guide_started_at is None:
+            app_state.chat_intensity_guide_started_at = now
+    return _chat_session_snapshot()
+
+
+def _chat_session_snapshot(now=None):
+    now = time.time() if now is None else float(now)
+    with app_state.lock:
+        started_at = app_state.chat_session_started_at
+        guide = _normalize_chat_intensity_guide(app_state.chat_intensity_guide)
+        guide_started_at = app_state.chat_intensity_guide_started_at or started_at
+    elapsed = None
+    elapsed_time = None
+    guide_elapsed = None
+    if started_at is not None:
+        elapsed = max(0, int(now - started_at))
+        elapsed_time = _format_elapsed_time(elapsed)
+    if guide_started_at is not None:
+        guide_elapsed = max(0, int(now - guide_started_at))
+
+    count_direction = {
+        "ramp_up": "up",
+        "ramp_down": "down",
+        "variable": "variable",
+    }.get(guide, "steady")
+    count_seconds = None
+    count_time = None
+    if guide_elapsed is not None:
+        if guide == "ramp_down":
+            count_seconds = max(0, CHAT_INTENSITY_ARC_SECONDS - guide_elapsed)
+        elif guide == "ramp_up":
+            count_seconds = min(CHAT_INTENSITY_ARC_SECONDS, guide_elapsed)
+        else:
+            count_seconds = guide_elapsed
+        count_time = _format_elapsed_time(count_seconds)
+
+    return {
+        "arc": guide,
+        "chat_arc": guide,
+        "chat_elapsed_seconds": elapsed,
+        "chat_elapsed_time": elapsed_time,
+        "chat_intensity_guide": guide,
+        "chat_intensity_count_direction": count_direction,
+        "chat_intensity_count_seconds": count_seconds,
+        "chat_intensity_count_time": count_time,
+        "chat_intensity_target_seconds": CHAT_INTENSITY_ARC_SECONDS,
+        "chat_intensity_target_time": _format_elapsed_time(CHAT_INTENSITY_ARC_SECONDS),
     }
 
 
@@ -1207,9 +1292,21 @@ CHAT_MOTION_CLAIM_PATTERNS = (
     r"\b(?:switching|changing|adjusting|moving|stroking|speeding|slowing)\b",
 )
 
-FIXED_PATTERN_NOISE_SPEED_DELTA = 6
+FIXED_PATTERN_NOISE_SPEED_DELTA = 0
 FIXED_PATTERN_NOISE_DEPTH_DELTA = 8
 FIXED_PATTERN_NOISE_RANGE_DELTA = 8
+LLM_TIGHT_FOCUS_PATTERN_IDS = {"flick", "flutter", "hold", "pulse", "tease"}
+LLM_SPECIFIC_FOCUS_REQUEST_RE = re.compile(
+    r"\b(?:tip|head|shaft|middle|mid|base|deep|deeper|shallow|upper|lower|"
+    r"focus|spot|area|lick|suck|flick|flutter|pulse|tease|hold|edge|short|"
+    r"tiny|tight|small)\b",
+    re.IGNORECASE,
+)
+LLM_PATTERN_VARIATION_REQUEST_RE = re.compile(
+    r"\b(?:another|new|different|rhythm|pattern|motion|move|stroke|switch|"
+    r"change|shift|try|mix\s+it\s+up|something\s+different)\b",
+    re.IGNORECASE,
+)
 
 def _looks_like_motion_request(text):
     clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
@@ -1228,9 +1325,9 @@ def _target_numeric_delta_exceeds_noise(current, target):
     current = current.rounded()
     target = target.rounded()
     return (
-        abs(current.speed - target.speed) >= FIXED_PATTERN_NOISE_SPEED_DELTA
-        or abs(current.depth - target.depth) >= FIXED_PATTERN_NOISE_DEPTH_DELTA
-        or abs(current.stroke_range - target.stroke_range) >= FIXED_PATTERN_NOISE_RANGE_DELTA
+        abs(current.speed - target.speed) > FIXED_PATTERN_NOISE_SPEED_DELTA
+        or abs(current.depth - target.depth) > FIXED_PATTERN_NOISE_DEPTH_DELTA
+        or abs(current.stroke_range - target.stroke_range) > FIXED_PATTERN_NOISE_RANGE_DELTA
     )
 
 def _target_has_motion_effect(current, target):
@@ -1250,14 +1347,79 @@ def _target_has_motion_effect(current, target):
         or current.stroke_range != target.stroke_range
     )
 
-def _target_from_llm_response_move(response, current):
+def _user_requested_specific_focus(text):
+    clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
+    return bool(clean and LLM_SPECIFIC_FOCUS_REQUEST_RE.search(clean))
+
+def _user_requested_pattern_variation(text):
+    clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
+    return bool(
+        clean
+        and _looks_like_motion_request(clean)
+        and LLM_PATTERN_VARIATION_REQUEST_RE.search(clean)
+    )
+
+def _llm_target_is_tight_or_local_focus(target):
+    if not target:
+        return False
+    pattern_id = _fixed_pattern_id_from_target(target)
+    if pattern_id in LLM_TIGHT_FOCUS_PATTERN_IDS:
+        return True
+    label = getattr(target, "label", "") or ""
+    if any(pattern in label.lower() for pattern in LLM_TIGHT_FOCUS_PATTERN_IDS):
+        return True
+    program = getattr(target, "motion_program", None)
+    if isinstance(program, dict) and program.get("generated_area_focus"):
+        return True
+    try:
+        return float(target.stroke_range) <= 45 and (
+            float(target.depth) <= 35 or float(target.depth) >= 65
+        )
+    except (TypeError, ValueError):
+        return False
+
+def _fallback_target_preserving_current_motion(current, target):
+    current_pattern = _fixed_pattern_id_from_target(current)
+    target_speed = getattr(target, "speed", None)
+    try:
+        speed = float(target_speed)
+    except (TypeError, ValueError):
+        speed = float(getattr(current, "speed", 35) or 35)
+    if speed <= 0:
+        speed = float(getattr(current, "speed", 35) or 35)
+
+    if current_pattern and current_pattern not in LLM_TIGHT_FOCUS_PATTERN_IDS:
+        return MotionTarget(
+            speed,
+            float(getattr(current, "depth", 50) or 50),
+            float(getattr(current, "stroke_range", 70) or 70),
+            getattr(current, "label", "") or f"llm+{current_pattern}",
+            motion_program=getattr(current, "motion_program", None),
+        ).clamped()
+
+    return MotionTarget(
+        speed,
+        50,
+        max(70.0, float(getattr(current, "stroke_range", 70) or 70)),
+        "llm+milk",
+    ).clamped()
+
+def _guard_unrequested_tight_llm_target(user_input, current, target):
+    if not _llm_target_is_tight_or_local_focus(target):
+        return target
+    if _user_requested_specific_focus(user_input) or _user_requested_pattern_variation(user_input):
+        return target
+    return _fallback_target_preserving_current_motion(current, target)
+
+def _target_from_llm_response_move(response, current, user_input=""):
     if not isinstance(response, dict):
         return None
     move = response.get("move")
     if not move:
         return None
     sanitized = _sanitize_llm_move_for_disabled_patterns(move)
-    return motion.sanitizer.from_llm_move(sanitized, current)
+    target = motion.sanitizer.from_llm_move(sanitized, current)
+    return _guard_unrequested_tight_llm_target(user_input, current, target)
 
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):
@@ -1267,7 +1429,7 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
         and _normalize_llm_mode_action(response.get("mode_action"))
     ):
         return response, False
-    target = _target_from_llm_response_move(response, current)
+    target = _target_from_llm_response_move(response, current, user_input=user_input)
     if context.get("autospeak_event") and not _chat_claims_motion_change(response.get("chat")):
         return response, False
     needs_repair = (
@@ -1286,8 +1448,8 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
         return response, False
     return repaired, True
 
-def _apply_llm_response_move(response, current, source="llm"):
-    target = _target_from_llm_response_move(response, current)
+def _apply_llm_response_move(response, current, source="llm", user_input=""):
+    target = _target_from_llm_response_move(response, current, user_input=user_input)
     if not _target_has_motion_effect(current, target):
         return None
     motion.apply_generated_target(target, source=source)
@@ -1674,6 +1836,9 @@ def reset_runtime_state():
         app_state.active_mode_started_at = None
         app_state.active_mode_paused_at = None
         app_state.active_mode_paused_total = 0.0
+        app_state.chat_session_started_at = None
+        app_state.chat_intensity_guide = "steady"
+        app_state.chat_intensity_guide_started_at = None
         app_state.motion_pause_active = False
         app_state.edging_start_time = None
         app_state.use_long_term_memory = True
@@ -1719,6 +1884,7 @@ def get_current_context():
         special_persona_mode = app_state.special_persona_mode
         active_mode_name = _active_mode_name()
     semantic_target = _motion_semantic_target()
+    chat_session = _chat_session_snapshot()
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
         'user_profile': settings.user_profile, 'patterns': settings.patterns,
@@ -1740,14 +1906,10 @@ def get_current_context():
         'active_mode': active_mode_name,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
+    context.update(chat_session)
     if edging_start_time:
         elapsed_seconds = int(time.time() - edging_start_time)
-        minutes, seconds = divmod(elapsed_seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        if hours > 0:
-            context['edging_elapsed_time'] = f"{hours}h {minutes}m {seconds}s"
-        else:
-            context['edging_elapsed_time'] = f"{minutes}m {seconds}s"
+        context['edging_elapsed_time'] = _format_elapsed_time(elapsed_seconds)
     return context
 
 def _is_llm_transport_error_text(text):
@@ -2521,6 +2683,7 @@ def _finalize_llm_chat_response(
             llm_response,
             current_before_llm,
             source="llm repair" if motion_repaired else "llm",
+            user_input=user_input,
         )
         motion_applied = target is not None
         _remember_motion_pattern_from_target(target)
@@ -2564,6 +2727,7 @@ def handle_user_message():
     if not user_input: return jsonify({"status": "empty_message"})
 
     _cancel_standalone_autospeak()
+    _ensure_chat_session_started()
     app_state.chat_history.append({"role": "user", "content": user_input})
 
     handled, response = _handle_chat_commands(
@@ -2630,6 +2794,7 @@ def handle_user_message_stream():
             return
 
         _cancel_standalone_autospeak()
+        _ensure_chat_session_started()
         app_state.chat_history.append({"role": "user", "content": user_input})
 
         handled, response = _handle_chat_commands(
@@ -2747,6 +2912,7 @@ def persist_local_voice_settings():
 def get_ui_updates_route():
     message_records = _message_records_for_ui_client(request.args.get("client_id", ""))
     messages = [record["text"] for record in message_records]
+    chat_session = _chat_session_snapshot()
     with app_state.lock:
         mode_status_message = app_state.mode_status_message
         app_state.mode_status_message = ""
@@ -2759,7 +2925,15 @@ def get_ui_updates_route():
         "audio_error": audio.consume_last_error(),
         "mode_status_message": mode_status_message,
         "chat_audio_warning": chat_audio_warning,
+        **chat_session,
     })
+
+
+@app.route('/set_chat_intensity_guide', methods=['POST'])
+def set_chat_intensity_guide_route():
+    data = _request_json()
+    snapshot = _set_chat_intensity_guide(data.get("arc", data.get("guide", "steady")))
+    return jsonify({"status": "success", **snapshot})
 
 def _request_bool_value(data, key, default):
     if key not in data:
