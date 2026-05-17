@@ -635,6 +635,23 @@ class MotionControllerTests(unittest.TestCase):
             time.sleep(0.01)
         return bool(predicate())
 
+    def wait_for_hsp_trace(self, controller, predicate=None, timeout=1.0):
+        points = []
+
+        def trace_matches():
+            nonlocal points
+            points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+            ]
+            if predicate is None:
+                return bool(points)
+            return any(predicate(point) for point in points)
+
+        self.assertTrue(self.wait_until(trace_matches, timeout=timeout), controller.observability_snapshot()["trace"])
+        return points
+
     def test_controller_routes_motion_through_smooth_path(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
@@ -868,11 +885,7 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(all("sample_range" in point for point in first_batch))
             self.assertTrue(any(point["sample_range"] < target.stroke_range for point in first_batch))
 
-            hsp_points = [
-                point
-                for point in controller.observability_snapshot()["trace"]
-                if point.get("continuous_schema") == "hsp"
-            ]
+            hsp_points = self.wait_for_hsp_trace(controller)
             self.assertTrue(hsp_points)
             self.assertTrue(all(point["range"] == target.stroke_range for point in hsp_points))
             self.assertTrue(any(point["sample_range"] < target.stroke_range for point in hsp_points))
@@ -2117,18 +2130,16 @@ class MotionControllerTests(unittest.TestCase):
             steady_points = [point for point in points if point["t"] >= 1800]
             self.assertTrue(steady_points, points)
             self.assertGreater(min(point["semantic_x"] for point in steady_points), 60)
-            trace = controller.observability_snapshot()["trace"]
-            self.assertTrue(
-                any(
-                    point.get("continuous_schema") == "hsp"
-                    and point.get("continuous_plan_kind") == "area_focus"
+            self.wait_for_hsp_trace(
+                controller,
+                lambda point: (
+                    point.get("continuous_plan_kind") == "area_focus"
                     and point.get("continuous_area_focus")
                     and point.get("continuous_area_focus_localized")
                     and point.get("continuous_area_focus_zone") == "base"
-                    for point in trace
                 ),
-                trace,
             )
+            trace = controller.observability_snapshot()["trace"]
             self.assertTrue(all(point.get("continuous_schema") != "hamp_live_anchor" for point in trace))
         finally:
             controller.stop()

@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #252 - Fix Parakeet Installer Python Command
+----------------------------------------------------------------
+
+Branch: codex/fix-parakeet-installer-python-command
+
+- Fixed the isolated Parakeet installer so a detected plain `python` command is
+  treated as a one-item command array instead of being indexed as the string
+  character `p` when creating `.venv-parakeet`.
+- Stabilized asynchronous motion unit tests that read HSP trace rows after the
+  fake Handy has accepted a stream but before the worker records trace details.
+
+
 2026-05-17 - PR #251 - Apply Saved Motion Direction On Startup
 ---------------------------------------------------------------
 
