@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #251 - Apply Saved Motion Direction On Startup
+---------------------------------------------------------------
+
+Branch: codex/reverse-direction-startup
+
+- Apply the saved Motion Direction and motion backend to the MotionController
+  during web startup, so Reverse orientation works immediately after launch
+  instead of requiring the user to reopen Settings and save it again.
+
+
 2026-05-17 - PR #250 - Map Handy Visualizer To HSP Playback Clock
 ------------------------------------------------------------------
 

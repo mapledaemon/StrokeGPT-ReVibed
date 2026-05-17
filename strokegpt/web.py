@@ -235,6 +235,8 @@ handy = HandyController(
 )
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
 motion = MotionController(handy)
+motion.set_backend(settings.motion_backend)
+motion.set_reverse_direction(settings.motion_reverse_direction)
 intent_matcher = IntentMatcher()
 motion_pattern_library = PatternLibrary(MOTION_PATTERN_DIR)
 motion_program_library = ProgramLibrary(MOTION_PROGRAM_DIR)
