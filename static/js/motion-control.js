@@ -250,11 +250,14 @@ function renderMotionStyleOptions(options = [], currentStyle = 'balanced') {
 
 function updateMotionReverseDirectionUi(enabled) {
     state.motionReverseDirection = Boolean(enabled);
-    if (el.motionReverseDirectionCheckbox) {
-        el.motionReverseDirectionCheckbox.checked = state.motionReverseDirection;
+    if (el.motionDirectionNormalRadio) {
+        el.motionDirectionNormalRadio.checked = !state.motionReverseDirection;
+    }
+    if (el.motionDirectionReverseRadio) {
+        el.motionDirectionReverseRadio.checked = state.motionReverseDirection;
     }
     if (el.motionReverseDirectionStatus) {
-        el.motionReverseDirectionStatus.textContent = `Current direction: ${state.motionReverseDirection ? 'Reverse phase' : 'Forward'}.`;
+        el.motionReverseDirectionStatus.textContent = `Current direction: ${state.motionReverseDirection ? 'Reverse' : 'Normal'}.`;
     }
 }
 
@@ -352,7 +355,7 @@ async function saveMotionStyle() {
 }
 
 async function saveMotionReverseDirection() {
-    const motionReverseDirection = Boolean(el.motionReverseDirectionCheckbox?.checked);
+    const motionReverseDirection = Boolean(el.motionDirectionReverseRadio?.checked);
     const data = await apiCall('/set_motion_reverse_direction', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -360,7 +363,7 @@ async function saveMotionReverseDirection() {
     });
     if (data && data.status === 'success') {
         updateMotionReverseDirectionUi(data.motion_reverse_direction);
-        el.statusText.textContent = `Motion direction saved: ${state.motionReverseDirection ? 'reverse phase' : 'forward'}.`;
+        el.statusText.textContent = `Motion direction saved: ${state.motionReverseDirection ? 'reverse' : 'normal'}.`;
     } else {
         reportSaveFailure(el.motionReverseDirectionStatus || el.statusText, data, 'Could not save motion direction.');
     }
@@ -1250,7 +1253,8 @@ export function initMotionControls({sendUserMessage}) {
     el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);
     el.motionStyleSelect?.addEventListener('change', () => updateMotionStyleUi(el.motionStyleSelect.value));
     el.saveMotionReverseDirectionBtn?.addEventListener('click', saveMotionReverseDirection);
-    el.motionReverseDirectionCheckbox?.addEventListener('change', () => updateMotionReverseDirectionUi(el.motionReverseDirectionCheckbox.checked));
+    el.motionDirectionNormalRadio?.addEventListener('change', () => updateMotionReverseDirectionUi(false));
+    el.motionDirectionReverseRadio?.addEventListener('change', () => updateMotionReverseDirectionUi(true));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.autospeakMinSecondsInput?.addEventListener('change', readAutospeakTimingPair);

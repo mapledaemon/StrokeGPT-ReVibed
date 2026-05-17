@@ -392,10 +392,16 @@
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Motion Direction</h4>
-                    <label class="settings-checkbox-line"><input type="checkbox" id="motion-reverse-direction-checkbox" data-requires-backend> Reverse pattern direction</label>
-                    <div class="settings-help">Flips the sampled pattern phase so continuous motion runs backward through the same shape.</div>
+                    <fieldset id="motion-direction-control" class="voice-input-choice-group" data-requires-backend>
+                        <legend>Device orientation</legend>
+                        <div class="segmented-control">
+                            <label><input type="radio" id="motion-direction-normal" name="motion-direction" value="normal" checked><span>Normal</span></label>
+                            <label><input type="radio" id="motion-direction-reverse" name="motion-direction" value="reverse"><span>Reverse</span></label>
+                        </div>
+                    </fieldset>
+                    <div class="settings-help">Reverse maps outgoing tip and base positions to the opposite physical direction for inverted device mounting.</div>
                     <button id="save-motion-reverse-direction-btn" class="my-button" data-requires-backend>Save Direction</button>
-                    <div id="motion-reverse-direction-status" class="settings-help">Current direction: Forward.</div>
+                    <div id="motion-reverse-direction-status" class="settings-help">Current direction: Normal.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
                     <h4>Speed Limits</h4>

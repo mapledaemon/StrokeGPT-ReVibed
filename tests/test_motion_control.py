@@ -1321,7 +1321,7 @@ class MotionControllerTests(unittest.TestCase):
         self.assertAlmostEqual(fast.tempo_scale, 1.3, places=3)
         self.assertGreater(fast.tempo_scale - slow.tempo_scale, 0.5)
 
-    def test_continuous_sampler_can_flip_phase_direction(self):
+    def test_reverse_orientation_does_not_flip_semantic_phase(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
         plan = continuous_motion_plan("ramp")
         target = MotionTarget(50, 50, 80, "ramp")
@@ -1330,11 +1330,80 @@ class MotionControllerTests(unittest.TestCase):
         forward = controller._sample_continuous_motion(plan, target, elapsed, sample_continuous_motion)
         controller.set_reverse_direction(True)
         reversed_sample = controller._sample_continuous_motion(plan, target, elapsed, sample_continuous_motion)
-        expected = sample_continuous_motion(plan, target, reversed_sample.effective_duration_seconds - elapsed)
 
-        self.assertNotAlmostEqual(forward.target.depth, reversed_sample.target.depth, places=2)
-        self.assertAlmostEqual(reversed_sample.phase, expected.phase, places=4)
-        self.assertAlmostEqual(reversed_sample.target.depth, expected.target.depth, places=3)
+        self.assertAlmostEqual(reversed_sample.phase, forward.phase, places=4)
+        self.assertAlmostEqual(reversed_sample.target.depth, forward.target.depth, places=3)
+
+    def test_reverse_orientation_flips_direct_hamp_output_depth(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        controller.set_reverse_direction(True)
+
+        controller.apply_target(MotionTarget(40, 88, 24, "base focus"), smooth=False, source="unit test")
+
+        self.assertEqual(handy.moves[-1], (40, 12, 24))
+        self.assertEqual(controller.current_target().depth, 88)
+        trace = controller.observability_snapshot()["trace"]
+        self.assertEqual(trace[-1]["depth"], 88)
+        self.assertEqual(trace[-1]["output_depth"], 12)
+
+    def test_reverse_orientation_flips_position_output_depth(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+        controller.set_backend("position")
+        controller.set_reverse_direction(True)
+
+        controller.apply_position_frames(
+            [PositionFrame(MotionTarget(40, 88, 24, "base focus"), delay_factor=0.0)],
+            source="unit test",
+        )
+
+        self.assertEqual(handy.position_moves[-1][1], 12)
+        self.assertEqual(controller.current_target().depth, 88)
+        trace = controller.observability_snapshot()["trace"]
+        self.assertEqual(trace[-1]["depth"], 88)
+        self.assertEqual(trace[-1]["output_depth"], 12)
+
+    def test_reverse_orientation_flips_hsp_area_focus_points(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        controller.set_reverse_direction(True)
+
+        try:
+            controller.apply_generated_target(MotionTarget(70, 90, 20, "plain chat"), source="llm")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            points = handy.stream_starts[0]["points"]
+            self.assertLessEqual(max(point["x"] for point in points), 35)
+            self.assertLess(min(point["x"] for point in points), 5)
+            trace = controller.observability_snapshot()["trace"]
+            self.assertTrue(any(point.get("output_depth", 100) <= 35 for point in trace), trace)
+            self.assertTrue(any(point.get("depth", 0) >= 65 for point in trace), trace)
+        finally:
+            controller.stop()
+
+    def test_reverse_orientation_flips_authored_hsp_points(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        controller.set_reverse_direction(True)
+
+        try:
+            applied = controller.apply_authored_actions(
+                (
+                    PatternAction(0, 20),
+                    PatternAction(1000, 80),
+                ),
+                MotionTarget(50, 50, 100, "authored"),
+                source="unit test",
+            )
+
+            self.assertTrue(applied)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            points = handy.stream_starts[0]["points"]
+            self.assertEqual([round(point["x"]) for point in points[:2]], [80, 20])
+            self.assertEqual([round(point["semantic_x"]) for point in points[:2]], [20, 80])
+        finally:
+            controller.stop()
 
     def test_continuous_hsp_preserves_point_timing_without_velocity_stretch(self):
         class HspVelocityTrapHandy(VelocityCappedStreamingFakeHandy):
