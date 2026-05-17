@@ -602,6 +602,10 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["hsp_state"]["current_point"], 11)
         self.assertEqual(diagnostics["hsp_state"]["stream_id"], 6)
         self.assertEqual(diagnostics["hsp_state"]["playback_rate"], 1)
+        self.assertEqual(diagnostics["hsp_state_source"], "poll")
+        self.assertEqual(diagnostics["hsp_state_refresh_failures"], 0)
+        self.assertEqual(diagnostics["hsp_state_refresh_error"], "")
+        self.assertIsInstance(diagnostics["hsp_state_refresh_success_at"], float)
         self.assertIsNone(diagnostics["last_command"])
         self.assertEqual(diagnostics["command_history"], [])
 
@@ -618,16 +622,37 @@ class HandyControllerTests(unittest.TestCase):
 
         get.assert_called_once()
         send.assert_not_called()
-        self.assertIsNone(handy.diagnostics()["last_command"])
+        diagnostics = handy.diagnostics()
+        self.assertIsNone(diagnostics["last_command"])
+        self.assertEqual(diagnostics["hsp_state_refresh_failures"], 1)
+        self.assertIn("state endpoint unavailable", diagnostics["hsp_state_refresh_error"])
 
-    def test_diagnostics_can_refresh_hsp_state(self):
+    def test_diagnostics_starts_async_hsp_state_refresh_worker(self):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
         handy._hsp_streaming = True
 
-        with mock.patch.object(handy, "refresh_hsp_state", return_value=True) as refresh:
+        with mock.patch.object(handy, "ensure_hsp_state_refresh_worker", return_value=True) as ensure:
             handy.diagnostics(refresh_hsp_state=True)
 
-        refresh.assert_called_once()
+        ensure.assert_called_once()
+
+    def test_hsp_state_refresh_worker_uses_background_thread(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        with mock.patch("strokegpt.handy.threading.Thread") as thread_class:
+            thread = mock.Mock()
+            thread.is_alive.return_value = False
+            thread_class.return_value = thread
+
+            self.assertTrue(handy.ensure_hsp_state_refresh_worker())
+
+        thread_class.assert_called_once()
+        thread.start.assert_called_once()
+
+    def test_hsp_state_refresh_cadence_matches_status_polling(self):
+        self.assertLessEqual(handy_module.HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS, 0.3)
+        self.assertLessEqual(handy_module.HSP_STATE_REFRESH_TIMEOUT_SECONDS, 0.5)
 
     def test_diagnostics_include_hsp_point_preview_without_secret_values(self):
         handy = RecordingV3HandyController()
