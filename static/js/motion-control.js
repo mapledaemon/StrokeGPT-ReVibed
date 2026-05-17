@@ -847,6 +847,10 @@ function updateMotionDiagnosticsPanel(payload = {}) {
         ].filter(Boolean);
         if (visualizerParts.length) lines.push(visualizerParts.join(' | '));
         const refreshParts = [
+            diagnostics.hsp_state_sse_active ? 'HSP SSE active' : '',
+            diagnostics.hsp_state_sse_event_type ? `SSE ${diagnostics.hsp_state_sse_event_type}` : '',
+            Number.isFinite(Number(diagnostics.hsp_state_sse_failures)) && Number(diagnostics.hsp_state_sse_failures) > 0 ? `SSE failures ${diagnostics.hsp_state_sse_failures}` : '',
+            diagnostics.hsp_state_sse_error ? `SSE error ${diagnostics.hsp_state_sse_error}` : '',
             diagnostics.hsp_state_refresh_active ? 'HSP state refresh active' : '',
             diagnostics.hsp_state_source ? `state source ${diagnostics.hsp_state_source}` : '',
             Number.isFinite(Number(diagnostics.hsp_state_refresh_failures)) && Number(diagnostics.hsp_state_refresh_failures) > 0 ? `failures ${diagnostics.hsp_state_refresh_failures}` : '',

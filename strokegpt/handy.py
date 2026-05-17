@@ -1,8 +1,10 @@
+import json
 import os
 import sys
 import threading
 import time
 from collections import deque
+from urllib.parse import urlencode
 import requests
 
 MODE_HAMP = 0
@@ -20,6 +22,31 @@ HSP_STATE_REFRESH_MAX_AGE_SECONDS = 0.25
 HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS = 0.25
 HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS = 2.0
 HSP_STATE_REFRESH_TIMEOUT_SECONDS = 0.5
+HSP_STATE_SSE_CONNECT_TIMEOUT_SECONDS = 5.0
+HSP_STATE_SSE_READ_TIMEOUT_SECONDS = 45.0
+HSP_STATE_SSE_RECONNECT_SECONDS = 0.75
+HSP_STATE_SSE_FAILURE_BACKOFF_SECONDS = 3.0
+HSP_STATE_SSE_EVENTS = (
+    "device_status",
+    "device_disconnected",
+    "hsp_state_changed",
+    "hsp_threshold_reached",
+    "hsp_starving",
+    "hsp_looping",
+    "hsp_paused_on_starving",
+    "hsp_resumed_on_not_starving",
+)
+HSP_STATE_SSE_STATE_EVENTS = frozenset(
+    (
+        "hsp_state_changed",
+        "hsp_threshold_reached",
+        "hsp_starving",
+        "hsp_looping",
+        "hsp_paused_on_starving",
+        "hsp_resumed_on_not_starving",
+        "hsp_resumed_on_non_starving",
+    )
+)
 # Handy position transports use absolute velocity/duration math. The app's
 # saved speed limits remain 0-100 percent-style controls, so timed position
 # and HSP guards convert those percentages onto this mm/s device scale.
@@ -79,6 +106,17 @@ class HandyController:
         self._last_hsp_state_refresh_failures = 0
         self._hsp_state_refresh_thread = None
         self._hsp_state_refresh_thread_lock = threading.Lock()
+        self._hsp_state_sse_thread = None
+        self._hsp_state_sse_thread_lock = threading.Lock()
+        self._hsp_state_sse_generation = 0
+        self._hsp_state_sse_response = None
+        self._last_hsp_state_sse_attempt_at = None
+        self._last_hsp_state_sse_connected_at = None
+        self._last_hsp_state_sse_event_at = None
+        self._last_hsp_state_sse_event_type = ""
+        self._last_hsp_state_sse_error = ""
+        self._last_hsp_state_sse_failures = 0
+        self._last_hsp_state_sse_events = 0
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
 
@@ -241,10 +279,15 @@ class HandyController:
         if not isinstance(payload, dict):
             return []
         candidates = []
+        seen = set()
 
-        def add_candidate(value):
+        def add_candidate(value, depth=0):
             if not isinstance(value, dict):
                 return
+            marker = id(value)
+            if marker in seen:
+                return
+            seen.add(marker)
             candidates.append(value)
             for response_key in (
                 "responseHspSetup",
@@ -262,6 +305,12 @@ class HandyController:
                     state = response.get("state")
                     if isinstance(state, dict):
                         candidates.append(state)
+            if depth >= 3:
+                return
+            for nested_key in ("result", "data", "state", "hsp_state", "hspState"):
+                nested = value.get(nested_key)
+                if isinstance(nested, dict):
+                    add_candidate(nested, depth + 1)
 
         for key in ("result", "data", "state", "hsp_state", "hspState"):
             add_candidate(payload.get(key))
@@ -421,6 +470,7 @@ class HandyController:
         self._reset_motion_cache()
 
     def _clear_hsp_state_cache(self):
+        self._close_hsp_state_sse_stream()
         self._last_hsp_state = None
         self._last_hsp_state_observed_at = None
         self._last_hsp_state_source = ""
@@ -429,6 +479,13 @@ class HandyController:
         self._last_hsp_state_refresh_success_at = None
         self._last_hsp_state_refresh_error = ""
         self._last_hsp_state_refresh_failures = 0
+        self._last_hsp_state_sse_attempt_at = None
+        self._last_hsp_state_sse_connected_at = None
+        self._last_hsp_state_sse_event_at = None
+        self._last_hsp_state_sse_event_type = ""
+        self._last_hsp_state_sse_error = ""
+        self._last_hsp_state_sse_failures = 0
+        self._last_hsp_state_sse_events = 0
 
     def _update_hsp_state_cache(self, state, *, source="command"):
         if not isinstance(state, dict) or not state:
@@ -446,6 +503,31 @@ class HandyController:
     def _record_hsp_state_refresh_failure(self, error):
         self._last_hsp_state_refresh_failures += 1
         self._last_hsp_state_refresh_error = str(error or "HSP state refresh failed")[:180]
+
+    def _close_hsp_state_sse_stream(self):
+        response = None
+        with self._hsp_state_sse_thread_lock:
+            self._hsp_state_sse_generation += 1
+            response = self._hsp_state_sse_response
+            self._hsp_state_sse_response = None
+            self._hsp_state_sse_thread = None
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+    def _record_hsp_state_sse_failure(self, error):
+        self._last_hsp_state_sse_failures += 1
+        self._last_hsp_state_sse_error = str(error or "HSP SSE stream failed")[:180]
+
+    def _record_hsp_state_sse_event(self, event_type):
+        now = time.time()
+        self._last_hsp_state_sse_event_at = now
+        self._last_hsp_state_sse_event_type = str(event_type or "message")[:80]
+        self._last_hsp_state_sse_events += 1
+        self._last_hsp_state_sse_error = ""
+        self._last_hsp_state_sse_failures = 0
 
     def supports_api_v3_control(self):
         return bool(
@@ -1100,6 +1182,173 @@ class HandyController:
         }
         return self._send_v3_command("hsp/synctime", body)
 
+    def _hsp_state_sse_url(self):
+        api_key = self._effective_api_v3_key()
+        query = urlencode(
+            {
+                "ck": self.handy_key,
+                "apikey": api_key,
+                "events": ",".join(HSP_STATE_SSE_EVENTS),
+            }
+        )
+        return f"{self.api_v3_base_url}sse?{query}"
+
+    def _same_hsp_state_sse_generation(self, generation):
+        return (
+            generation == self._hsp_state_sse_generation
+            and self._hsp_streaming
+            and self.supports_continuous_streaming()
+        )
+
+    def _iter_hsp_state_sse_events(self, response, generation):
+        event_id = None
+        event_type = None
+        data_lines = []
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not self._same_hsp_state_sse_generation(generation):
+                return
+            if raw_line is None:
+                continue
+            if isinstance(raw_line, bytes):
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r")
+            else:
+                line = str(raw_line).rstrip("\r")
+            if line == "":
+                if data_lines:
+                    yield {
+                        "id": event_id,
+                        "type": event_type or "",
+                        "data": "\n".join(data_lines),
+                    }
+                event_id = None
+                event_type = None
+                data_lines = []
+                continue
+            if line.startswith(":"):
+                continue
+            field, separator, value = line.partition(":")
+            if not separator:
+                continue
+            if value.startswith(" "):
+                value = value[1:]
+            if field == "id":
+                event_id = value
+            elif field == "event":
+                event_type = value
+            elif field == "data":
+                data_lines.append(value)
+        if data_lines and self._same_hsp_state_sse_generation(generation):
+            yield {
+                "id": event_id,
+                "type": event_type or "",
+                "data": "\n".join(data_lines),
+            }
+
+    def _handle_hsp_state_sse_event(self, event):
+        if not isinstance(event, dict):
+            return False
+        event_type = str(event.get("type") or "").strip()
+        data_text = str(event.get("data") or "").strip()
+        if not data_text:
+            return False
+        try:
+            payload = json.loads(data_text)
+        except (TypeError, ValueError):
+            return False
+        if not event_type and isinstance(payload, dict):
+            event_type = str(payload.get("type") or payload.get("event") or "").strip()
+        if not event_type:
+            event_type = "message"
+        self._record_hsp_state_sse_event(event_type)
+        if event_type == "device_disconnected":
+            self._hsp_streaming = False
+            return True
+        if event_type not in HSP_STATE_SSE_STATE_EVENTS:
+            return True
+        state = self._extract_hsp_state(payload)
+        if not isinstance(state, dict) or not state:
+            self._record_hsp_state_sse_failure(f"HSP SSE {event_type} event did not include state")
+            return False
+        return self._update_hsp_state_cache(state, source="sse")
+
+    def _run_hsp_state_sse_once(self, generation):
+        if not self._same_hsp_state_sse_generation(generation):
+            return False
+        api_key = self._effective_api_v3_key()
+        if not self.handy_key or not api_key:
+            self._record_hsp_state_sse_failure("missing HSP SSE credentials")
+            return False
+        self._last_hsp_state_sse_attempt_at = time.time()
+        response = None
+        try:
+            response = requests.get(
+                self._hsp_state_sse_url(),
+                headers={
+                    "Accept": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                },
+                stream=True,
+                timeout=(HSP_STATE_SSE_CONNECT_TIMEOUT_SECONDS, HSP_STATE_SSE_READ_TIMEOUT_SECONDS),
+            )
+            status_code = getattr(response, "status_code", None)
+            if status_code == 401:
+                self._disable_api_v3_control(path="sse", error="Unauthorized")
+                return False
+            response.raise_for_status()
+            with self._hsp_state_sse_thread_lock:
+                if not self._same_hsp_state_sse_generation(generation):
+                    return False
+                self._hsp_state_sse_response = response
+            self._last_hsp_state_sse_connected_at = time.time()
+            self._last_hsp_state_sse_error = ""
+            self._last_hsp_state_sse_failures = 0
+            for event in self._iter_hsp_state_sse_events(response, generation):
+                self._handle_hsp_state_sse_event(event)
+            return True
+        except Exception as exc:
+            if self._same_hsp_state_sse_generation(generation):
+                self._record_hsp_state_sse_failure(exc)
+            return False
+        finally:
+            with self._hsp_state_sse_thread_lock:
+                if self._hsp_state_sse_response is response:
+                    self._hsp_state_sse_response = None
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
+
+    def ensure_hsp_state_sse_worker(self):
+        if not self._hsp_streaming or not self.supports_continuous_streaming():
+            return False
+        with self._hsp_state_sse_thread_lock:
+            thread = self._hsp_state_sse_thread
+            if thread is not None and thread.is_alive():
+                return True
+            generation = self._hsp_state_sse_generation
+            thread = threading.Thread(
+                target=self._hsp_state_sse_loop,
+                args=(generation,),
+                name="StrokeGPT-HSP-State-SSE",
+                daemon=True,
+            )
+            self._hsp_state_sse_thread = thread
+            thread.start()
+        return True
+
+    def _hsp_state_sse_loop(self, generation):
+        while self._same_hsp_state_sse_generation(generation):
+            ok = self._run_hsp_state_sse_once(generation)
+            if not self._same_hsp_state_sse_generation(generation):
+                break
+            sleep_seconds = (
+                HSP_STATE_SSE_RECONNECT_SECONDS
+                if ok and not self._last_hsp_state_sse_failures
+                else HSP_STATE_SSE_FAILURE_BACKOFF_SECONDS
+            )
+            time.sleep(max(0.05, float(sleep_seconds)))
+
     def refresh_hsp_state(self, *, max_age_seconds=0.25):
         if not self._hsp_streaming or not self.supports_continuous_streaming():
             return False
@@ -1239,6 +1488,7 @@ class HandyController:
         if self._hsp_streaming or self._current_mode == MODE_HSP:
             self._send_v3_command("hsp/stop")
             self._hsp_streaming = False
+            self._close_hsp_state_sse_stream()
         if self._current_mode != MODE_HAMP:
             if self._send_mode_command(MODE_HAMP):
                 self._current_mode = MODE_HAMP
@@ -1251,6 +1501,10 @@ class HandyController:
 
     def diagnostics(self, *, refresh_hsp_state=False):
         if refresh_hsp_state:
+            try:
+                self.ensure_hsp_state_sse_worker()
+            except Exception:
+                pass
             try:
                 self.ensure_hsp_state_refresh_worker()
             except Exception:
@@ -1282,6 +1536,8 @@ class HandyController:
             hsp_state_age_ms = round(max(0.0, time.time() - self._last_hsp_state_observed_at) * 1000.0, 1)
         hsp_refresh_thread = self._hsp_state_refresh_thread
         hsp_refresh_active = bool(hsp_refresh_thread is not None and hsp_refresh_thread.is_alive())
+        hsp_sse_thread = self._hsp_state_sse_thread
+        hsp_sse_active = bool(hsp_sse_thread is not None and hsp_sse_thread.is_alive())
         return {
             "relative_speed": int(round(self.last_relative_speed)),
             "physical_speed": int(round(self.last_stroke_speed)),
@@ -1323,6 +1579,26 @@ class HandyController:
             "hsp_state_refresh_failures": int(self._last_hsp_state_refresh_failures),
             "hsp_state_refresh_error": self._last_hsp_state_refresh_error,
             "hsp_state_refresh_min_interval_ms": int(round(HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS * 1000.0)),
+            "hsp_state_sse_active": hsp_sse_active,
+            "hsp_state_sse_attempt_at": (
+                round(float(self._last_hsp_state_sse_attempt_at), 3)
+                if self._last_hsp_state_sse_attempt_at is not None
+                else None
+            ),
+            "hsp_state_sse_connected_at": (
+                round(float(self._last_hsp_state_sse_connected_at), 3)
+                if self._last_hsp_state_sse_connected_at is not None
+                else None
+            ),
+            "hsp_state_sse_event_at": (
+                round(float(self._last_hsp_state_sse_event_at), 3)
+                if self._last_hsp_state_sse_event_at is not None
+                else None
+            ),
+            "hsp_state_sse_event_type": self._last_hsp_state_sse_event_type,
+            "hsp_state_sse_events": int(self._last_hsp_state_sse_events),
+            "hsp_state_sse_failures": int(self._last_hsp_state_sse_failures),
+            "hsp_state_sse_error": self._last_hsp_state_sse_error,
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
             "api_v3_key_configured": bool(self._effective_api_v3_key()),

@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #254 - Subscribe To Handy HSP SSE State Events
+---------------------------------------------------------------
+
+Branch: codex/handy-hsp-sse-state
+
+- Add a Handy REST v3 SSE state listener for HSP playback events so the app can
+  refresh cached firmware stream state from pushed device events instead of
+  relying only on `/hsp/state` polling.
+- Keep the existing HSP state poll as a fallback, expose SSE activity/failure
+  diagnostics, and show the active SSE event source in motion debug output.
+
+
 2026-05-17 - PR #253 - Improve HSP Visualizer State Freshness
 ---------------------------------------------------------------
 
