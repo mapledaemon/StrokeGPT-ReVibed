@@ -849,6 +849,8 @@ function updateMotionDiagnosticsPanel(payload = {}) {
         const refreshParts = [
             diagnostics.hsp_state_sse_active ? 'HSP SSE active' : '',
             diagnostics.hsp_state_sse_event_type ? `SSE ${diagnostics.hsp_state_sse_event_type}` : '',
+            diagnostics.handy_sse_event_type && diagnostics.handy_sse_event_type !== diagnostics.hsp_state_sse_event_type ? `device SSE ${diagnostics.handy_sse_event_type}` : '',
+            Number.isFinite(Number(diagnostics.handy_sse_event_age_ms)) ? `device SSE age ${Math.round(Number(diagnostics.handy_sse_event_age_ms))}ms` : '',
             Number.isFinite(Number(diagnostics.hsp_state_sse_failures)) && Number(diagnostics.hsp_state_sse_failures) > 0 ? `SSE failures ${diagnostics.hsp_state_sse_failures}` : '',
             diagnostics.hsp_state_sse_error ? `SSE error ${diagnostics.hsp_state_sse_error}` : '',
             diagnostics.hsp_state_refresh_active ? 'HSP state refresh active' : '',

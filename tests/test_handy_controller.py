@@ -695,6 +695,88 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["hsp_state_source"], "sse")
         self.assertEqual(diagnostics["hsp_state_sse_event_type"], "hsp_state_changed")
 
+    def test_handy_sse_device_error_is_sanitized_in_diagnostics(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "id": "evt-7",
+                    "type": "device_error",
+                    "data": (
+                        '{"connection_key":"secret","data":{"code":1002,'
+                        '"name":"DeviceTimeout","message":"Device timeout",'
+                        '"authorization":"secret-token"}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["handy_sse_event_type"], "device_error")
+        self.assertEqual(diagnostics["handy_sse_event"]["id"], "evt-7")
+        payload = diagnostics["handy_sse_event"]["payload"]
+        self.assertEqual(payload["data"]["code"], 1002)
+        self.assertEqual(payload["data"]["name"], "DeviceTimeout")
+        self.assertEqual(payload["data"]["message"], "Device timeout")
+        self.assertNotIn("connection_key", str(diagnostics))
+        self.assertNotIn("secret", str(diagnostics))
+        self.assertEqual(len(diagnostics["handy_sse_recent_events"]), 1)
+
+    def test_handy_sse_disconnect_clears_active_motion_state(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+        handy._hamp_started = True
+        handy._current_mode = handy_module.MODE_HSP
+        handy._last_velocity = 80
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "type": "device_disconnected",
+                    "data": (
+                        '{"connection_key":"secret","data":{"reason":"io error",'
+                        '"description":"socket closed"}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertFalse(diagnostics["hsp_streaming"])
+        self.assertFalse(diagnostics["hamp_started"])
+        self.assertIsNone(diagnostics["mode"])
+        self.assertIsNone(diagnostics["velocity"])
+        self.assertEqual(diagnostics["handy_sse_event_type"], "device_disconnected")
+        self.assertIn("reason", diagnostics["handy_sse_event"]["payload"]["data"])
+        self.assertNotIn("secret", str(diagnostics))
+
+    def test_handy_sse_device_status_disconnected_clears_active_motion_state(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+        handy._hamp_started = True
+        handy._current_mode = handy_module.MODE_HSP
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "type": "device_status",
+                    "data": (
+                        '{"connection_key":"secret","data":{"connected":false,'
+                        '"info":{"fw_version":"4.0.0","session_id":"session-1"}}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertFalse(diagnostics["hsp_streaming"])
+        self.assertFalse(diagnostics["hamp_started"])
+        self.assertIsNone(diagnostics["mode"])
+        self.assertEqual(diagnostics["handy_sse_event_type"], "device_status")
+        self.assertFalse(diagnostics["handy_sse_event"]["payload"]["data"]["connected"])
+        self.assertNotIn("secret", str(diagnostics))
+
     def test_hsp_state_sse_once_subscribes_with_query_auth_and_event_filter(self):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
         handy._hsp_streaming = True
@@ -723,6 +805,8 @@ class HandyControllerTests(unittest.TestCase):
         self.assertIn("apikey=app-id", url)
         self.assertIn("ck=secret", url)
         self.assertIn("hsp_state_changed", url)
+        self.assertIn("device_error", url)
+        self.assertIn("slider_blocked", url)
         self.assertTrue(get.call_args.kwargs["stream"])
         self.assertEqual(get.call_args.kwargs["headers"]["Accept"], "text/event-stream")
         self.assertEqual(
@@ -788,7 +872,6 @@ class HandyControllerTests(unittest.TestCase):
 
     def test_hsp_state_sse_worker_uses_background_thread(self):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
-        handy._hsp_streaming = True
 
         with mock.patch("strokegpt.handy.threading.Thread") as thread_class:
             thread = mock.Mock()

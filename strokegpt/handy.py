@@ -28,13 +28,25 @@ HSP_STATE_SSE_RECONNECT_SECONDS = 0.75
 HSP_STATE_SSE_FAILURE_BACKOFF_SECONDS = 3.0
 HSP_STATE_SSE_EVENTS = (
     "device_status",
+    "device_connected",
     "device_disconnected",
+    "device_error",
+    "mode_changed",
+    "hamp_state_changed",
+    "hdsp_state_changed",
     "hsp_state_changed",
     "hsp_threshold_reached",
     "hsp_starving",
     "hsp_looping",
     "hsp_paused_on_starving",
     "hsp_resumed_on_not_starving",
+    "stroke_changed",
+    "slider_blocked",
+    "slider_unblocked",
+    "temp_high",
+    "temp_ok",
+    "low_memory_error",
+    "low_memory_warning",
 )
 HSP_STATE_SSE_STATE_EVENTS = frozenset(
     (
@@ -45,6 +57,22 @@ HSP_STATE_SSE_STATE_EVENTS = frozenset(
         "hsp_paused_on_starving",
         "hsp_resumed_on_not_starving",
         "hsp_resumed_on_non_starving",
+    )
+)
+HANDY_SSE_RECENT_EVENTS_LIMIT = 20
+HANDY_SSE_SECRET_KEYS = frozenset(
+    (
+        "apikey",
+        "api_key",
+        "authorization",
+        "ck",
+        "connection_key",
+        "connectionkey",
+        "token",
+        "x-api-key",
+        "xapikey",
+        "x-connection-key",
+        "xconnectionkey",
     )
 )
 # Handy position transports use absolute velocity/duration math. The app's
@@ -117,6 +145,9 @@ class HandyController:
         self._last_hsp_state_sse_error = ""
         self._last_hsp_state_sse_failures = 0
         self._last_hsp_state_sse_events = 0
+        self._last_handy_sse_event = None
+        self._last_handy_sse_event_at = None
+        self._handy_sse_recent_events = deque(maxlen=HANDY_SSE_RECENT_EVENTS_LIMIT)
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
 
@@ -486,6 +517,9 @@ class HandyController:
         self._last_hsp_state_sse_error = ""
         self._last_hsp_state_sse_failures = 0
         self._last_hsp_state_sse_events = 0
+        self._last_handy_sse_event = None
+        self._last_handy_sse_event_at = None
+        self._handy_sse_recent_events.clear()
 
     def _update_hsp_state_cache(self, state, *, source="command"):
         if not isinstance(state, dict) or not state:
@@ -528,6 +562,57 @@ class HandyController:
         self._last_hsp_state_sse_events += 1
         self._last_hsp_state_sse_error = ""
         self._last_hsp_state_sse_failures = 0
+
+    def _safe_sse_value(self, value, *, depth=0):
+        if depth > 4:
+            return None
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, (int, float)):
+            if isinstance(value, float) and not value.is_integer():
+                return round(value, 4)
+            return int(value)
+        if isinstance(value, str):
+            return value.strip()[:180]
+        if isinstance(value, dict):
+            result = {}
+            for key, nested in value.items():
+                safe_key = str(key or "").strip()[:80]
+                if not safe_key:
+                    continue
+                normalized_key = safe_key.lower().replace("_", "").replace("-", "")
+                if normalized_key in HANDY_SSE_SECRET_KEYS:
+                    continue
+                safe_nested = self._safe_sse_value(nested, depth=depth + 1)
+                if safe_nested is not None:
+                    result[safe_key] = safe_nested
+                elif nested is None:
+                    result[safe_key] = None
+            return result
+        if isinstance(value, (list, tuple)):
+            result = []
+            for item in value[:10]:
+                safe_item = self._safe_sse_value(item, depth=depth + 1)
+                if safe_item is not None:
+                    result.append(safe_item)
+            return result
+        return None
+
+    def _record_handy_sse_event(self, event_type, payload, *, event_id=None):
+        now = time.time()
+        record = {
+            "type": str(event_type or "message")[:80],
+            "at": round(now, 3),
+        }
+        if event_id:
+            record["id"] = str(event_id)[:80]
+        safe_payload = self._safe_sse_value(payload)
+        if isinstance(safe_payload, dict) and safe_payload:
+            record["payload"] = safe_payload
+        self._last_handy_sse_event = record
+        self._last_handy_sse_event_at = now
+        self._handy_sse_recent_events.append(record)
+        return record
 
     def supports_api_v3_control(self):
         return bool(
@@ -1196,8 +1281,7 @@ class HandyController:
     def _same_hsp_state_sse_generation(self, generation):
         return (
             generation == self._hsp_state_sse_generation
-            and self._hsp_streaming
-            and self.supports_continuous_streaming()
+            and self.supports_api_v3_control()
         )
 
     def _iter_hsp_state_sse_events(self, response, generation):
@@ -1260,8 +1344,21 @@ class HandyController:
         if not event_type:
             event_type = "message"
         self._record_hsp_state_sse_event(event_type)
+        self._record_handy_sse_event(event_type, payload, event_id=event.get("id"))
         if event_type == "device_disconnected":
             self._hsp_streaming = False
+            self._hamp_started = False
+            self._current_mode = None
+            self._reset_motion_cache()
+            return True
+        if event_type == "device_status":
+            data = payload.get("data") if isinstance(payload, dict) else None
+            status_data = data.get("data") if isinstance(data, dict) and isinstance(data.get("data"), dict) else data
+            if isinstance(status_data, dict) and status_data.get("connected") is False:
+                self._hsp_streaming = False
+                self._hamp_started = False
+                self._current_mode = None
+                self._reset_motion_cache()
             return True
         if event_type not in HSP_STATE_SSE_STATE_EVENTS:
             return True
@@ -1320,7 +1417,7 @@ class HandyController:
                     pass
 
     def ensure_hsp_state_sse_worker(self):
-        if not self._hsp_streaming or not self.supports_continuous_streaming():
+        if not self.supports_api_v3_control():
             return False
         with self._hsp_state_sse_thread_lock:
             thread = self._hsp_state_sse_thread
@@ -1488,7 +1585,6 @@ class HandyController:
         if self._hsp_streaming or self._current_mode == MODE_HSP:
             self._send_v3_command("hsp/stop")
             self._hsp_streaming = False
-            self._close_hsp_state_sse_stream()
         if self._current_mode != MODE_HAMP:
             if self._send_mode_command(MODE_HAMP):
                 self._current_mode = MODE_HAMP
@@ -1534,6 +1630,9 @@ class HandyController:
         hsp_state_age_ms = None
         if self._last_hsp_state_observed_at is not None:
             hsp_state_age_ms = round(max(0.0, time.time() - self._last_hsp_state_observed_at) * 1000.0, 1)
+        handy_sse_event_age_ms = None
+        if self._last_handy_sse_event_at is not None:
+            handy_sse_event_age_ms = round(max(0.0, time.time() - self._last_handy_sse_event_at) * 1000.0, 1)
         hsp_refresh_thread = self._hsp_state_refresh_thread
         hsp_refresh_active = bool(hsp_refresh_thread is not None and hsp_refresh_thread.is_alive())
         hsp_sse_thread = self._hsp_state_sse_thread
@@ -1599,6 +1698,23 @@ class HandyController:
             "hsp_state_sse_events": int(self._last_hsp_state_sse_events),
             "hsp_state_sse_failures": int(self._last_hsp_state_sse_failures),
             "hsp_state_sse_error": self._last_hsp_state_sse_error,
+            "handy_sse_event_at": (
+                round(float(self._last_handy_sse_event_at), 3)
+                if self._last_handy_sse_event_at is not None
+                else None
+            ),
+            "handy_sse_event_age_ms": handy_sse_event_age_ms,
+            "handy_sse_event_type": (
+                self._last_handy_sse_event.get("type", "")
+                if isinstance(self._last_handy_sse_event, dict)
+                else ""
+            ),
+            "handy_sse_event": (
+                dict(self._last_handy_sse_event)
+                if isinstance(self._last_handy_sse_event, dict)
+                else None
+            ),
+            "handy_sse_recent_events": [dict(event) for event in self._handy_sse_recent_events],
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
             "api_v3_key_configured": bool(self._effective_api_v3_key()),
