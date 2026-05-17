@@ -116,20 +116,65 @@ export function chatMessageKind(sender, text) {
     return sender === 'BOT' ? 'bot' : 'user';
 }
 
-function insertChatMessage(sender, text, {forceScroll = false} = {}) {
+function formatMs(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    return `${Math.round(number)}ms`;
+}
+
+function formatLlmMessageTooltip(metadata = {}) {
+    if (!metadata || typeof metadata !== 'object') return '';
+    const model = String(metadata.model || '').trim();
+    const parts = [];
+    if (model) parts.push(`Model: ${model}`);
+    if (metadata.prompt_mode) parts.push(`Prompt: ${metadata.prompt_mode}`);
+    parts.push(`Thinking: ${metadata.thinking_enabled ? 'on' : 'off'}`);
+    parts.push(`Streamed: ${metadata.streamed ? 'yes' : 'no'}`);
+    const timings = metadata.timings && typeof metadata.timings === 'object' ? metadata.timings : {};
+    const timingParts = [
+        ['LLM', timings.llm_ms],
+        ['Repair', timings.motion_repair_ms],
+        ['Mode', timings.mode_action_ms],
+        ['Motion', timings.motion_apply_ms],
+        ['Total', timings.request_ms],
+    ]
+        .map(([label, value]) => {
+            const formatted = formatMs(value);
+            return formatted ? `${label} ${formatted}` : '';
+        })
+        .filter(Boolean);
+    if (timingParts.length) parts.push(`Run: ${timingParts.join(' | ')}`);
+    return parts.join('\n');
+}
+
+function applyBotMessageMetadata(messageEl, metadata = {}, pfpElement = null) {
+    const tooltip = formatLlmMessageTooltip(metadata);
+    if (!tooltip) return;
+    messageEl.dataset.llmModel = String(metadata.model || '');
+    messageEl.dataset.llmRunDetails = tooltip;
+    const pfp = pfpElement || messageEl.querySelector?.('.chat-pfp');
+    if (pfp) {
+        pfp.title = tooltip;
+        pfp.setAttribute('aria-label', tooltip);
+    }
+}
+
+function insertChatMessage(sender, text, {forceScroll = false, metadata = null} = {}) {
     const shouldScroll = forceScroll || isChatNearBottom();
     const kind = chatMessageKind(sender, text);
     const speaker = kind === 'model-error' ? 'MODEL ERROR' : (sender === 'BOT' ? state.aiName : 'YOU');
     const messageEl = D.createElement('div');
     messageEl.className = `chat-message-container ${kind === 'user' ? 'user-bubble' : kind === 'model-error' ? 'system-bubble error-bubble' : 'bot-bubble'}`;
+    let pfp = null;
 
     if (kind === 'bot') {
-        const pfp = D.createElement('img');
+        pfp = D.createElement('img');
         pfp.className = 'chat-pfp';
         pfp.src = el.pfpPreview.src;
         pfp.alt = 'pfp';
         messageEl.appendChild(pfp);
     }
+    if (kind === 'bot') applyBotMessageMetadata(messageEl, metadata, pfp);
 
     const content = D.createElement('div');
     content.className = 'message-content';
@@ -156,11 +201,14 @@ function insertChatMessage(sender, text, {forceScroll = false} = {}) {
             renderMessageText(bubble, nextText);
             scrollChatToLatest();
         },
+        setMetadata(nextMetadata) {
+            applyBotMessageMetadata(messageEl, nextMetadata, pfp);
+        },
     };
 }
 
-export function addChatMessage(sender, text, {forceScroll = false} = {}) {
-    return insertChatMessage(sender, text, {forceScroll}).messageEl;
+export function addChatMessage(sender, text, {forceScroll = false, metadata = null} = {}) {
+    return insertChatMessage(sender, text, {forceScroll, metadata}).messageEl;
 }
 
 function startStreamingBotMessage() {
@@ -194,7 +242,10 @@ function handleSendMessageStatus(data) {
             data.message || 'Model request failed. Check Ollama status and try again.',
             'error',
         );
-        if (data.chat) addChatMessage('BOT', data.chat, {forceScroll: true});
+        if (data.chat) addChatMessage('BOT', data.chat, {
+            forceScroll: true,
+            metadata: data.llm_message_metadata,
+        });
         return false;
     }
 
@@ -228,13 +279,13 @@ function handleSendMessageStatus(data) {
     }
     if (data.chat && data.chat_queued !== true) {
         clearTypingIndicator();
-        addChatMessage('BOT', data.chat, {forceScroll: true});
+        addChatMessage('BOT', data.chat, {forceScroll: true, metadata: data.llm_message_metadata});
         return true;
     }
     if (data.chat_queued === true) {
         clearTypingIndicator();
         if (data.chat) {
-            addChatMessage('BOT', data.chat, {forceScroll: true});
+            addChatMessage('BOT', data.chat, {forceScroll: true, metadata: data.llm_message_metadata});
             state.pendingQueuedBotEcho = String(data.chat);
         }
         return true;
@@ -333,6 +384,9 @@ async function sendUserMessageStream(requestOptions, startedAt) {
         streamedText = String(finalData.chat);
         streamEntry.updateText(streamedText);
     }
+    if (streamEntry && finalData?.llm_message_metadata) {
+        streamEntry.setMetadata(finalData.llm_message_metadata);
+    }
     if (!finalData) {
         clearTypingIndicator('Message failed before the model could answer. Check the app terminal.');
         return {
@@ -419,6 +473,7 @@ export async function sendUserMessage(message, {source = 'chat'} = {}) {
                 message,
                 key: state.myHandyKey,
                 persona_desc: state.myPersonaDescription,
+                client_id: getUiClientId(),
                 source,
             }),
         };
@@ -453,13 +508,17 @@ export async function pollChatUpdates({playAudio = true} = {}) {
         el.typingIndicator.style.display = 'none';
     }
     if (data.messages) {
+        const records = Array.isArray(data.message_records) && data.message_records.length
+            ? data.message_records
+            : data.messages.map(text => ({text, metadata: null}));
         let skippedQueuedEcho = false;
-        data.messages.forEach(msg => {
+        records.forEach(record => {
+            const msg = typeof record === 'string' ? record : record?.text;
             if (!skippedQueuedEcho && state.pendingQueuedBotEcho && msg === state.pendingQueuedBotEcho) {
                 skippedQueuedEcho = true;
                 return;
             }
-            addChatMessage('BOT', msg);
+            addChatMessage('BOT', msg, {metadata: record?.metadata || null});
         });
         state.pendingQueuedBotEcho = '';
     }

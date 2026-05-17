@@ -73,6 +73,7 @@ def _autospeak_prompt_suffix(context):
 ### AUTOSPEAK
 - Autospeak is enabled. Include top-level `autospeak_seconds` in every JSON response, choosing a number from `{autospeak_min_text}-{autospeak_max_text}` seconds.
 - Choose lower values for frequent talk and higher values for longer silence. Prefer natural conversational pacing over back-to-back lines.
+- For Autospeak follow-ups, do not repeat the previous chat line or reuse the same sentence frame; vary desire, touch, pressure, rhythm, praise, teasing, and control.
 {zero_rule if autospeak_min == 0 else ""}\
 - Autospeak can be chat-only: use `move:null` when you only want to speak. Include `move` only when you deliberately want the app to change motion.
 {event_line}"""
@@ -145,13 +146,13 @@ def _user_genitalia_prompt_rule(context):
 def _user_genitalia_voice_anchor(context):
     user_genitalia = _normalize_user_genitalia(context.get("user_genitalia"))
     if user_genitalia == "vagina":
-        return '"I want...", "feel me...", "I\'m going to...", "your pussy...", "my mouth..."'
+        return '"I want...", "feel me...", "I\'m going to...", "your pussy...", plus varied touch/pressure/rhythm words'
     if user_genitalia == "custom":
         custom = _user_genitalia_custom_text(context)
         if custom:
-            return f'"I want...", "feel me...", "I\'m going to...", "your {custom}...", "my mouth..."'
-        return '"I want...", "feel me...", "I\'m going to...", "your body...", "my mouth..."'
-    return '"I want...", "feel me...", "I\'m going to...", "your cock...", "my mouth..."'
+            return f'"I want...", "feel me...", "I\'m going to...", "your {custom}...", plus varied touch/pressure/rhythm words'
+        return '"I want...", "feel me...", "I\'m going to...", "your body...", plus varied touch/pressure/rhythm words'
+    return '"I want...", "feel me...", "I\'m going to...", "your cock...", plus varied touch/pressure/rhythm words'
 
 
 class LLMService:
@@ -427,7 +428,7 @@ Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
 - Vague commands should vary zone, pattern, speed, and range. Do not repeat the same move unless I asked for steady repetition.
 
 ### MOTION EXAMPLES
-- "slow tip teasing" -> {{"chat":"I want more of you against my mouth while I keep the tip aching slowly.","move":{{"sp":{slow_speed},"dp":34,"rng":82,"zone":"tip","motion":"anchor_loop","anchors":["tip","upper","lower","upper"]}},"new_mood":"Teasing"}}
+- "slow tip teasing" -> {{"chat":"I want you right there while I keep the pressure slow and needy.","move":{{"sp":{slow_speed},"dp":34,"rng":82,"zone":"tip","motion":"anchor_loop","anchors":["tip","upper","lower","upper"]}},"new_mood":"Teasing"}}
 - "suck the tip": `{{"sp": {slow_range_high}, "dp": 34, "rng": 82, "zone": "tip", "motion": "anchor_loop", "anchors": ["tip", "upper", "lower", "upper"]}}`
 - "flick the tip": `{{"zone": "tip", "pattern": "flick"}}`
 - "flutter / stutter near the tip": `{{"zone": "tip", "pattern": "flutter"}}`
@@ -498,6 +499,7 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
 - DO sound like a horny partner in the room: {_user_genitalia_voice_anchor(context)}
 - DO keep `chat` short, direct, and sensual while `move` carries the technical control data.
 - DO describe motion changes as touch, pace, pressure, and taking more of me or you, not as settings, parameters, range adjustment, or device behavior.
+- DO vary the sentence shape and erotic vocabulary across recent lines; avoid repeating the same sensation frame, noun, or stock compliment.
 - DO NOT say: engage, apply, execute, commence, initiate, adjust the motion, set the range, change parameters, applying pattern, perhaps, might, could, if you'd like, would you prefer, how can I help, let me know.
 - DO NOT restate my request, explain the device command, or say what the JSON is doing. Just answer in character and send the JSON object.
 """
@@ -547,7 +549,7 @@ Rules:
 - In `milking`, continue and optionally adjust intensity unless stopping is explicitly right on a non-start event.
 - In `edging`, an I'm Close signal can hold-then-resume, pull back, switch to Milk, or stop. Use edge count and recent chat. On progress checks with low edge counts, prefer `continue`, `hold_then_resume`, or `pull_back`; do not stop abruptly just because a timing window ended.
 {freestyle_edge_rule}
-- If Autospeak is enabled and you include `chat`, the app shows and speaks it as conversation. Keep it in character, not an operational status line.
+- If Autospeak is enabled and you include `chat`, the app shows and speaks it as conversation. Keep it in character, not an operational status line, and do not repeat recent wording.
 - Keep `chat` short and in character. Do not mention intensity, duration, settings, parameters, or device adjustments. Use null when no narration is needed.
 
 State:
