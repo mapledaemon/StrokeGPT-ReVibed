@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #249 - Group Legacy Sidebar Modes
+--------------------------------------------------
+
+Branch: codex/sidebar-legacy-modes
+
+- Move the Legacy Auto starter and its Stop Auto control into the sidebar's
+  legacy mode group beside Edge Me and Milk Me, relabeling that section from
+  Preset Modes to Legacy Modes.
+
+
 2026-05-17 - PR #248 - Fix Startup Chat Echo And Autospeak Repetition
 ----------------------------------------------------------------------
 
