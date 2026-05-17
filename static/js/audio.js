@@ -1,4 +1,4 @@
-import { D, apiCall, el, fetchWithConnectionState, formatElapsed, formatPercent, reportSaveFailure, setSliderValue, state } from './context.js';
+import { D, apiCall, appendQueryParams, el, fetchWithConnectionState, formatElapsed, formatPercent, getUiClientId, reportSaveFailure, setSliderValue, state } from './context.js';
 
 let lastKnownAudioEnabled = false;
 
@@ -247,33 +247,121 @@ async function setupElevenLabsKey() {
     }
 }
 
-export async function playQueuedAudio({waitMs = 0, followupWaitMs = 350} = {}) {
-    if (state.audioFetchInProgress) return false;
+let queuedAudioDrainPromise = Promise.resolve(false);
+let queuedAudioDrainPending = false;
+const AUDIO_PLAYBACK_LOCK_KEY = 'strokegpt.audioPlaybackLock.v1';
+const AUDIO_PLAYBACK_LOCK_STALE_MS = 60000;
+const AUDIO_PLAYBACK_LOCK_REFRESH_MS = 10000;
+let audioPlaybackOwnerId = '';
+
+function getAudioPlaybackOwnerId() {
+    if (!audioPlaybackOwnerId) {
+        audioPlaybackOwnerId = [
+            getUiClientId(),
+            'audio',
+            Date.now().toString(36),
+            Math.random().toString(36).slice(2),
+        ].join(':');
+    }
+    return audioPlaybackOwnerId;
+}
+
+function audioPlaybackLockStorage() {
+    try {
+        return globalThis.localStorage || globalThis.window?.localStorage || null;
+    } catch {
+        return null;
+    }
+}
+
+function readAudioPlaybackLock(storage) {
+    try {
+        const raw = storage.getItem(AUDIO_PLAYBACK_LOCK_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.owner !== 'string') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function writeAudioPlaybackLock(storage, owner) {
+    const record = {
+        owner,
+        expiresAt: Date.now() + AUDIO_PLAYBACK_LOCK_STALE_MS,
+    };
+    storage.setItem(AUDIO_PLAYBACK_LOCK_KEY, JSON.stringify(record));
+}
+
+function acquireAudioPlaybackLock() {
+    const storage = audioPlaybackLockStorage();
+    if (!storage) return {release() {}};
+    const owner = getAudioPlaybackOwnerId();
+    const current = readAudioPlaybackLock(storage);
+    if (current && current.owner !== owner && Number(current.expiresAt || 0) > Date.now()) {
+        return null;
+    }
+    try {
+        writeAudioPlaybackLock(storage, owner);
+        const confirmed = readAudioPlaybackLock(storage);
+        if (!confirmed || confirmed.owner !== owner) return null;
+    } catch {
+        return {release() {}};
+    }
+    const refreshTimer = globalThis.setInterval?.(() => {
+        try {
+            const latest = readAudioPlaybackLock(storage);
+            if (!latest || latest.owner === owner) writeAudioPlaybackLock(storage, owner);
+        } catch { /* storage may become unavailable while audio is playing */ }
+    }, AUDIO_PLAYBACK_LOCK_REFRESH_MS);
+    return {
+        release() {
+            if (refreshTimer) globalThis.clearInterval?.(refreshTimer);
+            try {
+                const latest = readAudioPlaybackLock(storage);
+                if (!latest || latest.owner === owner) storage.removeItem(AUDIO_PLAYBACK_LOCK_KEY);
+            } catch { /* best-effort cross-tab lease cleanup */ }
+        },
+    };
+}
+
+async function drainQueuedAudio({waitMs = 0, followupWaitMs = 350} = {}) {
     state.audioFetchInProgress = true;
     let playedAny = false;
     try {
         let nextWaitMs = Math.max(0, Number(waitMs) || 0);
         while (true) {
-            const query = nextWaitMs > 0 ? `?wait_ms=${Math.round(nextWaitMs)}` : '';
-            const response = await fetchWithConnectionState('/get_audio' + query);
-            if (response.status === 204) return playedAny;
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const audioUrl = URL.createObjectURL(await response.blob());
-            const audio = new Audio(audioUrl);
-            await new Promise((resolve, reject) => {
-                let settled = false;
-                const finish = (error = null) => {
-                    if (settled) return;
-                    settled = true;
-                    URL.revokeObjectURL(audioUrl);
-                    if (error) reject(error);
-                    else resolve();
-                };
-                audio.onended = () => finish();
-                audio.onerror = () => finish(new Error('Browser could not play the generated audio.'));
-                const playback = audio.play();
-                if (playback && typeof playback.catch === 'function') playback.catch(finish);
-            });
+            const lease = acquireAudioPlaybackLock();
+            if (!lease) return playedAny;
+            let response;
+            try {
+                const endpoint = appendQueryParams('/get_audio', {
+                    client_id: getUiClientId(),
+                    wait_ms: nextWaitMs > 0 ? Math.round(nextWaitMs) : '',
+                });
+                response = await fetchWithConnectionState(endpoint);
+                if (response.status === 204) return playedAny;
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const audioUrl = URL.createObjectURL(await response.blob());
+                const audio = new Audio(audioUrl);
+                await new Promise((resolve, reject) => {
+                    let settled = false;
+                    const finish = (error = null) => {
+                        if (settled) return;
+                        settled = true;
+                        URL.revokeObjectURL(audioUrl);
+                        if (error) reject(error);
+                        else resolve();
+                    };
+                    audio.onended = () => finish();
+                    audio.onerror = () => finish(new Error('Browser could not play the generated audio.'));
+                    const playback = audio.play();
+                    if (playback && typeof playback.catch === 'function') playback.catch(finish);
+                });
+            } finally {
+                lease.release();
+            }
             playedAny = true;
             nextWaitMs = Math.max(0, Number(followupWaitMs) || 0);
         }
@@ -285,6 +373,29 @@ export async function playQueuedAudio({waitMs = 0, followupWaitMs = 350} = {}) {
     } finally {
         state.audioFetchInProgress = false;
     }
+}
+
+export function playQueuedAudio(options = {}) {
+    if (queuedAudioDrainPending) return queuedAudioDrainPromise;
+    queuedAudioDrainPending = true;
+    queuedAudioDrainPromise = queuedAudioDrainPromise
+        .catch(() => false)
+        .then(async () => {
+            queuedAudioDrainPending = false;
+            return drainQueuedAudio(options);
+        });
+    return queuedAudioDrainPromise;
+}
+
+let queuedAudioPlaybackScheduled = false;
+
+export function scheduleQueuedAudioPlayback({waitMs = 0, followupWaitMs = 0} = {}) {
+    if (queuedAudioPlaybackScheduled) return;
+    queuedAudioPlaybackScheduled = true;
+    window.setTimeout(async () => {
+        queuedAudioPlaybackScheduled = false;
+        await playQueuedAudio({waitMs, followupWaitMs});
+    }, 0);
 }
 
 export function populateAudioSettings(data = {}) {

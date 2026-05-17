@@ -1,5 +1,5 @@
-import { D, apiCall, el, fetchWithConnectionState, setStatusMessage, state } from './context.js';
-import { playQueuedAudio, voiceOutputEnabled } from './audio.js';
+import { D, apiCall, appendQueryParams, el, fetchWithConnectionState, getUiClientId, setStatusMessage, state } from './context.js';
+import { playQueuedAudio, scheduleQueuedAudioPlayback, voiceOutputEnabled } from './audio.js';
 
 function appendPlainMessageText(parent, text) {
     const parts = String(text || '').split('\n');
@@ -345,7 +345,7 @@ async function sendUserMessageStream(requestOptions, startedAt) {
     if (!streamEntry) {
         const handled = handleSendMessageStatus(finalData);
         if (handled) {
-            await pollChatUpdates();
+            await pollChatUpdates({playAudio: false});
             await waitForReplyAudio();
         }
         return {
@@ -379,7 +379,7 @@ async function sendUserMessageStream(requestOptions, startedAt) {
     }
     clearTypingIndicator();
     state.pendingQueuedBotEcho = finalData.chat_queued === true && finalData.chat ? String(finalData.chat) : '';
-    await pollChatUpdates();
+    await pollChatUpdates({playAudio: false});
     await waitForReplyAudio();
     return {
         data: finalData,
@@ -429,7 +429,7 @@ export async function sendUserMessage(message, {source = 'chat'} = {}) {
         const data = await apiCall('/send_message', requestOptions);
         const handled = handleSendMessageStatus(data);
         if (handled) {
-            await pollChatUpdates();
+            await pollChatUpdates({playAudio: false});
             await waitForReplyAudio();
         }
         return {
@@ -446,8 +446,8 @@ async function waitForReplyAudio() {
     await playQueuedAudio({waitMs: 5000, followupWaitMs: 1000});
 }
 
-export async function pollChatUpdates() {
-    const data = await apiCall('/get_updates');
+export async function pollChatUpdates({playAudio = true} = {}) {
+    const data = await apiCall(appendQueryParams('/get_updates', {client_id: getUiClientId()}));
     if (!data) return;
     if (data.messages && data.messages.length > 0) {
         el.typingIndicator.style.display = 'none';
@@ -473,8 +473,8 @@ export async function pollChatUpdates() {
     if (data.chat_audio_warning) {
         setStatusMessage(el.statusText, data.chat_audio_warning, 'warning');
     }
-    if (data.audio_ready) {
-        await playQueuedAudio();
+    if (data.audio_ready && playAudio) {
+        scheduleQueuedAudioPlayback();
     }
 }
 

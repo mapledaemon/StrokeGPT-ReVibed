@@ -189,7 +189,11 @@ def get_audio_route():
     except (TypeError, ValueError):
         wait_ms = 0
     wait_seconds = max(0.0, min(5.0, wait_ms / 1000.0))
-    audio_chunk = web.audio.wait_for_audio_chunk(wait_seconds)
+    client_id = request.args.get("client_id", "")
+    audio_chunk = web.audio.wait_for_audio_chunk(
+        wait_seconds,
+        defer_predicate=lambda: web.has_pending_ui_messages(client_id),
+    )
     if not audio_chunk:
         return ("", 204)
     return send_file(io.BytesIO(audio_chunk["bytes"]), mimetype=audio_chunk["mimetype"])

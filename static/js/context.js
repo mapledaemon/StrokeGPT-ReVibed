@@ -1,4 +1,38 @@
 export const D = document;
+const UI_CLIENT_ID_STORAGE_KEY = 'strokegpt.uiClientId.v1';
+
+function createUiClientId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function loadUiClientId() {
+    try {
+        const existing = globalThis.sessionStorage?.getItem?.(UI_CLIENT_ID_STORAGE_KEY);
+        if (existing) return existing;
+        const next = createUiClientId();
+        globalThis.sessionStorage?.setItem?.(UI_CLIENT_ID_STORAGE_KEY, next);
+        return next;
+    } catch {
+        return createUiClientId();
+    }
+}
+
+export function getUiClientId() {
+    if (!state.uiClientId) state.uiClientId = loadUiClientId();
+    return state.uiClientId;
+}
+
+export function appendQueryParams(endpoint, params = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (value === undefined || value === null || value === '') continue;
+        search.set(key, String(value));
+    }
+    if (!search.toString()) return endpoint;
+    const separator = endpoint.includes('?') ? '&' : '?';
+    return `${endpoint}${separator}${search.toString()}`;
+}
 
 export const el = {
     userChatInput: D.getElementById('user-chat-input'),
@@ -323,6 +357,7 @@ export const el = {
 };
 
 export const state = {
+    uiClientId: '',
     myHandyKey: '',
     handyFirmwareVersion: 'fw4',
     handyApiV3Key: '',

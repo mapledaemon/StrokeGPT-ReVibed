@@ -8,6 +8,23 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #246 - Keep Chat Ahead Of Voice Playback
+--------------------------------------------------------
+
+Branch: codex/chat-before-tts-ordering
+
+- Stop chat update polling from waiting on Chatterbox playback, so queued text
+  renders before local voice output drains audio clips.
+- Hold `/get_audio` responses while unread chat messages are still queued for
+  the browser, preventing a voice clip from being fetched before the matching
+  chat line has had a chance to render.
+- Give each browser tab its own `/get_updates` cursor so one tab or startup
+  poll cannot consume assistant bubbles before the visible tab renders them.
+- Serialize overlapping browser audio-drain triggers across tabs with a short
+  local playback lease, so startup catch-up or repeated polls cannot start
+  independent voice playback loops.
+
+
 2026-05-17 - PR #245 - Reduce Voice Output Latency
 --------------------------------------------------
 

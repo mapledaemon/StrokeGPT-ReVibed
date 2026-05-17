@@ -385,7 +385,7 @@ class AudioService:
     def get_next_audio_chunk(self):
         return self.wait_for_audio_chunk(0.0)
 
-    def wait_for_audio_chunk(self, wait_seconds=0.0):
+    def wait_for_audio_chunk(self, wait_seconds=0.0, defer_predicate=None):
         deadline = time.monotonic() + max(0.0, float(wait_seconds or 0.0))
         with self._audio_queue_condition:
             while not self.audio_output_queue:
@@ -393,6 +393,8 @@ class AudioService:
                 if remaining <= 0:
                     return None
                 self._audio_queue_condition.wait(timeout=remaining)
+            if defer_predicate and defer_predicate():
+                return None
             return self.audio_output_queue.popleft()
 
     def _enqueue_audio_chunk(self, audio_bytes, mimetype):
