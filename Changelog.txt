@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #240 - Stabilize Continuous Motion Trace Tests
+---------------------------------------------------------------
+
+Branch: codex/ci-motion-trace-waits
+
+- Tightened continuous HSP unit tests to wait for the trace rows they assert,
+  avoiding a CI-only race where fake stream events could appear before the
+  worker recorded motion observability.
+
+
 2026-05-17 - PR #239 - Collapse Mobile Sidebar By Default
 ----------------------------------------------------------
 
