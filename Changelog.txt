@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #253 - Improve HSP Visualizer State Freshness
+---------------------------------------------------------------
+
+Branch: codex/hsp-visualizer-state-freshness
+
+- Move HSP state refresh out of the `/get_status` request path, refresh it in
+  a background worker while HSP playback is active, and expose refresh
+  success/failure diagnostics for real-device visualizer debugging.
+- Stop extrapolating stale HSP state in the browser visualizer; fall back to
+  scheduled trace timing when firmware state is too old to trust.
+
+
 2026-05-17 - PR #252 - Fix Parakeet Installer Python Command
 ----------------------------------------------------------------
 

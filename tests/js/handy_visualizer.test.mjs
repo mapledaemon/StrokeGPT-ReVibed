@@ -199,6 +199,39 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-position').style.top, '30%');
     });
 
+    it('does not extrapolate stale HSP state beyond the trace clock', () => {
+        Date.now = () => 50_050;
+        const payload = continuousPayload({
+            received_at: 50,
+            snapshot_time: 150,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hamp_started: false,
+                hsp_streaming: true,
+                hsp_state_age_ms: 1500,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 5000,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 150.00, hsp_point_time_ms: 1000, output_depth: 20, continuous: true, continuous_schema: 'hsp'},
+                {t: 150.10, hsp_point_time_ms: 1100, output_depth: 80, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '50%');
+    });
+
     it('treats Handy enum-style HSP playing states as advancing', () => {
         Date.now = () => 20_000;
         const payload = continuousPayload({

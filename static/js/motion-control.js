@@ -149,6 +149,8 @@ export {
     updateMotionTrainingTimingReadouts,
 } from './motion/training-editor.js';
 
+const HSP_STATE_MAX_EXTRAPOLATION_AGE_MS = 750;
+
 let lastCylinderDebug = {source: 'init'};
 
 function normalizeMotionSpeedLimits() {
@@ -844,6 +846,13 @@ function updateMotionDiagnosticsPanel(payload = {}) {
             visualizer.play_state !== undefined && visualizer.play_state !== null ? `state ${visualizer.play_state}` : '',
         ].filter(Boolean);
         if (visualizerParts.length) lines.push(visualizerParts.join(' | '));
+        const refreshParts = [
+            diagnostics.hsp_state_refresh_active ? 'HSP state refresh active' : '',
+            diagnostics.hsp_state_source ? `state source ${diagnostics.hsp_state_source}` : '',
+            Number.isFinite(Number(diagnostics.hsp_state_refresh_failures)) && Number(diagnostics.hsp_state_refresh_failures) > 0 ? `failures ${diagnostics.hsp_state_refresh_failures}` : '',
+            diagnostics.hsp_state_refresh_error ? `error ${diagnostics.hsp_state_refresh_error}` : '',
+        ].filter(Boolean);
+        if (refreshParts.length) lines.push(refreshParts.join(' | '));
     }
     el.motionDiagnosticsPanel.hidden = false;
     el.motionDiagnosticsPanel.textContent = lines.join('\n');
@@ -1060,6 +1069,15 @@ function hspPlaybackClockMs(payload = {}, diagnostics = {}, nowSeconds = Date.no
 
 function hspBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
     if (!diagnostics.hsp_streaming) return null;
+    const ageMs = finiteObservation(diagnostics.hsp_state_age_ms);
+    if (ageMs !== null && ageMs > HSP_STATE_MAX_EXTRAPOLATION_AGE_MS) {
+        setCylinderDebug({
+            source: 'hsp-state-stale',
+            hsp_state_age_ms: ageMs,
+            play_state: (diagnostics.hsp_state || {}).play_state,
+        });
+        return null;
+    }
     const clockMs = hspPlaybackClockMs(payload, diagnostics, nowSeconds);
     if (clockMs === null) return null;
     const points = hspTracePoints(payload);
