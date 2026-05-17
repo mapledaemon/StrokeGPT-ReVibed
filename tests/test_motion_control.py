@@ -367,6 +367,8 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertGreaterEqual(base_intent.target.stroke_range, 82)
         self.assertIsNotNone(tip_intent.target.motion_program)
         self.assertIsNotNone(base_intent.target.motion_program)
+        self.assertTrue(tip_intent.target.motion_program["generated_area_focus"])
+        self.assertTrue(base_intent.target.motion_program["generated_area_focus"])
 
     def test_area_focus_does_not_inherit_max_speed(self):
         current = MotionTarget(100, 50, 80)
@@ -464,7 +466,7 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertEqual(intent.target.depth, 75)
         self.assertEqual(intent.target.stroke_range, 50)
 
-    def test_lick_base_maps_to_tight_deep_live_stroke_target(self):
+    def test_lick_base_maps_to_tight_deep_area_focus_target(self):
         intent = self.matcher.parse("lick the base", self.current)
 
         self.assertEqual(intent.kind, "move")
@@ -1976,15 +1978,61 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_backend_routes_plain_chat_targets_through_live_stroke_control(self):
-        handy = FakeHandy()
-        controller = MotionController(handy, step_delay=0)
+    def test_continuous_backend_routes_plain_chat_targets_through_hsp_area_focus(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
 
-        controller.apply_generated_target(MotionTarget(70, 90, 80, "plain chat"), source="llm")
+        try:
+            controller.apply_generated_target(MotionTarget(70, 90, 80, "plain chat"), source="llm")
 
-        self.assertEqual(handy.position_moves, [])
-        self.assertGreater(len(handy.moves), 1)
-        self.assertEqual(handy.moves[-1], (70, 90, 80))
+            self.assertEqual(handy.moves, [])
+            self.assertEqual(handy.position_moves, [])
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            points = handy.stream_starts[0]["points"]
+            self.assertGreater(max(point["x"] for point in points), 95)
+            self.assertLess(min(point["x"] for point in points), 55)
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous_schema") == "hsp"
+                        and point.get("continuous_plan_kind") == "area_focus"
+                        and point.get("continuous_area_focus")
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                ),
+                controller.observability_snapshot()["trace"],
+            )
+        finally:
+            controller.stop()
+
+    def test_continuous_backend_routes_regional_focus_program_through_hsp_area_focus(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        intent = IntentMatcher().parse("focus on the base", controller.current_target())
+
+        try:
+            self.assertTrue(intent.target.motion_program["generated_area_focus"])
+
+            controller.apply_generated_target(intent.target, source="chat command: base")
+
+            self.assertEqual(handy.moves, [])
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            points = handy.stream_starts[0]["points"]
+            self.assertGreater(max(point["x"] for point in points), 90)
+            self.assertLess(min(point["x"] for point in points), 35)
+            trace = controller.observability_snapshot()["trace"]
+            self.assertTrue(
+                any(
+                    point.get("continuous_schema") == "hsp"
+                    and point.get("continuous_plan_kind") == "area_focus"
+                    and point.get("continuous_area_focus")
+                    for point in trace
+                ),
+                trace,
+            )
+            self.assertTrue(all(point.get("continuous_schema") != "hamp_live_anchor" for point in trace))
+        finally:
+            controller.stop()
 
     def test_continuous_pattern_chat_restarts_from_stopped_state(self):
         handy = StreamingFakeHandy()

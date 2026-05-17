@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-17 - PR #243 - Replace Legacy Area Focus Transport
+----------------------------------------------------------
+
+Branch: codex/hsp-area-focus-path
+
+- Route generated plain and implicit regional area-focus targets through an
+  HSP-native area-focus stroke plan when HSP streaming is available, replacing
+  the legacy HAMP live-stroke fallback for requests like "lick the base" and
+  "focus on the base."
+- Keep explicit anchor-loop/bounce programs on the stutter-safe live-stroke
+  bypass while the dedicated HSP anchor-loop transport remains under device
+  review.
+
+
 2026-05-17 - PR #242 - Diagnose HSP Replacement Morph Starts
 --------------------------------------------------------------
 
