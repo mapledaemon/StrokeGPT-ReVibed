@@ -72,12 +72,29 @@ class FakeResponse:
     def __init__(self, status_code=204, payload=None):
         self.status_code = status_code
         self.payload = payload or {}
+        self.closed = False
 
     def raise_for_status(self):
         return None
 
     def json(self):
         return dict(self.payload)
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSseResponse(FakeResponse):
+    def __init__(self, lines, status_code=200):
+        super().__init__(status_code=status_code)
+        self.lines = list(lines)
+
+    def iter_lines(self, decode_unicode=False):
+        for line in self.lines:
+            if decode_unicode:
+                yield line
+            else:
+                yield str(line).encode("utf-8")
 
 
 class HandyControllerTests(unittest.TestCase):
@@ -627,13 +644,132 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["hsp_state_refresh_failures"], 1)
         self.assertIn("state endpoint unavailable", diagnostics["hsp_state_refresh_error"])
 
+    def test_hsp_state_sse_event_updates_state_from_nested_event_data(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "type": "hsp_threshold_reached",
+                    "data": (
+                        '{"connection_key":"secret","data":{"play_state":"HSP_STATE_PLAYING",'
+                        '"current_time":1705,"current_point":12,"stream_id":9,'
+                        '"tail_point_stream_index_threshold":42,"playback_rate":1.0}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["play_state"], "HSP_STATE_PLAYING")
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 1705)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 12)
+        self.assertEqual(diagnostics["hsp_state"]["stream_id"], 9)
+        self.assertEqual(diagnostics["hsp_state"]["tail_point_stream_index_threshold"], 42)
+        self.assertEqual(diagnostics["hsp_state_source"], "sse")
+        self.assertEqual(diagnostics["hsp_state_sse_event_type"], "hsp_threshold_reached")
+        self.assertEqual(diagnostics["hsp_state_sse_events"], 1)
+        self.assertEqual(diagnostics["hsp_state_sse_failures"], 0)
+        self.assertNotIn("secret", str(diagnostics))
+
+    def test_hsp_state_sse_event_uses_payload_type_when_event_field_is_missing(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "data": (
+                        '{"type":"hsp_state_changed","data":{"connection_key":"secret",'
+                        '"data":{"playState":"playing","currentTime":2200,"currentPoint":14}}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["play_state"], "playing")
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 2200)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 14)
+        self.assertEqual(diagnostics["hsp_state_source"], "sse")
+        self.assertEqual(diagnostics["hsp_state_sse_event_type"], "hsp_state_changed")
+
+    def test_hsp_state_sse_once_subscribes_with_query_auth_and_event_filter(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+        response = FakeSseResponse(
+            [
+                "id: 1",
+                "event: hsp_state_changed",
+                (
+                    'data: {"connection_key":"secret","data":{"play_state":"playing",'
+                    '"current_time":3100,"current_point":22,"stream_id":5}}'
+                ),
+                "",
+            ]
+        )
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=response,
+            create=True,
+        ) as get:
+            self.assertTrue(handy._run_hsp_state_sse_once(handy._hsp_state_sse_generation))
+
+        get.assert_called_once()
+        url = get.call_args.args[0]
+        self.assertIn("/sse?", url)
+        self.assertIn("apikey=app-id", url)
+        self.assertIn("ck=secret", url)
+        self.assertIn("hsp_state_changed", url)
+        self.assertTrue(get.call_args.kwargs["stream"])
+        self.assertEqual(get.call_args.kwargs["headers"]["Accept"], "text/event-stream")
+        self.assertEqual(
+            get.call_args.kwargs["timeout"],
+            (
+                handy_module.HSP_STATE_SSE_CONNECT_TIMEOUT_SECONDS,
+                handy_module.HSP_STATE_SSE_READ_TIMEOUT_SECONDS,
+            ),
+        )
+        self.assertTrue(response.closed)
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 3100)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 22)
+        self.assertEqual(diagnostics["hsp_state_source"], "sse")
+        self.assertEqual(diagnostics["hsp_state_sse_failures"], 0)
+
+    def test_hsp_state_sse_failure_does_not_send_command_fallback(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            side_effect=RuntimeError("sse unavailable"),
+            create=True,
+        ) as get, mock.patch.object(handy, "_send_v3_command", return_value=True) as send:
+            self.assertFalse(handy._run_hsp_state_sse_once(handy._hsp_state_sse_generation))
+
+        get.assert_called_once()
+        send.assert_not_called()
+        diagnostics = handy.diagnostics()
+        self.assertIsNone(diagnostics["last_command"])
+        self.assertEqual(diagnostics["hsp_state_sse_failures"], 1)
+        self.assertIn("sse unavailable", diagnostics["hsp_state_sse_error"])
+
     def test_diagnostics_starts_async_hsp_state_refresh_worker(self):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
         handy._hsp_streaming = True
 
-        with mock.patch.object(handy, "ensure_hsp_state_refresh_worker", return_value=True) as ensure:
+        with mock.patch.object(
+            handy, "ensure_hsp_state_sse_worker", return_value=True
+        ) as ensure_sse, mock.patch.object(
+            handy, "ensure_hsp_state_refresh_worker", return_value=True
+        ) as ensure:
             handy.diagnostics(refresh_hsp_state=True)
 
+        ensure_sse.assert_called_once()
         ensure.assert_called_once()
 
     def test_hsp_state_refresh_worker_uses_background_thread(self):
@@ -648,6 +784,22 @@ class HandyControllerTests(unittest.TestCase):
             self.assertTrue(handy.ensure_hsp_state_refresh_worker())
 
         thread_class.assert_called_once()
+        thread.start.assert_called_once()
+
+    def test_hsp_state_sse_worker_uses_background_thread(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        handy._hsp_streaming = True
+
+        with mock.patch("strokegpt.handy.threading.Thread") as thread_class:
+            thread = mock.Mock()
+            thread.is_alive.return_value = False
+            thread_class.return_value = thread
+
+            self.assertTrue(handy.ensure_hsp_state_sse_worker())
+
+        thread_class.assert_called_once()
+        kwargs = thread_class.call_args.kwargs
+        self.assertEqual(kwargs["name"], "StrokeGPT-HSP-State-SSE")
         thread.start.assert_called_once()
 
     def test_hsp_state_refresh_cadence_matches_status_polling(self):
