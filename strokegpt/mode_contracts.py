@@ -78,6 +78,7 @@ class ModeCallbacks(TypedDict, total=False):
     remember_pattern: Callable[[MotionTarget | None], object]
     remember_pattern_id: Callable[[str], object]
     freestyle_candidates: Callable[[], Iterable[FreestyleCandidate]]
+    motion_pattern_library_enabled_in_freestyle: Callable[[], bool]
     allow_llm_edge_in_freestyle: Callable[[], bool]
     autospeak_enabled: Callable[[], bool]
     autospeak_range: Callable[[], tuple[float, float]]

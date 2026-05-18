@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #263 - Pattern Library Mode Toggles
+----------------------------------------------------
+
+Branch: codex/pattern-library-mode-toggles
+
+- Add separate Motion Pattern settings for enabling exact pattern-library
+  playback in Freestyle and allowing normal chat to choose fixed pattern ids,
+  defaulting both off so the smoother generated/anchor motion paths remain the
+  routine behavior.
+- Gate normal chat pattern prompts and fixed-pattern response sanitization on
+  the chat toggle, while keeping the pattern catalog/editor available for
+  explicit opt-in use.
+
+
 2026-05-18 - PR #262 - Freestyle Area-Focus Pattern Transport
 --------------------------------------------------------------
 

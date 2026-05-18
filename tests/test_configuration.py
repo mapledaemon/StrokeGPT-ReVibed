@@ -88,6 +88,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["motion_diagnostics_level"], "compact")
         self.assertEqual(saved["ollama_diagnostics_level"], "compact")
         self.assertFalse(saved["motion_feedback_auto_disable"])
+        self.assertFalse(saved["motion_pattern_library_enabled_in_freestyle"])
+        self.assertFalse(saved["motion_pattern_library_enabled_in_chat"])
         self.assertTrue(saved["allow_llm_edge_in_freestyle"])
         self.assertTrue(saved["allow_llm_edge_in_chat"])
         self.assertFalse(saved["allow_llm_mode_actions_in_chat"])
@@ -169,6 +171,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.motion_diagnostics_level, "compact")
         self.assertEqual(settings.ollama_diagnostics_level, "compact")
         self.assertFalse(settings.motion_feedback_auto_disable)
+        self.assertFalse(settings.motion_pattern_library_enabled_in_freestyle)
+        self.assertFalse(settings.motion_pattern_library_enabled_in_chat)
         self.assertTrue(settings.allow_llm_edge_in_freestyle)
         self.assertTrue(settings.allow_llm_edge_in_chat)
         self.assertFalse(settings.allow_llm_mode_actions_in_chat)
@@ -242,6 +246,8 @@ class ModelConfigurationTests(unittest.TestCase):
 
     def test_llm_edge_permission_settings_are_persisted(self):
         fake_path = FakePath(json.dumps({
+            "motion_pattern_library_enabled_in_freestyle": True,
+            "motion_pattern_library_enabled_in_chat": True,
             "allow_llm_edge_in_freestyle": False,
             "allow_llm_edge_in_chat": False,
             "allow_llm_mode_actions_in_chat": True,
@@ -255,12 +261,16 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.save()
 
         saved = json.loads(fake_path.written)
+        self.assertTrue(settings.motion_pattern_library_enabled_in_freestyle)
+        self.assertTrue(settings.motion_pattern_library_enabled_in_chat)
         self.assertFalse(settings.allow_llm_edge_in_freestyle)
         self.assertFalse(settings.allow_llm_edge_in_chat)
         self.assertTrue(settings.allow_llm_mode_actions_in_chat)
         self.assertTrue(settings.autospeak_enabled)
         self.assertEqual(settings.autospeak_min_seconds, 3.0)
         self.assertEqual(settings.autospeak_max_seconds, 12.0)
+        self.assertTrue(saved["motion_pattern_library_enabled_in_freestyle"])
+        self.assertTrue(saved["motion_pattern_library_enabled_in_chat"])
         self.assertFalse(saved["allow_llm_edge_in_freestyle"])
         self.assertFalse(saved["allow_llm_edge_in_chat"])
         self.assertTrue(saved["allow_llm_mode_actions_in_chat"])

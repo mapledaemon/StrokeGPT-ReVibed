@@ -492,6 +492,8 @@ class WebSettingsRouteTests(WebTestCase):
         self.assertIn("thinking_enabled", data["ollama_status"])
         self.assertNotIn("motion_preferences", data)
         self.assertIn("motion_patterns", data)
+        self.assertIn("motion_pattern_library_enabled_in_freestyle", data)
+        self.assertIn("motion_pattern_library_enabled_in_chat", data)
 
     def test_llm_edge_permissions_can_be_selected_and_saved(self):
         from strokegpt.web import app_state, settings
@@ -581,20 +583,36 @@ class WebSettingsRouteTests(WebTestCase):
     def test_motion_feedback_auto_disable_option_can_be_saved(self):
         from strokegpt.web import settings
 
-        original = settings.motion_feedback_auto_disable
+        original = (
+            settings.motion_feedback_auto_disable,
+            settings.motion_pattern_library_enabled_in_freestyle,
+            settings.motion_pattern_library_enabled_in_chat,
+        )
         try:
             with mock.patch.object(settings, "save"):
-                response = self.client.post("/motion_feedback_options", json={"auto_disable": True})
+                response = self.client.post("/motion_feedback_options", json={
+                    "auto_disable": True,
+                    "motion_pattern_library_enabled_in_freestyle": True,
+                    "motion_pattern_library_enabled_in_chat": True,
+                })
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertEqual(data["status"], "success")
             self.assertTrue(data["motion_feedback_auto_disable"])
+            self.assertTrue(data["motion_pattern_library_enabled_in_freestyle"])
+            self.assertTrue(data["motion_pattern_library_enabled_in_chat"])
             self.assertTrue(settings.motion_feedback_auto_disable)
+            self.assertTrue(settings.motion_pattern_library_enabled_in_freestyle)
+            self.assertTrue(settings.motion_pattern_library_enabled_in_chat)
             self.assertIn("motion_patterns", data)
             self.assertIn("motion_preferences", data)
         finally:
-            settings.motion_feedback_auto_disable = original
+            (
+                settings.motion_feedback_auto_disable,
+                settings.motion_pattern_library_enabled_in_freestyle,
+                settings.motion_pattern_library_enabled_in_chat,
+            ) = original
 
     def test_system_prompts_route_returns_all_four_prompt_kinds(self):
         from strokegpt.web import settings

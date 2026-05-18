@@ -76,6 +76,9 @@ describe('motion/audio save feedback', () => {
         resetStubElement('local-tts-status');
         resetStubElement('download-local-tts-model-button');
         resetStubElement('llm-edge-permissions-status');
+        resetStubElement('motion-pattern-library-freestyle-checkbox');
+        resetStubElement('motion-pattern-library-chat-checkbox');
+        resetStubElement('motion-feedback-auto-disable-checkbox');
         resetStubElement('top-bar-autospeak-toggle-btn');
         resetStubElement('autospeak-min-seconds');
         resetStubElement('autospeak-max-seconds');
@@ -94,6 +97,9 @@ describe('motion/audio save feedback', () => {
         state.autospeakEnabled = false;
         state.autospeakMinSeconds = 12;
         state.autospeakMaxSeconds = 45;
+        state.motionPatternLibraryEnabledInFreestyle = false;
+        state.motionPatternLibraryEnabledInChat = false;
+        state.motionFeedbackAutoDisable = false;
         state.motionTraining = {state: 'idle', pattern_id: 'seed', pattern_name: 'Seed', preview: false};
         state.motionTrainingOriginalPattern = null;
         state.motionTrainingEditedPattern = null;
@@ -221,6 +227,40 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('motion-pattern-status');
         assert.strictEqual(status.textContent, 'Feedback options failed.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveMotionFeedbackOptions sends pattern library toggles and mirrors saved state', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                motion_feedback_auto_disable: true,
+                motion_pattern_library_enabled_in_freestyle: true,
+                motion_pattern_library_enabled_in_chat: false,
+                motion_preferences: {prompt: '', summary: ''},
+            });
+        };
+        getStubElement('motion-feedback-auto-disable-checkbox').checked = true;
+        getStubElement('motion-pattern-library-freestyle-checkbox').checked = true;
+        getStubElement('motion-pattern-library-chat-checkbox').checked = false;
+
+        await saveMotionFeedbackOptions();
+
+        assert.deepStrictEqual(requests, [[
+            '/motion_feedback_options',
+            {
+                auto_disable: true,
+                motion_pattern_library_enabled_in_freestyle: true,
+                motion_pattern_library_enabled_in_chat: false,
+            },
+        ]]);
+        assert.strictEqual(state.motionFeedbackAutoDisable, true);
+        assert.strictEqual(state.motionPatternLibraryEnabledInFreestyle, true);
+        assert.strictEqual(state.motionPatternLibraryEnabledInChat, false);
+        assert.strictEqual(getStubElement('motion-pattern-library-freestyle-checkbox').checked, true);
+        assert.strictEqual(getStubElement('motion-pattern-library-chat-checkbox').checked, false);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Pattern library saved. Freestyle: on. Chat: off.');
     });
 
     it('stopMotionTraining surfaces the backend message on global status', async () => {

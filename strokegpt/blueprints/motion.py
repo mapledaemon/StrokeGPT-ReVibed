@@ -60,11 +60,27 @@ def reset_motion_preferences_route():
 def set_motion_feedback_options_route():
     web = _web()
     data = web._request_json()
-    web.settings.motion_feedback_auto_disable = bool(data.get("auto_disable", False))
+    web.settings.motion_feedback_auto_disable = web._request_bool_value(
+        data,
+        "auto_disable",
+        web.settings.motion_feedback_auto_disable,
+    )
+    web.settings.motion_pattern_library_enabled_in_freestyle = web._request_bool_value(
+        data,
+        "motion_pattern_library_enabled_in_freestyle",
+        web.settings.motion_pattern_library_enabled_in_freestyle,
+    )
+    web.settings.motion_pattern_library_enabled_in_chat = web._request_bool_value(
+        data,
+        "motion_pattern_library_enabled_in_chat",
+        web.settings.motion_pattern_library_enabled_in_chat,
+    )
     web.settings.save()
     return jsonify({
         "status": "success",
         "motion_feedback_auto_disable": web.settings.motion_feedback_auto_disable,
+        "motion_pattern_library_enabled_in_freestyle": web.settings.motion_pattern_library_enabled_in_freestyle,
+        "motion_pattern_library_enabled_in_chat": web.settings.motion_pattern_library_enabled_in_chat,
         "motion_patterns": web._motion_pattern_catalog_payload(),
         "motion_preferences": web._motion_preference_payload(),
     })

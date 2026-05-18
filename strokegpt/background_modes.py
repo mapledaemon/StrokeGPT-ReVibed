@@ -553,6 +553,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     update_mood = callbacks.get("update_mood", lambda mood: None)
     remember_pattern_id = callbacks.get("remember_pattern_id", lambda pattern_id: None)
     freestyle_candidates = callbacks.get("freestyle_candidates", lambda: ())
+    pattern_library_enabled = callbacks.get("motion_pattern_library_enabled_in_freestyle", lambda: False)
     rng = random.Random()
     recent_ids = []
     step_count = 0
@@ -722,7 +723,14 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 "freestyle_planner_sleep_ms": round(sleep_seconds * 1000.0, 1),
             }
 
-        if freestyle_helpers._apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=trace_metadata):
+        use_pattern_library = pattern_library_enabled() if callable(pattern_library_enabled) else pattern_library_enabled
+        if freestyle_helpers._apply_freestyle_choices(
+            motion_controller,
+            choices,
+            rng,
+            trace_metadata=trace_metadata,
+            use_pattern_library=bool(use_pattern_library),
+        ):
             update_mood(choices[-1].mood)
             played_choices = choices[:1] if continuous_freestyle else choices
             for played_choice in played_choices:
