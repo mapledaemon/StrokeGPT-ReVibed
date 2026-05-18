@@ -7,6 +7,7 @@ stays in ``background_modes``; this module owns the scoring, candidate
 shaping, and chain planning that loop delegates to.
 """
 
+import inspect
 import random
 from dataclasses import dataclass, replace
 
@@ -341,6 +342,34 @@ def _freestyle_repeat_choice(choice, current, rng):
     )
 
 
+def _freestyle_flow_target(choice):
+    target = choice.target.clamped()
+    return MotionTarget(
+        target.speed,
+        target.depth,
+        target.stroke_range,
+        label="freestyle flow",
+    ).clamped()
+
+
+def _call_generated_target(motion_controller, target, *, source, trace_metadata=None):
+    apply_generated = getattr(motion_controller, "apply_generated_target", None)
+    if not callable(apply_generated):
+        return False
+    try:
+        params = inspect.signature(apply_generated).parameters
+        accepts_metadata = "trace_metadata" in params or any(
+            param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values()
+        )
+    except (TypeError, ValueError):
+        accepts_metadata = True
+    if accepts_metadata:
+        result = apply_generated(target, source=source, trace_metadata=trace_metadata)
+    else:
+        result = apply_generated(target, source=source)
+    return True if result is None else bool(result)
+
+
 def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids):
     weight = _candidate_weight(candidate, record)
     score = 12.0 + weight
@@ -476,21 +505,38 @@ def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rn
     return choices
 
 
-def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=None):
+def _apply_freestyle_choices(
+    motion_controller,
+    choices,
+    rng,
+    trace_metadata=None,
+):
     backend = getattr(motion_controller, "backend", "")
     if backend == "continuous":
-        if not choices or not hasattr(motion_controller, "apply_continuous_target"):
+        if not choices:
             return False
         choice = choices[0]
-        if str(getattr(choice.record, "source", "") or "").lower() in {"imported", "trained", "user"}:
-            apply_authored = getattr(motion_controller, "apply_authored_actions", None)
-            if callable(apply_authored):
-                return apply_authored(
-                    getattr(choice.record, "actions", ()) or (),
-                    choice.target,
-                    source="freestyle planner",
-                    trace_metadata=trace_metadata,
-                )
+        record_source = str(getattr(choice.record, "source", "") or "").lower()
+        apply_authored = getattr(motion_controller, "apply_authored_actions", None)
+        if record_source == "fixed":
+            flow_metadata = dict(trace_metadata or {})
+            flow_metadata.setdefault("freestyle_fixed_pattern_transport", "area_focus")
+            flow_metadata.setdefault("freestyle_fixed_pattern_id", choice.pattern_id)
+            flow_metadata.setdefault("freestyle_fixed_pattern_name", choice.pattern_name)
+            if _call_generated_target(
+                motion_controller,
+                _freestyle_flow_target(choice),
+                source="freestyle planner",
+                trace_metadata=flow_metadata,
+            ):
+                return True
+        if callable(apply_authored) and record_source in {"imported", "trained", "user"}:
+            return apply_authored(
+                getattr(choice.record, "actions", ()) or (),
+                choice.target,
+                source="freestyle planner",
+                trace_metadata=trace_metadata,
+            )
         apply_pattern = getattr(motion_controller, "apply_continuous_pattern", None)
         if callable(apply_pattern):
             try:
@@ -504,11 +550,14 @@ def _apply_freestyle_choices(motion_controller, choices, rng, trace_metadata=Non
                     source="freestyle planner",
                     trace_metadata=trace_metadata,
                 )
-        return motion_controller.apply_continuous_target(
-            choice.target,
-            source="freestyle planner",
-            trace_metadata=trace_metadata,
-        )
+        apply_continuous = getattr(motion_controller, "apply_continuous_target", None)
+        if callable(apply_continuous):
+            return apply_continuous(
+                choice.target,
+                source="freestyle planner",
+                trace_metadata=trace_metadata,
+            )
+        return False
 
     preserve_timing = backend == "position"
     frames, _current = _freestyle_choice_frames(

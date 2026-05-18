@@ -966,19 +966,32 @@ class MotionController:
             self.apply_generated_target(target, source="llm")
         return target
 
-    def apply_generated_target(self, target: MotionTarget, source: str = "generated") -> None:
+    def apply_generated_target(
+        self,
+        target: MotionTarget,
+        source: str = "generated",
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
         if target.speed <= 0:
             self.stop()
             return
 
         if self.backend == "continuous":
             if self._should_use_hsp_area_focus_for_generated_target(target):
-                if self._apply_hsp_area_focus_target(target, source=source):
+                if self._apply_hsp_area_focus_target(
+                    target,
+                    source=source,
+                    trace_metadata=trace_metadata,
+                ):
                     return
             if self._should_use_live_stroke_for_generated_target(target):
-                if self._apply_live_stroke_continuous_target(target, source=source):
+                if self._apply_live_stroke_continuous_target(
+                    target,
+                    source=source,
+                    trace_metadata=trace_metadata,
+                ):
                     return
-            if self.apply_continuous_target(target, source=source):
+            if self.apply_continuous_target(target, source=source, trace_metadata=trace_metadata):
                 return
             self.apply_target(target, source=source)
             return
@@ -1090,7 +1103,13 @@ class MotionController:
 
         return MotionTarget(target.speed, depth, stroke_range, target.label).clamped(), zone
 
-    def _apply_hsp_area_focus_target(self, target: MotionTarget, *, source: str) -> bool:
+    def _apply_hsp_area_focus_target(
+        self,
+        target: MotionTarget,
+        *,
+        source: str,
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
         clean_target, focus_zone = self._area_focus_transport_target(target)
         plan = self._hsp_area_focus_plan(clean_target)
         if plan is None:
@@ -1102,22 +1121,26 @@ class MotionController:
                 if target.motion_program.get("generated_area_focus")
                 else "localized_anchor_loop"
             )
+        metadata = {
+            "continuous_plan_kind": "area_focus",
+            "continuous_area_focus": True,
+            "continuous_area_focus_localized": focus_zone is not None,
+            "continuous_area_focus_zone": focus_zone or "",
+            "continuous_area_focus_requested_depth": round(float(target.depth), 3),
+            "continuous_area_focus_requested_range": round(float(target.stroke_range), 3),
+            "continuous_area_focus_transport_depth": round(float(clean_target.depth), 3),
+            "continuous_area_focus_transport_range": round(float(clean_target.stroke_range), 3),
+            "legacy_hamp_replaced": True,
+            "requested_motion_program": requested_motion_program,
+        }
+        if trace_metadata:
+            for key, value in trace_metadata.items():
+                metadata.setdefault(str(key), value)
         return self._apply_continuous_plan(
             plan,
             clean_target,
             source=source,
-            trace_metadata={
-                "continuous_plan_kind": "area_focus",
-                "continuous_area_focus": True,
-                "continuous_area_focus_localized": focus_zone is not None,
-                "continuous_area_focus_zone": focus_zone or "",
-                "continuous_area_focus_requested_depth": round(float(target.depth), 3),
-                "continuous_area_focus_requested_range": round(float(target.stroke_range), 3),
-                "continuous_area_focus_transport_depth": round(float(clean_target.depth), 3),
-                "continuous_area_focus_transport_range": round(float(clean_target.stroke_range), 3),
-                "legacy_hamp_replaced": True,
-                "requested_motion_program": requested_motion_program,
-            },
+            trace_metadata=metadata,
         )
 
     def _hsp_area_focus_plan(self, target: MotionTarget):
@@ -1139,7 +1162,13 @@ class MotionController:
             normalized_range=(0.0, 100.0),
         )
 
-    def _apply_live_stroke_continuous_target(self, target: MotionTarget, *, source: str) -> bool:
+    def _apply_live_stroke_continuous_target(
+        self,
+        target: MotionTarget,
+        *,
+        source: str,
+        trace_metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
         target = target.clamped()
         if target.speed <= 0:
             self.stop()
@@ -1160,6 +1189,9 @@ class MotionController:
             "morph_start_range": round(float(start_target.stroke_range), 1),
             "morph_start_source": "live_stroke_current_target",
         }
+        if trace_metadata:
+            for key, value in trace_metadata.items():
+                extras.setdefault(str(key), value)
         try:
             for step in self.sanitizer.transition_path(start_target, target):
                 with self._lock:
