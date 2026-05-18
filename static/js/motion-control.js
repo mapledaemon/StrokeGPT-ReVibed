@@ -287,6 +287,8 @@ export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
     state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
     state.motionFeedbackAutoDisable = data.motion_feedback_auto_disable ?? state.motionFeedbackAutoDisable ?? false;
+    state.motionPatternLibraryEnabledInFreestyle = data.motion_pattern_library_enabled_in_freestyle ?? state.motionPatternLibraryEnabledInFreestyle ?? false;
+    state.motionPatternLibraryEnabledInChat = data.motion_pattern_library_enabled_in_chat ?? state.motionPatternLibraryEnabledInChat ?? false;
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
     state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
@@ -295,6 +297,12 @@ export function populateMotionSettings(data = {}) {
     updateAutospeakToggleUi(data.autospeak_enabled ?? state.autospeakEnabled ?? false);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
+    }
+    if (el.motionPatternLibraryFreestyleCheckbox) {
+        el.motionPatternLibraryFreestyleCheckbox.checked = Boolean(state.motionPatternLibraryEnabledInFreestyle);
+    }
+    if (el.motionPatternLibraryChatCheckbox) {
+        el.motionPatternLibraryChatCheckbox.checked = Boolean(state.motionPatternLibraryEnabledInChat);
     }
     if (el.allowLlmEdgeFreestyleCheckbox) {
         el.allowLlmEdgeFreestyleCheckbox.checked = Boolean(state.allowLlmEdgeInFreestyle);
@@ -1562,6 +1570,12 @@ export function initMotionControls({sendUserMessage}) {
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.addEventListener('change', saveMotionFeedbackOptions);
+    }
+    if (el.motionPatternLibraryFreestyleCheckbox) {
+        el.motionPatternLibraryFreestyleCheckbox.addEventListener('change', saveMotionFeedbackOptions);
+    }
+    if (el.motionPatternLibraryChatCheckbox) {
+        el.motionPatternLibraryChatCheckbox.addEventListener('change', saveMotionFeedbackOptions);
     }
     el.importMotionPatternBtn.addEventListener('click', () => el.motionPatternImportInput.click());
     el.motionPatternImportInput.addEventListener('change', event => importMotionPatternFile(event.target.files[0]));

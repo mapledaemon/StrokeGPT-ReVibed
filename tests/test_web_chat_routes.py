@@ -10,8 +10,9 @@ from tests._web_support import WebTestCase
 class WebChatRouteTests(WebTestCase):
     def test_unrequested_tight_llm_focus_preserves_current_pattern(self):
         from strokegpt.motion import MotionTarget
-        from strokegpt.web import _target_from_llm_response_move
+        from strokegpt.web import _target_from_llm_response_move, settings
 
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
         current = MotionTarget(27, 50, 95, "llm+milk")
         response = {
             "move": {
@@ -23,7 +24,11 @@ class WebChatRouteTests(WebTestCase):
             }
         }
 
-        target = _target_from_llm_response_move(response, current, user_input="fuck me")
+        try:
+            settings.motion_pattern_library_enabled_in_chat = True
+            target = _target_from_llm_response_move(response, current, user_input="fuck me")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
 
         self.assertEqual(target.label, "llm+milk")
         self.assertEqual(target.speed, 21)
@@ -33,8 +38,9 @@ class WebChatRouteTests(WebTestCase):
 
     def test_explicit_tight_llm_focus_request_is_preserved(self):
         from strokegpt.motion import MotionTarget
-        from strokegpt.web import _target_from_llm_response_move
+        from strokegpt.web import _target_from_llm_response_move, settings
 
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
         current = MotionTarget(27, 50, 95, "llm+milk")
         response = {
             "move": {
@@ -46,7 +52,11 @@ class WebChatRouteTests(WebTestCase):
             }
         }
 
-        target = _target_from_llm_response_move(response, current, user_input="flutter at the tip")
+        try:
+            settings.motion_pattern_library_enabled_in_chat = True
+            target = _target_from_llm_response_move(response, current, user_input="flutter at the tip")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
 
         self.assertEqual(target.label, "llm+tip+flutter")
         self.assertEqual(target.speed, 21)
@@ -251,6 +261,47 @@ class WebChatRouteTests(WebTestCase):
                 settings.autospeak_enabled,
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_direct_chat_pattern_command_uses_patternless_target_when_chat_library_disabled(self):
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.motion_pattern_library_enabled_in_chat,
+        )
+        captured_targets = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.motion_pattern_library_enabled_in_chat = False
+            with mock.patch.object(
+                motion,
+                "apply_generated_target",
+                side_effect=lambda target, **_kwargs: captured_targets.append(target),
+            ), mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=False):
+                response = self.client.post("/send_message", json={
+                    "message": "flutter at the tip",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "move_applied")
+            self.assertEqual(len(captured_targets), 1)
+            self.assertNotIn("flutter", captured_targets[0].label)
+            self.assertIn("tip", captured_targets[0].label)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.motion_pattern_library_enabled_in_chat,
             ) = original_settings
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
@@ -534,6 +585,7 @@ class WebChatRouteTests(WebTestCase):
         original_pattern_enabled = dict(settings.motion_pattern_enabled)
         original_pattern_feedback = dict(settings.motion_pattern_feedback)
         original_pattern_weights = dict(settings.motion_pattern_weights)
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
         captured_targets = []
         app_state.messages_for_ui.clear()
         app_state.chat_history.clear()
@@ -543,6 +595,7 @@ class WebChatRouteTests(WebTestCase):
             settings.motion_pattern_enabled["flick"] = True
             settings.motion_pattern_feedback["flick"] = {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0}
             settings.motion_pattern_weights["flick"] = 50
+            settings.motion_pattern_library_enabled_in_chat = True
             handy.last_relative_speed = 30
             handy.last_depth_pos = 40
             handy.last_stroke_range = 50
@@ -587,6 +640,7 @@ class WebChatRouteTests(WebTestCase):
             settings.motion_pattern_enabled = original_pattern_enabled
             settings.motion_pattern_feedback = original_pattern_feedback
             settings.motion_pattern_weights = original_pattern_weights
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 

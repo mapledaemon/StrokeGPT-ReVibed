@@ -510,6 +510,7 @@ def _apply_freestyle_choices(
     choices,
     rng,
     trace_metadata=None,
+    use_pattern_library=False,
 ):
     backend = getattr(motion_controller, "backend", "")
     if backend == "continuous":
@@ -518,11 +519,14 @@ def _apply_freestyle_choices(
         choice = choices[0]
         record_source = str(getattr(choice.record, "source", "") or "").lower()
         apply_authored = getattr(motion_controller, "apply_authored_actions", None)
-        if record_source == "fixed":
+        if not use_pattern_library:
             flow_metadata = dict(trace_metadata or {})
-            flow_metadata.setdefault("freestyle_fixed_pattern_transport", "area_focus")
-            flow_metadata.setdefault("freestyle_fixed_pattern_id", choice.pattern_id)
-            flow_metadata.setdefault("freestyle_fixed_pattern_name", choice.pattern_name)
+            flow_metadata.setdefault("freestyle_pattern_transport", "area_focus")
+            flow_metadata.setdefault("freestyle_pattern_source", record_source or "unknown")
+            if record_source == "fixed":
+                flow_metadata.setdefault("freestyle_fixed_pattern_transport", "area_focus")
+                flow_metadata.setdefault("freestyle_fixed_pattern_id", choice.pattern_id)
+                flow_metadata.setdefault("freestyle_fixed_pattern_name", choice.pattern_name)
             if _call_generated_target(
                 motion_controller,
                 _freestyle_flow_target(choice),

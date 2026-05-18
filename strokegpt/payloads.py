@@ -884,6 +884,8 @@ def settings_payload(
         "motion_diagnostics_level": settings.motion_diagnostics_level,
         "ollama_diagnostics_level": settings.ollama_diagnostics_level,
         "motion_feedback_auto_disable": settings.motion_feedback_auto_disable,
+        "motion_pattern_library_enabled_in_freestyle": settings.motion_pattern_library_enabled_in_freestyle,
+        "motion_pattern_library_enabled_in_chat": settings.motion_pattern_library_enabled_in_chat,
         "allow_llm_edge_in_freestyle": settings.allow_llm_edge_in_freestyle,
         "allow_llm_edge_in_chat": settings.allow_llm_edge_in_chat,
         "allow_llm_mode_actions_in_chat": settings.allow_llm_mode_actions_in_chat,

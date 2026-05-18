@@ -102,6 +102,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "save-motion-backend-btn",
             "save-motion-speed-limits",
             "save-timings-btn",
+            "motion-pattern-library-freestyle-checkbox",
+            "motion-pattern-library-chat-checkbox",
             "motion-feedback-auto-disable-checkbox",
             "user-genitalia-select",
             "user-genitalia-custom-input",

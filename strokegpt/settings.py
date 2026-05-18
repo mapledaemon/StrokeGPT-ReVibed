@@ -225,6 +225,8 @@ def default_settings_dict():
         "motion_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "ollama_diagnostics_level": DEFAULT_DIAGNOSTICS_LEVEL,
         "motion_feedback_auto_disable": False,
+        "motion_pattern_library_enabled_in_freestyle": False,
+        "motion_pattern_library_enabled_in_chat": False,
         "allow_llm_edge_in_freestyle": True,
         "allow_llm_edge_in_chat": True,
         "allow_llm_mode_actions_in_chat": False,
@@ -383,6 +385,20 @@ class SettingsManager:
         )
         self.motion_feedback_auto_disable = bool(
             data.get("motion_feedback_auto_disable", defaults["motion_feedback_auto_disable"])
+        )
+        self.motion_pattern_library_enabled_in_freestyle = _as_bool(
+            data.get(
+                "motion_pattern_library_enabled_in_freestyle",
+                defaults["motion_pattern_library_enabled_in_freestyle"],
+            ),
+            defaults["motion_pattern_library_enabled_in_freestyle"],
+        )
+        self.motion_pattern_library_enabled_in_chat = _as_bool(
+            data.get(
+                "motion_pattern_library_enabled_in_chat",
+                defaults["motion_pattern_library_enabled_in_chat"],
+            ),
+            defaults["motion_pattern_library_enabled_in_chat"],
         )
         self.allow_llm_edge_in_freestyle = bool(
             data.get("allow_llm_edge_in_freestyle", defaults["allow_llm_edge_in_freestyle"])
@@ -631,6 +647,8 @@ class SettingsManager:
             "motion_diagnostics_level": self._normalize_diagnostics_level(self.motion_diagnostics_level),
             "ollama_diagnostics_level": self._normalize_diagnostics_level(self.ollama_diagnostics_level),
             "motion_feedback_auto_disable": bool(self.motion_feedback_auto_disable),
+            "motion_pattern_library_enabled_in_freestyle": bool(self.motion_pattern_library_enabled_in_freestyle),
+            "motion_pattern_library_enabled_in_chat": bool(self.motion_pattern_library_enabled_in_chat),
             "allow_llm_edge_in_freestyle": bool(self.allow_llm_edge_in_freestyle),
             "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
             "allow_llm_mode_actions_in_chat": bool(self.allow_llm_mode_actions_in_chat),

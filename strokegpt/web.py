@@ -1179,10 +1179,24 @@ def _edge_pattern_ids():
     return {pattern_id for pattern_id in PATTERNS if pattern_id.startswith("edge-")}
 
 def _motion_preference_payload():
+    catalog = _motion_pattern_catalog_payload()
+    if not settings.motion_pattern_library_enabled_in_chat:
+        all_fixed_ids = {
+            str(pattern.get("id") or "")
+            for pattern in catalog.get("patterns", [])
+            if pattern.get("source") == "fixed"
+        }
+        payload = payloads.motion_preference_payload(catalog, all_fixed_ids)
+        payload["prompt"] = ""
+        payload["summary"] = "Motion pattern library is disabled for normal chat."
+        payload["pattern_library_enabled_in_chat"] = False
+        return payload
     excluded = set()
     if not settings.allow_llm_edge_in_chat:
         excluded.update(_edge_pattern_ids())
-    return payloads.motion_preference_payload(_motion_pattern_catalog_payload(), excluded)
+    payload = payloads.motion_preference_payload(catalog, excluded)
+    payload["pattern_library_enabled_in_chat"] = True
+    return payload
 
 def _motion_pattern_record(pattern_id):
     return motion_pattern_library.get_record(
@@ -1262,6 +1276,8 @@ def _freestyle_candidate_patterns() -> list[FreestyleCandidate]:
     return candidates
 
 def _llm_visible_fixed_pattern(pattern_id):
+    if not settings.motion_pattern_library_enabled_in_chat:
+        return False
     catalog = _motion_pattern_catalog_payload()
     if not settings.allow_llm_edge_in_chat and pattern_id in _edge_pattern_ids():
         return False
@@ -1281,6 +1297,25 @@ def _sanitize_llm_move_for_disabled_patterns(move):
         sanitized.pop("pattern", None)
         return sanitized
     return move
+
+def _patternless_chat_target(target):
+    if not target or settings.motion_pattern_library_enabled_in_chat:
+        return target
+    if not _fixed_pattern_id_from_target(target):
+        return target
+    label = str(getattr(target, "label", "") or "")
+    zone_labels = []
+    for word in ("tip", "upper", "middle", "shaft", "base", "full", "deep", "shallow"):
+        if re.search(rf"\b{word}\b", label.lower()):
+            zone_labels.append(word)
+    clean_label = "chat direct " + (zone_labels[0] if zone_labels else "move")
+    return MotionTarget(
+        target.speed,
+        target.depth,
+        target.stroke_range,
+        clean_label,
+        motion_program=getattr(target, "motion_program", None),
+    ).clamped()
 
 MOTION_DIRECT_REQUEST_PATTERNS = (
     r"\b(?:faster|slower|slowly|harder|softer|gentler|deeper|shallower)\b",
@@ -1903,6 +1938,8 @@ def get_current_context():
         'user_genitalia': settings.user_genitalia,
         'user_genitalia_custom': settings.user_genitalia_custom,
         'motion_preferences': _motion_preference_payload()["prompt"],
+        'motion_pattern_library_enabled_in_chat': settings.motion_pattern_library_enabled_in_chat,
+        'motion_pattern_library_enabled_in_freestyle': settings.motion_pattern_library_enabled_in_freestyle,
         'motion_style': settings.motion_style,
         'motion_reverse_direction': settings.motion_reverse_direction,
         'rules': settings.rules, 'last_stroke_speed': semantic_target.speed,
@@ -2243,6 +2280,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'remember_pattern': _remember_motion_pattern_from_target,
         'remember_pattern_id': _remember_live_motion_pattern_id,
         'freestyle_candidates': _freestyle_candidate_patterns,
+        'motion_pattern_library_enabled_in_freestyle': lambda: settings.motion_pattern_library_enabled_in_freestyle,
         'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
         'autospeak_enabled': lambda: settings.autospeak_enabled,
         'autospeak_range': lambda: (settings.autospeak_min_seconds, settings.autospeak_max_seconds),
@@ -2321,8 +2359,9 @@ def _handle_chat_commands(text, allow_motion=True):
     if intent.kind == "move" and intent.target:
         if not allow_motion:
             return False, None
-        motion.apply_generated_target(intent.target, source=f"chat command: {intent.matched or 'move'}")
-        _remember_motion_pattern_from_target(intent.target)
+        target = _patternless_chat_target(intent.target)
+        motion.apply_generated_target(target, source=f"chat command: {intent.matched or 'move'}")
+        _remember_motion_pattern_from_target(target)
         add_mode_status_message("Adjusting.")
         autospeak_scheduled = _schedule_standalone_autospeak(0)
         return True, jsonify({

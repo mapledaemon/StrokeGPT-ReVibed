@@ -48,15 +48,21 @@ export async function saveMotionFeedbackOptions() {
     const data = await apiCall('/motion_feedback_options', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({auto_disable: Boolean(el.motionFeedbackAutoDisableCheckbox?.checked)}),
+        body: JSON.stringify({
+            auto_disable: Boolean(el.motionFeedbackAutoDisableCheckbox?.checked),
+            motion_pattern_library_enabled_in_freestyle: Boolean(el.motionPatternLibraryFreestyleCheckbox?.checked),
+            motion_pattern_library_enabled_in_chat: Boolean(el.motionPatternLibraryChatCheckbox?.checked),
+        }),
     });
     if (data && data.status === 'success') {
         state.motionFeedbackAutoDisable = Boolean(data.motion_feedback_auto_disable);
+        state.motionPatternLibraryEnabledInFreestyle = Boolean(data.motion_pattern_library_enabled_in_freestyle);
+        state.motionPatternLibraryEnabledInChat = Boolean(data.motion_pattern_library_enabled_in_chat);
         if (el.motionFeedbackAutoDisableCheckbox) el.motionFeedbackAutoDisableCheckbox.checked = state.motionFeedbackAutoDisable;
+        if (el.motionPatternLibraryFreestyleCheckbox) el.motionPatternLibraryFreestyleCheckbox.checked = state.motionPatternLibraryEnabledInFreestyle;
+        if (el.motionPatternLibraryChatCheckbox) el.motionPatternLibraryChatCheckbox.checked = state.motionPatternLibraryEnabledInChat;
         if (data.motion_patterns) renderMotionPatternsCallback(data.motion_patterns);
-        el.statusText.textContent = state.motionFeedbackAutoDisable
-            ? 'Repeated thumbs down can disable patterns.'
-            : 'Repeated thumbs down will not disable patterns.';
+        el.statusText.textContent = `Pattern library saved. Freestyle: ${state.motionPatternLibraryEnabledInFreestyle ? 'on' : 'off'}. Chat: ${state.motionPatternLibraryEnabledInChat ? 'on' : 'off'}.`;
     } else {
         reportSaveFailure(el.motionPatternStatus, data, 'Could not save feedback options.');
     }

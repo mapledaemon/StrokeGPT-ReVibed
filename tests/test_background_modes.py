@@ -98,6 +98,7 @@ class ModeContractTests(unittest.TestCase):
             "remember_pattern",
             "remember_pattern_id",
             "freestyle_candidates",
+            "motion_pattern_library_enabled_in_freestyle",
             "allow_llm_edge_in_freestyle",
             "autospeak_enabled",
             "autospeak_range",
@@ -949,6 +950,94 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(target.label, "Freestyle: Edge Build Low")
         self.assertEqual(kwargs["source"], "freestyle planner")
         self.assertEqual(kwargs["trace_metadata"], {"mode": "freestyle"})
+
+    def test_freestyle_continuous_pattern_library_toggle_uses_exact_record_pattern(self):
+        class PatternMotion(FakeMotionController):
+            def __init__(self):
+                super().__init__()
+                self.backend = "continuous"
+                self.generated_calls = []
+                self.pattern_calls = []
+
+            def apply_generated_target(self, target, source="generated", trace_metadata=None):
+                self.generated_calls.append((target, source, trace_metadata or {}))
+                return True
+
+            def apply_continuous_pattern(self, pattern, target, **kwargs):
+                self.pattern_calls.append((pattern, target, kwargs))
+                return True
+
+        motion = PatternMotion()
+        choice = freestyle.FreestyleChoice(
+            "sway",
+            "Sway",
+            FakePatternRecord("sway", "Sway"),
+            MotionTarget(44, 52, 76, label="Freestyle: Sway"),
+            50.0,
+            "Playful",
+            "Keeping Freestyle varied.",
+        )
+
+        applied = freestyle._apply_freestyle_choices(
+            motion,
+            [choice],
+            random.Random(3),
+            trace_metadata={"mode": "freestyle"},
+            use_pattern_library=True,
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(motion.generated_calls, [])
+        self.assertEqual(len(motion.pattern_calls), 1)
+        pattern, target, kwargs = motion.pattern_calls[0]
+        self.assertEqual(pattern.name, "Sway")
+        self.assertEqual(target.label, "Freestyle: Sway")
+        self.assertEqual(kwargs["source"], "freestyle planner")
+        self.assertEqual(kwargs["trace_metadata"], {"mode": "freestyle"})
+
+    def test_freestyle_continuous_pattern_library_disabled_routes_user_patterns_to_flow(self):
+        class AuthoredMotion(FakeMotionController):
+            def __init__(self):
+                super().__init__()
+                self.backend = "continuous"
+                self.authored_calls = []
+                self.generated_calls = []
+
+            def apply_authored_actions(self, actions, target, **kwargs):
+                self.authored_calls.append((tuple(actions), target, kwargs))
+                return True
+
+            def apply_generated_target(self, target, source="generated", trace_metadata=None):
+                self.generated_calls.append((target, source, trace_metadata or {}))
+                return True
+
+        motion = AuthoredMotion()
+        choice = freestyle.FreestyleChoice(
+            "custom-loop",
+            "Custom Loop",
+            FakePatternRecord("custom-loop", "Custom Loop", source="user"),
+            MotionTarget(44, 52, 76, label="Freestyle: Custom Loop"),
+            50.0,
+            "Playful",
+            "Keeping Freestyle varied.",
+        )
+
+        applied = freestyle._apply_freestyle_choices(
+            motion,
+            [choice],
+            random.Random(3),
+            trace_metadata={"mode": "freestyle"},
+            use_pattern_library=False,
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(motion.authored_calls, [])
+        self.assertEqual(len(motion.generated_calls), 1)
+        target, source, metadata = motion.generated_calls[0]
+        self.assertEqual(target.label, "freestyle flow")
+        self.assertEqual(source, "freestyle planner")
+        self.assertEqual(metadata["freestyle_pattern_transport"], "area_focus")
+        self.assertEqual(metadata["freestyle_pattern_source"], "user")
 
     def test_scripted_position_mode_routes_patterns_through_generated_target(self):
         motion = FakeMotionController()
