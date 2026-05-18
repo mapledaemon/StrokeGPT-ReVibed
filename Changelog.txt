@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #259 - HSP State And Latency Guardrails
+--------------------------------------------------------
+
+Branch: codex/hsp-state-latency-guardrails
+
+- Serialize cached HSP state updates from command responses, state polling,
+  and SSE events so stale device-clock snapshots cannot overwrite fresher
+  readings used by diagnostics and the visualizer.
+- Make recent HSP command-latency estimates recover after single spikes, keep
+  continuous HSP point density fixed at the smooth target cadence, and use a
+  shorter default lead for user-visible intent replacements than for
+  same-pattern drift updates.
+- Reset the chat intensity arc timer after long idle gaps and tighten
+  continuous hold-floor pattern-label matching to exact pattern tokens.
+
+
 2026-05-17 - PR #258 - Smooth Milk Speed Changes And Chat Intensity Arc
 ------------------------------------------------------------------------
 

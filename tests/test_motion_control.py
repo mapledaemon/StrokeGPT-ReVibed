@@ -16,6 +16,7 @@ from strokegpt.motion import (
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
     CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND,
+    CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS,
     ContinuousPhaseState,
     IntentMatcher,
     MotionController,
@@ -1689,6 +1690,7 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(second_points)
             self.assertGreater(second_points[0]["hsp_replacement_lead_ms"], 0.0)
+            self.assertEqual(second_points[0]["hsp_replacement_kind"], "drift")
             self.assertLessEqual(
                 second_points[0]["hsp_replacement_lead_ms"],
                 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS * 1000.0,
@@ -1720,6 +1722,7 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("hsp_batch") == "replace"
             ]
             self.assertTrue(second_points)
+            self.assertEqual(second_points[0]["hsp_replacement_kind"], "drift")
             self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 2700.0)
             self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 3200.0)
             self.assertEqual(second_points[0]["hsp_first_point_late_estimate_ms"], 0.0)
@@ -1738,7 +1741,16 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreater(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
         self.assertGreaterEqual(threshold, 3.6)
 
-    def test_continuous_hsp_buffer_and_sampling_expand_after_slow_command_latency(self):
+    def test_continuous_hsp_latency_spike_decays_after_next_normal_sample(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+
+        controller._observe_hsp_command_seconds(4.0)
+        self.assertGreaterEqual(controller._recent_hsp_command_latency_seconds(), 4.0)
+
+        controller._observe_hsp_command_seconds(0.12)
+        self.assertLess(controller._recent_hsp_command_latency_seconds(), 1.0)
+
+    def test_continuous_hsp_buffer_expands_without_sparsening_points(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
 
         controller._observe_hsp_command_seconds(5.0)
@@ -1747,9 +1759,9 @@ class MotionControllerTests(unittest.TestCase):
         threshold = controller._continuous_append_threshold_seconds()
         point_interval = controller._continuous_hsp_point_interval_seconds()
 
-        self.assertGreaterEqual(target_buffer, 7.0)
-        self.assertGreaterEqual(threshold, 6.0)
-        self.assertGreater(point_interval, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+        self.assertGreaterEqual(target_buffer, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS)
+        self.assertGreaterEqual(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
+        self.assertEqual(point_interval, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
 
     def test_continuous_hsp_replacement_uses_default_latency_reserve(self):
         handy = StreamingFakeHandy()
@@ -1770,7 +1782,9 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("hsp_batch") == "replace"
             ]
             self.assertTrue(replacement_points)
-            self.assertGreaterEqual(replacement_points[0]["hsp_replacement_lead_ms"], 900.0)
+            self.assertEqual(replacement_points[0]["hsp_replacement_kind"], "intent")
+            self.assertGreaterEqual(replacement_points[0]["hsp_replacement_lead_ms"], 400.0)
+            self.assertLess(replacement_points[0]["hsp_replacement_lead_ms"], 900.0)
         finally:
             controller.stop()
 

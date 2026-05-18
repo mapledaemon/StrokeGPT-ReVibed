@@ -127,6 +127,7 @@ class HandyController:
         self._last_hsp_state = None
         self._last_hsp_state_observed_at = None
         self._last_hsp_state_source = ""
+        self._hsp_state_cache_lock = threading.Lock()
         self._last_hsp_state_refresh_attempt_at = 0.0
         self._last_hsp_state_refresh_attempt_wall_at = None
         self._last_hsp_state_refresh_success_at = None
@@ -502,14 +503,15 @@ class HandyController:
 
     def _clear_hsp_state_cache(self):
         self._close_hsp_state_sse_stream()
-        self._last_hsp_state = None
-        self._last_hsp_state_observed_at = None
-        self._last_hsp_state_source = ""
-        self._last_hsp_state_refresh_attempt_at = 0.0
-        self._last_hsp_state_refresh_attempt_wall_at = None
-        self._last_hsp_state_refresh_success_at = None
-        self._last_hsp_state_refresh_error = ""
-        self._last_hsp_state_refresh_failures = 0
+        with self._hsp_state_cache_lock:
+            self._last_hsp_state = None
+            self._last_hsp_state_observed_at = None
+            self._last_hsp_state_source = ""
+            self._last_hsp_state_refresh_attempt_at = 0.0
+            self._last_hsp_state_refresh_attempt_wall_at = None
+            self._last_hsp_state_refresh_success_at = None
+            self._last_hsp_state_refresh_error = ""
+            self._last_hsp_state_refresh_failures = 0
         self._last_hsp_state_sse_attempt_at = None
         self._last_hsp_state_sse_connected_at = None
         self._last_hsp_state_sse_event_at = None
@@ -521,33 +523,100 @@ class HandyController:
         self._last_handy_sse_event_at = None
         self._handy_sse_recent_events.clear()
 
+    def _hsp_state_clock_ms(self, state):
+        if not isinstance(state, dict):
+            return None
+        try:
+            return float(state.get("current_time_ms"))
+        except (TypeError, ValueError):
+            return None
+
+    def _hsp_state_stream_id(self, state):
+        if not isinstance(state, dict):
+            return None
+        try:
+            return int(state.get("stream_id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _hsp_state_cache_snapshot(self):
+        with self._hsp_state_cache_lock:
+            return {
+                "state": dict(self._last_hsp_state) if isinstance(self._last_hsp_state, dict) else None,
+                "observed_at": self._last_hsp_state_observed_at,
+                "source": self._last_hsp_state_source,
+                "refresh_attempt_at": self._last_hsp_state_refresh_attempt_at,
+                "refresh_attempt_wall_at": self._last_hsp_state_refresh_attempt_wall_at,
+                "refresh_success_at": self._last_hsp_state_refresh_success_at,
+                "refresh_error": self._last_hsp_state_refresh_error,
+                "refresh_failures": self._last_hsp_state_refresh_failures,
+            }
+
     def _update_hsp_state_cache(self, state, *, source="command"):
         if not isinstance(state, dict) or not state:
             return False
         now = time.time()
-        self._last_hsp_state = dict(state)
-        self._last_hsp_state_observed_at = now
-        self._last_hsp_state_source = str(source or "command")[:40]
-        if source == "poll":
-            self._last_hsp_state_refresh_success_at = now
-        self._last_hsp_state_refresh_error = ""
-        self._last_hsp_state_refresh_failures = 0
+        next_state = dict(state)
+        incoming_clock = self._hsp_state_clock_ms(next_state)
+        incoming_stream_id = self._hsp_state_stream_id(next_state)
+        normalized_source = str(source or "command")[:40]
+        with self._hsp_state_cache_lock:
+            cached_state = self._last_hsp_state if isinstance(self._last_hsp_state, dict) else None
+            cached_clock = self._hsp_state_clock_ms(cached_state)
+            cached_stream_id = self._hsp_state_stream_id(cached_state)
+            cached_at = self._last_hsp_state_observed_at
+            cached_age = now - float(cached_at or 0.0)
+            same_stream = (
+                incoming_stream_id is not None
+                and cached_stream_id is not None
+                and incoming_stream_id == cached_stream_id
+            ) or (incoming_stream_id is None and cached_stream_id is None)
+            if (
+                cached_clock is not None
+                and incoming_clock is not None
+                and incoming_clock < cached_clock
+                and cached_age < 0.5
+                and (
+                    same_stream
+                    or (
+                        normalized_source == "command"
+                        and (incoming_stream_id is None or cached_stream_id is None)
+                    )
+                )
+            ):
+                return False
+            self._last_hsp_state = next_state
+            self._last_hsp_state_observed_at = now
+            self._last_hsp_state_source = normalized_source
+            if normalized_source == "poll":
+                self._last_hsp_state_refresh_success_at = now
+            self._last_hsp_state_refresh_error = ""
+            self._last_hsp_state_refresh_failures = 0
         return True
 
     def _record_hsp_state_refresh_failure(self, error):
-        self._last_hsp_state_refresh_failures += 1
-        self._last_hsp_state_refresh_error = str(error or "HSP state refresh failed")[:180]
+        with self._hsp_state_cache_lock:
+            self._last_hsp_state_refresh_failures += 1
+            self._last_hsp_state_refresh_error = str(error or "HSP state refresh failed")[:180]
 
     def _close_hsp_state_sse_stream(self):
         response = None
+        thread = None
         with self._hsp_state_sse_thread_lock:
             self._hsp_state_sse_generation += 1
             response = self._hsp_state_sse_response
+            thread = self._hsp_state_sse_thread
             self._hsp_state_sse_response = None
             self._hsp_state_sse_thread = None
         if response is not None:
             try:
                 response.close()
+            except Exception:
+                pass
+        if thread is not None and thread is not threading.current_thread():
+            try:
+                if thread.is_alive():
+                    thread.join(timeout=0.4)
             except Exception:
                 pass
 
@@ -1137,7 +1206,8 @@ class HandyController:
         return min(times), max(times)
 
     def _hsp_state_clock_is_past_points(self, points):
-        state = self._last_hsp_state if isinstance(self._last_hsp_state, dict) else None
+        snapshot = self._hsp_state_cache_snapshot()
+        state = snapshot["state"]
         bounds = self._hsp_point_time_bounds(points)
         if not state or not bounds:
             return False
@@ -1450,9 +1520,10 @@ class HandyController:
         if not self._hsp_streaming or not self.supports_continuous_streaming():
             return False
         now = time.time()
-        if self._last_hsp_state_observed_at is not None:
+        snapshot = self._hsp_state_cache_snapshot()
+        if snapshot["observed_at"] is not None:
             try:
-                if now - float(self._last_hsp_state_observed_at) < max(0.0, float(max_age_seconds)):
+                if now - float(snapshot["observed_at"]) < max(0.0, float(max_age_seconds)):
                     return True
             except (TypeError, ValueError):
                 pass
@@ -1460,16 +1531,17 @@ class HandyController:
         monotonic_now = time.monotonic()
         retry_interval = (
             HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS
-            if self._last_hsp_state_refresh_failures
+            if snapshot["refresh_failures"]
             else HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS
         )
         if (
-            monotonic_now - float(self._last_hsp_state_refresh_attempt_at or 0.0)
+            monotonic_now - float(snapshot["refresh_attempt_at"] or 0.0)
             < retry_interval
         ):
             return False
-        self._last_hsp_state_refresh_attempt_at = monotonic_now
-        self._last_hsp_state_refresh_attempt_wall_at = now
+        with self._hsp_state_cache_lock:
+            self._last_hsp_state_refresh_attempt_at = monotonic_now
+            self._last_hsp_state_refresh_attempt_wall_at = now
 
         api_key = self._effective_api_v3_key()
         if not self.handy_key or not api_key:
@@ -1522,9 +1594,10 @@ class HandyController:
                 self.refresh_hsp_state(max_age_seconds=HSP_STATE_REFRESH_MAX_AGE_SECONDS)
             except Exception as exc:
                 self._record_hsp_state_refresh_failure(exc)
+            snapshot = self._hsp_state_cache_snapshot()
             sleep_seconds = (
                 HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS
-                if self._last_hsp_state_refresh_failures
+                if snapshot["refresh_failures"]
                 else HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS
             )
             time.sleep(max(0.05, float(sleep_seconds)))
@@ -1628,8 +1701,9 @@ class HandyController:
         calibrated_min = max(0, min(100, int(round(min(self.min_handy_depth, self.max_handy_depth)))))
         calibrated_max = max(0, min(100, int(round(max(self.min_handy_depth, self.max_handy_depth)))))
         hsp_state_age_ms = None
-        if self._last_hsp_state_observed_at is not None:
-            hsp_state_age_ms = round(max(0.0, time.time() - self._last_hsp_state_observed_at) * 1000.0, 1)
+        hsp_state_snapshot = self._hsp_state_cache_snapshot()
+        if hsp_state_snapshot["observed_at"] is not None:
+            hsp_state_age_ms = round(max(0.0, time.time() - hsp_state_snapshot["observed_at"]) * 1000.0, 1)
         handy_sse_event_age_ms = None
         if self._last_handy_sse_event_at is not None:
             handy_sse_event_age_ms = round(max(0.0, time.time() - self._last_handy_sse_event_at) * 1000.0, 1)
@@ -1658,25 +1732,25 @@ class HandyController:
             "hsp_streaming": self._hsp_streaming,
             "hsp_stream_id": self._hsp_stream_id,
             "hsp_state_observed_at": (
-                round(float(self._last_hsp_state_observed_at), 3)
-                if self._last_hsp_state_observed_at is not None
+                round(float(hsp_state_snapshot["observed_at"]), 3)
+                if hsp_state_snapshot["observed_at"] is not None
                 else None
             ),
             "hsp_state_age_ms": hsp_state_age_ms,
-            "hsp_state_source": self._last_hsp_state_source,
+            "hsp_state_source": hsp_state_snapshot["source"],
             "hsp_state_refresh_active": hsp_refresh_active,
             "hsp_state_refresh_attempt_at": (
-                round(float(self._last_hsp_state_refresh_attempt_wall_at), 3)
-                if self._last_hsp_state_refresh_attempt_wall_at is not None
+                round(float(hsp_state_snapshot["refresh_attempt_wall_at"]), 3)
+                if hsp_state_snapshot["refresh_attempt_wall_at"] is not None
                 else None
             ),
             "hsp_state_refresh_success_at": (
-                round(float(self._last_hsp_state_refresh_success_at), 3)
-                if self._last_hsp_state_refresh_success_at is not None
+                round(float(hsp_state_snapshot["refresh_success_at"]), 3)
+                if hsp_state_snapshot["refresh_success_at"] is not None
                 else None
             ),
-            "hsp_state_refresh_failures": int(self._last_hsp_state_refresh_failures),
-            "hsp_state_refresh_error": self._last_hsp_state_refresh_error,
+            "hsp_state_refresh_failures": int(hsp_state_snapshot["refresh_failures"]),
+            "hsp_state_refresh_error": hsp_state_snapshot["refresh_error"],
             "hsp_state_refresh_min_interval_ms": int(round(HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS * 1000.0)),
             "hsp_state_sse_active": hsp_sse_active,
             "hsp_state_sse_attempt_at": (
@@ -1723,7 +1797,7 @@ class HandyController:
             "api_v3_auth_failed_path": self._api_v3_auth_failed_path,
             "api_v3_unavailable_reason": self.api_v3_unavailable_reason(),
             "continuous_streaming_supported": self.supports_continuous_streaming(),
-            "hsp_state": dict(self._last_hsp_state) if isinstance(self._last_hsp_state, dict) else None,
+            "hsp_state": hsp_state_snapshot["state"],
             "last_command": self.last_command_result(),
             "command_history": self.command_history(),
         }

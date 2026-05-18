@@ -1292,6 +1292,7 @@ class WebChatRouteTests(WebTestCase):
         original_settings_key = settings.handy_key
         original_state = (
             app_state.chat_session_started_at,
+            app_state.chat_last_activity_at,
             app_state.chat_intensity_guide,
             app_state.chat_intensity_guide_started_at,
         )
@@ -1302,6 +1303,7 @@ class WebChatRouteTests(WebTestCase):
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
             app_state.chat_session_started_at = None
+            app_state.chat_last_activity_at = None
             app_state.chat_intensity_guide = "ramp_up"
             app_state.chat_intensity_guide_started_at = None
 
@@ -1332,6 +1334,7 @@ class WebChatRouteTests(WebTestCase):
             settings.handy_key = original_settings_key
             (
                 app_state.chat_session_started_at,
+                app_state.chat_last_activity_at,
                 app_state.chat_intensity_guide,
                 app_state.chat_intensity_guide_started_at,
             ) = original_state

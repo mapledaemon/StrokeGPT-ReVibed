@@ -29,7 +29,13 @@ from strokegpt.motion_patterns import (
     _sample_action_position,
     _smooth_jitter,
 )
-from strokegpt.motion_scripts import EDGING_ARCS, MILKING_ARCS, MotionScriptPlanner
+from strokegpt.motion_scripts import (
+    EDGING_ARCS,
+    MILKING_ARCS,
+    MotionScriptPlanner,
+    _continuous_hold_floor_for_pattern,
+    _continuous_hold_floor_for_target,
+)
 
 
 class MotionScriptPlannerTests(unittest.TestCase):
@@ -87,6 +93,16 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertTrue(any(label.startswith("Milking ") for label in labels))
         self.assertFalse(any(label == "current" for label in labels))
         self.assertFalse(any(label.startswith("pressure build") for label in labels))
+
+    def test_continuous_hold_floor_label_fallback_uses_pattern_tokens(self):
+        milk_style = MotionTarget(30, 50, 80, "milk-style stroke")
+        milkshake = MotionTarget(30, 50, 80, "milkshake")
+
+        self.assertEqual(
+            _continuous_hold_floor_for_target(milk_style),
+            _continuous_hold_floor_for_pattern("milk"),
+        )
+        self.assertEqual(_continuous_hold_floor_for_target(milkshake), 0.0)
 
     def test_continuous_planner_keeps_fixed_pattern_as_single_control_basis(self):
         planner = MotionScriptPlanner("milking", rng=random.Random(2), continuous_patterns=True)

@@ -626,6 +626,63 @@ class HandyControllerTests(unittest.TestCase):
         self.assertIsNone(diagnostics["last_command"])
         self.assertEqual(diagnostics["command_history"], [])
 
+    def test_hsp_state_cache_rejects_stale_same_stream_clock(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+
+        self.assertTrue(
+            handy._update_hsp_state_cache(
+                {"current_time_ms": 5000, "current_point": 20, "stream_id": 9},
+                source="sse",
+            )
+        )
+        self.assertFalse(
+            handy._update_hsp_state_cache(
+                {"current_time_ms": 4900, "current_point": 19, "stream_id": 9},
+                source="command",
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 5000)
+        self.assertEqual(diagnostics["hsp_state"]["current_point"], 20)
+        self.assertEqual(diagnostics["hsp_state_source"], "sse")
+
+    def test_hsp_state_cache_accepts_lower_clock_for_new_stream(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+
+        self.assertTrue(
+            handy._update_hsp_state_cache(
+                {"current_time_ms": 5000, "current_point": 20, "stream_id": 9},
+                source="sse",
+            )
+        )
+        self.assertTrue(
+            handy._update_hsp_state_cache(
+                {"current_time_ms": 25, "current_point": 1, "stream_id": 10},
+                source="command",
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["hsp_state"]["current_time_ms"], 25)
+        self.assertEqual(diagnostics["hsp_state"]["stream_id"], 10)
+        self.assertEqual(diagnostics["hsp_state_source"], "command")
+
+    def test_hsp_state_sse_close_joins_existing_worker(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+        response = mock.Mock()
+        thread = mock.Mock()
+        thread.is_alive.return_value = True
+        handy._hsp_state_sse_response = response
+        handy._hsp_state_sse_thread = thread
+
+        handy._close_hsp_state_sse_stream()
+
+        response.close.assert_called_once()
+        thread.join.assert_called_once_with(timeout=0.4)
+        self.assertIsNone(handy._hsp_state_sse_response)
+        self.assertIsNone(handy._hsp_state_sse_thread)
+
     def test_refresh_hsp_state_does_not_send_command_fallback_on_poll_failure(self):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
         handy._hsp_streaming = True
