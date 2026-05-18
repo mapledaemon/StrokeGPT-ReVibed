@@ -104,15 +104,26 @@ class MotionScriptPlannerTests(unittest.TestCase):
         )
         self.assertEqual(_continuous_hold_floor_for_target(milkshake), 0.0)
 
-    def test_continuous_planner_keeps_fixed_pattern_as_single_control_basis(self):
+    def test_continuous_planner_repeats_milk_pattern_before_switching(self):
         planner = MotionScriptPlanner("milking", rng=random.Random(2), continuous_patterns=True)
         current = MotionTarget(20, 30, 40)
 
         steps = planner._pattern_cluster(current, "milking-full-drive", "Passionate", 66, 52, 88)
 
+        self.assertEqual(len(steps), 2)
+        self.assertTrue(all(step.target.label == PATTERNS["milking-full-drive"].name for step in steps))
+        self.assertTrue(all(step.delay_factor > 0 for step in steps))
+        self.assertTrue(all(step.hold_seconds_floor > 0 for step in steps))
+        self.assertNotEqual(steps[0].target.rounded(), steps[1].target.rounded())
+
+    def test_continuous_auto_pattern_cluster_stays_single_step(self):
+        planner = MotionScriptPlanner("auto", rng=random.Random(2), continuous_patterns=True)
+        current = MotionTarget(20, 30, 40)
+
+        steps = planner._pattern_cluster(current, "stroke", "Passionate", 66, 52, 88)
+
         self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0].target.label, PATTERNS["milking-full-drive"].name)
-        self.assertGreater(steps[0].delay_factor, 0)
+        self.assertEqual(steps[0].target.label, PATTERNS["stroke"].name)
         self.assertGreater(steps[0].hold_seconds_floor, 0)
 
     def test_continuous_feedback_uses_single_pattern_replacement(self):

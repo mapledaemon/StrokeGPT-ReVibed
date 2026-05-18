@@ -31,6 +31,8 @@ class ScriptStep:
 
 
 CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER = 1.15
+CONTINUOUS_MODE_PATTERN_REPEAT_MODES = {"milking", "edging"}
+CONTINUOUS_MODE_PATTERN_REPEAT_STEPS = 2
 
 
 def _continuous_hold_floor_for_pattern(pattern_id):
@@ -192,14 +194,33 @@ class MotionScriptPlanner:
             label=label,
         ).clamped()
         if self.continuous_patterns and pattern:
-            return [
+            hold_floor = _continuous_hold_floor_for_pattern(pattern_id)
+            repeat_steps = (
+                CONTINUOUS_MODE_PATTERN_REPEAT_STEPS
+                if self.mode in CONTINUOUS_MODE_PATTERN_REPEAT_MODES
+                else 1
+            )
+            steps = [
                 ScriptStep(
                     target,
                     mood=mood,
-                    delay_factor=self.rng.uniform(0.85, 1.15),
-                    hold_seconds_floor=_continuous_hold_floor_for_pattern(pattern_id),
+                    delay_factor=self.rng.uniform(0.9, 1.12),
+                    hold_seconds_floor=hold_floor,
                 )
             ]
+            previous_target = target
+            for repeat_index in range(1, repeat_steps):
+                varied = self._same_pattern_variation(previous_target, label)
+                steps.append(
+                    ScriptStep(
+                        varied,
+                        mood=mood,
+                        delay_factor=self.rng.uniform(0.9, 1.12),
+                        hold_seconds_floor=hold_floor,
+                    )
+                )
+                previous_target = varied
+            return steps
         frames = expand_pattern(pattern_id, current, target, rng=self.rng)
         if not frames:
             return [ScriptStep(target, mood=mood, delay_factor=self.rng.uniform(0.75, 1.15))]
@@ -207,6 +228,22 @@ class MotionScriptPlanner:
             ScriptStep(frame.target, mood=mood, delay_factor=frame.delay_factor)
             for frame in frames
         ]
+
+    def _same_pattern_variation(self, current, label):
+        current = current.clamped()
+        speed_delta = self.rng.uniform(4.0, 7.0)
+        depth_delta = self.rng.uniform(5.5, 8.5)
+        range_delta = self.rng.uniform(5.5, 8.5)
+        speed_direction = -1.0 if current.speed >= 82 else 1.0
+        depth_direction = -1.0 if current.depth >= 58 else 1.0
+        range_direction = -1.0 if current.stroke_range >= 68 else 1.0
+        return MotionTarget(
+            current.speed + speed_delta * speed_direction,
+            current.depth + depth_delta * depth_direction,
+            current.stroke_range + range_delta * range_direction,
+            label=label,
+            motion_program=current.motion_program,
+        ).clamped()
 
     def _varied_cluster(self, label, mood, speed, depth, stroke_range):
         cluster_size = self.rng.randint(1, 3)
@@ -258,7 +295,10 @@ class MotionScriptPlanner:
         clean_label = (label or "").lower()
         slug_label = _slug_label(label)
         for pattern in sorted(PATTERNS, key=len, reverse=True):
-            if pattern in clean_label or slug_label == pattern or slug_label.startswith(f"{pattern}-"):
+            if _slug_matches_pattern_id(slug_label, pattern):
+                return pattern
+        for pattern in sorted(PATTERNS, key=len, reverse=True):
+            if _label_matches_pattern_id(clean_label, pattern):
                 return pattern
         return None
 

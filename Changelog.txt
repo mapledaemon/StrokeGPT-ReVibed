@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #260 - Mode Transition Stutter Reduction
+---------------------------------------------------------
+
+Branch: codex/mode-transition-stutter-reduction
+
+- Reduce continuous-mode transition churn by skipping redundant scripted mode
+  targets that repeat the same fixed pattern with only tiny numeric drift.
+- Let Milk and Edge hold each built-in continuous pattern for a second
+  same-pattern drift step before switching, reducing cross-pattern morph seams
+  during scripted mode playback.
+- Let continuous Freestyle repeat the current fixed pattern once with a small
+  speed drift before selecting a new built-in pattern, so typical Freestyle
+  playback spends less time in cross-pattern replacements.
+
+
 2026-05-18 - PR #259 - HSP State And Latency Guardrails
 --------------------------------------------------------
 
