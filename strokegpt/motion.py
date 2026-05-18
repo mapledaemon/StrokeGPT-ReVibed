@@ -35,7 +35,7 @@ CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS = 0.08
 CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
 CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
-CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 3.4
+CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
@@ -48,6 +48,8 @@ CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
+CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
+CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS = {"area_focus", "milk"}
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -2471,6 +2473,7 @@ class MotionController:
         previous_stream_point = None
         previous_point_time_seconds = None
         previous_phase_time_seconds = None
+        suppressed_duplicate_points = 0
         phase_schedule: deque[tuple[float, float]] = deque()
         stream_wall_zero = None
         sync_count = 0
@@ -2544,16 +2547,36 @@ class MotionController:
             phase_interval: float,
             hsp_interval_limited_points: int = 0,
         ) -> None:
-            nonlocal previous_point_time_seconds, previous_phase_time_seconds
+            nonlocal previous_point_time_seconds, previous_phase_time_seconds, suppressed_duplicate_points
             nonlocal previous_stream_point, sample_index, stream_index, stream_seconds
             command_interval = (
                 base_interval
                 if previous_point_time_seconds is None
                 else max(0.001, point_stream_seconds - previous_point_time_seconds)
             )
-            stream_index += 1
             semantic_depth = _clamp(float(sample.target.depth))
             output_depth = self._output_depth(semantic_depth)
+            output_depth_int = int(round(_clamp(float(output_depth))))
+            duplicate_coalesce_enabled = (
+                str(plan_name or "").strip().lower()
+                in CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS
+            )
+            if (
+                duplicate_coalesce_enabled
+                and previous_stream_point is not None
+                and int(round(float(previous_stream_point["x"]))) == output_depth_int
+                and (
+                    point_stream_seconds
+                    - (float(previous_stream_point["t"]) / 1000.0)
+                ) < CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS
+            ):
+                suppressed_duplicate_points += 1
+                previous_point_time_seconds = point_stream_seconds
+                previous_phase_time_seconds = point_seconds
+                stream_seconds = point_stream_seconds
+                return
+
+            stream_index += 1
             point = {
                 "t": int(round(point_stream_seconds * 1000.0)),
                 "logical_t": int(round(point_seconds * 1000.0)),
@@ -2577,6 +2600,9 @@ class MotionController:
             }
             if hsp_interval_limited_points:
                 point["hsp_interval_limited_points"] = int(hsp_interval_limited_points)
+            if suppressed_duplicate_points:
+                point["hsp_duplicate_suppressed_points"] = int(suppressed_duplicate_points)
+                suppressed_duplicate_points = 0
             phase_schedule.append((point_stream_seconds, point_seconds))
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
@@ -2792,6 +2818,8 @@ class MotionController:
                     extras["hsp_first_point_late_estimate_ms"] = first_point_late_ms
                 if point.get("hsp_interval_limited_points"):
                     extras["hsp_interval_limited_points"] = int(point["hsp_interval_limited_points"])
+                if point.get("hsp_duplicate_suppressed_points"):
+                    extras["hsp_duplicate_suppressed_points"] = int(point["hsp_duplicate_suppressed_points"])
                 if previous_recorded_point is not None:
                     dt_seconds = (point["t"] - previous_recorded_point["t"]) / 1000.0
                     if dt_seconds > 0:
