@@ -8,6 +8,22 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #266 - Autospeak Retry Cadence
+------------------------------------------------
+
+Branch: codex/autospeak-motion-speed
+
+- Keep standalone Autospeak alive after local model transport errors by
+  scheduling a retry at the configured minimum pause instead of letting the
+  previously canceled timer disappear.
+- Retry background-mode Autospeak at the configured minimum pause when an
+  Autospeak decision returns no speakable chat, reducing long silent gaps after
+  failed or malformed LLM turns.
+- Add local-model prompt guardrails and recent-line reminders near Autospeak
+  requests so smaller Qwen/Gemma-family models have a concrete list of chat
+  lines not to repeat.
+
+
 2026-05-18 - PR #265 - Chatterbox Warm Queue
 ---------------------------------------------
 

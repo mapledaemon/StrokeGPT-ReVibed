@@ -366,6 +366,53 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_standalone_autospeak_turn_retries_after_model_error(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 2
+            settings.autospeak_max_seconds = 30
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "LLM Connection Error: read timed out",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(audio, "enqueue_text_for_audio") as enqueue_audio, \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            self.assertEqual(list(app_state.messages_for_ui), [])
+            self.assertEqual(list(app_state.chat_history), [{"role": "user", "content": "hello"}])
+            enqueue_audio.assert_not_called()
+            schedule_autospeak.assert_called_once_with(2.0)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_standalone_autospeak_zero_delay_uses_natural_floor(self):
         import strokegpt.web as web
 
@@ -379,10 +426,16 @@ class WebChatRouteTests(WebTestCase):
     def test_standalone_autospeak_prompt_asks_for_wording_variety(self):
         import strokegpt.web as web
 
-        message = web._standalone_autospeak_user_message()
+        message = web._standalone_autospeak_user_message([
+            {"role": "assistant", "content": "Stay with me."},
+            {"role": "assistant", "content": "Still with you."},
+        ])
 
         self.assertIn("Do not repeat the previous chat line", message)
         self.assertIn("vary the erotic wording naturally", message)
+        self.assertIn("Recent assistant lines to avoid repeating", message)
+        self.assertIn('"Stay with me."', message)
+        self.assertIn('"Still with you."', message)
 
     def test_send_message_stream_renders_deltas_without_queue_duplicate(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
@@ -529,12 +582,16 @@ class WebChatRouteTests(WebTestCase):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
         original_key = handy.handy_key
-        original_settings_key = settings.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+        )
         app_state.messages_for_ui.clear()
         app_state.chat_history.clear()
         try:
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
+            settings.autospeak_enabled = False
             error_text = "LLM Connection Error: HTTPConnectionPool read timed out"
             with mock.patch.object(llm, "get_chat_response", return_value={
                 "chat": error_text,
@@ -568,7 +625,58 @@ class WebChatRouteTests(WebTestCase):
             generate_audio.assert_not_called()
         finally:
             handy.handy_key = original_key
-            settings.handy_key = original_settings_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+            ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_send_message_model_error_reschedules_enabled_autospeak(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 3
+            settings.autospeak_max_seconds = 30
+            error_text = "LLM Connection Error: HTTPConnectionPool read timed out"
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": error_text,
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(audio, "enqueue_text_for_audio") as enqueue_audio, \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                response = self.client.post("/send_message", json={
+                    "message": "say something",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "model_error")
+            self.assertTrue(data["autospeak_scheduled"])
+            schedule_autospeak.assert_called_once_with(3.0)
+            enqueue_audio.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 

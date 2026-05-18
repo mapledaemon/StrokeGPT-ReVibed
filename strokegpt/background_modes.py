@@ -299,8 +299,11 @@ def _maybe_send_autospeak(
         edge_count=edge_count,
         current_target=current_target,
     )
-    mode_decision_helpers._send_autospeak_message(callbacks, decision)
+    sent = mode_decision_helpers._send_autospeak_message(callbacks, decision)
     autospeak_interval = _autospeak_interval_from_decision(callbacks, decision, autospeak_interval)
+    if not sent:
+        min_seconds, _max_seconds = _autospeak_range(callbacks)
+        autospeak_interval = min_seconds
     return autospeak_interval, _next_autospeak_at(autospeak_interval)
 
 

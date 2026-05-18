@@ -307,6 +307,33 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertEqual(decision_events, [])
 
+    def test_autospeak_missing_chat_retries_after_minimum_pause(self):
+        decision_events = []
+        callbacks = {
+            "autospeak_enabled": lambda: True,
+            "autospeak_range": lambda: (2, 30),
+            "mode_decision": lambda **kwargs: (
+                decision_events.append(kwargs["event"]) or {
+                    "action": "continue",
+                    "autospeak_seconds": 30,
+                    "chat": "",
+                }
+            ),
+        }
+
+        interval, next_due = background_modes._maybe_send_autospeak(
+            callbacks,
+            "freestyle",
+            30,
+            time.monotonic() - 1,
+            current_target=MotionTarget(20, 30, 40),
+        )
+
+        self.assertEqual(decision_events, ["autospeak"])
+        self.assertEqual(interval, 2.0)
+        self.assertGreater(next_due, time.monotonic())
+        self.assertLess(next_due - time.monotonic(), 9.0)
+
     def test_autospeak_enabled_decision_chat_uses_chat_channel(self):
         status_messages = []
         chat_messages = []
