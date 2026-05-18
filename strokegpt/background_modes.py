@@ -13,6 +13,7 @@ Freestyle legacy or expand it toward adaptive Freestyle behavior.
 """
 
 import random
+import re
 import threading
 import time
 from typing import cast
@@ -31,6 +32,7 @@ from .mode_decisions import (
 )
 from .mode_contracts import ModeCallbacks, ModeLogic, ModeServices
 from .motion import IntentMatcher
+from .motion_patterns import PATTERNS
 from .motion_scripts import MotionScriptPlanner, ScriptStep
 
 
@@ -39,6 +41,9 @@ INTENT_MATCHER = IntentMatcher()
 EDGE_START_MIN_STEPS = 12
 EDGE_PROGRESS_MIN_STEPS = 10
 AUTOSPEAK_RESCHEDULE_FLOOR_SECONDS = 8.0
+MODE_TARGET_NOISE_SPEED_DELTA = 3.0
+MODE_TARGET_NOISE_DEPTH_DELTA = 5.0
+MODE_TARGET_NOISE_RANGE_DELTA = 5.0
 
 
 __all__ = [
@@ -368,11 +373,51 @@ def _uses_timed_pattern_motion(motion_controller) -> bool:
     return getattr(motion_controller, "backend", "") in {"continuous", "position"}
 
 
+def _mode_pattern_id_from_target(target) -> str:
+    label = getattr(target, "label", "") or ""
+    parts = set(re.split(r"[^a-z0-9_-]+", label.lower()))
+    slug_label = re.sub(r"[^a-z0-9_-]+", "-", label.lower()).strip("-_")
+    for pattern_id in sorted(PATTERNS, key=len, reverse=True):
+        if (
+            pattern_id in parts
+            or slug_label == pattern_id
+            or slug_label.startswith(f"{pattern_id}-")
+        ):
+            return pattern_id
+    return ""
+
+
+def _mode_target_is_redundant(current, target) -> bool:
+    if not current or not target:
+        return False
+    if getattr(target, "motion_program", None):
+        return False
+    current_pattern = _mode_pattern_id_from_target(current)
+    target_pattern = _mode_pattern_id_from_target(target)
+    if current_pattern or target_pattern:
+        if current_pattern != target_pattern:
+            return False
+    try:
+        current = current.rounded()
+        target = target.rounded()
+        return (
+            abs(current.speed - target.speed) <= MODE_TARGET_NOISE_SPEED_DELTA
+            and abs(current.depth - target.depth) <= MODE_TARGET_NOISE_DEPTH_DELTA
+            and abs(current.stroke_range - target.stroke_range) <= MODE_TARGET_NOISE_RANGE_DELTA
+        )
+    except Exception:
+        return False
+
+
 def _apply_mode_motion(motion_controller, target, source):
+    if _mode_target_is_redundant(_semantic_target(motion_controller), target):
+        return False
     if _uses_timed_pattern_motion(motion_controller):
         motion_controller.apply_generated_target(target, source=source)
+        return True
     else:
         motion_controller.apply_target(target, source=source)
+        return True
 
 
 def _mode_step_sleep_seconds(base_seconds: float, step: ScriptStep, motion_controller) -> float:
@@ -471,8 +516,9 @@ def _run_scripted_mode(
             send_message(step.message)
         update_mood(step.mood)
         target = mode_decision_helpers._target_with_intensity(step.target, mode_intensity)
-        _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
-        remember_pattern(target)
+        applied_motion = _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
+        if applied_motion:
+            remember_pattern(target)
         step_count += 1
         sleep_seconds = _mode_step_sleep_seconds(
             random.uniform(min_time, max_time) * step.delay_factor,
@@ -514,6 +560,8 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     close_count = 0
     close_style_target = None
     close_style_until = 0.0
+    repeat_choice = None
+    repeat_steps_remaining = 0
     autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     while not stop_event.is_set():
@@ -529,6 +577,8 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             current_target=_semantic_target(motion_controller),
         )
         if user_signal_event and user_signal_event.is_set():
+            repeat_choice = None
+            repeat_steps_remaining = 0
             user_signal_event.clear()
             close_count += 1
             decision_thread, decision_result = mode_decision_helpers._start_mode_decision_request(
@@ -620,14 +670,29 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             close_style_target = None
 
         continuous_freestyle = _uses_continuous_motion(motion_controller)
-        choices = freestyle_helpers._freestyle_choice_chain(
-            tuple(freestyle_candidates()),
-            _semantic_target(motion_controller),
-            feedback_target,
-            tuple(recent_ids),
-            rng,
-            length=1 if continuous_freestyle else freestyle_helpers.FREESTYLE_CHAIN_LENGTH,
-        )
+        repeat_active = False
+        current_target = _semantic_target(motion_controller)
+        if (
+            continuous_freestyle
+            and not feedback_target
+            and repeat_choice is not None
+            and repeat_steps_remaining > 0
+        ):
+            choices = [freestyle_helpers._freestyle_repeat_choice(repeat_choice, current_target, rng)]
+            repeat_steps_remaining -= 1
+            repeat_active = True
+        else:
+            if feedback_target:
+                repeat_choice = None
+                repeat_steps_remaining = 0
+            choices = freestyle_helpers._freestyle_choice_chain(
+                tuple(freestyle_candidates()),
+                current_target,
+                feedback_target,
+                tuple(recent_ids),
+                rng,
+                length=1 if continuous_freestyle else freestyle_helpers.FREESTYLE_CHAIN_LENGTH,
+            )
         if not choices:
             send_message("Freestyle needs at least one enabled motion pattern.")
             stop_event.set()
@@ -652,6 +717,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 "freestyle_score": round(choice.score, 1),
                 "freestyle_mood": choice.mood,
                 "freestyle_feedback": bool(feedback_target),
+                "freestyle_repeat": repeat_active,
                 "freestyle_close_style": bool(close_style_target),
                 "freestyle_planner_sleep_ms": round(sleep_seconds * 1000.0, 1),
             }
@@ -663,6 +729,20 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 remember_pattern_id(played_choice.pattern_id)
                 recent_ids.append(played_choice.pattern_id)
             recent_ids[:] = recent_ids[-8:]
+            if continuous_freestyle:
+                if repeat_active:
+                    if repeat_steps_remaining <= 0:
+                        repeat_choice = None
+                elif (
+                    not feedback_target
+                    and freestyle_helpers._freestyle_choice_can_repeat(choice)
+                    and freestyle_helpers.FREESTYLE_CONTINUOUS_PATTERN_REPEAT_STEPS > 1
+                ):
+                    repeat_choice = choice
+                    repeat_steps_remaining = freestyle_helpers.FREESTYLE_CONTINUOUS_PATTERN_REPEAT_STEPS - 1
+                else:
+                    repeat_choice = None
+                    repeat_steps_remaining = 0
 
         step_count += 1 if continuous_freestyle else len(choices)
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(

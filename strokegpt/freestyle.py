@@ -22,6 +22,7 @@ FREESTYLE_DECISION_GRACE_SECONDS = 0.05
 FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS = 8.0
 FREESTYLE_CONTINUOUS_MAX_HOLD_SECONDS = 24.0
 FREESTYLE_CONTINUOUS_CYCLE_HOLD_MULTIPLIER = 1.15
+FREESTYLE_CONTINUOUS_PATTERN_REPEAT_STEPS = 2
 
 
 @dataclass(frozen=True)
@@ -313,6 +314,31 @@ def _freestyle_continuous_hold_seconds(choice, min_time, max_time, rng):
         cycle_seconds * FREESTYLE_CONTINUOUS_CYCLE_HOLD_MULTIPLIER,
     )
     return min(FREESTYLE_CONTINUOUS_MAX_HOLD_SECONDS, max(base, hold_floor))
+
+
+def _freestyle_choice_can_repeat(choice):
+    source = str(getattr(choice.record, "source", "") or "").lower()
+    if source in {"imported", "trained", "user"}:
+        return False
+    return callable(getattr(choice.record, "to_motion_pattern", None))
+
+
+def _freestyle_repeat_choice(choice, current, rng):
+    current = current.clamped()
+    speed_delta = rng.uniform(4.0, 7.0)
+    speed_direction = -1.0 if current.speed >= 82 else 1.0
+    target = MotionTarget(
+        current.speed + speed_delta * speed_direction,
+        current.depth + rng.uniform(-3.0, 3.0),
+        current.stroke_range + rng.uniform(-4.0, 4.0),
+        label=choice.target.label,
+    ).clamped()
+    return replace(
+        choice,
+        target=target,
+        reason="Holding the same Freestyle rhythm a little longer.",
+        debug_reason=f"{choice.debug_reason}; same-pattern repeat",
+    )
 
 
 def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids):

@@ -780,6 +780,60 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(metadata["freestyle_pattern_name"], "Sway")
         self.assertEqual(metadata["freestyle_planner_sleep_ms"], 8000.0)
         self.assertFalse(metadata["freestyle_feedback"])
+        self.assertFalse(metadata["freestyle_repeat"])
+
+    def test_freestyle_continuous_repeats_pattern_before_new_choice(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_calls = []
+
+        def apply_continuous_target(target, source="continuous pattern", trace_metadata=None):
+            motion.applied.append(target)
+            motion.continuous_calls.append((target, trace_metadata or {}))
+            return True
+
+        motion.apply_continuous_target = apply_continuous_target
+        stop_event = threading.Event()
+        remembered = []
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+        callbacks = {
+            "get_timings": lambda _mode: (0.0, 0.0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": remembered.append,
+            "freestyle_candidates": lambda: candidates,
+        }
+        sleep_count = 0
+
+        def stop_after_two_iterations(event, _seconds, *_args, **_kwargs):
+            nonlocal sleep_count
+            sleep_count += 1
+            if sleep_count >= 2:
+                event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_two_iterations):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(remembered, ["sway", "sway"])
+        self.assertEqual(len(motion.continuous_calls), 2)
+        self.assertFalse(motion.continuous_calls[0][1]["freestyle_repeat"])
+        self.assertTrue(motion.continuous_calls[1][1]["freestyle_repeat"])
+        self.assertEqual(motion.continuous_calls[0][0].label, motion.continuous_calls[1][0].label)
+        self.assertNotEqual(
+            motion.continuous_calls[0][0].rounded(),
+            motion.continuous_calls[1][0].rounded(),
+        )
 
     def test_freestyle_continuous_hold_uses_pattern_cycle_floor(self):
         choice = freestyle.FreestyleChoice(
@@ -849,6 +903,28 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertEqual(motion.generated, [(target, "milking mode")])
         self.assertEqual(motion.position_frames, [])
+
+    def test_scripted_mode_skips_redundant_same_pattern_target(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.applied.append(MotionTarget(50, 58, 70, label="Milking Pressure Build"))
+        target = MotionTarget(52, 61, 73, label="Milking Pressure Build")
+
+        applied = background_modes._apply_mode_motion(motion, target, source="milking mode")
+
+        self.assertFalse(applied)
+        self.assertEqual(motion.generated, [])
+
+    def test_scripted_mode_applies_same_pattern_meaningful_drift(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.applied.append(MotionTarget(50, 58, 70, label="Milking Pressure Build"))
+        target = MotionTarget(58, 66, 78, label="Milking Pressure Build")
+
+        applied = background_modes._apply_mode_motion(motion, target, source="milking mode")
+
+        self.assertTrue(applied)
+        self.assertEqual(motion.generated, [(target, "milking mode")])
 
     def test_scripted_continuous_mode_honors_step_hold_floor(self):
         motion = FakeMotionController()
