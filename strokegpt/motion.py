@@ -41,11 +41,13 @@ CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
+CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.45
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
+CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
-CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS = 0.085
+CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -733,6 +735,7 @@ class MotionController:
         self._continuous_phase_state: Optional[ContinuousPhaseState] = None
         self._semantic_target: Optional[MotionTarget] = None
         self._recent_hsp_command_seconds = 0.0
+        self._recent_hsp_command_samples = deque(maxlen=CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT)
         self._move_to_depth_accepts_intent_speed: Optional[bool] = None
         self._move_to_depth_accepts_duration_ms: Optional[bool] = None
         self._pause_event = threading.Event()
@@ -2008,12 +2011,23 @@ class MotionController:
                 return str(value)
         return "hsp_streaming_not_supported"
 
-    def _continuous_replacement_lead_seconds(self) -> float:
-        lead = CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS
+    def _continuous_replacement_lead_seconds(self, *, replacement_kind: str = "drift") -> float:
+        is_intent = str(replacement_kind or "").lower() == "intent"
+        minimum_lead = (
+            CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS
+            if is_intent
+            else CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS
+        )
+        latency_padding = (
+            CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS
+            if is_intent
+            else CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS
+        )
+        lead = minimum_lead
         observed_seconds = self._recent_hsp_command_latency_seconds()
         if observed_seconds > 0:
-            lead = max(lead, observed_seconds + CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS)
-        return _clamp(lead, CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
+            lead = max(lead, observed_seconds + latency_padding)
+        return _clamp(lead, minimum_lead, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
 
     def _recent_hsp_command_latency_seconds(self) -> float:
         observed_seconds = 0.0
@@ -2038,9 +2052,15 @@ class MotionController:
             seconds = max(0.0, float(seconds or 0.0))
         except (TypeError, ValueError):
             return
+        if seconds < 0.02:
+            return
         with self._observability_lock:
-            previous = max(0.0, float(self._recent_hsp_command_seconds or 0.0))
-            self._recent_hsp_command_seconds = max(seconds, previous * 0.72)
+            self._recent_hsp_command_samples.append(seconds)
+            samples = sorted(float(item) for item in self._recent_hsp_command_samples)
+            if samples:
+                self._recent_hsp_command_seconds = samples[(len(samples) - 1) // 2]
+            else:
+                self._recent_hsp_command_seconds = seconds
 
     def _continuous_append_threshold_seconds(self) -> float:
         threshold = CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS
@@ -2066,21 +2086,13 @@ class MotionController:
             )
         max_buffer_seconds = (
             max(1, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1)
-            * CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS
+            * CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
         )
+        max_buffer_seconds = max(CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS, max_buffer_seconds)
         return _clamp(buffer_seconds, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS, max_buffer_seconds)
 
     def _continuous_hsp_point_interval_seconds(self) -> float:
-        observed_seconds = self._recent_hsp_command_latency_seconds()
-        if observed_seconds <= 0:
-            return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
-        target_buffer_seconds = self._continuous_target_buffer_seconds()
-        required_interval = target_buffer_seconds / max(1, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1)
-        return _clamp(
-            required_interval,
-            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
-            CONTINUOUS_HSP_MAX_POINT_INTERVAL_SECONDS,
-        )
+        return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
 
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
@@ -2364,7 +2376,12 @@ class MotionController:
 
         base_interval = self._continuous_sample_interval()
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
-        replacement_lead_seconds = self._continuous_replacement_lead_seconds() if replacing_active_stream else 0.0
+        replacement_kind = "drift" if preserve_replacement_phase else "intent"
+        replacement_lead_seconds = (
+            self._continuous_replacement_lead_seconds(replacement_kind=replacement_kind)
+            if replacing_active_stream
+            else 0.0
+        )
         initial_sample = self._sample_continuous_motion(
             plan,
             target,
@@ -2737,6 +2754,7 @@ class MotionController:
                     "hsp_selected_phase_ms": phase_offset_ms,
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_replacement_lead_ms": round(replacement_lead_seconds * 1000.0, 1),
+                    "hsp_replacement_kind": replacement_kind if replacing_active_stream else "start",
                     "hsp_stream_cycle_ms": stream_cycle_ms,
                     "hsp_transport_time_scale": round(
                         point["sample_interval_seconds"] / max(0.001, point["phase_interval_seconds"]),

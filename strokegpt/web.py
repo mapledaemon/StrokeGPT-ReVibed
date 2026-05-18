@@ -79,6 +79,7 @@ MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
 CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
 CHAT_INTENSITY_ARC_SECONDS = 600
+CHAT_SESSION_IDLE_RESET_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -401,11 +402,20 @@ def _normalize_chat_intensity_guide(value):
 def _ensure_chat_session_started(now=None):
     now = time.time() if now is None else float(now)
     with app_state.lock:
+        last_activity = app_state.chat_last_activity_at or app_state.chat_session_started_at
+        if (
+            app_state.chat_session_started_at is not None
+            and last_activity is not None
+            and now - float(last_activity) > CHAT_SESSION_IDLE_RESET_SECONDS
+        ):
+            app_state.chat_session_started_at = None
+            app_state.chat_intensity_guide_started_at = None
         started_now = app_state.chat_session_started_at is None
         if app_state.chat_session_started_at is None:
             app_state.chat_session_started_at = now
         if started_now or app_state.chat_intensity_guide_started_at is None:
             app_state.chat_intensity_guide_started_at = now
+        app_state.chat_last_activity_at = now
         return app_state.chat_session_started_at
 
 
@@ -1837,6 +1847,7 @@ def reset_runtime_state():
         app_state.active_mode_paused_at = None
         app_state.active_mode_paused_total = 0.0
         app_state.chat_session_started_at = None
+        app_state.chat_last_activity_at = None
         app_state.chat_intensity_guide = "steady"
         app_state.chat_intensity_guide_started_at = None
         app_state.motion_pause_active = False

@@ -50,6 +50,7 @@ class AppState:
     active_mode_paused_at: float | None = None
     active_mode_paused_total: float = 0.0
     chat_session_started_at: float | None = None
+    chat_last_activity_at: float | None = None
     chat_intensity_guide: str = "steady"
     chat_intensity_guide_started_at: float | None = None
     motion_pause_active: bool = False

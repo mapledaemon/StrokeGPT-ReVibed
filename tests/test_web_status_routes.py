@@ -330,12 +330,14 @@ class WebStatusRouteTests(WebTestCase):
 
         original_state = (
             web.app_state.chat_session_started_at,
+            web.app_state.chat_last_activity_at,
             web.app_state.chat_intensity_guide,
             web.app_state.chat_intensity_guide_started_at,
         )
         try:
             now = time.time()
             web.app_state.chat_session_started_at = now - 42.4
+            web.app_state.chat_last_activity_at = now - 5.0
             web.app_state.chat_intensity_guide = "ramp_down"
             web.app_state.chat_intensity_guide_started_at = now - 12.0
 
@@ -356,7 +358,35 @@ class WebStatusRouteTests(WebTestCase):
         finally:
             (
                 web.app_state.chat_session_started_at,
+                web.app_state.chat_last_activity_at,
                 web.app_state.chat_intensity_guide,
+                web.app_state.chat_intensity_guide_started_at,
+            ) = original_state
+
+    def test_chat_session_timer_resets_after_idle_before_next_message(self):
+        import strokegpt.web as web
+
+        original_state = (
+            web.app_state.chat_session_started_at,
+            web.app_state.chat_last_activity_at,
+            web.app_state.chat_intensity_guide_started_at,
+        )
+        try:
+            now = time.time()
+            web.app_state.chat_session_started_at = now - 1800.0
+            web.app_state.chat_last_activity_at = now - 1200.0
+            web.app_state.chat_intensity_guide_started_at = now - 1700.0
+
+            started_at = web._ensure_chat_session_started(now=now)
+
+            self.assertEqual(started_at, now)
+            self.assertEqual(web.app_state.chat_session_started_at, now)
+            self.assertEqual(web.app_state.chat_last_activity_at, now)
+            self.assertEqual(web.app_state.chat_intensity_guide_started_at, now)
+        finally:
+            (
+                web.app_state.chat_session_started_at,
+                web.app_state.chat_last_activity_at,
                 web.app_state.chat_intensity_guide_started_at,
             ) = original_state
 
@@ -365,11 +395,13 @@ class WebStatusRouteTests(WebTestCase):
 
         original_state = (
             web.app_state.chat_session_started_at,
+            web.app_state.chat_last_activity_at,
             web.app_state.chat_intensity_guide,
             web.app_state.chat_intensity_guide_started_at,
         )
         try:
             web.app_state.chat_session_started_at = None
+            web.app_state.chat_last_activity_at = None
             web.app_state.chat_intensity_guide = "steady"
             web.app_state.chat_intensity_guide_started_at = None
 
@@ -390,6 +422,7 @@ class WebStatusRouteTests(WebTestCase):
         finally:
             (
                 web.app_state.chat_session_started_at,
+                web.app_state.chat_last_activity_at,
                 web.app_state.chat_intensity_guide,
                 web.app_state.chat_intensity_guide_started_at,
             ) = original_state

@@ -43,6 +43,20 @@ def _continuous_hold_floor_for_pattern(pattern_id):
     return max(0.0, float(plan.duration_seconds or 0.0) * CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER)
 
 
+def _slug_matches_pattern_id(slug_label, pattern_id):
+    candidate = str(pattern_id or "").strip().lower()
+    if not candidate:
+        return False
+    return slug_label == candidate or slug_label.startswith(f"{candidate}-")
+
+
+def _label_matches_pattern_id(clean_label, pattern_id):
+    candidate = str(pattern_id or "").strip().lower()
+    if not candidate:
+        return False
+    return bool(re.search(rf"(?<![a-z0-9_-]){re.escape(candidate)}(?![a-z0-9_-])", clean_label))
+
+
 def _continuous_hold_floor_for_target(target, pattern_id=None):
     if not isinstance(target, MotionTarget):
         return 0.0
@@ -55,7 +69,10 @@ def _continuous_hold_floor_for_target(target, pattern_id=None):
     clean_label = (target.label or "").lower()
     slug_label = _slug_label(target.label)
     for candidate in sorted(PATTERNS, key=len, reverse=True):
-        if candidate in clean_label or slug_label == candidate or slug_label.startswith(f"{candidate}-"):
+        if _slug_matches_pattern_id(slug_label, candidate):
+            return _continuous_hold_floor_for_pattern(candidate)
+    for candidate in sorted(PATTERNS, key=len, reverse=True):
+        if _label_matches_pattern_id(clean_label, candidate):
             return _continuous_hold_floor_for_pattern(candidate)
     return 0.0
 
