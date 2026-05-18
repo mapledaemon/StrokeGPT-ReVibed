@@ -8,6 +8,16 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #264 - HSP Trace Test Sync
+-------------------------------------------
+
+Branch: codex/hsp-trace-test-sync
+
+- Tighten HSP `area_focus` unit tests so CI waits for the specific trace
+  metadata each assertion checks instead of racing the asynchronous trace
+  writer after the stream starts.
+
+
 2026-05-18 - PR #263 - Pattern Library Mode Toggles
 ----------------------------------------------------
 

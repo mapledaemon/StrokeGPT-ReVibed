@@ -1375,7 +1375,8 @@ class MotionControllerTests(unittest.TestCase):
             ]
             trace = self.wait_for_hsp_trace(
                 controller,
-                lambda point: point.get("continuous_plan_kind") == "area_focus",
+                lambda point: point.get("continuous_plan_kind") == "area_focus"
+                and point.get("hsp_duplicate_suppressed_points"),
             )
 
             self.assertTrue(any(point.get("hsp_duplicate_suppressed_points") for point in trace))
@@ -2325,9 +2326,14 @@ class MotionControllerTests(unittest.TestCase):
             )
 
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("continuous_plan_kind") == "area_focus"
+                and point.get("source") == "freestyle planner",
+            )
             point = next(
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp"
                 and point.get("continuous_plan_kind") == "area_focus"
                 and point.get("source") == "freestyle planner"
