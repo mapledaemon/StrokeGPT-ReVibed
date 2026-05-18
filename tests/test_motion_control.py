@@ -2308,6 +2308,37 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_generated_area_focus_trace_includes_supplied_mode_metadata(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(
+                MotionTarget(54, 50, 78, "freestyle flow"),
+                source="freestyle planner",
+                trace_metadata={
+                    "mode": "freestyle",
+                    "freestyle_pattern_id": "sway",
+                    "freestyle_fixed_pattern_transport": "area_focus",
+                    "sample_index": 999,
+                },
+            )
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            point = next(
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp"
+                and point.get("continuous_plan_kind") == "area_focus"
+                and point.get("source") == "freestyle planner"
+            )
+            self.assertEqual(point["mode"], "freestyle")
+            self.assertEqual(point["freestyle_pattern_id"], "sway")
+            self.assertEqual(point["freestyle_fixed_pattern_transport"], "area_focus")
+            self.assertEqual(point["sample_index"], 0)
+        finally:
+            controller.stop()
+
     def test_continuous_backend_routes_regional_focus_program_through_hsp_area_focus(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)

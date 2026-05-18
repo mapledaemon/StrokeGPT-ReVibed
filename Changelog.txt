@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #262 - Freestyle Area-Focus Pattern Transport
+--------------------------------------------------------------
+
+Branch: codex/freestyle-authored-hsp
+
+- Route routine continuous Freestyle built-in fixed-pattern choices through a
+  generated `area_focus` flow target instead of exact fixed-pattern HSP plans,
+  matching the smoother Legacy Auto transport shape while preserving the
+  selected pattern id/name in trace metadata for diagnosis.
+- Preserve exact continuous fixed-pattern playback as a fallback when the
+  generated route is unavailable, and leave imported/trained/user-authored
+  Freestyle patterns on their existing authored-action path.
+- Add regression coverage that verifies Freestyle fixed-pattern choices avoid
+  the fixed-pattern HSP replacement route and that generated `area_focus`
+  traces keep the Freestyle planner metadata without overriding transport
+  fields.
+
+
 2026-05-18 - PR #261 - Continuous HSP Hitch Smoothing
 ------------------------------------------------------
 

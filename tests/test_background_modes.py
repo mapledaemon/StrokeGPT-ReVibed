@@ -34,7 +34,7 @@ class FakeMotionController:
     def apply_target(self, target, source="target"):
         self.applied.append(target)
 
-    def apply_generated_target(self, target, source="generated"):
+    def apply_generated_target(self, target, source="generated", trace_metadata=None):
         self.generated.append((target, source))
         self.applied.append(target)
 
@@ -731,14 +731,14 @@ class AutoModeThreadTests(unittest.TestCase):
     def test_freestyle_continuous_trace_metadata_describes_choice_and_hold(self):
         motion = FakeMotionController()
         motion.backend = "continuous"
-        motion.continuous_calls = []
+        motion.generated_calls = []
 
-        def apply_continuous_target(target, source="continuous pattern", trace_metadata=None):
+        def apply_generated_target(target, source="generated", trace_metadata=None):
             motion.applied.append(target)
-            motion.continuous_calls.append((source, trace_metadata or {}))
+            motion.generated_calls.append((target, source, trace_metadata or {}))
             return True
 
-        motion.apply_continuous_target = apply_continuous_target
+        motion.apply_generated_target = apply_generated_target
         stop_event = threading.Event()
         remembered = []
         candidates = [
@@ -771,13 +771,15 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertEqual(sleep_seconds, [freestyle.FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS])
         self.assertEqual(remembered, ["sway"])
-        self.assertEqual(len(motion.continuous_calls), 1)
-        source, metadata = motion.continuous_calls[0]
+        self.assertEqual(len(motion.generated_calls), 1)
+        target, source, metadata = motion.generated_calls[0]
+        self.assertEqual(target.label, "freestyle flow")
         self.assertEqual(source, "freestyle planner")
         self.assertEqual(metadata["mode"], "freestyle")
         self.assertEqual(metadata["freestyle_step"], 0)
         self.assertEqual(metadata["freestyle_pattern_id"], "sway")
         self.assertEqual(metadata["freestyle_pattern_name"], "Sway")
+        self.assertEqual(metadata["freestyle_fixed_pattern_transport"], "area_focus")
         self.assertEqual(metadata["freestyle_planner_sleep_ms"], 8000.0)
         self.assertFalse(metadata["freestyle_feedback"])
         self.assertFalse(metadata["freestyle_repeat"])
@@ -785,14 +787,14 @@ class AutoModeThreadTests(unittest.TestCase):
     def test_freestyle_continuous_repeats_pattern_before_new_choice(self):
         motion = FakeMotionController()
         motion.backend = "continuous"
-        motion.continuous_calls = []
+        motion.generated_calls = []
 
-        def apply_continuous_target(target, source="continuous pattern", trace_metadata=None):
+        def apply_generated_target(target, source="generated", trace_metadata=None):
             motion.applied.append(target)
-            motion.continuous_calls.append((target, trace_metadata or {}))
+            motion.generated_calls.append((target, trace_metadata or {}))
             return True
 
-        motion.apply_continuous_target = apply_continuous_target
+        motion.apply_generated_target = apply_generated_target
         stop_event = threading.Event()
         remembered = []
         candidates = [
@@ -826,13 +828,14 @@ class AutoModeThreadTests(unittest.TestCase):
             background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(remembered, ["sway", "sway"])
-        self.assertEqual(len(motion.continuous_calls), 2)
-        self.assertFalse(motion.continuous_calls[0][1]["freestyle_repeat"])
-        self.assertTrue(motion.continuous_calls[1][1]["freestyle_repeat"])
-        self.assertEqual(motion.continuous_calls[0][0].label, motion.continuous_calls[1][0].label)
+        self.assertEqual(len(motion.generated_calls), 2)
+        self.assertFalse(motion.generated_calls[0][1]["freestyle_repeat"])
+        self.assertTrue(motion.generated_calls[1][1]["freestyle_repeat"])
+        self.assertEqual(motion.generated_calls[0][0].label, "freestyle flow")
+        self.assertEqual(motion.generated_calls[0][0].label, motion.generated_calls[1][0].label)
         self.assertNotEqual(
-            motion.continuous_calls[0][0].rounded(),
-            motion.continuous_calls[1][0].rounded(),
+            motion.generated_calls[0][0].rounded(),
+            motion.generated_calls[1][0].rounded(),
         )
 
     def test_freestyle_continuous_hold_uses_pattern_cycle_floor(self):
@@ -854,19 +857,72 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertAlmostEqual(hold_seconds, 13.8)
 
-    def test_freestyle_continuous_applies_exact_record_pattern(self):
-        class PatternMotion(FakeMotionController):
+    def test_freestyle_continuous_fixed_patterns_use_generated_flow_target(self):
+        class FlowMotion(FakeMotionController):
             def __init__(self):
                 super().__init__()
                 self.backend = "continuous"
+                self.generated_calls = []
                 self.pattern_calls = []
+
+            def apply_generated_target(self, target, source="generated", trace_metadata=None):
+                self.generated_calls.append((target, source, trace_metadata or {}))
+                return True
 
             def apply_continuous_pattern(self, pattern, target, **kwargs):
                 self.pattern_calls.append((pattern, target, kwargs))
                 return True
 
             def apply_continuous_target(self, *_args, **_kwargs):
+                raise AssertionError("Freestyle fixed patterns should use generated area-focus transport")
+
+        motion = FlowMotion()
+        choice = freestyle.FreestyleChoice(
+            "edge-build-low",
+            "Edge Build Low",
+            FakePatternRecord("edge-build-low", "Edge Build Low"),
+            MotionTarget(42, 50, 70, label="Freestyle: Edge Build Low"),
+            50.0,
+            "Playful",
+            "Keeping Freestyle varied.",
+        )
+
+        applied = freestyle._apply_freestyle_choices(
+            motion,
+            [choice],
+            random.Random(3),
+            trace_metadata={"mode": "freestyle"},
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(motion.pattern_calls, [])
+        self.assertEqual(len(motion.generated_calls), 1)
+        target, source, metadata = motion.generated_calls[0]
+        self.assertEqual(target.label, "freestyle flow")
+        self.assertEqual(round(target.speed), 42)
+        self.assertEqual(round(target.depth), 50)
+        self.assertEqual(round(target.stroke_range), 70)
+        self.assertEqual(source, "freestyle planner")
+        self.assertEqual(metadata["mode"], "freestyle")
+        self.assertEqual(metadata["freestyle_fixed_pattern_transport"], "area_focus")
+        self.assertEqual(metadata["freestyle_fixed_pattern_id"], "edge-build-low")
+        self.assertEqual(metadata["freestyle_fixed_pattern_name"], "Edge Build Low")
+
+    def test_freestyle_continuous_falls_back_to_exact_record_pattern_without_generated_route(self):
+        class PatternMotion:
+            def __init__(self):
+                self.backend = "continuous"
+                self.pattern_calls = []
+
+            def current_target(self):
+                return MotionTarget(20, 30, 40)
+
+            def apply_continuous_target(self, *_args, **_kwargs):
                 raise AssertionError("Freestyle should not resolve continuous patterns by label")
+
+            def apply_continuous_pattern(self, pattern, target, **kwargs):
+                self.pattern_calls.append((pattern, target, kwargs))
+                return True
 
         motion = PatternMotion()
         choice = freestyle.FreestyleChoice(
