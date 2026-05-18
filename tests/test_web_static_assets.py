@@ -792,6 +792,9 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("preload_elapsed_seconds", script)
         self.assertIn("preload_progress_percent", script)
         self.assertIn("generation_elapsed_seconds", script)
+        self.assertIn("tts_request_queue_depth", script)
+        self.assertIn("audio_output_queue_depth", script)
+        self.assertIn("tts_dropped_text_count", script)
         self.assertIn("audio.onended", script)
         self.assertIn("new Promise", script)
 

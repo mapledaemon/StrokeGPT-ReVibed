@@ -2037,7 +2037,7 @@ def add_message_to_queue(
         if warning_for_ui:
             with app_state.lock:
                 app_state.chat_audio_warning = warning_for_ui
-        threading.Thread(target=audio.generate_audio_for_text, args=(text,), daemon=True).start()
+        audio.enqueue_text_for_audio(text)
 
 def _message_records_for_ui_client(client_id):
     cleaned_client_id = _clean_ui_client_id(client_id)

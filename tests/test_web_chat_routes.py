@@ -74,7 +74,7 @@ class WebChatRouteTests(WebTestCase):
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
             with mock.patch.object(llm, "get_chat_response", return_value={"move": None, "new_mood": None}), \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "hello",
                     "key": "test-key",
@@ -124,7 +124,7 @@ class WebChatRouteTests(WebTestCase):
                 "chat": "This text should be visible and spoken.",
                 "move": None,
                 "new_mood": None,
-            }), mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+            }), mock.patch.object(audio, "enqueue_text_for_audio", side_effect=lambda text: spoken.append(text)):
                 response = self.client.post("/send_message", json={
                     "message": "say something",
                     "key": "test-key",
@@ -192,7 +192,7 @@ class WebChatRouteTests(WebTestCase):
                 "move": None,
                 "new_mood": None,
                 "autospeak_seconds": 7,
-            }), mock.patch.object(audio, "generate_audio_for_text", return_value=None), \
+            }), mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), \
                     mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
                 response = self.client.post("/send_message", json={
                     "message": "hello",
@@ -344,7 +344,7 @@ class WebChatRouteTests(WebTestCase):
                 }
 
             with mock.patch.object(llm, "get_chat_response", side_effect=fake_chat_response), \
-                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", side_effect=lambda text: spoken.append(text)), \
                     mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
                 self.assertTrue(web._run_standalone_autospeak_turn(token))
 
@@ -400,7 +400,7 @@ class WebChatRouteTests(WebTestCase):
                 'as it arrives.","move":null,"new_mood":null}',
             ])
             with mock.patch.object(llm, "iter_chat_response_content", return_value=chunks), \
-                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+                    mock.patch.object(audio, "enqueue_text_for_audio", side_effect=lambda text: spoken.append(text)):
                 response = self.client.post("/send_message_stream", json={
                     "message": "say something",
                     "key": "test-key",
@@ -463,7 +463,7 @@ class WebChatRouteTests(WebTestCase):
                 '{"chat":"Already visible in the sending tab.","move":null,"new_mood":null}',
             ])
             with mock.patch.object(llm, "iter_chat_response_content", return_value=chunks), \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message_stream", json={
                     "message": "say something",
                     "key": "test-key",
@@ -541,7 +541,7 @@ class WebChatRouteTests(WebTestCase):
                 "move": None,
                 "new_mood": None,
             }), mock.patch.object(llm, "repair_motion_response") as repair_motion_response, \
-                    mock.patch.object(audio, "generate_audio_for_text") as generate_audio:
+                    mock.patch.object(audio, "enqueue_text_for_audio") as generate_audio:
                 response = self.client.post("/send_message", json={
                     "message": "switch to another rhythm",
                     "key": "test-key",
@@ -612,7 +612,7 @@ class WebChatRouteTests(WebTestCase):
                 "apply_generated_target",
                 side_effect=lambda target, **_kwargs: captured_targets.append(target),
             ), \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "switch to another rhythm",
                     "key": "test-key",
@@ -660,7 +660,7 @@ class WebChatRouteTests(WebTestCase):
                 "new_mood": None,
             }), mock.patch.object(llm, "repair_motion_response") as repair, \
                     mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "what does tip mean?",
                     "key": "test-key",
@@ -694,7 +694,7 @@ class WebChatRouteTests(WebTestCase):
             settings.handy_key = "test-key"
             app_state.auto_mode_active_task = SimpleNamespace(name="edging", stop=lambda: None)
             with mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "focus on the tip",
                     "key": "test-key",
@@ -819,7 +819,7 @@ class WebChatRouteTests(WebTestCase):
                 }
 
             with mock.patch.object(llm, "get_chat_response", side_effect=fake_response), \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "keep me right at the edge",
                     "key": "test-key",
@@ -869,7 +869,7 @@ class WebChatRouteTests(WebTestCase):
                 "mode_action": "start_freestyle",
                 "new_mood": None,
             }), mock.patch.object(web, "start_background_mode") as start_background_mode, \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "say hello",
                     "key": "test-key",
@@ -916,7 +916,7 @@ class WebChatRouteTests(WebTestCase):
 
             with mock.patch.object(llm, "get_chat_response", side_effect=fake_response), \
                     mock.patch.object(web, "start_background_mode") as start_background_mode, \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "surprise me",
                     "key": "test-key",
@@ -968,7 +968,7 @@ class WebChatRouteTests(WebTestCase):
                 "move": {"zone": "tip", "pattern": "tease"},
                 "mode_action": None,
                 "new_mood": None,
-            }), mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+            }), mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "focus on the tip",
                     "key": "test-key",
@@ -1235,7 +1235,7 @@ class WebChatRouteTests(WebTestCase):
                 stop_event.set()
 
             with mock.patch.object(web.motion, "stop", return_value=None), \
-                    mock.patch.object(audio, "generate_audio_for_text", side_effect=lambda text: spoken.append(text)):
+                    mock.patch.object(audio, "enqueue_text_for_audio", side_effect=lambda text: spoken.append(text)):
                 web.start_background_mode(
                     mode_logic,
                     "Starting adaptive Freestyle.",
@@ -1366,7 +1366,7 @@ class WebChatRouteTests(WebTestCase):
                 return {"chat": "Timer noted.", "move": None, "new_mood": None}
 
             with mock.patch.object(llm, "get_chat_response", side_effect=fake_chat_response), \
-                    mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 response = self.client.post("/send_message", json={
                     "message": "start",
                     "key": "test-key",

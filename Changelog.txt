@@ -8,6 +8,20 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #265 - Chatterbox Warm Queue
+---------------------------------------------
+
+Branch: codex/chatterbox-warm-queue
+
+- Route local Chatterbox voice output through a single bounded text-generation
+  worker so cold-start backlog keeps only the newest pending reply instead of
+  flooding playback after the model warms.
+- Warm the local Chatterbox model with two realistic-length samples instead of
+  a one-word clip, so manual preload better covers the first real reply path.
+- Surface local TTS request and output queue depths in status payloads and the
+  Voice tab status line for voice-latency diagnosis.
+
+
 2026-05-18 - PR #264 - HSP Trace Test Sync
 -------------------------------------------
 

@@ -18,6 +18,9 @@ class AudioService:
     LOCAL_TTS_FIRST_CHUNK_CHARS = 150
     LOCAL_TTS_CHUNK_CHARS = 220
     LOCAL_TTS_TAIL_PADDING_MS = 120
+    LOCAL_TTS_PENDING_TEXT_LIMIT = 1
+    LOCAL_TTS_WARMUP_TEXT = "Hello there. I am ready when you are."
+    LOCAL_TTS_WARMUP_PASSES = 2
     LOCAL_ENGINE_LABELS = {
         LOCAL_ENGINE_CHATTERBOX_TURBO: "Chatterbox Turbo",
         LOCAL_ENGINE_CHATTERBOX: "Chatterbox Standard",
@@ -117,6 +120,10 @@ class AudioService:
 
         self.audio_output_queue = deque()
         self._audio_queue_condition = threading.Condition()
+        self._tts_request_queue = deque()
+        self._tts_request_condition = threading.Condition()
+        self._tts_worker_thread = None
+        self._tts_dropped_text_count = 0
 
     def set_provider(self, provider, enabled=None):
         if provider not in {"elevenlabs", "local"}:
@@ -244,6 +251,10 @@ class AudioService:
                 "generation_error": self._local_generation_error,
                 "generation_elapsed_seconds": self._elapsed_seconds(self._local_generation_started_at),
                 "last_generation_seconds": self.last_generation_seconds,
+                "tts_request_queue_depth": self.tts_request_queue_depth(),
+                "tts_request_queue_limit": self.LOCAL_TTS_PENDING_TEXT_LIMIT,
+                "tts_dropped_text_count": self._tts_dropped_text_count,
+                "audio_output_queue_depth": self.audio_output_queue_depth(),
                 "prompt_path": self.local_prompt_path,
             }
 
@@ -306,6 +317,10 @@ class AudioService:
             "generation_error": self._local_generation_error,
             "generation_elapsed_seconds": self._elapsed_seconds(self._local_generation_started_at),
             "last_generation_seconds": self.last_generation_seconds,
+            "tts_request_queue_depth": self.tts_request_queue_depth(),
+            "tts_request_queue_limit": self.LOCAL_TTS_PENDING_TEXT_LIMIT,
+            "tts_dropped_text_count": self._tts_dropped_text_count,
+            "audio_output_queue_depth": self.audio_output_queue_depth(),
             "prompt_path": self.local_prompt_path,
         }
 
@@ -382,6 +397,39 @@ class AudioService:
         else:
             self._generate_elevenlabs_audio(text)
 
+    def enqueue_text_for_audio(self, text_to_speak):
+        if self.provider != "local":
+            threading.Thread(target=self.generate_audio_for_text, args=(text_to_speak,), daemon=True).start()
+            return True
+        if not self.is_on:
+            return False
+        text = self._clean_text(text_to_speak)
+        if not text:
+            return False
+        with self._tts_request_condition:
+            while len(self._tts_request_queue) >= self.LOCAL_TTS_PENDING_TEXT_LIMIT:
+                dropped = self._tts_request_queue.popleft()
+                self._tts_dropped_text_count += 1
+                print(f"[INFO] Local TTS fell behind; skipping older queued text: '{dropped[:60]}...'")
+            self._tts_request_queue.append(text)
+            self._ensure_tts_worker_started_locked()
+            self._tts_request_condition.notify_all()
+        return True
+
+    def _ensure_tts_worker_started_locked(self):
+        if self._tts_worker_thread and self._tts_worker_thread.is_alive():
+            return
+        self._tts_worker_thread = threading.Thread(target=self._tts_worker_loop, daemon=True)
+        self._tts_worker_thread.start()
+
+    def _tts_worker_loop(self):
+        while True:
+            with self._tts_request_condition:
+                while not self._tts_request_queue:
+                    self._tts_request_condition.wait()
+                text = self._tts_request_queue.popleft()
+            self.generate_audio_for_text(text)
+
     def get_next_audio_chunk(self):
         return self.wait_for_audio_chunk(0.0)
 
@@ -405,11 +453,21 @@ class AudioService:
     def clear_audio_queue(self):
         with self._audio_queue_condition:
             self.audio_output_queue.clear()
+        with self._tts_request_condition:
+            self._tts_request_queue.clear()
         return None
 
     def has_audio(self):
         with self._audio_queue_condition:
             return bool(self.audio_output_queue)
+
+    def audio_output_queue_depth(self):
+        with self._audio_queue_condition:
+            return len(self.audio_output_queue)
+
+    def tts_request_queue_depth(self):
+        with self._tts_request_condition:
+            return len(self._tts_request_queue)
 
     def consume_last_error(self):
         error = self.last_error
@@ -546,7 +604,8 @@ class AudioService:
             return
         with self._local_generation_lock:
             started_at = time.perf_counter()
-            self._generate_local_waveform(model, "Ready.")
+            for _index in range(max(1, int(self.LOCAL_TTS_WARMUP_PASSES))):
+                self._generate_local_waveform(model, self.LOCAL_TTS_WARMUP_TEXT)
             self._local_warmup_done = True
             print(f"[OK] Local Chatterbox warmup completed in {time.perf_counter() - started_at:.3f}s.")
 

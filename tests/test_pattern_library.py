@@ -289,7 +289,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_allow_llm_edge_in_chat = self.web.settings.allow_llm_edge_in_chat
         self.original_pattern_library_chat = self.web.settings.motion_pattern_library_enabled_in_chat
         self.original_settings_save = self.web.settings.save
-        self.original_audio_generate = self.web.audio.generate_audio_for_text
+        self.original_audio_enqueue = self.web.audio.enqueue_text_for_audio
         self.original_last_live_pattern = self.web.app_state.last_live_motion_pattern_id
         self.original_handy_key = self.web.handy.handy_key
         self.original_handy_state = (
@@ -312,7 +312,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.allow_llm_edge_in_chat = True
         self.web.settings.motion_pattern_library_enabled_in_chat = True
         self.web.settings.save = lambda *args, **kwargs: None
-        self.web.audio.generate_audio_for_text = lambda *args, **kwargs: None
+        self.web.audio.enqueue_text_for_audio = lambda *args, **kwargs: True
         self.web.app_state.last_live_motion_pattern_id = ""
         self.web.motion.stop = lambda: self.stop_calls.append("stopped")
         self.web._set_motion_training_state(
@@ -335,7 +335,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.allow_llm_edge_in_chat = self.original_allow_llm_edge_in_chat
         self.web.settings.motion_pattern_library_enabled_in_chat = self.original_pattern_library_chat
         self.web.settings.save = self.original_settings_save
-        self.web.audio.generate_audio_for_text = self.original_audio_generate
+        self.web.audio.enqueue_text_for_audio = self.original_audio_enqueue
         self.web.app_state.last_live_motion_pattern_id = self.original_last_live_pattern
         self.web.handy.handy_key = self.original_handy_key
         (

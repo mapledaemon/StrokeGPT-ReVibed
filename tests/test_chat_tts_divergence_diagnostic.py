@@ -26,7 +26,7 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
     """Drive ``add_message_to_queue`` directly and confirm the diagnostic
     actually fires (or stays silent) for the right shapes.
 
-    Patches ``audio.generate_audio_for_text`` so the test never spawns a
+    Patches ``audio.enqueue_text_for_audio`` so the test never spawns a
     real TTS thread. Captures stdout to read the ``[WARN]`` lines."""
 
     def _run_add_message(self, **kwargs):
@@ -35,7 +35,7 @@ class ChatTtsDivergenceBehavioralTests(WebTestCase):
         captured = io.StringIO()
         app_state.messages_for_ui.clear()
         app_state.chat_audio_warning = ""
-        with mock.patch.object(audio, "generate_audio_for_text", return_value=None) as gen:
+        with mock.patch.object(audio, "enqueue_text_for_audio", return_value=True) as gen:
             with redirect_stdout(captured):
                 add_message_to_queue(**kwargs)
         warning = app_state.chat_audio_warning
