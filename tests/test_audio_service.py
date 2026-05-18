@@ -292,6 +292,77 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(chunk, {"bytes": b"RIFFlater", "mimetype": "audio/wav"})
         self.assertIsNone(service.get_next_audio_chunk())
 
+    def test_local_tts_request_queue_keeps_latest_pending_text(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        started = threading.Event()
+        release = threading.Event()
+        spoken = []
+
+        def generate(text):
+            spoken.append(text)
+            if text == "first":
+                started.set()
+                release.wait(timeout=1)
+
+        service.generate_audio_for_text = generate
+
+        self.assertTrue(service.enqueue_text_for_audio("first"))
+        self.assertTrue(started.wait(timeout=1), spoken)
+        self.assertTrue(service.enqueue_text_for_audio("second"))
+        self.assertTrue(service.enqueue_text_for_audio("third"))
+        self.assertEqual(service.tts_request_queue_depth(), 1)
+        self.assertEqual(service._tts_dropped_text_count, 1)
+
+        release.set()
+        deadline = time.time() + 1
+        while time.time() < deadline and spoken != ["first", "third"]:
+            time.sleep(0.01)
+
+        self.assertEqual(spoken, ["first", "third"])
+
+    def test_non_local_tts_enqueue_preserves_async_generation_path(self):
+        service = AudioService()
+        called = threading.Event()
+        spoken = []
+
+        def generate(text):
+            spoken.append(text)
+            called.set()
+
+        service.generate_audio_for_text = generate
+
+        self.assertTrue(service.enqueue_text_for_audio("hello"))
+        self.assertTrue(called.wait(timeout=1), spoken)
+        self.assertEqual(spoken, ["hello"])
+
+    def test_local_status_reports_tts_queue_depths(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._tts_request_queue.append("pending")
+        service.audio_output_queue.append({"bytes": b"RIFF", "mimetype": "audio/wav"})
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": True,
+            "cuda_version": "test",
+            "device_count": 1,
+            "device_name": "test gpu",
+            "device": "cuda",
+            "device_override": "auto",
+        }
+        service._local_engine_options = lambda: [
+            {"id": service.local_engine, "label": "Chatterbox Turbo", "available": True}
+        ]
+
+        status = service.local_status()
+
+        self.assertEqual(status["tts_request_queue_depth"], 1)
+        self.assertEqual(status["tts_request_queue_limit"], service.LOCAL_TTS_PENDING_TEXT_LIMIT)
+        self.assertEqual(status["audio_output_queue_depth"], 1)
+
     def test_local_preload_failure_resets_cached_model_state(self):
         service = AudioService()
         service._local_model = object()
@@ -309,6 +380,18 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_preload_status, "error")
         self.assertEqual(service._local_preload_phase, "error")
         self.assertIn("download failed", service._local_preload_error)
+
+    def test_local_warmup_uses_realistic_text_twice(self):
+        service = AudioService()
+        calls = []
+
+        service._generate_local_waveform = lambda _model, text: calls.append(text)
+
+        service._warmup_local_model(object())
+
+        self.assertEqual(calls, [service.LOCAL_TTS_WARMUP_TEXT, service.LOCAL_TTS_WARMUP_TEXT])
+        self.assertGreater(len(service.LOCAL_TTS_WARMUP_TEXT), len("Ready."))
+        self.assertTrue(service._local_warmup_done)
 
     @unittest.skipIf(importlib.util.find_spec("torch") is None, "torch not installed")
     def test_local_waveform_coerces_chatterbox_conditionals_to_float32(self):

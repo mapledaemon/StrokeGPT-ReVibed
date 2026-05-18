@@ -82,10 +82,16 @@ export function updateLocalTtsStatus(status) {
     const preloadElapsed = formatElapsed(status.preload_elapsed_seconds);
     const preloadProgress = formatPercent(status.preload_progress_percent);
     const generationElapsed = formatElapsed(status.generation_elapsed_seconds);
+    const pendingText = Number(status.tts_request_queue_depth || 0);
+    const readyChunks = Number(status.audio_output_queue_depth || 0);
+    const droppedText = Number(status.tts_dropped_text_count || 0);
     let message = status.message || 'Local voice status unavailable.';
     if (loading && preloadProgress) message += ` Progress: ${preloadProgress}.`;
     if (loading && preloadElapsed) message += ` Elapsed: ${preloadElapsed}.`;
     if (generating && generationElapsed) message += ` Generation elapsed: ${generationElapsed}.`;
+    if (pendingText > 0) message += ` Text queue: ${pendingText}.`;
+    if (readyChunks > 0) message += ` Ready chunks: ${readyChunks}.`;
+    if (droppedText > 0) message += ` Skipped old replies: ${droppedText}.`;
     el.localTtsStatus.textContent = message;
     el.localTtsStatus.style.color = loading || generating
         ? 'var(--comment)'

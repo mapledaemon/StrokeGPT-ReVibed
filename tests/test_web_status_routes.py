@@ -180,7 +180,7 @@ class WebStatusRouteTests(WebTestCase):
         app_state.messages_for_ui.clear()
         app_state.chat_audio_warning = ""
         try:
-            with mock.patch.object(audio, "generate_audio_for_text", return_value=None):
+            with mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
                 add_message_to_queue(
                     "hidden spoken reply",
                     add_to_history=False,
