@@ -3,6 +3,8 @@ import time
 import requests
 
 DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
+RECENT_ASSISTANT_LINES_LIMIT = 3
+RECENT_ASSISTANT_LINE_CHARS = 180
 
 # Static repair instructions appended to the chat system prompt when the
 # connector retries an LLM response that claimed motion but produced no
@@ -77,6 +79,28 @@ def _autospeak_prompt_suffix(context):
 {zero_rule if autospeak_min == 0 else ""}\
 - Autospeak can be chat-only: use `move:null` when you only want to speak. Include `move` only when you deliberately want the app to change motion.
 {event_line}"""
+
+
+def recent_assistant_lines_prompt(chat_history, limit=RECENT_ASSISTANT_LINES_LIMIT):
+    lines = []
+    for record in reversed(list(chat_history or [])):
+        if not isinstance(record, dict) or record.get("role") != "assistant":
+            continue
+        text = " ".join(str(record.get("content") or "").split())
+        if not text:
+            continue
+        lines.append(text[:RECENT_ASSISTANT_LINE_CHARS])
+        if len(lines) >= limit:
+            break
+    if not lines:
+        return ""
+    lines.reverse()
+    quoted_lines = "\n".join(f"- {json.dumps(line, ensure_ascii=False)}" for line in lines)
+    return (
+        "Recent assistant lines to avoid repeating:\n"
+        f"{quoted_lines}\n"
+        "Use a new sentence structure, different key nouns, and a different sensation focus."
+    )
 
 
 def _speed_in_range(speed_min, speed_max, ratio):
@@ -521,6 +545,10 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
 
         if prompt_mode != "legacy" and context.get('special_persona_mode') != 'snarky_scientist':
             prompt_text += f"""
+### LOCAL MODEL OUTPUT GUARD
+- Return exactly one JSON object. No markdown, no preface, no analysis text, and no repeated JSON objects.
+- If unsure, choose `move:null` with a fresh short `chat` line instead of copying a prior reply.
+
 ### FINAL CHAT VOICE CHECK
 - DO sound like a horny partner in the room: {_user_genitalia_voice_anchor(context)}
 - DO keep `chat` short, direct, and sensual while `move` carries the technical control data.
@@ -548,6 +576,7 @@ Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% 
         autospeak_min_text = _format_seconds(autospeak_min)
         autospeak_max_text = _format_seconds(autospeak_max)
         current_target = current_target or {}
+        recent_lines_prompt = recent_assistant_lines_prompt(chat_history)
         freestyle_edge_rule = ""
         if mode == "freestyle":
             if context.get("allow_llm_edge_in_freestyle", True):
@@ -599,6 +628,8 @@ State:
                 "and return only the JSON object. Do not use null for chat or autospeak_seconds. "
                 "Pace it like natural conversation; 0 is the shortest natural pause, not immediate re-prompting."
             )
+            if recent_lines_prompt:
+                request_text += f"\n\n{recent_lines_prompt}"
         else:
             request_text = (
                 "Choose the next bounded mode decision now. "

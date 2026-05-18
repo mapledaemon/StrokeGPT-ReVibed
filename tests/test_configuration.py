@@ -611,6 +611,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"as fast as you can on the base"', prompt)
         self.assertIn('"as fast as you can on the base": `{"sp": 80, "dp": 66, "rng": 82', prompt)
         self.assertIn("touch, pace, pressure", prompt)
+        self.assertIn("LOCAL MODEL OUTPUT GUARD", prompt)
+        self.assertIn("Return exactly one JSON object", prompt)
+        self.assertIn("no repeated JSON objects", prompt)
         self.assertIn("vary the sentence shape", prompt)
         self.assertIn("stock compliment", prompt)
         self.assertIn("adjust the motion", prompt)
@@ -944,7 +947,10 @@ class ModelConfigurationTests(unittest.TestCase):
 
         service._talk_to_llm = fake_talk
         response = service.get_mode_decision(
-            [],
+            [
+                {"role": "assistant", "content": "Stay with me."},
+                {"role": "assistant", "content": "Still with you."},
+            ],
             {"autospeak_enabled": True, "autospeak_min_seconds": 0, "autospeak_max_seconds": 12},
             mode="freestyle",
             event="autospeak",
@@ -963,6 +969,10 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("Do not use null for chat or autospeak_seconds", user_message)
         self.assertIn("Pace it like natural conversation", user_message)
         self.assertIn("shortest natural pause", user_message)
+        self.assertIn("Recent assistant lines to avoid repeating", user_message)
+        self.assertIn('"Stay with me."', user_message)
+        self.assertIn('"Still with you."', user_message)
+        self.assertIn("Use a new sentence structure", user_message)
 
     def test_freestyle_mode_decision_prompt_honors_edge_permission(self):
         service = LLMService(url="http://localhost:11434/api/chat")

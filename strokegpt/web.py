@@ -19,7 +19,7 @@ from werkzeug.utils import secure_filename
 from .app_state import APP_STATE_EXPORTS, AppState
 from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
-from .llm import LLMService
+from .llm import LLMService, recent_assistant_lines_prompt
 from .audio import AudioService
 from .asr import VoiceInputService
 from .diagnostics import (
@@ -2099,6 +2099,11 @@ def _coerce_autospeak_delay(value=None):
     return max(min_seconds, min(max_seconds, seconds))
 
 
+def _autospeak_retry_delay_after_failure():
+    min_seconds, _max_seconds = _autospeak_timing_pair()
+    return min_seconds
+
+
 def _cancel_standalone_autospeak():
     with app_state.lock:
         app_state.autospeak_generation += 1
@@ -2125,9 +2130,9 @@ def _llm_message_metadata(timings, *, streamed_to_client=False):
     }
 
 
-def _standalone_autospeak_user_message():
+def _standalone_autospeak_user_message(chat_history=None):
     min_seconds, max_seconds = _autospeak_timing_pair()
-    return (
+    message = (
         "Autospeak is due. Keep the conversation going with one short "
         "in-character chat line. Use move:null when no motion change is "
         "needed, or include move only if you deliberately want to change "
@@ -2137,6 +2142,10 @@ def _standalone_autospeak_user_message():
         f"{min_seconds:g} and {max_seconds:g}. If the range allows 0, "
         "0 means the shortest natural pause, not an immediate loop."
     )
+    recent_lines = recent_assistant_lines_prompt(chat_history)
+    if recent_lines:
+        message += f"\n\n{recent_lines}"
+    return message
 
 
 def _run_standalone_autospeak_turn(token):
@@ -2150,7 +2159,7 @@ def _run_standalone_autospeak_turn(token):
     context = get_current_context()
     context["autospeak_event"] = True
     current_before_llm = _motion_semantic_target()
-    autospeak_user_input = _standalone_autospeak_user_message()
+    autospeak_user_input = _standalone_autospeak_user_message(history_snapshot)
     messages = history_snapshot + [{"role": "user", "content": autospeak_user_input}]
     request_started = time.perf_counter()
     timings = {}
@@ -2676,6 +2685,11 @@ def _finalize_llm_chat_response(
     message_metadata = _llm_message_metadata(timings, streamed_to_client=streamed_to_client)
 
     if is_llm_transport_error:
+        autospeak_scheduled = False
+        if settings.autospeak_enabled and not app_state.auto_mode_active_task:
+            autospeak_scheduled = _schedule_standalone_autospeak(_autospeak_retry_delay_after_failure())
+            if autospeak_scheduled:
+                print("[WARN] Autospeak LLM request failed; scheduled retry.")
         timings["request_ms"] = int((time.perf_counter() - request_started) * 1000)
         return {
             "status": "model_error",
@@ -2686,6 +2700,7 @@ def _finalize_llm_chat_response(
             "llm_message_metadata": message_metadata,
             "motion_applied": False,
             "motion_repaired": False,
+            "autospeak_scheduled": autospeak_scheduled,
             "timings": timings,
         }
 
