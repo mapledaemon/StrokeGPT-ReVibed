@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-18 - PR #261 - Continuous HSP Hitch Smoothing
+------------------------------------------------------
+
+Branch: codex/milk-endpoint-gap-smoothing
+
+- Smooth continuous HSP playback by suppressing redundant same-integer timed
+  points in the hitch-prone generated `milk` and area-focus streams while
+  keeping bounded keepalive spacing, reducing hold-then-snap feel without
+  changing the dense fractional cadence of other built-in patterns or authored
+  funscript playback.
+- Reduce steady-state HSP append churn by letting the buffer run lower before
+  sending the next `hsp/add` when command latency is normal, so healthy
+  continuous streams do not keep touching the firmware every few hundred
+  milliseconds between slow REST calls.
+- Add trace metadata for suppressed duplicate HSP points so future motion logs
+  can distinguish intentional coalescing from transport gaps.
+
+
 2026-05-18 - PR #260 - Mode Transition Stutter Reduction
 ---------------------------------------------------------
 
