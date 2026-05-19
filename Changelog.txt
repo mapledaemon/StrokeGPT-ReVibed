@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-19 - PR #282 - Motion Studio Preview Clipping
+-----------------------------------------------------
+
+Branch: codex/motion-studio-draw-clipping
+
+- Clipped Motion Pattern Studio preview geometry to the graph bounds so
+  freehand strokes no longer appear to persist outside the editable range,
+  while keeping saved draw points clamped to valid timing and position values.
+
 2026-05-19 - PR #281 - Motion Studio Smooth Envelope
 ----------------------------------------------------
 

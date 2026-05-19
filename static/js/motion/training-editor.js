@@ -666,6 +666,24 @@ function drawCurvePath(ctx, points) {
     }
 }
 
+function drawWithinPlotBounds(ctx, pad, width, height, draw) {
+    if (
+        typeof ctx.save !== 'function'
+        || typeof ctx.restore !== 'function'
+        || typeof ctx.rect !== 'function'
+        || typeof ctx.clip !== 'function'
+    ) {
+        draw();
+        return;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(pad, pad, width - pad * 2, height - pad * 2);
+    ctx.clip();
+    draw();
+    ctx.restore();
+}
+
 export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor = '#7fb7a3', pointColor = '#d8b66a', options = {}) {
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
@@ -739,25 +757,27 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
         previewCtx.stroke();
     }
 
-    previewCtx.strokeStyle = lineColor;
-    previewCtx.lineWidth = 2.5;
-    previewCtx.beginPath();
-    drawCurvePath(previewCtx, actions.map(action => ({x: xFor(action), y: yFor(action)})));
-    previewCtx.stroke();
-
     const selectedPointIndex = Number.isInteger(options.selectedPointIndex) ? options.selectedPointIndex : -1;
-    actions.forEach((action, index) => {
-        if (index === selectedPointIndex) {
-            previewCtx.strokeStyle = 'rgba(189, 147, 249, 0.96)';
-            previewCtx.lineWidth = 2;
-            previewCtx.beginPath();
-            previewCtx.arc(xFor(action), yFor(action), 7, 0, Math.PI * 2);
-            previewCtx.stroke();
-        }
-        previewCtx.fillStyle = index === selectedPointIndex ? 'rgba(189, 147, 249, 0.98)' : pointColor;
+    drawWithinPlotBounds(previewCtx, pad, width, height, () => {
+        previewCtx.strokeStyle = lineColor;
+        previewCtx.lineWidth = 2.5;
         previewCtx.beginPath();
-        previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
-        previewCtx.fill();
+        drawCurvePath(previewCtx, actions.map(action => ({x: xFor(action), y: yFor(action)})));
+        previewCtx.stroke();
+
+        actions.forEach((action, index) => {
+            if (index === selectedPointIndex) {
+                previewCtx.strokeStyle = 'rgba(189, 147, 249, 0.96)';
+                previewCtx.lineWidth = 2;
+                previewCtx.beginPath();
+                previewCtx.arc(xFor(action), yFor(action), 7, 0, Math.PI * 2);
+                previewCtx.stroke();
+            }
+            previewCtx.fillStyle = index === selectedPointIndex ? 'rgba(189, 147, 249, 0.98)' : pointColor;
+            previewCtx.beginPath();
+            previewCtx.arc(xFor(action), yFor(action), 3, 0, Math.PI * 2);
+            previewCtx.fill();
+        });
     });
 
     previewCtx.fillStyle = 'rgba(232, 230, 223, 0.7)';
