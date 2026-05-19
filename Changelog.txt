@@ -8,6 +8,30 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #269 - Motion Style Roadmap Cleanup
+----------------------------------------------------
+
+Branch: codex/roadmap-style-docs
+
+- Cleaned up the Motion Style roadmap after the learned-preference reset work
+  landed and after Freestyle gained deterministic Motion Style scoring. The
+  remaining planner-style roadmap item now focuses on preset-mode planners
+  only.
+
+
+2026-05-19 - PR #268 - Freestyle Motion Style Bias
+---------------------------------------------------
+
+Branch: codex/freestyle-style-bias
+
+- Passed the saved Motion Style into Freestyle's deterministic planner so
+  style choices such as Full range, Ramping, Pulsing, Smooth, and Teasing bias
+  enabled-pattern selection instead of relying only on LLM prompt/context bias.
+- Added Freestyle trace metadata for the active motion style and numeric style
+  bias while leaving continuous playback, safety limits, pattern-library
+  transport, and preset-mode planners unchanged.
+
+
 2026-05-19 - PR #267 - Motion Preference Reset
 ------------------------------------------------
 
