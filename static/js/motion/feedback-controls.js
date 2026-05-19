@@ -1,9 +1,13 @@
 import { D, apiCall, el, reportSaveFailure, state } from '../context.js';
 
 let renderMotionPatternsCallback = () => {};
+let renderMotionStyleOptionsCallback = () => {};
 
-export function configureMotionFeedbackControls({renderMotionPatterns} = {}) {
+export function configureMotionFeedbackControls({renderMotionPatterns, renderMotionStyleOptions} = {}) {
     if (typeof renderMotionPatterns === 'function') renderMotionPatternsCallback = renderMotionPatterns;
+    if (typeof renderMotionStyleOptions === 'function') {
+        renderMotionStyleOptionsCallback = renderMotionStyleOptions;
+    }
 }
 
 function feedbackRatingLabel(rating) {
@@ -65,5 +69,21 @@ export async function saveMotionFeedbackOptions() {
         el.statusText.textContent = `Pattern library saved. Freestyle: ${state.motionPatternLibraryEnabledInFreestyle ? 'on' : 'off'}. Chat: ${state.motionPatternLibraryEnabledInChat ? 'on' : 'off'}.`;
     } else {
         reportSaveFailure(el.motionPatternStatus, data, 'Could not save feedback options.');
+    }
+}
+
+export async function resetMotionPreferences() {
+    const data = await apiCall('/motion_preferences/reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({}),
+    });
+    if (data && data.status === 'success') {
+        state.motionStyle = data.motion_style || 'balanced';
+        renderMotionStyleOptionsCallback(data.motion_style_options || state.motionStyleOptions, state.motionStyle);
+        if (data.motion_patterns) renderMotionPatternsCallback(data.motion_patterns);
+        el.statusText.textContent = data.message || 'Motion preferences reset.';
+    } else {
+        reportSaveFailure(el.motionStyleStatus || el.motionPatternStatus, data, 'Could not reset motion preferences.');
     }
 }

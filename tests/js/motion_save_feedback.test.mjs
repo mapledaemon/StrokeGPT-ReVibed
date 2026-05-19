@@ -14,7 +14,7 @@ import {
     setMotionPatternEnabled,
     setMotionPatternWeight,
 } from '../../static/js/motion/pattern-list.js';
-import { saveMotionFeedbackOptions } from '../../static/js/motion/feedback-controls.js';
+import { resetMotionPreferences, saveMotionFeedbackOptions } from '../../static/js/motion/feedback-controls.js';
 import { state } from '../../static/js/context.js';
 
 
@@ -73,6 +73,10 @@ describe('motion/audio save feedback', () => {
         resetStubElement('status-text');
         resetStubElement('motion-backend-status');
         resetStubElement('motion-pattern-status');
+        resetStubElement('motion-style-select');
+        resetStubElement('motion-style-status');
+        resetStubElement('reset-motion-preferences-btn');
+        resetStubElement('motion-feedback-history');
         resetStubElement('local-tts-status');
         resetStubElement('download-local-tts-model-button');
         resetStubElement('llm-edge-permissions-status');
@@ -100,6 +104,11 @@ describe('motion/audio save feedback', () => {
         state.motionPatternLibraryEnabledInFreestyle = false;
         state.motionPatternLibraryEnabledInChat = false;
         state.motionFeedbackAutoDisable = false;
+        state.motionStyle = 'balanced';
+        state.motionStyleOptions = [
+            {id: 'balanced', label: 'Balanced', description: 'Let the model choose a sensible mix.'},
+            {id: 'high_variation', label: 'High variation', description: 'Use more motion contrast.'},
+        ];
         state.motionTraining = {state: 'idle', pattern_id: 'seed', pattern_name: 'Seed', preview: false};
         state.motionTrainingOriginalPattern = null;
         state.motionTrainingEditedPattern = null;
@@ -261,6 +270,46 @@ describe('motion/audio save feedback', () => {
         assert.strictEqual(getStubElement('motion-pattern-library-freestyle-checkbox').checked, true);
         assert.strictEqual(getStubElement('motion-pattern-library-chat-checkbox').checked, false);
         assert.strictEqual(getStubElement('status-text').textContent, 'Pattern library saved. Freestyle: on. Chat: off.');
+    });
+
+    it('resetMotionPreferences resets style controls and learned pattern feedback', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                message: 'Motion preferences reset.',
+                motion_style: 'balanced',
+                motion_style_options: [
+                    {id: 'balanced', label: 'Balanced', description: 'Let the model choose a sensible mix.'},
+                    {id: 'high_variation', label: 'High variation', description: 'Use more motion contrast.'},
+                ],
+                motion_patterns: {
+                    patterns: [{
+                        id: 'seed',
+                        name: 'Seed',
+                        source: 'fixed',
+                        enabled: true,
+                        duration_ms: 1000,
+                        action_count: 2,
+                        actions: [{ at: 0, pos: 30 }, { at: 1000, pos: 70 }],
+                    }],
+                    feedback_history: [],
+                },
+                motion_preferences: {weights: {}},
+            });
+        };
+        state.motionStyle = 'high_variation';
+        getStubElement('motion-style-select').value = 'high_variation';
+
+        await resetMotionPreferences();
+
+        assert.deepStrictEqual(requests, [['/motion_preferences/reset', {}]]);
+        assert.strictEqual(state.motionStyle, 'balanced');
+        assert.strictEqual(getStubElement('motion-style-select').value, 'balanced');
+        assert.strictEqual(getStubElement('motion-style-status').textContent, 'Current style: Balanced. Let the model choose a sensible mix.');
+        assert.strictEqual(getStubElement('motion-feedback-history').children.at(-1).textContent, 'No recent pattern feedback.');
+        assert.strictEqual(getStubElement('status-text').textContent, 'Motion preferences reset.');
     });
 
     it('stopMotionTraining surfaces the backend message on global status', async () => {

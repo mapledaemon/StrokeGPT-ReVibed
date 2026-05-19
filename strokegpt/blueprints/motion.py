@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 from .. import payloads
+from ..settings import DEFAULT_MOTION_STYLE
 
 
 motion_blueprint = Blueprint("motion", __name__)
@@ -49,10 +50,20 @@ def motion_preferences_route():
 def reset_motion_preferences_route():
     web = _web()
     web.settings.motion_pattern_feedback = {}
+    web.settings.motion_pattern_feedback_history = []
     web.settings.motion_pattern_weights = {}
+    web.settings.motion_style = DEFAULT_MOTION_STYLE
     web.settings.save()
-    payload = web._motion_preference_payload()
-    payload["status"] = "success"
+    preference_payload = web._motion_preference_payload()
+    payload = dict(preference_payload)
+    payload.update({
+        "status": "success",
+        "message": "Motion preferences reset.",
+        "motion_preferences": preference_payload,
+        "motion_patterns": web._motion_pattern_catalog_payload(),
+        "motion_style": web.settings.motion_style,
+        "motion_style_options": payloads.motion_style_options(),
+    })
     return jsonify(payload)
 
 
