@@ -8,6 +8,28 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #272 - Voice Warm Start And Library Export Tools
+-----------------------------------------------------------------
+
+Branch: codex/chatterbox-cached-preload
+
+- Added cached-only local Chatterbox preload on startup and at the first chat
+  request. The preload uses already-downloaded Hugging Face snapshots and does
+  not trigger first-use model downloads; manual Voice-tab loading still owns
+  the download path.
+- Added local voice status fields that distinguish cached-but-not-loaded
+  models from models that still require a download.
+- Added `scripts/replay_motion_capture.py`, an offline motion transport
+  capture analyzer/replay helper for exported Diagnostics captures.
+- Added Motion Pattern and Program tag editing, visible tag metadata in the
+  Motion settings lists, and a one-click Motion library zip export containing
+  user patterns, imported programs, safe motion preferences, persona text, and
+  a manifest that excludes secrets and local runtime artifacts.
+- Synchronized a timing-sensitive HSP replacement trace test so GitHub Actions
+  waits for the trace row it asserts on instead of racing the fake transport
+  replacement callback.
+
+
 2026-05-19 - PR #271 - Setup Verifier
 --------------------------------------
 

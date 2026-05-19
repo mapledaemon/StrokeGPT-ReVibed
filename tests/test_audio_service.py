@@ -93,6 +93,93 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_preload_phase, "ready")
         self.assertEqual(service._local_preload_error, "")
 
+    def test_chatterbox_cached_model_path_detects_complete_snapshots(self):
+        cache_parent = Path(__file__).resolve().parents[1] / "user_data" / "test_tts_cache"
+        cache_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cache_parent) as temp_dir:
+            hub = Path(temp_dir) / "hub"
+            turbo_snapshot = (
+                hub
+                / "models--ResembleAI--chatterbox-turbo"
+                / "snapshots"
+                / "turbo123"
+            )
+            standard_snapshot = (
+                hub
+                / "models--ResembleAI--chatterbox"
+                / "snapshots"
+                / "standard123"
+            )
+            turbo_snapshot.mkdir(parents=True)
+            standard_snapshot.mkdir(parents=True)
+
+            service = AudioService()
+            service._chatterbox_hf_cache_roots = lambda: [hub]
+            for filename in service.CHATTERBOX_CACHE_REQUIRED_FILES[service.LOCAL_ENGINE_CHATTERBOX_TURBO]:
+                (turbo_snapshot / filename).touch()
+            for filename in service.CHATTERBOX_CACHE_REQUIRED_FILES[service.LOCAL_ENGINE_CHATTERBOX]:
+                (standard_snapshot / filename).touch()
+
+            self.assertEqual(service._chatterbox_cached_model_path(), turbo_snapshot)
+            self.assertTrue(service.local_model_cached())
+            status = service.local_status(lightweight=True)
+            self.assertTrue(status["model_cached"])
+            self.assertFalse(status["load_requires_download"])
+
+            service.local_engine = service.LOCAL_ENGINE_CHATTERBOX
+            self.assertEqual(service._chatterbox_cached_model_path(), standard_snapshot)
+
+    def test_cached_only_preload_skips_without_cached_weights(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._chatterbox_cached_model_path = lambda: None
+
+        started = service.preload_local_model_async(require_cached=True)
+
+        self.assertFalse(started)
+        self.assertIsNone(service._local_preload_thread)
+        self.assertEqual(service._local_preload_status, "idle")
+        self.assertEqual(service._local_preload_phase, "idle")
+
+    def test_get_chatterbox_model_uses_cached_snapshot_without_download(self):
+        service = AudioService()
+        cached_path = Path("cached-chatterbox")
+        loaded_model = object()
+        calls = []
+
+        class DummyModelClass:
+            @staticmethod
+            def from_local(path, device):
+                calls.append(("from_local", path, device))
+                return loaded_model
+
+            @staticmethod
+            def from_pretrained(device):
+                calls.append(("from_pretrained", device))
+                raise AssertionError("cached-only load should not download")
+
+        service._local_runtime_info = lambda: {
+            "torch_available": True,
+            "torch_version": "test",
+            "cuda_available": True,
+            "cuda_version": "test",
+            "device_count": 1,
+            "device_name": "test gpu",
+            "device": "cuda",
+            "device_override": "auto",
+        }
+        service._chatterbox_model_class = lambda _engine: DummyModelClass
+        service._chatterbox_cached_model_path = lambda: cached_path
+        service._prepare_chatterbox_model_for_inference = lambda model: model
+
+        model = service._get_chatterbox_model(require_cached=True)
+
+        self.assertIs(model, loaded_model)
+        self.assertEqual(calls, [("from_local", cached_path, "cuda")])
+        self.assertEqual(service._local_model_engine, service.local_engine)
+        self.assertEqual(service._local_model_device, "cuda")
+
     def test_local_status_reports_preload_progress_percent(self):
         service = AudioService()
         service.provider = "local"

@@ -757,6 +757,18 @@ def setup_check_payload():
         elevenlabs_key=settings.elevenlabs_api_key,
     )
 
+def _preload_cached_local_voice(reason="chat"):
+    if app.config.get("DISABLE_AUTO_LOCAL_TTS_PRELOAD"):
+        return False
+    if audio.provider != "local" or not audio.is_on:
+        return False
+    was_loaded = audio.local_model_loaded()
+    was_loading = bool(getattr(audio, "_local_preload_thread", None) and audio._local_preload_thread.is_alive())
+    started = audio.preload_local_model_async_if_cached()
+    if started and not was_loaded and not was_loading:
+        print(f"[INFO] Cached local Chatterbox preload started ({reason}).")
+    return started
+
 def diagnostics_latency_payload():
     return build_diagnostics_latency_payload(
         base_url=OLLAMA_BASE_URL,
@@ -2792,6 +2804,7 @@ def handle_user_message():
     if not handy.handy_key: return jsonify({"status": "no_key_set"})
     if not user_input: return jsonify({"status": "empty_message"})
 
+    _preload_cached_local_voice(reason="chat")
     _cancel_standalone_autospeak()
     _ensure_chat_session_started()
     app_state.chat_history.append({"role": "user", "content": user_input})
@@ -2859,6 +2872,7 @@ def handle_user_message_stream():
             yield _chat_stream_event("final", data={"status": "empty_message"})
             return
 
+        _preload_cached_local_voice(reason="chat_stream")
         _cancel_standalone_autospeak()
         _ensure_chat_session_started()
         app_state.chat_history.append({"role": "user", "content": user_input})
@@ -3080,6 +3094,7 @@ def main():
     print(f"[INFO] Open {url}")
     if _env_flag("STROKEGPT_OPEN_BROWSER"):
         threading.Timer(1.0, _open_browser, args=(url,)).start()
+    _preload_cached_local_voice(reason="startup")
     app.run(
         host=host,
         port=port,

@@ -68,6 +68,7 @@ class WebTestCase(unittest.TestCase):
         from strokegpt.web import app
 
         cls.app = app
+        app.config["DISABLE_AUTO_LOCAL_TTS_PRELOAD"] = True
         cls.client = app.test_client()
 
     def frontend_scripts(self):

@@ -115,7 +115,19 @@ def format_motion_preferences_for_prompt(enabled_fixed):
         "Available fixed move.pattern weights from 0-100. Higher weight means prefer that pattern when it fits the user's request. Only choose listed pattern names; patterns not listed are unavailable.",
     ]
     if enabled_fixed:
-        lines.append(", ".join(f"{pattern.get('id')}={pattern.get('weight', 0)}" for pattern in enabled_fixed))
+        lines.append(", ".join(_format_pattern_prompt_entry(pattern) for pattern in enabled_fixed))
     else:
         lines.append("- No fixed patterns are currently enabled; use numeric sp/dp/rng or anchor_loop instead.")
     return "\n".join(lines)
+
+
+def _format_pattern_prompt_entry(pattern):
+    entry = f"{pattern.get('id')}={pattern.get('weight', 0)}"
+    tags = [
+        str(tag).strip()
+        for tag in pattern.get("tags", [])
+        if str(tag).strip() and str(tag).strip().lower() != "built-in"
+    ]
+    if tags:
+        entry += f" tags:{'/'.join(tags[:5])}"
+    return entry

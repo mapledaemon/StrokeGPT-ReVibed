@@ -214,6 +214,7 @@ export const el = {
     llmEdgePermissionsStatus: D.getElementById('llm-edge-permissions-status'),
     refreshMotionPatternsBtn: D.getElementById('refresh-motion-patterns-btn'),
     importMotionPatternBtn: D.getElementById('import-motion-pattern-btn'),
+    exportMotionLibraryBtn: D.getElementById('export-motion-library-btn'),
     openMotionTrainingBtn: D.getElementById('open-motion-training-btn'),
     motionPatternImportInput: D.getElementById('motion-pattern-import-input'),
     refreshMotionProgramsBtn: D.getElementById('refresh-motion-programs-btn'),

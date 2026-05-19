@@ -18,6 +18,7 @@ import {
     createPatternDeleteButton,
     createPatternExportButton,
     createPatternFeedbackResetButton,
+    createPatternTagsButton,
     createPatternText,
     formatPatternDuration,
     formatPatternMetadata,
@@ -26,6 +27,7 @@ import {
     patternDisplayName,
     patternHasFeedbackState,
     renderCompactMotionPatternList,
+    setMotionPatternTags,
     setPatternStatus,
     updatePatternStats,
 } from './motion/pattern-list.js';
@@ -40,6 +42,7 @@ import {
     configureMotionProgramList,
     refreshMotionPrograms,
     renderMotionPrograms,
+    setMotionProgramTags,
     setProgramStatus,
 } from './motion/program-list.js';
 import {
@@ -91,6 +94,7 @@ export {
     configureMotionPatternList,
     createPatternExportButton,
     createPatternFeedbackResetButton,
+    createPatternTagsButton,
     createPatternText,
     formatPatternDuration,
     formatPatternMetadata,
@@ -101,6 +105,7 @@ export {
     renderCompactMotionPatternList,
     resetMotionPatternFeedback,
     setMotionPatternEnabled,
+    setMotionPatternTags,
     setMotionPatternWeight,
     setPatternStatus,
     updatePatternStats,
@@ -118,6 +123,7 @@ export {
     configureMotionProgramList,
     refreshMotionPrograms,
     renderMotionPrograms,
+    setMotionProgramTags,
     setProgramStatus,
 } from './motion/program-list.js';
 // Compatibility shim - do not extend. New code imports from './motion/program-player.js'.
@@ -1571,6 +1577,9 @@ export function initMotionControls({sendUserMessage}) {
         await saveChatIntensityGuide(nextChatIntensityGuide(state.chatIntensityGuide));
     });
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
+    el.exportMotionLibraryBtn?.addEventListener('click', () => {
+        window.location.href = '/motion_library/export';
+    });
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.addEventListener('change', saveMotionFeedbackOptions);
     }

@@ -169,6 +169,51 @@ class WebChatRouteTests(WebTestCase):
             app_state.ui_client_cursors.clear()
             app_state.chat_history.clear()
 
+    def test_send_message_starts_cached_local_voice_preload_before_llm(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_audio = (audio.provider, audio.is_on)
+        original_auto_preload_disabled = self.app.config.get("DISABLE_AUTO_LOCAL_TTS_PRELOAD")
+        calls = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            audio.provider = "local"
+            audio.is_on = True
+            self.app.config["DISABLE_AUTO_LOCAL_TTS_PRELOAD"] = False
+
+            def fake_llm_response(*_args, **_kwargs):
+                calls.append("llm")
+                return {"chat": "Ready.", "move": None, "new_mood": None}
+
+            def fake_preload():
+                calls.append("preload")
+                return True
+
+            with mock.patch.object(audio, "preload_local_model_async_if_cached", side_effect=fake_preload), \
+                    mock.patch.object(llm, "get_chat_response", side_effect=fake_llm_response), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
+                response = self.client.post("/send_message", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["status"], "ok")
+            self.assertEqual(calls[:2], ["preload", "llm"])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            audio.provider, audio.is_on = original_audio
+            self.app.config["DISABLE_AUTO_LOCAL_TTS_PRELOAD"] = original_auto_preload_disabled
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_send_message_schedules_standalone_autospeak_followup(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -490,6 +535,57 @@ class WebChatRouteTests(WebTestCase):
         finally:
             handy.handy_key = original_key
             settings.handy_key = original_settings_key
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_send_message_stream_starts_cached_local_voice_preload_before_llm(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_audio = (audio.provider, audio.is_on)
+        original_auto_preload_disabled = self.app.config.get("DISABLE_AUTO_LOCAL_TTS_PRELOAD")
+        calls = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            audio.provider = "local"
+            audio.is_on = True
+            self.app.config["DISABLE_AUTO_LOCAL_TTS_PRELOAD"] = False
+
+            def fake_chunks(*_args, **_kwargs):
+                calls.append("llm")
+                return iter(['{"chat":"Ready.","move":null,"new_mood":null}'])
+
+            def fake_preload():
+                calls.append("preload")
+                return True
+
+            with mock.patch.object(audio, "preload_local_model_async_if_cached", side_effect=fake_preload), \
+                    mock.patch.object(llm, "iter_chat_response_content", side_effect=fake_chunks), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
+                response = self.client.post("/send_message_stream", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                }, buffered=True)
+
+            self.assertEqual(response.status_code, 200)
+            events = [
+                json.loads(line)
+                for line in response.get_data(as_text=True).splitlines()
+                if line.strip()
+            ]
+            final = [event["data"] for event in events if event["type"] == "final"][-1]
+            self.assertEqual(final["status"], "ok")
+            self.assertEqual(calls[:2], ["preload", "llm"])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            audio.provider, audio.is_on = original_audio
+            self.app.config["DISABLE_AUTO_LOCAL_TTS_PRELOAD"] = original_auto_preload_disabled
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 

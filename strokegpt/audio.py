@@ -25,6 +25,28 @@ class AudioService:
         LOCAL_ENGINE_CHATTERBOX_TURBO: "Chatterbox Turbo",
         LOCAL_ENGINE_CHATTERBOX: "Chatterbox Standard",
     }
+    CHATTERBOX_REPO_IDS = {
+        LOCAL_ENGINE_CHATTERBOX_TURBO: "ResembleAI/chatterbox-turbo",
+        LOCAL_ENGINE_CHATTERBOX: "ResembleAI/chatterbox",
+    }
+    CHATTERBOX_CACHE_REQUIRED_FILES = {
+        LOCAL_ENGINE_CHATTERBOX_TURBO: (
+            "ve.safetensors",
+            "t3_turbo_v1.safetensors",
+            "s3gen_meanflow.safetensors",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+            "conds.pt",
+        ),
+        LOCAL_ENGINE_CHATTERBOX: (
+            "ve.safetensors",
+            "t3_cfg.safetensors",
+            "s3gen.safetensors",
+            "tokenizer.json",
+            "conds.pt",
+        ),
+    }
     CHATTERBOX_STYLE_PRESETS = {
         "default": {
             "label": "Default",
@@ -220,6 +242,9 @@ class AudioService:
         selected = next((engine for engine in engines if engine["id"] == self.local_engine), None)
         prompt_problem = self._local_prompt_path_problem()
         model_loaded = self.local_model_loaded()
+        cached_model_path = self._chatterbox_cached_model_path()
+        model_cached = bool(model_loaded or cached_model_path)
+        model_cache_path = str(cached_model_path or "")
         if lightweight:
             message = "Local voice status will refresh after startup."
             if self.provider == "local" or self.is_on:
@@ -242,6 +267,9 @@ class AudioService:
                 "device": self._local_model_device,
                 "cuda_available": None,
                 "model_loaded": model_loaded,
+                "model_cached": model_cached,
+                "model_cache_path": model_cache_path,
+                "load_requires_download": not model_cached,
                 "preload_status": self._local_preload_status,
                 "preload_phase": self._local_preload_phase,
                 "preload_error": self._local_preload_error,
@@ -285,9 +313,12 @@ class AudioService:
         if model_loaded:
             message += f" Model loaded on {self._local_model_device or runtime['device']}."
         elif self._local_preload_status == "loading":
-            message += f" Model download/load is running ({self._local_preload_phase.replace('_', ' ')})."
+            load_label = "load" if model_cached else "download/load"
+            message += f" Model {load_label} is running ({self._local_preload_phase.replace('_', ' ')})."
         elif self._local_preload_status == "error" and self._local_preload_error:
             message += f" Download/load failed: {self._local_preload_error}"
+        elif available and model_cached:
+            message += " Model is cached but not loaded yet. It can load in the background without downloading."
         elif available:
             message += " Model is not loaded yet. Click Download / Load Local Voice Model before testing; first use may download several GB."
 
@@ -308,6 +339,9 @@ class AudioService:
             "device": runtime["device"],
             "cuda_available": runtime["cuda_available"],
             "model_loaded": model_loaded,
+            "model_cached": model_cached,
+            "model_cache_path": model_cache_path,
+            "load_requires_download": not model_cached,
             "preload_status": self._local_preload_status,
             "preload_phase": self._local_preload_phase,
             "preload_error": self._local_preload_error,
@@ -535,7 +569,10 @@ class AudioService:
             self.last_error = f"Local Chatterbox problem: {error}"
             print(f"[ERROR] {self.last_error}")
 
-    def _get_chatterbox_model(self):
+    def local_model_cached(self):
+        return bool(self.local_model_loaded() or self._chatterbox_cached_model_path())
+
+    def _get_chatterbox_model(self, *, require_cached=False):
         with self._local_model_lock:
             if self._local_model is not None and self._local_model_engine == self.local_engine:
                 return self._local_model
@@ -547,12 +584,24 @@ class AudioService:
                     raise RuntimeError(runtime["error"])
                 model_class = self._chatterbox_model_class(self.local_engine)
                 device = runtime["device"]
-                print(
-                    "[INFO] Loading local Chatterbox model. "
-                    "If the model weights are not cached, this may download several GB."
-                )
+                cached_model_path = self._chatterbox_cached_model_path()
                 with self._torch_float32_default_dtype():
-                    loaded_model = model_class.from_pretrained(device=device)
+                    if cached_model_path:
+                        print(
+                            "[INFO] Loading local Chatterbox model from cached weights: "
+                            f"{cached_model_path}"
+                        )
+                        loaded_model = model_class.from_local(cached_model_path, device=device)
+                    else:
+                        if require_cached:
+                            raise RuntimeError(
+                                "Local Chatterbox weights are not cached yet. Use Download / Load Local Voice Model once."
+                            )
+                        print(
+                            "[INFO] Loading local Chatterbox model. "
+                            "If the model weights are not cached, this may download several GB."
+                        )
+                        loaded_model = model_class.from_pretrained(device=device)
                 self._local_model = self._prepare_chatterbox_model_for_inference(loaded_model)
                 self._local_model_engine = self.local_engine
                 self._local_model_device = device
@@ -561,7 +610,7 @@ class AudioService:
                 raise RuntimeError(f"Could not load Chatterbox. Install with requirements.txt. Details: {e}")
         return self._local_model
 
-    def preload_local_model_async(self, force=False):
+    def preload_local_model_async(self, force=False, require_cached=False):
         if not force and (self.provider != "local" or not self.is_on):
             return False
         if self.local_model_loaded():
@@ -570,6 +619,8 @@ class AudioService:
             self._local_preload_error = ""
             self._local_preload_started_at = None
             return True
+        if require_cached and not self._chatterbox_cached_model_path():
+            return False
         if self._local_preload_thread and self._local_preload_thread.is_alive():
             return True
 
@@ -579,7 +630,11 @@ class AudioService:
             self._local_preload_error = ""
             self._local_preload_started_at = time.perf_counter()
             try:
-                model = self._get_chatterbox_model()
+                model = (
+                    self._get_chatterbox_model(require_cached=True)
+                    if require_cached
+                    else self._get_chatterbox_model()
+                )
                 self._local_preload_phase = "warming_up"
                 self._warmup_local_model(model)
                 self._local_preload_status = "ready"
@@ -598,6 +653,9 @@ class AudioService:
         self._local_preload_thread = threading.Thread(target=preload, daemon=True)
         self._local_preload_thread.start()
         return True
+
+    def preload_local_model_async_if_cached(self):
+        return self.preload_local_model_async(require_cached=True)
 
     def _warmup_local_model(self, model):
         if self._local_warmup_done or os.getenv("STROKEGPT_TTS_WARMUP", "1") == "0":
@@ -870,6 +928,59 @@ class AudioService:
         if engine not in self.LOCAL_ENGINE_LABELS:
             return self.LOCAL_ENGINE_DEFAULT
         return engine
+
+    def _chatterbox_hf_cache_roots(self):
+        roots = []
+        seen = set()
+
+        def add_root(path):
+            if not path:
+                return
+            try:
+                root = Path(path).expanduser()
+            except (TypeError, ValueError):
+                return
+            key = os.path.normcase(str(root))
+            if key not in seen:
+                seen.add(key)
+                roots.append(root)
+
+        add_root(os.getenv("HF_HUB_CACHE"))
+        add_root(os.getenv("HUGGINGFACE_HUB_CACHE"))
+        hf_home = os.getenv("HF_HOME")
+        if hf_home:
+            add_root(Path(hf_home) / "hub")
+        add_root(Path.home() / ".cache" / "huggingface" / "hub")
+        return roots
+
+    def _chatterbox_cached_model_path(self, engine=None):
+        engine = self._normalize_local_engine(engine)
+        repo_id = self.CHATTERBOX_REPO_IDS.get(engine)
+        if not repo_id:
+            return None
+        repo_cache_dir = f"models--{repo_id.replace('/', '--')}"
+        required_files = self.CHATTERBOX_CACHE_REQUIRED_FILES.get(engine, ())
+        candidates = []
+        for root in self._chatterbox_hf_cache_roots():
+            snapshots_dir = root / repo_cache_dir / "snapshots"
+            if not snapshots_dir.is_dir():
+                continue
+            try:
+                snapshot_dirs = [path for path in snapshots_dir.iterdir() if path.is_dir()]
+            except OSError:
+                continue
+            candidates.extend(snapshot_dirs)
+        candidates.sort(key=self._path_mtime_or_zero, reverse=True)
+        for candidate in candidates:
+            if all((candidate / filename).exists() for filename in required_files):
+                return candidate
+        return None
+
+    def _path_mtime_or_zero(self, path):
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
 
     def _local_engine_options(self):
         return [

@@ -9,6 +9,7 @@ import {
     formatProgramMetadata,
     renameMotionProgram,
     renderMotionPrograms,
+    setMotionProgramTags,
 } from '../../static/js/motion/program-list.js';
 import { el, state } from '../../static/js/context.js';
 
@@ -98,7 +99,7 @@ describe('motion program list helpers', () => {
         assert.equal(formatProgramMetadata(state.motionPrograms[0]), 'imported | 10m duration | 2501 actions | long funscript');
     });
 
-    it('renders open, rename, and trash buttons for Programs', async () => {
+    it('renders open, rename, tags, and trash buttons for Programs', async () => {
         const calls = [];
         const opened = [];
         configureMotionProgramList({openMotionProgramWindow: programId => opened.push(programId)});
@@ -127,10 +128,13 @@ describe('motion program list helpers', () => {
         const actions = row.children[1];
         const openButton = actions.children[0];
         const renameButton = actions.children[1];
-        const deleteButton = actions.children[3];
+        const tagsButton = actions.children[2];
+        const deleteButton = actions.children[4];
         openButton.click();
         assert.deepEqual(opened, ['long-wave']);
         assert.equal(renameButton.textContent, 'Rename');
+        assert.equal(tagsButton.textContent, 'Tags');
+        assert.equal(tagsButton.hasAttribute('data-requires-backend'), true);
         assert.equal(deleteButton.getAttribute('aria-label'), 'Delete Long Wave');
         assert.equal(deleteButton.hasAttribute('data-requires-backend'), true);
 
@@ -143,6 +147,55 @@ describe('motion program list helpers', () => {
         assert.equal(state.motionPrograms.length, 0);
         assert.match(el.motionProgramList.children[0].textContent, /No long programs saved yet/);
         assert.equal(el.statusText.textContent, 'Deleted program: Long Wave.');
+    });
+
+    it('updates Program tags and mirrors an open Program player metadata row', async () => {
+        const calls = [];
+        state.motionProgramSelected = {
+            id: 'long-wave',
+            name: 'Long Wave',
+            source: 'imported',
+            duration_ms: 600_000,
+            action_count: 2501,
+            tags: ['program'],
+        };
+        el.motionProgramDialogMeta.textContent = 'baseline';
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, options});
+            return jsonResponse(200, {
+                status: 'success',
+                message: 'Updated tags for Long Wave.',
+                program: {
+                    id: 'long-wave',
+                    name: 'Long Wave',
+                    source: 'imported',
+                    duration_ms: 600_000,
+                    action_count: 2501,
+                    tags: ['teasing', 'program'],
+                },
+                motion_programs: {
+                    programs: [{
+                        id: 'long-wave',
+                        name: 'Long Wave',
+                        source: 'imported',
+                        duration_ms: 600_000,
+                        action_count: 2501,
+                        tags: ['teasing', 'program'],
+                    }],
+                    errors: [],
+                },
+            });
+        };
+
+        const data = await setMotionProgramTags('long-wave', 'teasing, program');
+
+        assert.equal(data.status, 'success');
+        assert.equal(calls[0].endpoint, '/motion_programs/long-wave/tags');
+        assert.equal(calls[0].options.method, 'POST');
+        assert.deepEqual(JSON.parse(calls[0].options.body), {tags: ['teasing', 'program']});
+        assert.equal(state.motionPrograms[0].tags[0], 'teasing');
+        assert.match(el.motionProgramDialogMeta.textContent, /tags teasing, program/);
+        assert.equal(el.statusText.textContent, 'Updated tags for Long Wave.');
     });
 
     it('renames a Program and updates an open Program player title', async () => {

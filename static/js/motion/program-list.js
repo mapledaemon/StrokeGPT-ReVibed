@@ -26,12 +26,15 @@ export function formatProgramDuration(durationMs) {
 
 
 export function formatProgramMetadata(program) {
-    return [
+    const parts = [
         program.source || 'imported',
         `${formatProgramDuration(program.duration_ms)} duration`,
         `${program.action_count || 0} actions`,
         'long funscript',
-    ].join(' | ');
+    ];
+    const tags = Array.isArray(program.tags) ? program.tags.map(tag => String(tag).trim()).filter(Boolean) : [];
+    if (tags.length) parts.push(`tags ${tags.join(', ')}`);
+    return parts.join(' | ');
 }
 
 
@@ -107,6 +110,24 @@ function createProgramRenameButton(program) {
 }
 
 
+function createProgramTagsButton(program) {
+    const tagsButton = D.createElement('button');
+    tagsButton.type = 'button';
+    tagsButton.className = 'my-button motion-pattern-tags motion-program-tags';
+    tagsButton.textContent = 'Tags';
+    tagsButton.setAttribute('data-requires-backend', '');
+    tagsButton.title = `Edit tags for ${programDisplayName(program)}`;
+    tagsButton.addEventListener('click', event => {
+        event.stopPropagation?.();
+        const current = Array.isArray(program.tags) ? program.tags.join(', ') : '';
+        const next = window.prompt?.('Program tags, comma-separated', current);
+        if (next === null || next === undefined) return;
+        setMotionProgramTags(program.id, next);
+    });
+    return tagsButton;
+}
+
+
 function createProgramDeleteButton(program) {
     const deleteButton = D.createElement('button');
     deleteButton.type = 'button';
@@ -159,6 +180,31 @@ export async function renameMotionProgram(program, nextName) {
 }
 
 
+export async function setMotionProgramTags(program, tags) {
+    const programId = typeof program === 'string' ? program : program?.id;
+    if (!programId) return null;
+    const tagList = Array.isArray(tags)
+        ? tags
+        : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const data = await apiCall(`/motion_programs/${encodeURIComponent(programId)}/tags`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tags: tagList}),
+    });
+    if (data && data.status === 'success') {
+        if (data.motion_programs) renderMotionPrograms(data.motion_programs);
+        if (data.program && state.motionProgramSelected?.id === data.program.id) {
+            state.motionProgramSelected = {...state.motionProgramSelected, ...data.program};
+            if (el.motionProgramDialogMeta) el.motionProgramDialogMeta.textContent = formatProgramMetadata(data.program);
+        }
+        setStatusMessage(el.statusText, data.message || 'Program tags updated.', 'success');
+    } else {
+        reportSaveFailure(el.motionProgramStatus || el.statusText, data, 'Could not update program tags.');
+    }
+    return data;
+}
+
+
 export async function deleteMotionProgram(program) {
     const programId = typeof program === 'string' ? program : program?.id;
     if (!programId) return null;
@@ -199,7 +245,13 @@ export function renderMotionPrograms(catalog = {}) {
 
             const actions = D.createElement('div');
             actions.className = 'motion-pattern-row-actions';
-            actions.append(createProgramOpenButton(program), createProgramRenameButton(program), createProgramExportButton(program), createProgramDeleteButton(program));
+            actions.append(
+                createProgramOpenButton(program),
+                createProgramRenameButton(program),
+                createProgramTagsButton(program),
+                createProgramExportButton(program),
+                createProgramDeleteButton(program),
+            );
 
             row.append(main, actions);
             el.motionProgramList.appendChild(row);
