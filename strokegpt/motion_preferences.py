@@ -1,3 +1,6 @@
+from .motion_tags import INTERNAL_MOTION_TAGS
+
+
 THUMBS_DOWN_DISABLE_THRESHOLD = 3
 BASE_PATTERN_WEIGHT = 50
 MAX_PATTERN_WEIGHT = 100
@@ -58,7 +61,7 @@ def enrich_catalog(catalog, weight_overrides=None):
     return updated
 
 
-def build_motion_preference_payload(catalog, excluded_llm_pattern_ids=None):
+def build_motion_preference_payload(catalog, excluded_llm_pattern_ids=None, program_catalog=None):
     excluded_llm_pattern_ids = set(excluded_llm_pattern_ids or ())
     enriched = enrich_catalog(catalog)
     fixed_patterns = [
@@ -82,35 +85,52 @@ def build_motion_preference_payload(catalog, excluded_llm_pattern_ids=None):
         ),
         key=lambda pattern: (-int(pattern.get("weight") or 0), str(pattern.get("id") or "")),
     )
+    library_tagged_patterns = _tagged_user_patterns(enriched.get("patterns", []))
+    library_tagged_programs = _tagged_programs(program_catalog)
     return {
         "enabled_fixed_patterns": enabled_fixed,
         "disabled_fixed_patterns": disabled_fixed,
         "llm_visible_fixed_patterns": llm_visible_fixed,
-        "summary": format_motion_preferences_for_ui(enabled_fixed, disabled_fixed),
-        "prompt": format_motion_preferences_for_prompt(llm_visible_fixed),
+        "library_tagged_patterns": library_tagged_patterns,
+        "library_tagged_programs": library_tagged_programs,
+        "summary": format_motion_preferences_for_ui(
+            enabled_fixed,
+            disabled_fixed,
+            library_tagged_patterns,
+            library_tagged_programs,
+        ),
+        "prompt": format_motion_preferences_for_prompt(
+            llm_visible_fixed,
+            library_tagged_patterns,
+            library_tagged_programs,
+        ),
     }
 
 
-def format_motion_preferences_for_ui(enabled_fixed, disabled_fixed):
+def format_motion_preferences_for_ui(enabled_fixed, disabled_fixed, library_tagged_patterns=(), library_tagged_programs=()):
     if not enabled_fixed and not disabled_fixed:
-        return "No fixed motion pattern weights are available."
-    lines = []
-    if enabled_fixed:
-        lines.append(
-            "Enabled fixed patterns: "
-            + ", ".join(f"{pattern['id']}={pattern.get('weight', 0)}" for pattern in enabled_fixed)
-            + "."
-        )
-    if disabled_fixed:
-        lines.append(
-            "Disabled fixed patterns: "
-            + ", ".join(str(pattern.get("id") or "") for pattern in disabled_fixed[:8])
-            + "."
-        )
+        lines = ["No fixed motion pattern weights are available."]
+    else:
+        lines = []
+        if enabled_fixed:
+            lines.append(
+                "Enabled fixed patterns: "
+                + ", ".join(f"{pattern['id']}={pattern.get('weight', 0)}" for pattern in enabled_fixed)
+                + "."
+            )
+        if disabled_fixed:
+            lines.append(
+                "Disabled fixed patterns: "
+                + ", ".join(str(pattern.get("id") or "") for pattern in disabled_fixed[:8])
+                + "."
+            )
+    tagged_count = len(tuple(library_tagged_patterns or ())) + len(tuple(library_tagged_programs or ()))
+    if tagged_count:
+        lines.append(f"Saved library tags available for {tagged_count} item(s).")
     return " ".join(line for line in lines if line)
 
 
-def format_motion_preferences_for_prompt(enabled_fixed):
+def format_motion_preferences_for_prompt(enabled_fixed, library_tagged_patterns=(), library_tagged_programs=()):
     lines = [
         "Available fixed move.pattern weights from 0-100. Higher weight means prefer that pattern when it fits the user's request. Only choose listed pattern names; patterns not listed are unavailable.",
     ]
@@ -118,6 +138,9 @@ def format_motion_preferences_for_prompt(enabled_fixed):
         lines.append(", ".join(_format_pattern_prompt_entry(pattern) for pattern in enabled_fixed))
     else:
         lines.append("- No fixed patterns are currently enabled; use numeric sp/dp/rng or anchor_loop instead.")
+    tag_lines = _format_library_tags_prompt(library_tagged_patterns, library_tagged_programs)
+    if tag_lines:
+        lines.extend(tag_lines)
     return "\n".join(lines)
 
 
@@ -131,3 +154,87 @@ def _format_pattern_prompt_entry(pattern):
     if tags:
         entry += f" tags:{'/'.join(tags[:5])}"
     return entry
+
+
+def _prompt_tags(tags):
+    clean = []
+    seen = set()
+    for tag in tags if isinstance(tags, list) else []:
+        text = " ".join(str(tag or "").split()).strip().lower()
+        if not text or text in INTERNAL_MOTION_TAGS or text in seen:
+            continue
+        clean.append(text)
+        seen.add(text)
+    return clean
+
+
+def _tagged_user_patterns(patterns):
+    tagged = []
+    for pattern in patterns if isinstance(patterns, list) else []:
+        if pattern.get("source") == "fixed" or not pattern.get("enabled", True):
+            continue
+        tags = _prompt_tags(pattern.get("tags", []))
+        if not tags:
+            continue
+        tagged.append({
+            "id": str(pattern.get("id") or ""),
+            "name": str(pattern.get("name") or pattern.get("id") or ""),
+            "source": str(pattern.get("source") or "imported"),
+            "tags": tags,
+            "duration_ms": int(pattern.get("duration_ms") or 0),
+            "action_count": int(pattern.get("action_count") or 0),
+        })
+    return sorted(tagged, key=lambda item: (item["source"], item["id"]))
+
+
+def _tagged_programs(program_catalog):
+    catalog = program_catalog if isinstance(program_catalog, dict) else {}
+    tagged = []
+    for program in catalog.get("programs", []) if isinstance(catalog.get("programs"), list) else []:
+        tags = _prompt_tags(program.get("tags", []))
+        if not tags:
+            continue
+        tagged.append({
+            "id": str(program.get("id") or ""),
+            "name": str(program.get("name") or program.get("id") or ""),
+            "source": str(program.get("source") or "imported"),
+            "tags": tags,
+            "duration_ms": int(program.get("duration_ms") or 0),
+            "action_count": int(program.get("action_count") or 0),
+        })
+    return sorted(tagged, key=lambda item: (item["source"], item["id"]))
+
+
+def _format_duration_ms(duration_ms):
+    duration = max(0, int(duration_ms or 0))
+    if duration >= 60_000:
+        minutes = duration // 60_000
+        seconds = (duration % 60_000) // 1000
+        return f"{minutes}m{seconds:02d}s" if seconds else f"{minutes}m"
+    if duration >= 1000:
+        return f"{duration / 1000:.1f}s"
+    return f"{duration}ms"
+
+
+def _format_library_entry(item):
+    entry = f"{item.get('id')} tags:{'/'.join(item.get('tags', [])[:6])}"
+    duration_ms = int(item.get("duration_ms") or 0)
+    if duration_ms:
+        entry += f" duration:{_format_duration_ms(duration_ms)}"
+    return entry
+
+
+def _format_library_tags_prompt(library_tagged_patterns, library_tagged_programs):
+    lines = []
+    patterns = list(library_tagged_patterns or ())[:12]
+    programs = list(library_tagged_programs or ())[:8]
+    if not patterns and not programs:
+        return lines
+    lines.append(
+        "Saved library tags are semantic hints for future content selection; do not invent move.pattern IDs from them unless a pattern is listed as an available fixed move.pattern above."
+    )
+    if patterns:
+        lines.append("Saved user pattern tags: " + "; ".join(_format_library_entry(pattern) for pattern in patterns))
+    if programs:
+        lines.append("Saved long program tags: " + "; ".join(_format_library_entry(program) for program in programs))
+    return lines

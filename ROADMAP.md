@@ -292,25 +292,6 @@ watch items after recent regressions.
   Pause/Resume, chat edge-blocking, motion-target language) while moving
   the visible surface into the new layout.
 
-### 6. Shareable Library Export And Tags (S/M)
-
-Why next: sharing user-authored prompts, Motion Patterns, and Programs /
-funscripts is a short-term collaboration unlock. A portable library export and
-explicit pattern/script tags let users exchange useful content now and provide
-the metadata needed for later LLM-curated playback without waiting for the
-larger curation architecture.
-
-Status note: Partial. One-click zip export and visible tag editing have landed
-for saved Motion Patterns and imported Programs. The remaining work is to make
-tags more ergonomic and connect them to the future LLM-curated playback path.
-
-- Add tag suggestions or a small controlled tag picker with labels such as
-  intense, full shaft, mid shaft, tip, base, teasing, slow, and edging.
-- Include saved user-pattern and program tags in the LLM-facing library/catalog
-  summaries when a future planner is allowed to choose authored content by
-  semantic tags, not only by names, feedback weights, or recent playback
-  history.
-
 ## Queued
 
 ### 7. Soft-Anchor Pattern Authoring (M/L)

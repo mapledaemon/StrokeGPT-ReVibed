@@ -358,6 +358,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(catalog_response.status_code, 200)
         catalog = catalog_response.get_json()
         self.assertIn("patterns", catalog)
+        self.assertIn("full shaft", catalog["tag_suggestions"])
         self.assertIn("stroke", {pattern["id"] for pattern in catalog["patterns"]})
         stroke_summary = next(pattern for pattern in catalog["patterns"] if pattern["id"] == "stroke")
         self.assertEqual(stroke_summary["weight"], 50)

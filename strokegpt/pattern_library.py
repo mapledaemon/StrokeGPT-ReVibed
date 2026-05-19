@@ -3,6 +3,7 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .motion_tags import safe_motion_tags
 from .motion_patterns import MotionPattern, PATTERNS, PatternAction, normalize_actions
 
 
@@ -50,14 +51,7 @@ def _safe_text(value, default="", max_length=240):
 
 
 def _safe_tags(value):
-    if not isinstance(value, list):
-        return ()
-    tags = []
-    for item in value[:20]:
-        tag = _safe_text(item, max_length=40)
-        if tag and tag not in tags:
-            tags.append(tag)
-    return tuple(tags)
+    return safe_motion_tags(value, max_tags=20)
 
 
 def _safe_feedback(value):

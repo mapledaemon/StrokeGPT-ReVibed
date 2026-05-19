@@ -51,6 +51,7 @@ import {
     configureMotionProgramPlayer,
     openMotionProgramWindow,
 } from './motion/program-player.js';
+import { updateMotionTagSuggestions } from './motion/tag-editor.js';
 import { updateHandyConnectionStatusFromMotion } from './device-control.js';
 import {
     bindMotionPatternStudioControls,
@@ -575,6 +576,7 @@ function renderMotionTrainingPatternList(patterns) {
 }
 
 export function renderMotionPatterns(catalog = {}) {
+    updateMotionTagSuggestions(catalog);
     const patterns = Array.isArray(catalog.patterns) ? catalog.patterns : [];
     state.motionPatterns = patterns;
     renderMotionFeedbackHistory(catalog.feedback_history);

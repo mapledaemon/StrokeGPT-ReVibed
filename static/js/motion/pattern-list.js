@@ -1,4 +1,5 @@
 import { D, apiCall, clampNumber, el, markRequiresBackend, reportSaveFailure, state } from '../context.js';
+import { normalizeMotionTagList, tagPromptMessage } from './tag-editor.js';
 
 const TRASH_ICON = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm3 0v7h2v-7h-2Z"></path></svg>';
 
@@ -118,9 +119,9 @@ export function createPatternTagsButton(pattern) {
         ? 'Built-in pattern tags are read-only.'
         : `Edit tags for ${patternDisplayName(pattern)}`;
     tagsButton.addEventListener('click', event => {
-        event.stopPropagation();
+        event.stopPropagation?.();
         const current = Array.isArray(pattern.tags) ? pattern.tags.join(', ') : '';
-        const next = window.prompt?.('Pattern tags, comma-separated', current);
+        const next = window.prompt?.(tagPromptMessage('Pattern'), current);
         if (next === null || next === undefined) return;
         setMotionPatternTags(pattern.id, next);
     });
@@ -331,9 +332,7 @@ export async function resetMotionPatternFeedback(patternId) {
 }
 
 export async function setMotionPatternTags(patternId, tags) {
-    const tagList = Array.isArray(tags)
-        ? tags
-        : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const tagList = normalizeMotionTagList(tags);
     const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}/tags`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
