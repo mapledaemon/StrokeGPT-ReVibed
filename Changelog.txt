@@ -7,6 +7,20 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-19 - PR #280 - Motion Studio Drawing Smoothing
+-------------------------------------------------------
+
+Branch: codex/motion-studio-drawing-smoothing
+
+- Changed Motion Pattern Studio drawing so freehand strokes are captured at a
+  useful real-time rate, then simplified into duration-scaled editable control
+  points instead of preserving every pointer event as device actions.
+- Saved newly drawn patterns with cubic interpolation defaults and rendered
+  preview curves with Bezier/Catmull-Rom smoothing so the graph better matches
+  playback.
+- Added Draw Detail and Simplify controls, and made Smooth operate on the
+  existing control points without densifying the pattern each time.
+
 2026-05-19 - PR #278 - Freestyle HSP Transition Bridge
 ------------------------------------------------------
 

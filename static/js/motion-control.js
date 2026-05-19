@@ -69,6 +69,7 @@ import {
     setMotionEditStatus,
     setMotionTrainingDetail,
     setMotionTrainingLoadingDetail,
+    simplifyEditedPattern,
     smoothEditedPattern,
     studioCropPreviewPayload,
     studioSourceProgramPayload,
@@ -150,6 +151,7 @@ export {
     setMotionEditStatus,
     setMotionTrainingDetail,
     setMotionTrainingLoadingDetail,
+    simplifyEditedPattern,
     smoothEditedPattern,
     studioSourceProgramPayload,
     stepMotionTrainingRangeInput,
@@ -1611,6 +1613,7 @@ export function initMotionControls({sendUserMessage}) {
         if (!D.hidden) pollMotionStatus();
     });
     el.motionTransformSmoothBtn?.addEventListener('click', smoothEditedPattern);
+    el.motionTransformSimplifyBtn?.addEventListener('click', simplifyEditedPattern);
     el.motionTransformHarshenBtn?.addEventListener('click', harshenEditedPattern);
     el.motionTransformDurationDownBtn?.addEventListener('click', () => setEditedPatternDuration(0.85, 'Shortened the temporary copy.'));
     el.motionTransformDurationUpBtn?.addEventListener('click', () => setEditedPatternDuration(1.18, 'Lengthened the temporary copy.'));

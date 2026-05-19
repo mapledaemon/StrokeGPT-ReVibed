@@ -4,8 +4,10 @@ import assert from 'node:assert';
 import {
     createBlankStudioPattern,
     cropPatternToWindow,
+    drawPatternPreviewCanvas,
     patternFromImportPayload,
     segmentIntensity,
+    simplifyDrawnActions,
     STUDIO_EDIT_HIT_TOLERANCE_PX,
     STUDIO_MAX_ACTIONS,
     studioActionAtPixel,
@@ -39,9 +41,11 @@ function studioMetrics(actions, width = 400, height = 200) {
 
 function stubCanvas(canvas, width = 400, height = 220) {
     canvas.getBoundingClientRect = () => ({top: 0, left: 0, right: width, bottom: height, width, height});
-    canvas.getContext = () => ({
+    const context = {
+        bezierCurveCalls: 0,
         beginPath() {},
         arc() {},
+        bezierCurveTo() { this.bezierCurveCalls += 1; },
         clearRect() {},
         fill() {},
         fillRect() {},
@@ -54,7 +58,9 @@ function stubCanvas(canvas, width = 400, height = 220) {
         set lineWidth(_value) {},
         set strokeStyle(_value) {},
         set textAlign(_value) {},
-    });
+    };
+    canvas.__testContext = context;
+    canvas.getContext = () => context;
 }
 
 describe('motion pattern studio helpers', () => {
@@ -116,7 +122,57 @@ describe('motion pattern studio helpers', () => {
             { at: 0, pos: 50 },
             { at: 4200, pos: 50 },
         ]);
+        assert.strictEqual(pattern.style.interpolation, 'cubic');
+        assert.strictEqual(pattern.style.interpolation_ms, 80);
         assert.ok(pattern.tags.includes('drawn'));
+    });
+
+    it('simplifies dense drawn gestures into sparse editable controls', () => {
+        const dense = [];
+        for (let i = 0; i <= 120; i++) {
+            const phase = (i / 120) * Math.PI * 2;
+            dense.push({
+                at: i * 50,
+                pos: 50 + (Math.sin(phase) * 36) + (Math.sin(phase * 11) * 1.2),
+            });
+        }
+
+        const simplified = simplifyDrawnActions(dense, {epsilon: 2.7, maxPoints: 24, minSpacingMs: 110});
+
+        assert.ok(simplified.length <= 24);
+        assert.strictEqual(simplified[0].at, dense[0].at);
+        assert.strictEqual(simplified[simplified.length - 1].at, dense[dense.length - 1].at);
+        assert.ok(simplified.some(action => action.pos > 82));
+        assert.ok(simplified.some(action => action.pos < 18));
+    });
+
+    it('scales the default drawn control budget with pattern duration', () => {
+        const dense = [];
+        for (let i = 0; i <= 240; i++) {
+            dense.push({ at: i * 100, pos: i % 2 === 0 ? 15 : 85 });
+        }
+
+        const simplified = simplifyDrawnActions(dense);
+
+        // Medium detail allows roughly 4.5 controls/second, capped by
+        // simplification when the curve needs fewer points.
+        assert.ok(simplified.length <= 100);
+        assert.ok(simplified.length > 24);
+    });
+
+    it('renders preview actions as a curved path when the canvas supports it', () => {
+        const canvas = el.motionTrainingPreviewCanvas;
+        stubCanvas(canvas);
+
+        drawPatternPreviewCanvas(canvas, {
+            actions: [
+                { at: 0, pos: 20 },
+                { at: 1000, pos: 80 },
+                { at: 2000, pos: 20 },
+            ],
+        }, 'Empty');
+
+        assert.ok(canvas.__testContext.bezierCurveCalls > 0);
     });
 
     it('maps faster motion segments to hotter timeline colors', () => {

@@ -284,7 +284,10 @@ export const el = {
     motionTrainingOriginalPreviewCanvas: D.getElementById('motion-training-original-preview-canvas'),
     motionTrainingPreviewCanvas: D.getElementById('motion-training-preview-canvas'),
     motionTransformSmoothBtn: D.getElementById('motion-transform-smooth-btn'),
+    motionTransformSimplifyBtn: D.getElementById('motion-transform-simplify-btn'),
     motionTransformHarshenBtn: D.getElementById('motion-transform-harshen-btn'),
+    motionDrawDetailSlider: D.getElementById('motion-draw-detail-slider'),
+    motionDrawDetailValue: D.getElementById('motion-draw-detail-value'),
     motionTransformDurationDownBtn: D.getElementById('motion-transform-duration-down-btn'),
     motionTransformDurationUpBtn: D.getElementById('motion-transform-duration-up-btn'),
     motionTransformTempoDownBtn: D.getElementById('motion-transform-tempo-down-btn'),
@@ -506,6 +509,8 @@ export const state = {
     motionStudioDrawingEnabled: false,
     motionStudioDrawingActive: false,
     motionStudioDrawBuffer: [],
+    motionStudioDrawLastEventMs: 0,
+    motionStudioDrawCapturedCount: 0,
     // Active studio tool. ``edit`` allows drag/insert/delete on existing
     // points and is the default whenever an editable pattern is loaded.
     // ``draw`` records one freehand sweep that replaces the pattern's
