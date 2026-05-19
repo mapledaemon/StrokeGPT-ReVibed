@@ -8,6 +8,24 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #274 - Local Voice Memory Guards
+------------------------------------------------
+
+Branch: codex/local-voice-memory-guards
+
+- Added local Chatterbox lifecycle guards so disabling local voice, switching
+  to ElevenLabs, or changing local TTS engine unloads the resident model,
+  clears pending local voice queues, runs garbage collection, and empties the
+  CUDA cache instead of keeping several GB resident after voice is no longer in
+  use.
+- Added an idle unload guard for local Chatterbox voice after 15 minutes of no
+  local TTS use. Set `STROKEGPT_LOCAL_TTS_IDLE_UNLOAD_SECONDS=0` to disable it
+  or a smaller number for memory-constrained testing.
+- Bounded the ready audio-output queue by chunk count and bytes so generated
+  voice chunks cannot accumulate indefinitely when the browser is not draining
+  playback.
+
+
 2026-05-19 - PR #273 - Chatterbox Console Output Guard
 ------------------------------------------------------
 

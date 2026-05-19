@@ -1,3 +1,4 @@
+import gc
 import io
 import inspect
 import importlib.util
@@ -20,8 +21,11 @@ class AudioService:
     LOCAL_TTS_CHUNK_CHARS = 220
     LOCAL_TTS_TAIL_PADDING_MS = 120
     LOCAL_TTS_PENDING_TEXT_LIMIT = 1
+    AUDIO_OUTPUT_QUEUE_LIMIT = 8
+    AUDIO_OUTPUT_QUEUE_BYTES_LIMIT = 12 * 1024 * 1024
     LOCAL_TTS_WARMUP_TEXT = "Hello there. I am ready when you are."
     LOCAL_TTS_WARMUP_PASSES = 2
+    LOCAL_TTS_IDLE_UNLOAD_SECONDS = 15 * 60
     LOCAL_ENGINE_LABELS = {
         LOCAL_ENGINE_CHATTERBOX_TURBO: "Chatterbox Turbo",
         LOCAL_ENGINE_CHATTERBOX: "Chatterbox Standard",
@@ -138,10 +142,14 @@ class AudioService:
         self._local_generation_started_at = None
         self._local_warmup_done = False
         self._local_prompt_conditionals_signature = None
+        self._local_model_last_used_at = None
+        self._local_idle_unload_timer = None
         self.last_generation_seconds = None
         self.last_error = ""
 
         self.audio_output_queue = deque()
+        self._audio_output_queue_bytes = 0
+        self._audio_output_dropped_count = 0
         self._audio_queue_condition = threading.Condition()
         self._tts_request_queue = deque()
         self._tts_request_condition = threading.Condition()
@@ -151,9 +159,12 @@ class AudioService:
     def set_provider(self, provider, enabled=None):
         if provider not in {"elevenlabs", "local"}:
             return False, "Unknown audio provider."
+        previous_provider = self.provider
         self.provider = provider
         if enabled is not None:
             self.is_on = bool(enabled)
+        if previous_provider == "local" and (provider != "local" or not self.is_on):
+            self.unload_local_model(reason="local voice disabled", clear_queues=True)
         return True, "Audio provider updated."
 
     def set_api_key(self, api_key):
@@ -182,9 +193,12 @@ class AudioService:
         if not voice_id and enabled and self.provider == "elevenlabs":
             return False, "A voice must be selected to enable ElevenLabs audio."
 
+        was_local = self.provider == "local"
         self.provider = "elevenlabs"
         self.voice_id = voice_id
         self.is_on = bool(enabled)
+        if was_local:
+            self.unload_local_model(reason="switched to ElevenLabs", clear_queues=True)
 
         status_message = "ON" if self.is_on else "OFF"
         if voice_id:
@@ -209,12 +223,7 @@ class AudioService:
     ):
         next_engine = self._normalize_local_engine(engine)
         if next_engine != self.local_engine:
-            with self._local_model_lock:
-                self._local_model = None
-                self._local_model_engine = None
-                self._local_model_device = ""
-                self._local_warmup_done = False
-                self._local_prompt_conditionals_signature = None
+            self.unload_local_model(reason="local voice engine changed", clear_queues=True)
             self.local_engine = next_engine
             self._local_preload_status = "idle"
             self._local_preload_phase = "idle"
@@ -236,6 +245,8 @@ class AudioService:
         self.local_repetition_penalty = self._clamp_float(
             repetition_penalty, 1.0, 2.0, preset["repetition_penalty"]
         )
+        if not self.is_on:
+            self.unload_local_model(reason="local voice disabled", clear_queues=True)
         return True, "Local voice settings updated."
 
     def local_status(self, *, lightweight=False):
@@ -284,6 +295,11 @@ class AudioService:
                 "tts_request_queue_limit": self.LOCAL_TTS_PENDING_TEXT_LIMIT,
                 "tts_dropped_text_count": self._tts_dropped_text_count,
                 "audio_output_queue_depth": self.audio_output_queue_depth(),
+                "audio_output_queue_limit": self.AUDIO_OUTPUT_QUEUE_LIMIT,
+                "audio_output_queue_bytes": self.audio_output_queue_bytes(),
+                "audio_output_queue_bytes_limit": self.AUDIO_OUTPUT_QUEUE_BYTES_LIMIT,
+                "audio_output_dropped_count": self._audio_output_dropped_count,
+                "local_tts_idle_unload_seconds": self._local_idle_unload_seconds(),
                 "prompt_path": self.local_prompt_path,
             }
 
@@ -356,6 +372,11 @@ class AudioService:
             "tts_request_queue_limit": self.LOCAL_TTS_PENDING_TEXT_LIMIT,
             "tts_dropped_text_count": self._tts_dropped_text_count,
             "audio_output_queue_depth": self.audio_output_queue_depth(),
+            "audio_output_queue_limit": self.AUDIO_OUTPUT_QUEUE_LIMIT,
+            "audio_output_queue_bytes": self.audio_output_queue_bytes(),
+            "audio_output_queue_bytes_limit": self.AUDIO_OUTPUT_QUEUE_BYTES_LIMIT,
+            "audio_output_dropped_count": self._audio_output_dropped_count,
+            "local_tts_idle_unload_seconds": self._local_idle_unload_seconds(),
             "prompt_path": self.local_prompt_path,
         }
 
@@ -478,16 +499,25 @@ class AudioService:
                 self._audio_queue_condition.wait(timeout=remaining)
             if defer_predicate and defer_predicate():
                 return None
-            return self.audio_output_queue.popleft()
+            chunk = self.audio_output_queue.popleft()
+            self._audio_output_queue_bytes = max(
+                0,
+                self._audio_output_queue_bytes - self._audio_chunk_size(chunk),
+            )
+            return chunk
 
     def _enqueue_audio_chunk(self, audio_bytes, mimetype):
         with self._audio_queue_condition:
-            self.audio_output_queue.append({"bytes": audio_bytes, "mimetype": mimetype})
+            chunk = {"bytes": audio_bytes, "mimetype": mimetype}
+            self.audio_output_queue.append(chunk)
+            self._audio_output_queue_bytes += self._audio_chunk_size(chunk)
+            self._trim_audio_output_queue_locked()
             self._audio_queue_condition.notify_all()
 
     def clear_audio_queue(self):
         with self._audio_queue_condition:
             self.audio_output_queue.clear()
+            self._audio_output_queue_bytes = 0
         with self._tts_request_condition:
             self._tts_request_queue.clear()
         return None
@@ -499,6 +529,29 @@ class AudioService:
     def audio_output_queue_depth(self):
         with self._audio_queue_condition:
             return len(self.audio_output_queue)
+
+    def audio_output_queue_bytes(self):
+        with self._audio_queue_condition:
+            return self._audio_output_queue_bytes
+
+    def _audio_chunk_size(self, chunk):
+        try:
+            return len(chunk.get("bytes") or b"")
+        except Exception:
+            return 0
+
+    def _trim_audio_output_queue_locked(self):
+        while (
+            len(self.audio_output_queue) > self.AUDIO_OUTPUT_QUEUE_LIMIT
+            or self._audio_output_queue_bytes > self.AUDIO_OUTPUT_QUEUE_BYTES_LIMIT
+        ):
+            dropped = self.audio_output_queue.popleft()
+            self._audio_output_queue_bytes = max(
+                0,
+                self._audio_output_queue_bytes - self._audio_chunk_size(dropped),
+            )
+            self._audio_output_dropped_count += 1
+        return None
 
     def tts_request_queue_depth(self):
         with self._tts_request_condition:
@@ -576,47 +629,52 @@ class AudioService:
     def _get_chatterbox_model(self, *, require_cached=False):
         with self._local_model_lock:
             if self._local_model is not None and self._local_model_engine == self.local_engine:
-                return self._local_model
-            try:
-                runtime = self._local_runtime_info()
-                if not runtime["torch_available"]:
-                    raise RuntimeError("PyTorch is not installed.")
-                if runtime.get("error"):
-                    raise RuntimeError(runtime["error"])
-                model_class = self._chatterbox_model_class(self.local_engine)
-                device = runtime["device"]
-                cached_model_path = self._chatterbox_cached_model_path()
-                with self._torch_float32_default_dtype():
-                    if cached_model_path:
-                        print(
-                            "[INFO] Loading local Chatterbox model from cached weights: "
-                            f"{cached_model_path}"
-                        )
-                        with self._suppress_chatterbox_console_output():
-                            loaded_model = model_class.from_local(cached_model_path, device=device)
-                    else:
-                        if require_cached:
-                            raise RuntimeError(
-                                "Local Chatterbox weights are not cached yet. Use Download / Load Local Voice Model once."
+                model = self._local_model
+            else:
+                try:
+                    runtime = self._local_runtime_info()
+                    if not runtime["torch_available"]:
+                        raise RuntimeError("PyTorch is not installed.")
+                    if runtime.get("error"):
+                        raise RuntimeError(runtime["error"])
+                    model_class = self._chatterbox_model_class(self.local_engine)
+                    device = runtime["device"]
+                    cached_model_path = self._chatterbox_cached_model_path()
+                    with self._torch_float32_default_dtype():
+                        if cached_model_path:
+                            print(
+                                "[INFO] Loading local Chatterbox model from cached weights: "
+                                f"{cached_model_path}"
                             )
-                        print(
-                            "[INFO] Loading local Chatterbox model. "
-                            "If the model weights are not cached, this may download several GB."
-                        )
-                        with self._suppress_chatterbox_console_output():
-                            loaded_model = model_class.from_pretrained(device=device)
-                self._local_model = self._prepare_chatterbox_model_for_inference(loaded_model)
-                self._local_model_engine = self.local_engine
-                self._local_model_device = device
-                print(f"[OK] {self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} loaded on {device}.")
-            except Exception as e:
-                raise RuntimeError(f"Could not load Chatterbox. Install with requirements.txt. Details: {e}")
-        return self._local_model
+                            with self._suppress_chatterbox_console_output():
+                                loaded_model = model_class.from_local(cached_model_path, device=device)
+                        else:
+                            if require_cached:
+                                raise RuntimeError(
+                                    "Local Chatterbox weights are not cached yet. Use Download / Load Local Voice Model once."
+                                )
+                            print(
+                                "[INFO] Loading local Chatterbox model. "
+                                "If the model weights are not cached, this may download several GB."
+                            )
+                            with self._suppress_chatterbox_console_output():
+                                loaded_model = model_class.from_pretrained(device=device)
+                    self._local_model = self._prepare_chatterbox_model_for_inference(loaded_model)
+                    self._local_model_engine = self.local_engine
+                    self._local_model_device = device
+                    self._local_model_last_used_at = time.monotonic()
+                    model = self._local_model
+                    print(f"[OK] {self.LOCAL_ENGINE_LABELS.get(self.local_engine, self.local_engine)} loaded on {device}.")
+                except Exception as e:
+                    raise RuntimeError(f"Could not load Chatterbox. Install with requirements.txt. Details: {e}")
+        self._mark_local_model_used()
+        return model
 
     def preload_local_model_async(self, force=False, require_cached=False):
         if not force and (self.provider != "local" or not self.is_on):
             return False
         if self.local_model_loaded():
+            self._mark_local_model_used()
             self._local_preload_status = "ready"
             self._local_preload_phase = "ready"
             self._local_preload_error = ""
@@ -668,16 +726,89 @@ class AudioService:
             for _index in range(max(1, int(self.LOCAL_TTS_WARMUP_PASSES))):
                 self._generate_local_waveform(model, self.LOCAL_TTS_WARMUP_TEXT)
             self._local_warmup_done = True
+            self._mark_local_model_used()
             print(f"[OK] Local Chatterbox warmup completed in {time.perf_counter() - started_at:.3f}s.")
 
     def _reset_local_model_after_failure(self):
+        self._release_local_model_state()
+        gc.collect()
+        self._empty_cuda_cache()
+
+    def unload_local_model(self, *, reason="manual", clear_queues=False):
+        if clear_queues:
+            self.clear_audio_queue()
+        with self._local_generation_lock:
+            had_model = self.local_model_loaded()
+            self._release_local_model_state()
+        gc.collect()
+        self._empty_cuda_cache()
+        if had_model:
+            print(f"[INFO] Local Chatterbox model unloaded ({reason}).")
+        return had_model
+
+    def _release_local_model_state(self):
+        self._cancel_local_idle_unload_timer()
         with self._local_model_lock:
             self._local_model = None
             self._local_model_engine = None
             self._local_model_device = ""
             self._local_warmup_done = False
             self._local_prompt_conditionals_signature = None
-        self._empty_cuda_cache()
+            self._local_model_last_used_at = None
+        return None
+
+    def _mark_local_model_used(self):
+        self._local_model_last_used_at = time.monotonic()
+        self._schedule_local_idle_unload()
+
+    def _local_idle_unload_seconds(self):
+        raw = os.getenv("STROKEGPT_LOCAL_TTS_IDLE_UNLOAD_SECONDS")
+        try:
+            value = float(raw) if raw is not None else self.LOCAL_TTS_IDLE_UNLOAD_SECONDS
+        except (TypeError, ValueError):
+            value = self.LOCAL_TTS_IDLE_UNLOAD_SECONDS
+        return max(0.0, value)
+
+    def _cancel_local_idle_unload_timer(self):
+        timer = self._local_idle_unload_timer
+        self._local_idle_unload_timer = None
+        if timer:
+            timer.cancel()
+
+    def _schedule_local_idle_unload(self):
+        seconds = self._local_idle_unload_seconds()
+        if seconds <= 0:
+            self._cancel_local_idle_unload_timer()
+            return
+        with self._local_model_lock:
+            if self._local_model is None or self._local_model_engine != self.local_engine:
+                self._cancel_local_idle_unload_timer()
+                return
+        self._cancel_local_idle_unload_timer()
+        timer = threading.Timer(seconds, self._unload_local_model_if_idle)
+        timer.daemon = True
+        self._local_idle_unload_timer = timer
+        timer.start()
+
+    def _unload_local_model_if_idle(self):
+        seconds = self._local_idle_unload_seconds()
+        if seconds <= 0:
+            return
+        if self._local_generation_status == "generating" or self._local_preload_status == "loading":
+            self._schedule_local_idle_unload()
+            return
+        last_used = self._local_model_last_used_at
+        if last_used is None:
+            return
+        idle_for = time.monotonic() - last_used
+        if idle_for < seconds:
+            self._schedule_local_idle_unload()
+            return
+        self._local_preload_status = "idle"
+        self._local_preload_phase = "idle"
+        self._local_preload_error = ""
+        self._local_preload_started_at = None
+        self.unload_local_model(reason=f"idle for {int(seconds)}s")
 
     def _empty_cuda_cache(self):
         try:
