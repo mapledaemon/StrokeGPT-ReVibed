@@ -1,6 +1,7 @@
 import importlib.util
 import importlib.machinery
 import io
+import logging
 from pathlib import Path
 import sys
 import tempfile
@@ -179,6 +180,35 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(calls, [("from_local", cached_path, "cuda")])
         self.assertEqual(service._local_model_engine, service.local_engine)
         self.assertEqual(service._local_model_device, "cuda")
+
+    def test_local_waveform_suppresses_chatterbox_console_output(self):
+        service = AudioService()
+        service.local_prompt_path = "voice.wav"
+
+        class BrokenStream:
+            def write(self, _value):
+                raise OSError(22, "Invalid argument")
+
+            def flush(self):
+                raise OSError(22, "Invalid argument")
+
+        class NoisyModel:
+            def prepare_conditionals(self, _path):
+                print("vendor conditioning stdout")
+                logging.warning("vendor conditioning log")
+
+            def generate(self, _text, **_kwargs):
+                print("vendor stdout progress")
+                print("vendor stderr progress", file=sys.stderr)
+                logging.warning("vendor generation log")
+                return "waveform"
+
+        service._local_generation_kwargs = lambda: {}
+
+        with mock.patch("sys.stdout", BrokenStream()), mock.patch("sys.stderr", BrokenStream()):
+            waveform = service._generate_local_waveform(NoisyModel(), "Ready.")
+
+        self.assertEqual(waveform, "waveform")
 
     def test_local_status_reports_preload_progress_percent(self):
         service = AudioService()

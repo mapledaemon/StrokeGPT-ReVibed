@@ -1,6 +1,7 @@
 import io
 import inspect
 import importlib.util
+import logging
 import os
 import re
 import threading
@@ -8,7 +9,7 @@ import time
 import warnings
 import wave
 from collections import deque
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 class AudioService:
@@ -591,7 +592,8 @@ class AudioService:
                             "[INFO] Loading local Chatterbox model from cached weights: "
                             f"{cached_model_path}"
                         )
-                        loaded_model = model_class.from_local(cached_model_path, device=device)
+                        with self._suppress_chatterbox_console_output():
+                            loaded_model = model_class.from_local(cached_model_path, device=device)
                     else:
                         if require_cached:
                             raise RuntimeError(
@@ -601,7 +603,8 @@ class AudioService:
                             "[INFO] Loading local Chatterbox model. "
                             "If the model weights are not cached, this may download several GB."
                         )
-                        loaded_model = model_class.from_pretrained(device=device)
+                        with self._suppress_chatterbox_console_output():
+                            loaded_model = model_class.from_pretrained(device=device)
                 self._local_model = self._prepare_chatterbox_model_for_inference(loaded_model)
                 self._local_model_engine = self.local_engine
                 self._local_model_device = device
@@ -690,11 +693,14 @@ class AudioService:
         self._prepare_chatterbox_model_for_inference(model)
         with self._torch_float32_default_dtype(), self._torch_inference_mode():
             if self.local_prompt_path:
-                prepared_prompt = self._prepare_chatterbox_prompt_conditionals(model, kwargs)
+                with self._suppress_chatterbox_console_output():
+                    prepared_prompt = self._prepare_chatterbox_prompt_conditionals(model, kwargs)
                 if not prepared_prompt:
                     kwargs["audio_prompt_path"] = self.local_prompt_path
             self._coerce_chatterbox_conditionals_to_float32(model)
-            return self._coerce_local_waveform_dtype(model.generate(text, **kwargs))
+            with self._suppress_chatterbox_console_output():
+                generated = model.generate(text, **kwargs)
+            return self._coerce_local_waveform_dtype(generated)
 
     def _prepare_chatterbox_model_for_inference(self, model):
         self._patch_chatterbox_float32_inputs(model)
@@ -1159,6 +1165,34 @@ class AudioService:
         finally:
             if get_default_dtype() != previous_dtype:
                 set_default_dtype(previous_dtype)
+
+    @contextmanager
+    def _suppress_chatterbox_console_output(self):
+        verbose = os.getenv("STROKEGPT_TTS_VERBOSE", "").strip().lower()
+        if verbose in {"1", "true", "yes", "on"}:
+            yield
+            return
+
+        class SilentStream:
+            def write(self, _value):
+                return 0
+
+            def flush(self):
+                return None
+
+        previous_logging_disable = logging.root.manager.disable
+        previous_root_handlers = list(logging.root.handlers)
+        sink = SilentStream()
+        try:
+            logging.disable(logging.CRITICAL)
+            with redirect_stdout(sink), redirect_stderr(sink):
+                yield
+        finally:
+            logging.disable(previous_logging_disable)
+            for handler in list(logging.root.handlers):
+                if handler not in previous_root_handlers and getattr(handler, "stream", None) is sink:
+                    logging.root.removeHandler(handler)
+                    handler.close()
 
     @contextmanager
     def _suppress_perth_pkg_resources_warning(self):

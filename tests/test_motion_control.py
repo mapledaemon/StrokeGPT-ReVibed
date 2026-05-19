@@ -2280,10 +2280,14 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertTrue(applied)
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "freestyle planner",
+            )
 
             point = next(
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp" and point.get("source") == "freestyle planner"
             )
             self.assertEqual(point["mode"], "freestyle")

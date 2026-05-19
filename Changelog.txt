@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #273 - Chatterbox Console Output Guard
+------------------------------------------------------
+
+Branch: codex/chatterbox-console-output-guard
+
+- Prevent Chatterbox load, voice-clone conditioning, and generation-time
+  console output from breaking local voice when the Windows launch context has
+  an invalid stdout/stderr handle, which could surface as `[Errno 22] Invalid
+  argument` during warmup or the next generated reply.
+- Kept a `STROKEGPT_TTS_VERBOSE=1` escape hatch for debugging raw Chatterbox
+  output in a terminal.
+- Synchronized the Freestyle continuous HSP metadata trace test so CI waits
+  for the trace row it asserts instead of racing the background stream worker.
+
+
 2026-05-19 - PR #272 - Voice Warm Start And Library Export Tools
 -----------------------------------------------------------------
 
