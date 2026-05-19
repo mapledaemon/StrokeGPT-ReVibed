@@ -21,6 +21,25 @@ Branch: codex/motion-studio-drawing-smoothing
 - Added Draw Detail and Simplify controls, and made Smooth operate on the
   existing control points without densifying the pattern each time.
 
+2026-05-19 - PR #279 - Freestyle Area-Focus Phase Preservation
+---------------------------------------------------------------
+
+Branch: codex/freestyle-transition-jump-guard
+
+- Kept same-shape continuous replacements phase-preserving even when the plan
+  duration changes, so Freestyle area-focus style/range changes drift from the
+  currently playing phase instead of being treated as a fresh cross-pattern
+  restart.
+- Started active-replacement bridge points near the estimated REST flush
+  arrival instead of at apply time, reducing stale pre-start points that could
+  make the Handy snap back to a fixed position at Freestyle transition ticks.
+- Added regression coverage for Freestyle area-focus replacements whose speed
+  and range changes alter the generated cycle duration and for bridge batches
+  that skip stale apply-time points.
+- Made generated area-focus HSP startup/replacement morphs honor the configured
+  velocity cap before entering the normal focus-area cycle, so tip/base focus
+  changes do not rapidly seek to the new area at transition start.
+
 2026-05-19 - PR #278 - Freestyle HSP Transition Bridge
 ------------------------------------------------------
 

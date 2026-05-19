@@ -57,6 +57,7 @@ CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
 CONTINUOUS_MORPH_SECONDS = 0.95
 CONTINUOUS_MIN_MORPH_SECONDS = 0.45
 CONTINUOUS_MAX_MORPH_SECONDS = 1.8
+CONTINUOUS_MORPH_SPEED_CAP_SAFETY = 1.35
 AUTHORED_HSP_INITIAL_BUFFER_SECONDS = 30.0
 AUTHORED_HSP_TARGET_BUFFER_SECONDS = 30.0
 AUTHORED_HSP_APPEND_THRESHOLD_SECONDS = 8.0
@@ -1914,7 +1915,10 @@ class MotionController:
             preserve_replacement_phase = (
                 replacing_active_stream
                 and self._continuous_phase_state is not None
-                and self._continuous_phase_state.key == plan_key
+                and (
+                    self._continuous_phase_state.key == plan_key
+                    or self._continuous_plans_phase_compatible(self._continuous_phase_state.plan, plan)
+                )
             )
             if stream_offset_seconds is None:
                 stream_offset_seconds = phase_offset_seconds
@@ -1982,9 +1986,38 @@ class MotionController:
             duration,
         )
 
+    def _continuous_plan_phase_key(self, plan) -> tuple[Any, ...]:
+        if plan is None:
+            return ()
+        # Duration is intentionally excluded: generated area-focus streams can
+        # change cadence with speed/range while keeping the same cyclic shape.
+        style = getattr(plan, "style", None)
+        normalized_range = getattr(plan, "normalized_range", None)
+        if normalized_range is not None:
+            try:
+                normalized_range = tuple(round(float(value), 4) for value in normalized_range)
+            except (TypeError, ValueError):
+                normalized_range = tuple(normalized_range or ())
+        return (
+            str(getattr(plan, "name", "") or ""),
+            tuple(getattr(plan, "actions", ()) or ()),
+            str(getattr(style, "name", "") or ""),
+            normalized_range,
+        )
+
+    def _continuous_plans_phase_compatible(self, previous_plan, next_plan) -> bool:
+        return bool(
+            previous_plan is not None
+            and next_plan is not None
+            and self._continuous_plan_phase_key(previous_plan)
+            == self._continuous_plan_phase_key(next_plan)
+        )
+
     def _continuous_phase_offset_seconds(self, plan, plan_key: tuple[Any, ...], now: float) -> float:
         state = self._continuous_phase_state
-        if state is None or state.generation != self._generation or state.key != plan_key:
+        if state is None or state.generation != self._generation:
+            return 0.0
+        if state.key != plan_key and not self._continuous_plans_phase_compatible(state.plan, plan):
             return 0.0
         try:
             phase_rate = max(0.0, float(state.phase_rate))
@@ -2230,6 +2263,35 @@ class MotionController:
             CONTINUOUS_MIN_MORPH_SECONDS,
             CONTINUOUS_MAX_MORPH_SECONDS,
         )
+
+    def _continuous_speed_cap_morph_seconds(
+        self,
+        start: MotionTarget,
+        target: MotionTarget,
+        *,
+        plan_range: Optional[dict[str, Any]] = None,
+    ) -> float:
+        start = start.clamped()
+        target = target.clamped()
+        depth_candidates: list[float] = [float(target.depth)]
+        if isinstance(plan_range, dict):
+            for key in ("min", "max"):
+                try:
+                    depth_candidates.append(float(plan_range[key]))
+                except (KeyError, TypeError, ValueError):
+                    pass
+
+        seconds = 0.0
+        for depth in depth_candidates:
+            capped_target = MotionTarget(
+                target.speed,
+                depth,
+                target.stroke_range,
+                label=target.label,
+                motion_program=target.motion_program,
+            ).clamped()
+            seconds = max(seconds, self._minimum_position_duration_seconds(start, capped_target))
+        return seconds * CONTINUOUS_MORPH_SPEED_CAP_SAFETY
 
     def _continuous_morph_amount(self, progress: float) -> float:
         progress = _clamp(progress, 0.0, 1.0)
@@ -2495,7 +2557,20 @@ class MotionController:
                 finite_stop_stream_seconds = play_start_stream_seconds + (
                     effective_duration_seconds * finite_cycles
                 )
-        morph_seconds = self._continuous_morph_seconds(morph_start_target, initial_sample.target)
+        plan_name = str(getattr(plan, "name", "") or "continuous")
+        program_range = continuous_plan_depth_range(plan, target)
+        base_morph_seconds = self._continuous_morph_seconds(morph_start_target, initial_sample.target)
+        speed_cap_morph_seconds = (
+            self._continuous_speed_cap_morph_seconds(
+                morph_start_target,
+                initial_sample.target,
+                plan_range=program_range,
+            )
+            if plan_name.strip().lower() == "area_focus"
+            else 0.0
+        )
+        morph_seconds = max(base_morph_seconds, speed_cap_morph_seconds)
+        freeze_phase_during_morph = speed_cap_morph_seconds > base_morph_seconds + 0.001
         stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
@@ -2508,7 +2583,9 @@ class MotionController:
         suppressed_duplicate_points = 0
         phase_schedule: deque[tuple[float, float]] = deque()
         # A flushed active-stream replacement starts in the future to survive
-        # REST latency; bridge that lead window with the old stream trajectory.
+        # REST latency. The old buffer keeps playing until the flush arrives,
+        # so start bridge points near estimated arrival instead of at apply
+        # time; stale bridge points can make firmware snap backward.
         bridge_points_pending = (
             replacing_active_stream
             and replacement_phase_state is not None
@@ -2519,17 +2596,32 @@ class MotionController:
             base_interval,
             CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
         )
+        bridge_start_stream_seconds = bridge_stream_seconds
+        bridge_start_latency_seconds = 0.0
+        if bridge_points_pending:
+            bridge_start_latency_seconds = max(
+                CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+                self._recent_hsp_command_latency_seconds(),
+            )
+            latest_bridge_start = max(
+                hsp_clock_start_seconds,
+                play_start_stream_seconds - bridge_interval_seconds,
+            )
+            bridge_start_stream_seconds = min(
+                max(hsp_clock_start_seconds, hsp_clock_start_seconds + bridge_start_latency_seconds),
+                latest_bridge_start,
+            )
+            bridge_stream_seconds = bridge_start_stream_seconds
         stream_wall_zero = None
         sync_count = 0
         next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None
-        program_range = continuous_plan_depth_range(plan, target)
-        plan_name = str(getattr(plan, "name", "") or "continuous")
         plan_key = self._continuous_plan_key(plan)
         cycle_ms = round(plan.duration_seconds * 1000.0, 1)
         phase_offset_ms = round(play_start_seconds * 1000.0, 1)
         play_start_ms = round(play_start_stream_seconds * 1000.0, 1)
         stream_cycle_ms = round(stream_duration_seconds * 1000.0, 1)
         morph_ms = round(morph_seconds * 1000.0, 1)
+        speed_cap_morph_ms = round(speed_cap_morph_seconds * 1000.0, 1)
         morph_start_depth = round(float(morph_start_target.depth), 1)
         morph_start_range = round(float(morph_start_target.stroke_range), 1)
         morph_start_delta_depth = round(float(morph_start_target.depth) - float(start_target.depth), 1)
@@ -2562,14 +2654,17 @@ class MotionController:
         def sample_stream_point(
             point_seconds: float,
             point_stream_seconds: float,
-        ):
+        ) -> tuple[Any, float]:
+            logical_point_seconds = point_seconds
+            stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
+            if freeze_phase_during_morph:
+                logical_point_seconds = play_start_seconds + max(0.0, stream_elapsed - morph_seconds)
             sample = self._sample_continuous_motion(
                 plan,
                 target,
-                point_seconds,
+                logical_point_seconds,
                 sample_continuous_motion,
             )
-            stream_elapsed = max(0.0, point_stream_seconds - play_start_stream_seconds)
             if stream_elapsed < morph_seconds:
                 amount = self._continuous_morph_amount(stream_elapsed / morph_seconds)
                 sample = sample.with_target(
@@ -2580,7 +2675,7 @@ class MotionController:
                         f"{sample.target.label or plan_name} morph",
                     )
                 )
-            return sample
+            return sample, logical_point_seconds
 
         def append_stream_point(
             points: list[dict[str, Any]],
@@ -2590,6 +2685,7 @@ class MotionController:
             sample,
             phase_interval: float,
             hsp_interval_limited_points: int = 0,
+            logical_point_seconds: Optional[float] = None,
         ) -> None:
             nonlocal previous_point_time_seconds, previous_phase_time_seconds, suppressed_duplicate_points
             nonlocal previous_stream_point, sample_index, stream_index, stream_seconds
@@ -2624,7 +2720,7 @@ class MotionController:
             stream_index += 1
             point = {
                 "t": int(round(point_stream_seconds * 1000.0)),
-                "logical_t": int(round(point_seconds * 1000.0)),
+                "logical_t": int(round((point_seconds if logical_point_seconds is None else logical_point_seconds) * 1000.0)),
                 "x": output_depth,
                 "semantic_x": semantic_depth,
                 "speed": sample.target.speed,
@@ -2648,7 +2744,9 @@ class MotionController:
             if suppressed_duplicate_points:
                 point["hsp_duplicate_suppressed_points"] = int(suppressed_duplicate_points)
                 suppressed_duplicate_points = 0
-            phase_schedule.append((point_stream_seconds, point_seconds))
+            phase_schedule.append(
+                (point_stream_seconds, point_seconds if logical_point_seconds is None else logical_point_seconds)
+            )
             points.append(point)
             previous_point_time_seconds = point_stream_seconds
             previous_phase_time_seconds = point_seconds
@@ -2753,7 +2851,7 @@ class MotionController:
                     bridge_points_pending = False
             if start_point_pending:
                 start_point_pending = False
-                sample = sample_stream_point(play_start_seconds, play_start_stream_seconds)
+                sample, logical_point_seconds = sample_stream_point(play_start_seconds, play_start_stream_seconds)
                 append_stream_point(
                     points,
                     play_start_seconds,
@@ -2761,6 +2859,7 @@ class MotionController:
                     start_point_authored,
                     sample,
                     base_interval,
+                    logical_point_seconds=logical_point_seconds,
                 )
             while len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND:
                 phase_point = hsp_phase_points[next_phase_index]
@@ -2776,7 +2875,7 @@ class MotionController:
                 provisional_stream_seconds = (
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
                 ) + phase_interval
-                sample = sample_stream_point(point_seconds, provisional_stream_seconds)
+                sample, _logical_point_seconds = sample_stream_point(point_seconds, provisional_stream_seconds)
                 transport_interval = phase_interval
                 point_stream_seconds = (
                     stream_seconds if previous_point_time_seconds is None else previous_point_time_seconds
@@ -2786,7 +2885,7 @@ class MotionController:
                 ):
                     break
 
-                sample = sample_stream_point(point_seconds, point_stream_seconds)
+                sample, logical_point_seconds = sample_stream_point(point_seconds, point_stream_seconds)
                 interval_limited_points = int(phase_point.get("hsp_interval_limited_points") or 0)
                 append_stream_point(
                     points,
@@ -2796,6 +2895,7 @@ class MotionController:
                     sample,
                     phase_interval,
                     interval_limited_points,
+                    logical_point_seconds=logical_point_seconds,
                 )
                 advance_phase_cursor()
             if finite_stop_stream_seconds is not None and until_seconds >= finite_stop_stream_seconds:
@@ -2809,7 +2909,7 @@ class MotionController:
                         0.0,
                         finite_stop_stream_seconds - play_start_stream_seconds,
                     )
-                    sample = sample_stream_point(point_seconds, finite_stop_stream_seconds)
+                    sample, logical_point_seconds = sample_stream_point(point_seconds, finite_stop_stream_seconds)
                     phase_interval = (
                         base_interval
                         if previous_phase_time_seconds is None
@@ -2822,6 +2922,7 @@ class MotionController:
                         False,
                         sample,
                         phase_interval,
+                        logical_point_seconds=logical_point_seconds,
                     )
             return points
 
@@ -2891,6 +2992,8 @@ class MotionController:
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_replacement_lead_ms": round(replacement_lead_seconds * 1000.0, 1),
                     "hsp_replacement_kind": replacement_kind if replacing_active_stream else "start",
+                    "hsp_replacement_bridge_start_ms": round(bridge_start_stream_seconds * 1000.0, 1),
+                    "hsp_replacement_bridge_latency_ms": round(bridge_start_latency_seconds * 1000.0, 1),
                     "hsp_stream_cycle_ms": stream_cycle_ms,
                     "hsp_transport_time_scale": round(
                         point["sample_interval_seconds"] / max(0.001, point["phase_interval_seconds"]),
@@ -2899,6 +3002,8 @@ class MotionController:
                     "hsp_authored_point": bool(point.get("authored_point")),
                     "hsp_replacement_bridge": bool(point.get("hsp_replacement_bridge")),
                     "morph_ms": morph_ms,
+                    "morph_speed_cap_ms": speed_cap_morph_ms,
+                    "morph_phase_frozen": bool(freeze_phase_during_morph),
                     "morph_start_depth": morph_start_depth,
                     "morph_start_range": morph_start_range,
                     "morph_start_source": morph_start_source,

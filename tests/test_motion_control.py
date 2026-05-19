@@ -1547,6 +1547,43 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_hsp_area_focus_start_morph_respects_velocity_cap(self):
+        handy = VelocityCappedStreamingFakeHandy(max_velocity=25)
+        handy.last_relative_speed = 40
+        handy.last_depth_pos = 50
+        handy.last_stroke_range = 80
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(MotionTarget(40, 90, 80, "base focus"), source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            hsp_points = self.wait_for_hsp_trace(controller)
+            first = hsp_points[0]
+            self.assertEqual(first["continuous_plan_kind"], "area_focus")
+            self.assertTrue(first["morph_phase_frozen"])
+            self.assertGreater(first["morph_speed_cap_ms"], CONTINUOUS_MAX_MORPH_SECONDS * 1000.0)
+
+            morph_end_ms = first["hsp_play_start_ms"] + first["morph_ms"]
+            transition_points = [
+                point for point in handy.stream_starts[0]["points"] if point["t"] <= morph_end_ms
+            ]
+            self.assertGreater(len(transition_points), 3)
+            self.assertEqual(
+                {point["logical_t"] for point in transition_points[:-1]},
+                {transition_points[0]["logical_t"]},
+            )
+
+            transition_rates = [
+                abs(right["x"] - left["x"]) / ((right["t"] - left["t"]) / 1000.0)
+                for left, right in zip(transition_points, transition_points[1:])
+                if right["t"] > left["t"]
+            ]
+            self.assertTrue(transition_rates)
+            self.assertLessEqual(max(transition_rates), handy.max_velocity + 1.0)
+        finally:
+            controller.stop()
+
     def test_continuous_hsp_preserves_point_timing_without_velocity_stretch(self):
         class HspVelocityTrapHandy(VelocityCappedStreamingFakeHandy):
             def __init__(self):
@@ -2422,6 +2459,102 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(bridge_points)
             self.assertLess(bridge_points[0]["hsp_point_time_ms"], bridge_points[0]["hsp_play_start_ms"])
+        finally:
+            controller.stop()
+
+    def test_freestyle_area_focus_replacement_bridge_skips_stale_apply_time_points(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(
+                MotionTarget(54, 50, 78, "freestyle flow"),
+                source="freestyle planner",
+                trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "sway"},
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            controller._observe_hsp_command_seconds(0.42)
+
+            controller.apply_generated_target(
+                MotionTarget(62, 58, 70, "freestyle flow"),
+                source="freestyle planner",
+                trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "wave"},
+            )
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
+            self.assertTrue(bridge_points)
+
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("hsp_replacement_bridge")
+                and point.get("source") == "freestyle planner"
+                and point.get("freestyle_pattern_id") == "wave",
+            )
+            first_bridge = next(
+                point
+                for point in trace
+                if point.get("hsp_replacement_bridge")
+                and point.get("source") == "freestyle planner"
+                and point.get("freestyle_pattern_id") == "wave"
+            )
+            hsp_clock_start_ms = first_bridge["hsp_play_start_ms"] - first_bridge["hsp_replacement_lead_ms"]
+
+            self.assertGreaterEqual(bridge_points[0]["t"] - hsp_clock_start_ms, 390.0)
+            self.assertLess(bridge_points[0]["t"], replacement["start_time_ms"])
+            self.assertAlmostEqual(first_bridge["hsp_replacement_bridge_start_ms"], bridge_points[0]["t"], delta=1.0)
+            self.assertGreaterEqual(first_bridge["hsp_replacement_bridge_latency_ms"], 420.0)
+        finally:
+            controller.stop()
+
+    def test_freestyle_area_focus_replacement_preserves_phase_when_duration_changes(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        first = MotionTarget(20, 50, 84, "freestyle flow")
+        second = MotionTarget(80, 62, 36, "freestyle flow")
+        first_clean, _first_zone = controller._area_focus_transport_target(first)
+        second_clean, _second_zone = controller._area_focus_transport_target(second)
+        old_plan = controller._hsp_area_focus_plan(first_clean)
+        new_plan = controller._hsp_area_focus_plan(second_clean)
+        self.assertNotEqual(round(old_plan.duration_seconds, 3), round(new_plan.duration_seconds, 3))
+        old_duration = sample_continuous_motion(old_plan, first_clean, 0.0).effective_duration_seconds
+
+        try:
+            controller.apply_generated_target(
+                first,
+                source="freestyle planner",
+                trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "slow-wide"},
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            with mock.patch("strokegpt.motion.CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS", 1.0):
+                controller.apply_generated_target(
+                    second,
+                    source="freestyle planner",
+                    trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "fast-tight"},
+                )
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            second_points = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "freestyle planner"
+                and point.get("freestyle_pattern_id") == "fast-tight"
+                and not point.get("hsp_replacement_bridge"),
+            )
+            second_points = [
+                point
+                for point in second_points
+                if point.get("source") == "freestyle planner"
+                and point.get("freestyle_pattern_id") == "fast-tight"
+            ]
+            self.assertTrue(any(point.get("hsp_replacement_bridge") for point in second_points))
+            first_point = next(point for point in second_points if not point.get("hsp_replacement_bridge"))
+            expected_phase = (first_point["hsp_replacement_lead_ms"] / 1000.0) / old_duration
+
+            self.assertEqual(first_point["hsp_replacement_kind"], "drift")
+            self.assertAlmostEqual(first_point["sample_phase"], expected_phase, delta=0.08)
+            self.assertAlmostEqual(first_point["output_depth"], first_point["morph_start_depth"], delta=2.0)
         finally:
             controller.stop()
 
