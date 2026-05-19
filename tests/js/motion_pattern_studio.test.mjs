@@ -8,6 +8,7 @@ import {
     patternFromImportPayload,
     segmentIntensity,
     simplifyDrawnActions,
+    smoothEditedPattern,
     STUDIO_EDIT_HIT_TOLERANCE_PX,
     STUDIO_MAX_ACTIONS,
     studioActionAtPixel,
@@ -173,6 +174,39 @@ describe('motion pattern studio helpers', () => {
         }, 'Empty');
 
         assert.ok(canvas.__testContext.bezierCurveCalls > 0);
+    });
+
+    it('smooths sparse controls without flattening peaks and troughs', () => {
+        stubCanvas(el.motionTrainingOriginalPreviewCanvas);
+        stubCanvas(el.motionTrainingPreviewCanvas);
+        stubCanvas(el.motionStudioCropCanvas);
+        state.motionTrainingEditedPattern = {
+            id: 'sparse-wave',
+            name: 'Sparse Wave',
+            actions: [
+                { at: 0, pos: 50 },
+                { at: 1000, pos: 96 },
+                { at: 2000, pos: 4 },
+                { at: 3000, pos: 96 },
+                { at: 4000, pos: 50 },
+            ],
+        };
+        state.motionTrainingDirty = false;
+
+        smoothEditedPattern();
+
+        const actions = state.motionTrainingEditedPattern.actions;
+        const positions = actions.map(action => action.pos);
+        assert.strictEqual(actions.length, 5);
+        assert.strictEqual(actions[0].pos, 50);
+        assert.strictEqual(actions[actions.length - 1].pos, 50);
+        assert.ok(Math.max(...positions) > 90, positions);
+        assert.ok(Math.min(...positions) < 10, positions);
+        assert.strictEqual(state.motionTrainingDirty, true);
+
+        state.motionTrainingEditedPattern = null;
+        state.motionTrainingPreviewPattern = null;
+        state.motionTrainingDirty = false;
     });
 
     it('maps faster motion segments to hotter timeline colors', () => {
