@@ -302,6 +302,19 @@ class HandyControllerTests(unittest.TestCase):
         self.assertLess(slide["min"], slide["max"])
         self.assertEqual(slide, {"min": 98, "max": 100})
 
+    def test_move_normalizes_reversed_calibrated_depth_limits(self):
+        handy = RecordingHandyController()
+        handy.update_settings(10, 80, 90, 10)
+
+        handy.move(50, 25, 50)
+
+        slide = next(body for path, body in handy.commands if path == "slide")
+        self.assertEqual(slide, {"min": 50, "max": 90})
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["calibrated_range"], {"min": 10, "max": 90})
+        self.assertEqual(diagnostics["physical_depth"], 30)
+        self.assertEqual(diagnostics["stroke_zone"], {"min": 10, "max": 50})
+
     def test_move_to_depth_uses_xava_with_calibrated_position_and_velocity(self):
         handy = RecordingHandyController()
         handy.update_settings(20, 80, 10, 90)

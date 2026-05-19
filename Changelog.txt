@@ -7,6 +7,20 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-19 - PR #277 - Original HAMP Window Cleanup
+---------------------------------------------------
+
+Branch: codex/original-code-audit
+
+- Compared current `master` against the original upstream StrokeGPT baseline;
+  only the default profile image remains byte-for-byte identical, while the
+  remaining original-style code is mostly carried forward as expanded backend
+  behavior.
+- Refactored the legacy HAMP slide-window projection so calibrated depth
+  bounds, stroke-zone diagnostics, zero-range calibration, and reversed depth
+  inputs share one normalized helper instead of duplicating the original
+  inline math in command and diagnostics paths.
+
 
 2026-05-19 - PR #275 - Status Poll Memory And Payload Guards
 -------------------------------------------------------------
