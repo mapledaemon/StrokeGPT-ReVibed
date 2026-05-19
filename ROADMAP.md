@@ -404,16 +404,14 @@ Why later: the training workspace already exists, so richer editing can
 build on the current surface without crowding Settings.
 
 Status note: Partial. Motion Pattern Studio, funscript import/crop preview,
-freehand drawing, smoothing/harshening, tempo/duration controls, range remap,
-and Save As New Pattern have landed. Remaining work is deeper editing:
-direct point manipulation, undo/redo history, unimplemented transforms, and
-multi-pattern sequencing.
+freehand drawing with simplification/detail controls, direct point
+manipulation, smoothing/harshening, tempo/duration controls, range remap, and
+Save As New Pattern have landed. Remaining work is deeper editing:
+undo/redo history, unimplemented transforms, and multi-pattern sequencing.
 
-- Add point dragging on the motion graph with snap/undo and validation
-  before playback.
 - Add transform history with per-step undo/redo.
-- Add remaining pattern transforms: repeat a stroke shape, simplify noisy
-  points, mirror timing, and apply subtle randomized variation.
+- Add remaining pattern transforms: repeat a stroke shape, mirror timing, and
+  apply subtle randomized variation.
 - Add pattern sequencing: alternate multiple patterns in order with small
   blends between segments to avoid stutter.
 - Continue Programs (funscripts) after playback/sections: add richer timeline

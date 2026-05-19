@@ -782,9 +782,15 @@
                             <div class="motion-training-section-title">Shape</div>
                             <div class="motion-training-transform-actions">
                                 <button id="motion-transform-smooth-btn" class="my-button" disabled>Smooth</button>
+                                <button id="motion-transform-simplify-btn" class="my-button" disabled>Simplify</button>
                                 <button id="motion-transform-harshen-btn" class="my-button" disabled>Harshen</button>
                                 <button id="motion-transform-reset-btn" class="my-button" disabled>Reset</button>
                             </div>
+                            <label class="motion-training-detail-field" for="motion-draw-detail-slider">
+                                <span>Draw Detail</span>
+                                <input type="range" id="motion-draw-detail-slider" min="1" max="3" step="1" value="2" aria-label="Drawn pattern detail">
+                                <strong id="motion-draw-detail-value">Medium</strong>
+                            </label>
                             <div class="motion-training-range-row">
                                 <div class="motion-training-number-field">
                                     <input type="number" id="motion-training-range-min" min="0" max="100" step="1" value="0" aria-label="Pattern minimum position">

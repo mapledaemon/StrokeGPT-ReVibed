@@ -12,6 +12,16 @@ export const STUDIO_MAX_ACTIONS = 2000;
 export const STUDIO_MAX_DURATION_MS = 300000;
 export const STUDIO_TIMELINE_MAX_ZOOM = 16;
 const DEFAULT_DRAW_DURATION_MS = 8000;
+const DRAWN_PATTERN_INTERPOLATION_MS = 80;
+const DRAWN_PATTERN_INTERPOLATION = 'cubic';
+const DRAW_CAPTURE_MIN_EVENT_MS = 16;
+const DRAW_CAPTURE_MIN_PATTERN_MS = 24;
+const DRAW_CAPTURE_MIN_POS_DELTA = 1.0;
+const DRAW_DETAIL_PRESETS = {
+    1: {label: 'Low', epsilon: 4.2, maxPointsPerSecond: 2.5, minPoints: 8, absoluteMaxPoints: 60, minSpacingMs: 140},
+    2: {label: 'Medium', epsilon: 2.35, maxPointsPerSecond: 4.5, minPoints: 12, absoluteMaxPoints: 100, minSpacingMs: 75},
+    3: {label: 'High', epsilon: 1.15, maxPointsPerSecond: 8, minPoints: 18, absoluteMaxPoints: 160, minSpacingMs: 40},
+};
 const MIN_CROP_DURATION_MS = 100;
 
 export function patternTempoScale(pattern) {
@@ -48,6 +58,107 @@ function msToSeconds(ms) {
 function secondsToMs(seconds, maxMs = STUDIO_MAX_DURATION_MS) {
     const maxSeconds = Math.max(0, maxMs / 1000);
     return Math.round(clampNumber(seconds, 0, maxSeconds, 0) * 1000);
+}
+
+function drawnPatternStyle(style = {}) {
+    return {
+        ...style,
+        interpolation_ms: clampNumber(style?.interpolation_ms, 0, 1000, DRAWN_PATTERN_INTERPOLATION_MS) || DRAWN_PATTERN_INTERPOLATION_MS,
+        interpolation: style?.interpolation || DRAWN_PATTERN_INTERPOLATION,
+    };
+}
+
+function drawDetailPreset(value = el.motionDrawDetailSlider?.value) {
+    const key = Math.round(clampNumber(value, 1, 3, 2));
+    return DRAW_DETAIL_PRESETS[key] || DRAW_DETAIL_PRESETS[2];
+}
+
+function syncDrawDetailReadout() {
+    const preset = drawDetailPreset();
+    if (el.motionDrawDetailValue) el.motionDrawDetailValue.textContent = preset.label;
+}
+
+function actionToSimplifyPoint(action, startAt, duration) {
+    return {
+        action,
+        x: ((action.at - startAt) / Math.max(1, duration)) * 100,
+        y: clampNumber(action.pos, 0, 100, 50),
+    };
+}
+
+function perpendicularDistance(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) {
+        return Math.hypot(point.x - start.x, point.y - start.y);
+    }
+    return Math.abs((dy * point.x) - (dx * point.y) + (end.x * start.y) - (end.y * start.x))
+        / Math.hypot(dx, dy);
+}
+
+function rdpSimplifyPoints(points, epsilon) {
+    if (points.length <= 2) return points.slice();
+    let farthestIndex = -1;
+    let farthestDistance = -1;
+    const first = points[0];
+    const last = points[points.length - 1];
+    for (let index = 1; index < points.length - 1; index++) {
+        const distance = perpendicularDistance(points[index], first, last);
+        if (distance > farthestDistance) {
+            farthestDistance = distance;
+            farthestIndex = index;
+        }
+    }
+    if (farthestDistance <= epsilon || farthestIndex <= 0) return [first, last];
+    return [
+        ...rdpSimplifyPoints(points.slice(0, farthestIndex + 1), epsilon).slice(0, -1),
+        ...rdpSimplifyPoints(points.slice(farthestIndex), epsilon),
+    ];
+}
+
+function filterCloseSimplifiedActions(actions, minSpacingMs) {
+    if (actions.length <= 2 || minSpacingMs <= 1) return actions;
+    const filtered = [actions[0]];
+    for (let index = 1; index < actions.length - 1; index++) {
+        const action = actions[index];
+        const previous = filtered[filtered.length - 1];
+        const next = actions[index + 1];
+        if (action.at - previous.at < minSpacingMs && next.at - previous.at < minSpacingMs * 1.4) continue;
+        filtered.push(action);
+    }
+    const last = actions[actions.length - 1];
+    if (filtered[filtered.length - 1].at !== last.at) filtered.push(last);
+    return filtered;
+}
+
+function maxSimplifiedPoints(preset, durationMs) {
+    if (Number.isFinite(Number(preset?.maxPoints))) {
+        return Math.max(2, Math.round(Number(preset.maxPoints)));
+    }
+    const seconds = Math.max(0.25, durationMs / 1000);
+    const pointsPerSecond = Math.max(1, Number(preset?.maxPointsPerSecond) || DRAW_DETAIL_PRESETS[2].maxPointsPerSecond);
+    const minPoints = Math.max(2, Math.round(Number(preset?.minPoints) || 2));
+    const absoluteMax = Math.max(minPoints, Math.round(Number(preset?.absoluteMaxPoints) || STUDIO_MAX_ACTIONS));
+    return Math.round(clampNumber(Math.ceil(seconds * pointsPerSecond), minPoints, absoluteMax, minPoints));
+}
+
+export function simplifyDrawnActions(actions, preset = DRAW_DETAIL_PRESETS[2]) {
+    const cleanActions = normalizedActions(actions);
+    if (cleanActions.length <= 2) return cleanActions;
+    const startAt = cleanActions[0].at;
+    const duration = Math.max(1, cleanActions[cleanActions.length - 1].at - startAt);
+    const points = cleanActions.map(action => actionToSimplifyPoint(action, startAt, duration));
+    const maxPoints = maxSimplifiedPoints(preset, duration);
+    let epsilon = Math.max(0.1, Number(preset?.epsilon) || DRAW_DETAIL_PRESETS[2].epsilon);
+    let simplified = rdpSimplifyPoints(points, epsilon).map(point => point.action);
+
+    for (let attempt = 0; simplified.length > maxPoints && attempt < 12; attempt++) {
+        epsilon *= 1.35;
+        simplified = rdpSimplifyPoints(points, epsilon).map(point => point.action);
+    }
+    simplified = filterCloseSimplifiedActions(normalizedActions(simplified), Math.max(0, Number(preset?.minSpacingMs) || 0));
+    if (simplified.length > maxPoints) simplified = downsampleActions(simplified, maxPoints);
+    return normalizedActions(simplified);
 }
 
 function mixChannel(start, end, amount) {
@@ -214,7 +325,7 @@ export function createBlankStudioPattern(durationMs = DEFAULT_DRAW_DURATION_MS) 
         description: 'Created by drawing in Motion Pattern Studio.',
         source: 'trained',
         enabled: true,
-        style: {},
+        style: drawnPatternStyle(),
         actions: [
             {at: 0, pos: 50},
             {at: duration, pos: 50},
@@ -256,6 +367,7 @@ export function updateMotionTrainingEditButtons() {
     const dirty = Boolean(state.motionTrainingDirty);
     [
         el.motionTransformSmoothBtn,
+        el.motionTransformSimplifyBtn,
         el.motionTransformHarshenBtn,
         el.motionTransformDurationDownBtn,
         el.motionTransformDurationUpBtn,
@@ -273,6 +385,8 @@ export function updateMotionTrainingEditButtons() {
         ? state.motionStudioSelectedPointIndex
         : -1;
     const selectedPointDeletable = toolsAvailable && tool === 'edit' && studioCanDeleteActionAt(actions, selectedIndex);
+    if (el.motionTransformSmoothBtn) el.motionTransformSmoothBtn.disabled = !hasEditable || actions.length < 3;
+    if (el.motionTransformSimplifyBtn) el.motionTransformSimplifyBtn.disabled = !hasEditable || actions.length < 3;
     if (el.motionStudioDrawControls) {
         el.motionStudioDrawControls.hidden = !toolsAvailable;
     }
@@ -305,6 +419,7 @@ export function updateMotionTrainingEditButtons() {
         el.motionTrainingPreviewCanvas.classList.toggle('studio-tool-draw', toolsAvailable && tool === 'draw');
     }
     if (el.motionStudioClearDrawingBtn) el.motionStudioClearDrawingBtn.disabled = !toolsAvailable;
+    if (el.motionDrawDetailSlider) el.motionDrawDetailSlider.disabled = !hasEditable;
     if (el.motionTransformResetBtn) el.motionTransformResetBtn.disabled = !hasEditable || !dirty;
     if (el.saveMotionTrainingPatternBtn) el.saveMotionTrainingPatternBtn.disabled = !hasEditable || !dirty;
     if (el.motionTrainingSaveNameInput) el.motionTrainingSaveNameInput.disabled = !hasEditable;
@@ -358,14 +473,18 @@ export function refreshMotionTrainingDetail(message = '') {
     updateMotionTrainingEditButtons();
 }
 
-function setEditedPatternActions(actions, message) {
+function setEditedPatternActions(actions, message, {stylePatch = null} = {}) {
     if (!state.motionTrainingEditedPattern) return;
     const nextActions = normalizedActions(actions);
     if (state.motionStudioSelectedPointIndex >= nextActions.length) {
         state.motionStudioSelectedPointIndex = -1;
     }
+    const nextStyle = stylePatch
+        ? {...(state.motionTrainingEditedPattern.style || {}), ...stylePatch}
+        : state.motionTrainingEditedPattern.style;
     state.motionTrainingEditedPattern = updatePatternStats({
         ...state.motionTrainingEditedPattern,
+        style: nextStyle,
         actions: nextActions,
     });
     state.motionTrainingDirty = true;
@@ -386,37 +505,23 @@ function setStudioEditedPattern(pattern, message, {dirty = true, sourcePattern =
     refreshMotionTrainingDetail(message);
 }
 
-function interpolatePosition(a, b, amount) {
-    const eased = (1 - Math.cos(Math.PI * amount)) / 2;
-    return a + ((b - a) * eased);
-}
-
 export function smoothEditedPattern() {
     const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
-    if (actions.length < 2) return;
-    const dense = [];
-    actions.forEach((action, index) => {
-        if (index === 0) dense.push(action);
-        const previous = actions[index - 1];
-        if (!previous) return;
-        const gap = action.at - previous.at;
-        const inserts = Math.min(8, Math.max(0, Math.floor(gap / 140)));
-        for (let step = 1; step <= inserts; step++) {
-            const amount = step / (inserts + 1);
-            dense.push({
-                at: Math.round(previous.at + gap * amount),
-                pos: interpolatePosition(previous.pos, action.pos, amount),
-            });
-        }
-        dense.push(action);
-    });
-    const smoothed = dense.map((action, index) => {
-        if (index === 0 || index === dense.length - 1) return action;
-        const before = dense[index - 1].pos;
-        const after = dense[index + 1].pos;
+    if (actions.length < 3) return;
+    const smoothed = actions.map((action, index) => {
+        if (index === 0 || index === actions.length - 1) return action;
+        const before = actions[index - 1].pos;
+        const after = actions[index + 1].pos;
         return {...action, pos: (before * 0.25) + (action.pos * 0.5) + (after * 0.25)};
     });
-    setEditedPatternActions(smoothed, 'Smoothed the temporary copy.');
+    setEditedPatternActions(smoothed, 'Smoothed the existing control points without adding new points.');
+}
+
+export function simplifyEditedPattern() {
+    const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
+    if (actions.length < 3) return;
+    const simplified = simplifyDrawnActions(actions, drawDetailPreset());
+    setEditedPatternActions(simplified, `Simplified ${actions.length} points to ${simplified.length} controls.`);
 }
 
 export function harshenEditedPattern() {
@@ -497,6 +602,27 @@ export function resetEditedPattern() {
     refreshMotionTrainingDetail('Reset to the selected pattern.');
 }
 
+function drawCurvePath(ctx, points) {
+    if (!points.length) return;
+    ctx.moveTo(points[0].x, points[0].y);
+    if (points.length < 2) return;
+    if (typeof ctx.bezierCurveTo !== 'function') {
+        points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+        return;
+    }
+    for (let index = 0; index < points.length - 1; index++) {
+        const p0 = points[Math.max(0, index - 1)];
+        const p1 = points[index];
+        const p2 = points[index + 1];
+        const p3 = points[Math.min(points.length - 1, index + 2)];
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = p1.y + (p2.y - p0.y) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = p2.y - (p3.y - p1.y) / 6;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+}
+
 export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor = '#7fb7a3', pointColor = '#d8b66a', options = {}) {
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
@@ -573,12 +699,7 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
     previewCtx.strokeStyle = lineColor;
     previewCtx.lineWidth = 2.5;
     previewCtx.beginPath();
-    actions.forEach((action, index) => {
-        const x = xFor(action);
-        const y = yFor(action);
-        if (index === 0) previewCtx.moveTo(x, y);
-        else previewCtx.lineTo(x, y);
-    });
+    drawCurvePath(previewCtx, actions.map(action => ({x: xFor(action), y: yFor(action)})));
     previewCtx.stroke();
 
     const selectedPointIndex = Number.isInteger(options.selectedPointIndex) ? options.selectedPointIndex : -1;
@@ -696,6 +817,8 @@ function closeStudioFlow() {
     state.motionStudioDrawingEnabled = false;
     state.motionStudioDrawingActive = false;
     state.motionStudioDrawBuffer = [];
+    state.motionStudioDrawLastEventMs = 0;
+    state.motionStudioDrawCapturedCount = 0;
     state.motionStudioDragPointIndex = -1;
     state.motionStudioSelectedPointIndex = -1;
     if (el.motionStudioPanel) el.motionStudioPanel.hidden = true;
@@ -1159,6 +1282,8 @@ function setStudioTool(tool, {announce = true} = {}) {
     state.motionStudioDrawingEnabled = next === 'draw';
     state.motionStudioDrawingActive = false;
     state.motionStudioDrawBuffer = [];
+    state.motionStudioDrawLastEventMs = 0;
+    state.motionStudioDrawCapturedCount = 0;
     state.motionStudioDragPointIndex = -1;
     if (next === 'draw') state.motionStudioSelectedPointIndex = -1;
     updateMotionTrainingEditButtons();
@@ -1182,7 +1307,8 @@ function startNewDrawnPattern() {
 
 function clearStudioDrawing() {
     if (!state.motionTrainingEditedPattern) return;
-    setEditedPatternActions(createBlankStudioPattern(state.motionTrainingEditedPattern.duration_ms || DEFAULT_DRAW_DURATION_MS).actions, 'Cleared the drawing.');
+    const blank = createBlankStudioPattern(state.motionTrainingEditedPattern.duration_ms || DEFAULT_DRAW_DURATION_MS);
+    setEditedPatternActions(blank.actions, 'Cleared the drawing.', {stylePatch: blank.style});
     setStudioTool('draw', {announce: false});
 }
 
@@ -1209,18 +1335,30 @@ function canvasActionFromEvent(canvas, event) {
     return studioActionFromPixel(x, y, metrics);
 }
 
-function pushDrawAction(action) {
+function pushDrawAction(action, {force = false, eventMs = 0} = {}) {
     const buffer = state.motionStudioDrawBuffer || [];
     const last = buffer[buffer.length - 1];
-    if (last && Math.abs(last.at - action.at) < 35 && Math.abs(last.pos - action.pos) < 1) return;
+    const now = Number(eventMs) || 0;
+    state.motionStudioDrawCapturedCount = (Number(state.motionStudioDrawCapturedCount) || 0) + 1;
+    if (last && !force) {
+        const eventGap = now > 0 && state.motionStudioDrawLastEventMs > 0
+            ? now - state.motionStudioDrawLastEventMs
+            : DRAW_CAPTURE_MIN_EVENT_MS;
+        const patternGap = Math.abs(last.at - action.at);
+        const posGap = Math.abs(last.pos - action.pos);
+        if (eventGap < DRAW_CAPTURE_MIN_EVENT_MS) return;
+        if (patternGap < DRAW_CAPTURE_MIN_PATTERN_MS && posGap < DRAW_CAPTURE_MIN_POS_DELTA) return;
+    }
     buffer.push(action);
     state.motionStudioDrawBuffer = buffer;
+    if (now > 0) state.motionStudioDrawLastEventMs = now;
 }
 
 function finishStudioDrawing() {
     state.motionStudioDrawingActive = false;
     const buffer = normalizedActions(state.motionStudioDrawBuffer);
     state.motionStudioDrawBuffer = [];
+    state.motionStudioDrawLastEventMs = 0;
     if (buffer.length < 2 || !state.motionTrainingEditedPattern) {
         // Empty / single-point stroke: fall back to Edit so the user can
         // place individual points instead of being stuck in Draw with
@@ -1238,7 +1376,14 @@ function finishStudioDrawing() {
     if (actions[actions.length - 1].at < duration) {
         actions.push({at: duration, pos: actions[actions.length - 1].pos});
     }
-    setEditedPatternActions(actions, `Drew ${actions.length} points on the temporary pattern.`);
+    const capturedCount = Math.max(buffer.length, Number(state.motionStudioDrawCapturedCount) || buffer.length);
+    state.motionStudioDrawCapturedCount = 0;
+    const controls = simplifyDrawnActions(actions, drawDetailPreset());
+    setEditedPatternActions(
+        controls,
+        `Drew ${controls.length} control points from ${capturedCount} captured samples.`,
+        {stylePatch: drawnPatternStyle(state.motionTrainingEditedPattern.style)},
+    );
     // Auto-revert to Edit so the next pointer interaction refines the
     // freshly drawn shape instead of accidentally overwriting it.
     setStudioTool('edit');
@@ -1246,14 +1391,21 @@ function finishStudioDrawing() {
 
 function handleStudioDrawPointer(event) {
     event.preventDefault?.();
+    const canvas = el.motionTrainingPreviewCanvas;
+    if (!canvas) return;
+    const isEndEvent = event.type === 'pointerup' || event.type === 'pointercancel' || event.type === 'pointerleave';
     if (event.type === 'pointerdown') {
         state.motionStudioDrawingActive = true;
         state.motionStudioDrawBuffer = [];
-        el.motionTrainingPreviewCanvas.setPointerCapture?.(event.pointerId);
+        state.motionStudioDrawLastEventMs = 0;
+        state.motionStudioDrawCapturedCount = 0;
+        canvas.setPointerCapture?.(event.pointerId);
+        pushDrawAction(canvasActionFromEvent(canvas, event), {force: true, eventMs: event.timeStamp});
+        return;
     }
     if (!state.motionStudioDrawingActive) return;
-    pushDrawAction(canvasActionFromEvent(el.motionTrainingPreviewCanvas, event));
-    if (event.type === 'pointerup' || event.type === 'pointercancel' || event.type === 'pointerleave') {
+    pushDrawAction(canvasActionFromEvent(canvas, event), {force: isEndEvent, eventMs: event.timeStamp});
+    if (isEndEvent) {
         finishStudioDrawing();
     }
 }
@@ -1472,6 +1624,7 @@ export function bindMotionPatternStudioControls() {
     el.motionStudioToolDrawBtn?.addEventListener('click', () => setStudioTool('draw'));
     el.motionStudioDeletePointBtn?.addEventListener('click', deleteSelectedStudioPoint);
     el.motionStudioClearDrawingBtn?.addEventListener('click', clearStudioDrawing);
+    el.motionDrawDetailSlider?.addEventListener('input', syncDrawDetailReadout);
     el.motionTrainingPreviewCanvas?.addEventListener('contextmenu', handleStudioCanvasContextMenu);
     el.motionStudioZoomSlider?.addEventListener('input', event => {
         setStudioTimelineZoom(Number(event.target?.value) || 1);
@@ -1509,6 +1662,7 @@ export function bindMotionPatternStudioControls() {
         el.motionTrainingPreviewCanvas?.addEventListener(eventName, handleStudioCanvasPointer);
     });
     syncCropControlsFromState();
+    syncDrawDetailReadout();
     updateMotionTrainingEditButtons();
 }
 

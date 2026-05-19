@@ -542,7 +542,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .motion-training-transform-panel { display: flex; flex-direction: column; gap: 10px; }
 .motion-training-control-section { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #2d333d; border-radius: 6px; background: rgba(20, 23, 30, 0.72); }
 .motion-training-section-title { color: var(--foreground); font-size: 0.82rem; font-weight: 700; }
-.motion-training-transform-actions { display: grid; grid-template-columns: repeat(3, minmax(78px, 1fr)); gap: 8px; }
+.motion-training-transform-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; }
+.motion-training-detail-field { display: grid; grid-template-columns: auto minmax(120px, 1fr) 66px; gap: 8px; align-items: center; min-height: 36px; padding: 6px 8px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; }
+.motion-training-detail-field input[type="range"] { width: 100%; min-width: 0; accent-color: var(--purple); }
+.motion-training-detail-field strong { color: var(--foreground); font-size: 0.78rem; text-align: right; text-transform: none; white-space: nowrap; }
 .motion-training-range-row { display: grid; grid-template-columns: minmax(96px, 0.55fr) minmax(96px, 0.55fr) minmax(130px, 1fr); gap: 8px; }
 .motion-training-number-field { position: relative; min-height: 38px; border: 1px solid #37404c; border-radius: 6px; background: var(--background-lighter); overflow: hidden; }
 .motion-training-number-field:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.3); }
@@ -662,6 +665,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .about-wallet-grid { grid-template-columns: 1fr; }
     .motion-training-workspace { grid-template-columns: 1fr; overflow-y: auto; }
     .motion-training-toolbar, .motion-training-detail-header, .motion-training-preview-grid, .motion-training-feedback-row, .motion-training-transform-actions, .motion-training-range-row, .motion-training-timing-grid, .motion-training-save-row, .motion-studio-actions, .motion-studio-entry-actions, .motion-studio-timeline-controls, .motion-studio-crop-fields, .motion-program-player-toolbar, .motion-program-action-grid, .motion-program-section-grid, .motion-program-save-row { grid-template-columns: 1fr; }
+    .motion-training-detail-field { grid-template-columns: 1fr; }
+    .motion-training-detail-field strong { text-align: left; }
     .motion-training-timing-control { grid-template-columns: minmax(0, 1fr) 38px 38px; }
     .motion-training-toolbar .my-button, .motion-training-feedback-row .my-button, .motion-training-transform-actions .my-button, .motion-training-range-row .my-button, .motion-training-save-row .my-button, .motion-studio-actions .my-button, .motion-studio-entry-actions .my-button, .motion-studio-timeline-controls .my-button, .motion-studio-crop-fields .my-button, .motion-program-player-toolbar .my-button, .motion-program-action-grid .my-button, .motion-program-save-row .my-button { width: 100%; }
     .motion-studio-crop-header { flex-direction: column; gap: 4px; }
