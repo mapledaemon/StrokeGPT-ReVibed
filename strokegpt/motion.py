@@ -2507,6 +2507,18 @@ class MotionController:
         previous_phase_time_seconds = None
         suppressed_duplicate_points = 0
         phase_schedule: deque[tuple[float, float]] = deque()
+        # A flushed active-stream replacement starts in the future to survive
+        # REST latency; bridge that lead window with the old stream trajectory.
+        bridge_points_pending = (
+            replacing_active_stream
+            and replacement_phase_state is not None
+            and play_start_stream_seconds > hsp_clock_start_seconds + 0.001
+        )
+        bridge_stream_seconds = hsp_clock_start_seconds
+        bridge_interval_seconds = max(
+            base_interval,
+            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+        )
         stream_wall_zero = None
         sync_count = 0
         next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None
@@ -2596,6 +2608,7 @@ class MotionController:
             if (
                 duplicate_coalesce_enabled
                 and previous_stream_point is not None
+                and not bool(previous_stream_point.get("hsp_replacement_bridge"))
                 and int(round(float(previous_stream_point["x"]))) == output_depth_int
                 and (
                     point_stream_seconds
@@ -2643,6 +2656,54 @@ class MotionController:
             sample_index += 1
             stream_seconds = point_stream_seconds
 
+        def append_bridge_point(points: list[dict[str, Any]], point_stream_seconds: float) -> None:
+            nonlocal previous_point_time_seconds, previous_stream_point, sample_index, stream_index, stream_seconds
+            predicted = self._estimated_continuous_target_at_stream_time(
+                replacement_phase_state,
+                point_stream_seconds,
+                sample_continuous_motion,
+            )
+            if predicted is None:
+                predicted = morph_start_target
+            predicted = predicted.clamped()
+            command_interval = (
+                base_interval
+                if previous_point_time_seconds is None
+                else max(0.001, point_stream_seconds - previous_point_time_seconds)
+            )
+            semantic_depth = _clamp(float(predicted.depth))
+            output_depth = self._output_depth(semantic_depth)
+            previous_output = previous_stream_point["x"] if previous_stream_point is not None else output_depth
+            position_per_second = abs(float(output_depth) - float(previous_output)) / max(0.001, command_interval)
+            stream_index += 1
+            point = {
+                "t": int(round(point_stream_seconds * 1000.0)),
+                "logical_t": int(round(play_start_seconds * 1000.0)),
+                "x": output_depth,
+                "semantic_x": semantic_depth,
+                "speed": predicted.speed,
+                "intent_speed": predicted.speed,
+                "range": predicted.stroke_range,
+                "sample_range": predicted.stroke_range,
+                "label": predicted.label or f"{plan_name} bridge",
+                "sample_index": sample_index,
+                "stream_index": stream_index,
+                "phase": 0.0,
+                "position_per_second": position_per_second,
+                "tempo_scale": 1.0,
+                "effective_duration_seconds": stream_duration_seconds,
+                "phase_interval_seconds": command_interval,
+                "sample_interval_seconds": command_interval,
+                "reverse_direction": self.reverse_direction,
+                "authored_point": False,
+                "hsp_replacement_bridge": True,
+            }
+            points.append(point)
+            previous_point_time_seconds = point_stream_seconds
+            previous_stream_point = point
+            sample_index += 1
+            stream_seconds = point_stream_seconds
+
         def phase_at_stream_time(elapsed_seconds: float) -> tuple[float, float]:
             if not phase_schedule:
                 return play_start_seconds, 1.0
@@ -2669,10 +2730,27 @@ class MotionController:
             return previous_phase, 1.0
 
         def build_batch(until_seconds: float, *, min_points: int = 1) -> list[dict[str, Any]]:
-            nonlocal start_point_pending
+            nonlocal start_point_pending, bridge_points_pending, bridge_stream_seconds
             if finite_stop_stream_seconds is not None:
                 until_seconds = min(until_seconds, finite_stop_stream_seconds)
             points: list[dict[str, Any]] = []
+            if bridge_points_pending:
+                bridge_until = min(until_seconds, play_start_stream_seconds)
+                point_stream_seconds = bridge_stream_seconds
+                if previous_point_time_seconds is not None:
+                    point_stream_seconds = max(
+                        point_stream_seconds,
+                        previous_point_time_seconds + bridge_interval_seconds,
+                    )
+                while (
+                    len(points) < CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1
+                    and point_stream_seconds < bridge_until - 0.001
+                ):
+                    append_bridge_point(points, point_stream_seconds)
+                    point_stream_seconds += bridge_interval_seconds
+                bridge_stream_seconds = point_stream_seconds
+                if bridge_until >= play_start_stream_seconds - 0.001:
+                    bridge_points_pending = False
             if start_point_pending:
                 start_point_pending = False
                 sample = sample_stream_point(play_start_seconds, play_start_stream_seconds)
@@ -2819,6 +2897,7 @@ class MotionController:
                         3,
                     ),
                     "hsp_authored_point": bool(point.get("authored_point")),
+                    "hsp_replacement_bridge": bool(point.get("hsp_replacement_bridge")),
                     "morph_ms": morph_ms,
                     "morph_start_depth": morph_start_depth,
                     "morph_start_range": morph_start_range,
