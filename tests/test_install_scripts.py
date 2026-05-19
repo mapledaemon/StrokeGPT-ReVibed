@@ -97,6 +97,32 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("[switch]$RunValidation", script)
         self.assertNotIn("ollama pull", script)
 
+    def test_setup_verifier_checks_runtime_without_model_downloads(self):
+        script = (PROJECT_ROOT / "scripts" / "verify_setup.ps1").read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn('[string]$OllamaBaseUrl = "http://127.0.0.1:11434"', script)
+        self.assertIn('[int]$Port = 5000', script)
+        self.assertIn("[switch]$SkipOllama", script)
+        self.assertIn("[switch]$Json", script)
+        self.assertIn("Test-PythonModule", script)
+        self.assertIn('"flask" -Required', script)
+        self.assertIn('"requests" -Required', script)
+        self.assertIn('"cryptography" -Required', script)
+        self.assertIn('"elevenlabs" -Required', script)
+        self.assertIn('"faster_whisper"', script)
+        self.assertIn('"chatterbox.tts_turbo"', script)
+        self.assertIn("Test-TorchRuntime", script)
+        self.assertIn("/api/tags", script)
+        self.assertIn("Test-PortAvailability", script)
+        self.assertIn('Test-WritableFolder "user-data"', script)
+        self.assertIn('Test-WritableFolder "diagnostics-folder"', script)
+        self.assertIn('Test-WritableFolder "voice-samples"', script)
+        self.assertIn("ConvertTo-Json", script)
+        self.assertNotIn("ollama pull", script)
+        self.assertNotIn("from_pretrained", script)
+        self.assertIn(".\\scripts\\verify_setup.ps1", readme)
+
     def test_windows_bootstrap_downloads_or_clones_repo_and_runs_installer(self):
         script = (PROJECT_ROOT / "scripts" / "bootstrap_windows.ps1").read_text(encoding="utf-8")
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
