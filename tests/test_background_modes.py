@@ -80,6 +80,11 @@ class FakePatternRecord:
         )
 
 
+class LowRollRandom:
+    def uniform(self, start, _end):
+        return start
+
+
 class ModeContractTests(unittest.TestCase):
     def test_mode_contracts_document_runtime_keys(self):
         self.assertEqual({"llm", "handy", "motion"}, set(ModeServices.__annotations__))
@@ -99,6 +104,7 @@ class ModeContractTests(unittest.TestCase):
             "remember_pattern_id",
             "freestyle_candidates",
             "motion_pattern_library_enabled_in_freestyle",
+            "motion_style",
             "allow_llm_edge_in_freestyle",
             "autospeak_enabled",
             "autospeak_range",
@@ -737,6 +743,7 @@ class AutoModeThreadTests(unittest.TestCase):
             "update_mood": lambda _mood: None,
             "remember_pattern_id": remembered.append,
             "freestyle_candidates": lambda: candidates,
+            "motion_style": lambda: "full_range",
         }
         sleep_seconds = []
 
@@ -787,6 +794,7 @@ class AutoModeThreadTests(unittest.TestCase):
             "update_mood": lambda _mood: None,
             "remember_pattern_id": remembered.append,
             "freestyle_candidates": lambda: candidates,
+            "motion_style": lambda: "full_range",
         }
         sleep_seconds = []
 
@@ -808,6 +816,8 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(metadata["freestyle_pattern_id"], "sway")
         self.assertEqual(metadata["freestyle_pattern_name"], "Sway")
         self.assertEqual(metadata["freestyle_fixed_pattern_transport"], "area_focus")
+        self.assertEqual(metadata["freestyle_motion_style"], "full_range")
+        self.assertGreater(metadata["freestyle_style_bias"], 0)
         self.assertEqual(metadata["freestyle_planner_sleep_ms"], 8000.0)
         self.assertFalse(metadata["freestyle_feedback"])
         self.assertFalse(metadata["freestyle_repeat"])
@@ -1508,6 +1518,31 @@ class AutoModeThreadTests(unittest.TestCase):
 
         self.assertIsNotNone(choice)
         self.assertEqual(choice.pattern_id, "sway")
+
+    def test_freestyle_selector_uses_motion_style_bias(self):
+        current = MotionTarget(30, 50, 55)
+        hold = FakePatternRecord("hold", "Hold")
+        sway = FakePatternRecord("sway", "Sway")
+        candidates = [
+            {"id": "hold", "name": "Hold", "source": "fixed", "enabled": True, "weight": 80, "record": hold},
+            {"id": "sway", "name": "Sway", "source": "fixed", "enabled": True, "weight": 60, "record": sway},
+        ]
+
+        balanced_choice = freestyle._choose_freestyle_pattern(
+            candidates,
+            current,
+            rng=LowRollRandom(),
+        )
+        full_range_choice = freestyle._choose_freestyle_pattern(
+            candidates,
+            current,
+            rng=LowRollRandom(),
+            motion_style="full-range",
+        )
+
+        self.assertEqual(balanced_choice.pattern_id, "hold")
+        self.assertEqual(full_range_choice.pattern_id, "sway")
+        self.assertIn("style full_range", full_range_choice.debug_reason)
 
     def test_freestyle_selector_allows_edge_patterns_for_edge_feedback(self):
         current = MotionTarget(30, 50, 55)

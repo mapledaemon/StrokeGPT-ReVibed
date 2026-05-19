@@ -557,6 +557,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     remember_pattern_id = callbacks.get("remember_pattern_id", lambda pattern_id: None)
     freestyle_candidates = callbacks.get("freestyle_candidates", lambda: ())
     pattern_library_enabled = callbacks.get("motion_pattern_library_enabled_in_freestyle", lambda: False)
+    motion_style_callback = callbacks.get("motion_style", lambda: "")
     rng = random.Random()
     recent_ids = []
     step_count = 0
@@ -572,6 +573,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
         if _wait_while_paused(stop_event, pause_event):
             break
         min_time, max_time = get_timings("freestyle")
+        motion_style = motion_style_callback() if callable(motion_style_callback) else motion_style_callback
         autospeak_interval, next_autospeak_at = _maybe_send_autospeak(
             callbacks,
             "freestyle",
@@ -610,6 +612,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                     rng=rng,
                     resume_candidates=candidates,
                     recent_ids=tuple(recent_ids),
+                    motion_style=motion_style,
                 )
                 if not completed:
                     break
@@ -650,6 +653,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                     rng=rng,
                     resume_candidates=candidates,
                     recent_ids=tuple(recent_ids),
+                    motion_style=motion_style,
                 )
                 for step in edge_steps:
                     if step.message:
@@ -696,6 +700,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 tuple(recent_ids),
                 rng,
                 length=1 if continuous_freestyle else freestyle_helpers.FREESTYLE_CHAIN_LENGTH,
+                motion_style=motion_style,
             )
         if not choices:
             send_message("Freestyle needs at least one enabled motion pattern.")
@@ -723,6 +728,8 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 "freestyle_feedback": bool(feedback_target),
                 "freestyle_repeat": repeat_active,
                 "freestyle_close_style": bool(close_style_target),
+                "freestyle_motion_style": freestyle_helpers._freestyle_motion_style_id(motion_style),
+                "freestyle_style_bias": round(getattr(choice, "style_bias", 0.0), 1),
                 "freestyle_planner_sleep_ms": round(sleep_seconds * 1000.0, 1),
             }
 

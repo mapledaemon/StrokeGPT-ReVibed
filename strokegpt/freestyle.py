@@ -15,6 +15,7 @@ from .mode_decisions import _target_with_intensity
 from .motion import MotionTarget, _slugify_motion_pattern_id
 from .motion_patterns import expand_motion_pattern
 from .motion_scripts import MotionScriptPlanner
+from .settings import DEFAULT_MOTION_STYLE, MOTION_STYLES
 
 
 FREESTYLE_CHAIN_LENGTH = 4
@@ -24,6 +25,25 @@ FREESTYLE_CONTINUOUS_MIN_HOLD_SECONDS = 8.0
 FREESTYLE_CONTINUOUS_MAX_HOLD_SECONDS = 24.0
 FREESTYLE_CONTINUOUS_CYCLE_HOLD_MULTIPLIER = 1.15
 FREESTYLE_CONTINUOUS_PATTERN_REPEAT_STEPS = 2
+
+FREESTYLE_STYLE_KIND_BIAS = {
+    "smooth": {"wide": 18.0, "pressure": 14.0, "balanced": 8.0, "build": -6.0, "quick-tip": -12.0},
+    "steady": {"pressure": 22.0, "balanced": 16.0, "wide": 8.0, "build": -8.0, "quick-tip": -14.0},
+    "teasing": {"tease": 28.0, "quick-tip": 8.0, "deep": -8.0, "finish": -10.0},
+    "pulsing": {"pressure": 16.0, "balanced": 12.0, "quick-tip": 6.0},
+    "ramping": {"build": 30.0, "finish": 10.0, "balanced": 4.0},
+    "high_variation": {"build": 16.0, "wide": 14.0, "deep": 12.0, "finish": 12.0, "tease": 8.0, "balanced": -4.0},
+    "full_range": {"wide": 30.0, "finish": 18.0, "deep": 12.0, "pressure": -6.0, "tease": -10.0},
+    "freestyle": {"build": 12.0, "wide": 12.0, "finish": 8.0, "tease": 8.0},
+}
+
+FREESTYLE_STYLE_KEYWORD_BIAS = {
+    "pulsing": (("pulse", 28.0), ("surge", 10.0), ("flutter", 8.0)),
+    "ramping": (("ramp", 24.0), ("build", 18.0), ("ladder", 18.0), ("climb", 18.0), ("surge", 12.0)),
+    "full_range": (("full", 18.0), ("wide", 18.0), ("stroke", 14.0), ("wave", 12.0), ("sway", 12.0)),
+    "teasing": (("tease", 18.0), ("tip", 10.0)),
+    "smooth": (("wave", 12.0), ("sway", 12.0)),
+}
 
 
 @dataclass(frozen=True)
@@ -36,12 +56,18 @@ class FreestyleChoice:
     mood: str
     reason: str
     debug_reason: str = ""
+    style_bias: float = 0.0
 
 
 # Kept as a module-level alias so the local ``_slug_pattern_id`` name used
 # throughout the freestyle helpers stays short while delegating to the
 # canonical implementation in ``motion``.
 _slug_pattern_id = _slugify_motion_pattern_id
+
+
+def _freestyle_motion_style_id(motion_style):
+    cleaned = str(motion_style or DEFAULT_MOTION_STYLE).strip().lower().replace("-", "_")
+    return cleaned if cleaned in MOTION_STYLES else DEFAULT_MOTION_STYLE
 
 
 def _semantic_target(motion_controller):
@@ -130,6 +156,21 @@ def _freestyle_choice_frames(
     return frames, current
 
 
+def _freestyle_style_score(pattern_id, pattern_name, profile, motion_style=None, feedback_target=None):
+    style_id = _freestyle_motion_style_id(motion_style)
+    if style_id == DEFAULT_MOTION_STYLE:
+        return 0.0
+    kind = str(profile.get("kind") or "balanced")
+    score = FREESTYLE_STYLE_KIND_BIAS.get(style_id, {}).get(kind, 0.0)
+    text = _slug_pattern_id(f"{pattern_id} {pattern_name}")
+    for keyword, bonus in FREESTYLE_STYLE_KEYWORD_BIAS.get(style_id, ()):
+        if keyword in text:
+            score += bonus
+    if feedback_target:
+        score *= 0.35
+    return score
+
+
 def _apply_freestyle_edge_reaction(
     motion_controller,
     edge_count,
@@ -137,6 +178,7 @@ def _apply_freestyle_edge_reaction(
     rng=None,
     resume_candidates=(),
     recent_ids=(),
+    motion_style=None,
 ):
     edge_steps = _edge_reaction_steps(motion_controller, edge_count, intensity=intensity, rng=rng)
     current = edge_steps[-1].target if edge_steps else _semantic_target(motion_controller)
@@ -147,6 +189,7 @@ def _apply_freestyle_edge_reaction(
         recent_ids,
         rng or random.Random(),
         length=FREESTYLE_EDGE_RESUME_CHAIN_LENGTH,
+        motion_style=motion_style,
     )
     backend = getattr(motion_controller, "backend", "")
     if backend == "continuous":
@@ -370,7 +413,7 @@ def _call_generated_target(motion_controller, target, *, source, trace_metadata=
     return True if result is None else bool(result)
 
 
-def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids):
+def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids, motion_style=None):
     weight = _candidate_weight(candidate, record)
     score = 12.0 + weight
     recent_penalty = sum(1 for recent_id in recent_ids if recent_id == pattern_id) * 34.0
@@ -396,6 +439,7 @@ def _freestyle_score(pattern_id, pattern_name, candidate, record, profile, curre
         if current.depth >= 70 and profile["depth"] >= 60:
             score += 10.0
 
+    score += _freestyle_style_score(pattern_id, pattern_name, profile, motion_style, feedback_target)
     return max(1.0, score)
 
 
@@ -436,8 +480,9 @@ def _freestyle_explicit_match(pattern_id, pattern_name, feedback_target):
     return bool(pattern_id and (pattern_id in requested or requested in text))
 
 
-def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_ids=(), rng=None):
+def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_ids=(), rng=None, motion_style=None):
     rng = rng or random.Random()
+    style_id = _freestyle_motion_style_id(motion_style)
     choices = []
     for candidate in candidates or ():
         if not isinstance(candidate, dict):
@@ -454,12 +499,25 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
         if not _candidate_allowed_for_routine_freestyle(pattern_id, pattern_name, feedback_target):
             continue
         profile = _freestyle_profile(pattern_id, pattern_name)
-        score = _freestyle_score(pattern_id, pattern_name, candidate, record, profile, current, feedback_target, recent_ids)
+        score = _freestyle_score(
+            pattern_id,
+            pattern_name,
+            candidate,
+            record,
+            profile,
+            current,
+            feedback_target,
+            recent_ids,
+            motion_style=style_id,
+        )
         target = _freestyle_target(pattern_id, pattern_name, profile, current, feedback_target, rng)
+        style_bias = _freestyle_style_score(pattern_id, pattern_name, profile, style_id, feedback_target)
         debug_reason = (
             f"Freestyle selecting {pattern_name}: {profile['kind']} profile, "
             f"weight {int(round(_candidate_weight(candidate, record)))}."
         )
+        if style_id != DEFAULT_MOTION_STYLE and abs(style_bias) >= 0.5:
+            debug_reason = f"{debug_reason[:-1]}, style {style_id} {style_bias:+.0f}."
         reason = _freestyle_narration(profile, feedback_target)
         choices.append(FreestyleChoice(
             pattern_id,
@@ -470,6 +528,7 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
             profile["mood"],
             reason,
             debug_reason,
+            style_bias,
         ))
 
     choices.sort(key=lambda choice: choice.score, reverse=True)
@@ -484,7 +543,7 @@ def _choose_freestyle_pattern(candidates, current, feedback_target=None, recent_
     return _weighted_freestyle_choice(top_choices, rng)
 
 
-def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rng, length=FREESTYLE_CHAIN_LENGTH):
+def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rng, length=FREESTYLE_CHAIN_LENGTH, motion_style=None):
     choices = []
     planned_recent = list(recent_ids)
     planned_current = current
@@ -495,6 +554,7 @@ def _freestyle_choice_chain(candidates, current, feedback_target, recent_ids, rn
             feedback_target=feedback_target if index == 0 else None,
             recent_ids=tuple(planned_recent),
             rng=rng,
+            motion_style=motion_style,
         )
         if not choice:
             break
