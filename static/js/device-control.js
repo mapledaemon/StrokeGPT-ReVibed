@@ -11,22 +11,42 @@ function handyKeyStatusElements() {
 function connectionStatusColor(status = 'disconnected') {
     return {
         connected: 'var(--green)',
+        api: 'var(--green)',
+        saved: 'var(--comment)',
         disconnected: 'var(--red-hover)',
+        offline: 'var(--red-hover)',
         error: 'var(--yellow)',
     }[status] || 'var(--red-hover)';
 }
 
 function connectionStatusLabel(status = 'disconnected') {
     return {
-        connected: 'Connected',
+        connected: 'Device online',
+        api: 'Command OK',
+        saved: 'Key saved',
         disconnected: 'Disconnected',
-        error: 'Error',
+        offline: 'Device offline',
+        error: 'Connection issue',
     }[status] || 'Disconnected';
 }
 
+function offlineDetail(value = '') {
+    return /\b(offline|disconnected|not connected|device timeout|device unavailable)\b/i.test(String(value || ''));
+}
+
+function normalizeHandyStatus(status = 'disconnected', detail = '') {
+    const normalized = String(status || 'disconnected').toLowerCase();
+    if (normalized === 'online') return 'connected';
+    if (normalized === 'offline' || offlineDetail(detail)) return 'offline';
+    if (normalized === 'api' || normalized === 'saved') return normalized;
+    if (normalized === 'connected' || normalized === 'disconnected' || normalized === 'error') return normalized;
+    return 'disconnected';
+}
+
 export function setHandyConnectionStatus(status = 'disconnected', detail = '') {
-    const label = connectionStatusLabel(status);
-    const color = connectionStatusColor(status);
+    const normalizedStatus = normalizeHandyStatus(status, detail);
+    const label = connectionStatusLabel(normalizedStatus);
+    const color = connectionStatusColor(normalizedStatus);
     handyKeyStatusElements().forEach(statusElement => {
         statusElement.textContent = label;
         statusElement.style.color = color;
@@ -43,7 +63,12 @@ export function syncHandyConnectionKey(key = '', source = null) {
 export function markHandyConnectionKeySaved(key) {
     state.myHandyKey = key || '';
     syncHandyConnectionKey(state.myHandyKey);
-    setHandyConnectionStatus('disconnected');
+    setHandyConnectionStatus(
+        state.myHandyKey ? 'saved' : 'disconnected',
+        state.myHandyKey
+            ? 'Handy key saved; waiting for a device status or command result.'
+            : 'No Handy connection key saved.',
+    );
 }
 
 export function applyHandyConnectionResult(key, res) {
@@ -53,8 +78,9 @@ export function applyHandyConnectionResult(key, res) {
     const detail = connection.message || res?.message || (
         connectionStatus === 'connected' ? 'Connected to Handy.' : 'Handy connection check failed.'
     );
-    setHandyConnectionStatus(connectionStatus, detail);
-    setStatusMessage(el.statusText, detail, connectionStatus === 'connected' ? 'success' : 'warning');
+    const normalizedStatus = normalizeHandyStatus(connectionStatus, detail);
+    setHandyConnectionStatus(normalizedStatus, detail);
+    setStatusMessage(el.statusText, detail, normalizedStatus === 'connected' ? 'success' : 'warning');
 }
 
 function hasUnsavedHandyKeyDraft() {
@@ -81,7 +107,12 @@ export function populateDeviceSettings(data = {}) {
     if (el.handyFirmwareSelect) el.handyFirmwareSelect.value = state.handyFirmwareVersion;
     if (el.handyApiV3KeyInput) el.handyApiV3KeyInput.value = state.handyApiV3Key;
     updateHandyFirmwareStatus(data);
-    setHandyConnectionStatus('disconnected');
+    setHandyConnectionStatus(
+        state.myHandyKey ? 'saved' : 'disconnected',
+        state.myHandyKey
+            ? 'Handy key saved; waiting for a device status or command result.'
+            : 'No Handy connection key saved.',
+    );
     setSliderValue(el.motionDepthMinSlider, el.motionDepthMinVal, data.min_depth ?? 5);
     setSliderValue(el.motionDepthMaxSlider, el.motionDepthMaxVal, data.max_depth ?? 100);
     normalizeMotionDepthRange();
@@ -109,9 +140,27 @@ export function updateHandyConnectionStatusFromMotion(payload = {}) {
         setHandyConnectionStatus('disconnected', 'No Handy connection key saved.');
         return;
     }
-    const command = payload?.diagnostics?.last_command;
+    const diagnostics = payload?.diagnostics || {};
+    const deviceStatus = normalizeHandyStatus(
+        diagnostics.device_connection_status || 'unknown',
+        diagnostics.device_connection_message || '',
+    );
+    if (deviceStatus === 'connected' || deviceStatus === 'offline' || deviceStatus === 'error') {
+        setHandyConnectionStatus(
+            deviceStatus,
+            diagnostics.device_connection_message || (
+                deviceStatus === 'connected'
+                    ? 'Handy device status reports online.'
+                    : deviceStatus === 'offline'
+                        ? 'Handy device status reports offline.'
+                        : 'Handy device status reported a problem.'
+            ),
+        );
+        return;
+    }
+    const command = diagnostics.last_command;
     if (!command) {
-        setHandyConnectionStatus('disconnected', 'No successful Handy command has been seen this session.');
+        setHandyConnectionStatus('saved', 'Handy key saved; no command result or live device status has been seen this session.');
         return;
     }
     const path = String(command.path || 'command').trim();
@@ -119,13 +168,13 @@ export function updateHandyConnectionStatusFromMotion(payload = {}) {
         const status = command.status_code !== undefined ? ` ${command.status_code}` : '';
         const error = String(command.error || '').trim();
         setHandyConnectionStatus(
-            'error',
+            offlineDetail(error) ? 'offline' : 'error',
             `Handy ${path}${status} failed${error ? `: ${error}` : '.'}`,
         );
         return;
     }
     if (command.ok === true) {
-        setHandyConnectionStatus('connected', `Handy ${path} OK.`);
+        setHandyConnectionStatus('api', `Last Handy ${path} command succeeded; no live device status event yet.`);
     }
 }
 
@@ -200,7 +249,7 @@ export function initDeviceControls() {
             } else if (normalized !== state.myHandyKey) {
                 setHandyConnectionStatus('error', 'Unsaved Handy connection key.');
             } else {
-                setHandyConnectionStatus('disconnected', 'No successful Handy command has been seen this session.');
+                setHandyConnectionStatus('saved', 'Handy key saved; waiting for a device status or command result.');
             }
         });
         input.addEventListener('keydown', event => {

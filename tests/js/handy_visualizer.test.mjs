@@ -483,9 +483,9 @@ describe('Handy visualizer tracking', () => {
             },
         });
 
-        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Error');
-        assert.equal(getStubElement('handy-key-status').textContent, 'Error');
-        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--yellow)');
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Device offline');
+        assert.equal(getStubElement('handy-key-status').textContent, 'Device offline');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--red-hover)');
         assert.equal(getStubElement('sidebar-handy-key-status').title, 'Handy hdsp/xava 503 failed: device offline');
 
         updateMotionObservability({
@@ -501,8 +501,53 @@ describe('Handy visualizer tracking', () => {
             },
         });
 
-        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Connected');
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Command OK');
         assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
-        assert.equal(getStubElement('sidebar-handy-key-status').title, 'Handy hamp/velocity OK.');
+        assert.equal(
+            getStubElement('sidebar-handy-key-status').title,
+            'Last Handy hamp/velocity command succeeded; no live device status event yet.',
+        );
+    });
+
+    it('prefers live Handy device status over stale successful commands', () => {
+        state.myHandyKey = 'saved-key';
+
+        updateMotionObservability({
+            backend: 'continuous',
+            diagnostics: {
+                relative_speed: 0,
+                depth: 50,
+                device_connection_status: 'offline',
+                device_connection_message: 'Device disconnected',
+                last_command: {
+                    path: 'hsp/add',
+                    ok: true,
+                    status_code: 200,
+                },
+            },
+        });
+
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Device offline');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--red-hover)');
+        assert.equal(getStubElement('sidebar-handy-key-status').title, 'Device disconnected');
+
+        updateMotionObservability({
+            backend: 'continuous',
+            diagnostics: {
+                relative_speed: 0,
+                depth: 50,
+                device_connection_status: 'online',
+                device_connection_message: 'Device connected',
+                last_command: {
+                    path: 'hsp/add',
+                    ok: true,
+                    status_code: 200,
+                },
+            },
+        });
+
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Device online');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
+        assert.equal(getStubElement('sidebar-handy-key-status').title, 'Device connected');
     });
 });

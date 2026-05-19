@@ -81,7 +81,7 @@ describe('Device Handy connection controls', () => {
         state.connectionLost = false;
     });
 
-    it('Connect posts the key and shows an immediate connected result', async () => {
+    it('Connect posts the key and shows an immediate device-online result', async () => {
         const calls = [];
         globalThis.fetch = async (endpoint, options = {}) => {
             calls.push({endpoint, body: JSON.parse(options.body)});
@@ -106,8 +106,8 @@ describe('Device Handy connection controls', () => {
         assert.deepEqual(calls, [{endpoint: '/set_handy_key', body: {key: 'new-key'}}]);
         assert.equal(state.myHandyKey, 'new-key');
         assert.equal(getStubElement('handy-key-input').value, 'new-key');
-        assert.equal(getStubElement('handy-key-status').textContent, 'Connected');
-        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Connected');
+        assert.equal(getStubElement('handy-key-status').textContent, 'Device online');
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Device online');
         assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
         assert.equal(getStubElement('status-text').textContent, 'Connected to Handy.');
     });
@@ -132,8 +132,8 @@ describe('Device Handy connection controls', () => {
 
         assert.equal(state.myHandyKey, 'saved-but-offline');
         assert.equal(getStubElement('sidebar-handy-key-input').value, 'saved-but-offline');
-        assert.equal(getStubElement('handy-key-status').textContent, 'Error');
-        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--yellow)');
+        assert.equal(getStubElement('handy-key-status').textContent, 'Device offline');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--red-hover)');
         assert.equal(getStubElement('sidebar-handy-key-status').title, 'Handy connection failed: device offline');
         assert.equal(getStubElement('status-text').textContent, 'Handy connection failed: device offline');
     });

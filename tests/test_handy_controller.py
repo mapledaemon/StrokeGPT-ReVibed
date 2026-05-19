@@ -806,6 +806,9 @@ class HandyControllerTests(unittest.TestCase):
         self.assertIsNone(diagnostics["velocity"])
         self.assertEqual(diagnostics["handy_sse_event_type"], "device_disconnected")
         self.assertIn("reason", diagnostics["handy_sse_event"]["payload"]["data"])
+        self.assertEqual(diagnostics["device_connection_status"], "offline")
+        self.assertEqual(diagnostics["device_connection_event_type"], "device_disconnected")
+        self.assertEqual(diagnostics["device_connection_message"], "io error")
         self.assertNotIn("secret", str(diagnostics))
 
     def test_handy_sse_device_status_disconnected_clears_active_motion_state(self):
@@ -832,6 +835,31 @@ class HandyControllerTests(unittest.TestCase):
         self.assertIsNone(diagnostics["mode"])
         self.assertEqual(diagnostics["handy_sse_event_type"], "device_status")
         self.assertFalse(diagnostics["handy_sse_event"]["payload"]["data"]["connected"])
+        self.assertEqual(diagnostics["device_connection_status"], "offline")
+        self.assertEqual(diagnostics["device_connection_event_type"], "device_status")
+        self.assertEqual(diagnostics["device_connection_message"], "Handy SSE reports the device is offline.")
+        self.assertIsNotNone(diagnostics["device_connection_observed_at"])
+        self.assertNotIn("secret", str(diagnostics))
+
+    def test_handy_sse_device_connected_updates_device_connection_status(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+
+        self.assertTrue(
+            handy._handle_hsp_state_sse_event(
+                {
+                    "type": "device_connected",
+                    "data": (
+                        '{"connection_key":"secret","data":{"connected":true,'
+                        '"description":"device online"}}'
+                    ),
+                }
+            )
+        )
+
+        diagnostics = handy.diagnostics()
+        self.assertEqual(diagnostics["device_connection_status"], "online")
+        self.assertEqual(diagnostics["device_connection_event_type"], "device_connected")
+        self.assertEqual(diagnostics["device_connection_message"], "device online")
         self.assertNotIn("secret", str(diagnostics))
 
     def test_hsp_state_sse_once_subscribes_with_query_auth_and_event_filter(self):
