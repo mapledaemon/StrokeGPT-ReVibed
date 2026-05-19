@@ -202,11 +202,10 @@ persona prompts stay separable.
 - Validate whether the visible Motion Style selector's current choices map to
   useful behavior in real chat and mode-control sessions, then rename or prune
   styles that do not produce distinct enough motion.
-- Decide whether Freestyle and preset-mode planners should consume the saved
-  style directly in deterministic scoring, rather than relying only on the LLM
-  prompt/context bias.
-- Let users reset learned motion feedback and style preferences without a
-  full settings reset.
+- Decide whether preset-mode planners should consume the saved style directly
+  in deterministic scoring, rather than relying only on the LLM prompt/context
+  bias. Freestyle deterministic scoring now consumes Motion Style directly, so
+  this remaining item is about Edge/Milk or successor preset planners.
 
 ### 5. Chat And Responsive UI Refactor (M)
 
