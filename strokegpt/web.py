@@ -16,7 +16,7 @@ import requests
 from flask import Flask, Response, request, jsonify, render_template_string, send_from_directory, stream_with_context
 from werkzeug.utils import secure_filename
 
-from .app_state import APP_STATE_EXPORTS, AppState
+from .app_state import APP_STATE_EXPORTS, UI_CLIENT_CURSOR_LIMIT, AppState
 from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
 from .llm import LLMService, recent_assistant_lines_prompt
@@ -78,6 +78,7 @@ DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
 CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
+STATUS_OBSERVABILITY_TRACE_LIMIT = 96
 CHAT_INTENSITY_ARC_SECONDS = 600
 CHAT_SESSION_IDLE_RESET_SECONDS = 600
 
@@ -1980,6 +1981,26 @@ def _clean_ui_client_id(client_id):
     return re.sub(r"[^a-zA-Z0-9_.:-]+", "", str(client_id or ""))[:96]
 
 
+def _set_ui_client_cursor(cleaned_client_id, message_id):
+    if not cleaned_client_id:
+        return
+    try:
+        next_id = int(message_id or 0)
+    except (TypeError, ValueError):
+        next_id = 0
+    previous_id = app_state.ui_client_cursors.pop(cleaned_client_id, None)
+    try:
+        next_id = max(int(previous_id or 0), next_id)
+    except (TypeError, ValueError):
+        pass
+    app_state.ui_client_cursors[cleaned_client_id] = next_id
+    while len(app_state.ui_client_cursors) > UI_CLIENT_CURSOR_LIMIT:
+        oldest_client_id = next(iter(app_state.ui_client_cursors))
+        if oldest_client_id == cleaned_client_id and len(app_state.ui_client_cursors) <= 1:
+            break
+        app_state.ui_client_cursors.pop(oldest_client_id, None)
+
+
 def add_message_to_queue(
     text,
     add_to_history=True,
@@ -2001,10 +2022,7 @@ def add_message_to_queue(
             })
             cleaned_client_id = _clean_ui_client_id(seen_by_client_id)
             if cleaned_client_id:
-                app_state.ui_client_cursors[cleaned_client_id] = max(
-                    int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0),
-                    message_id,
-                )
+                _set_ui_client_cursor(cleaned_client_id, message_id)
         if add_to_history:
             clean_text = re.sub(r'<[^>]+>', '', text).strip()
             if clean_text:
@@ -2062,11 +2080,11 @@ def _message_records_for_ui_client(client_id):
         last_seen = int(app_state.ui_client_cursors.get(cleaned_client_id, 0) or 0)
         records = [record for record in app_state.ui_message_log if int(record.get("id", 0)) > last_seen]
         if records:
-            app_state.ui_client_cursors[cleaned_client_id] = int(records[-1]["id"])
+            _set_ui_client_cursor(cleaned_client_id, records[-1]["id"])
             app_state.messages_for_ui.clear()
         elif app_state.ui_message_log:
             latest_id = int(app_state.ui_message_log[-1].get("id", 0) or 0)
-            app_state.ui_client_cursors.setdefault(cleaned_client_id, latest_id)
+            _set_ui_client_cursor(cleaned_client_id, latest_id)
         return [
             {
                 "text": str(record.get("text", "")),

@@ -620,9 +620,18 @@ def test_depth_range_route():
 @motion_blueprint.route('/get_status')
 def get_status_route():
     web = _web()
-    diagnostics = web.handy.diagnostics(refresh_hsp_state=True)
-    motion_observability = web.motion.observability_snapshot(diagnostics)
-    motion_observability["diagnostics_level"] = web.settings.motion_diagnostics_level
+    diagnostics_level = web.settings.motion_diagnostics_level
+    include_verbose_diagnostics = diagnostics_level == "debug"
+    diagnostics = web.handy.diagnostics(
+        refresh_hsp_state=True,
+        include_history=include_verbose_diagnostics,
+        include_recent_events=include_verbose_diagnostics,
+    )
+    motion_observability = web.motion.observability_snapshot(
+        diagnostics,
+        trace_limit=web.STATUS_OBSERVABILITY_TRACE_LIMIT,
+    )
+    motion_observability["diagnostics_level"] = diagnostics_level
     active_mode = web._active_mode_snapshot()
     chat_session = web._chat_session_snapshot()
     return jsonify({
@@ -635,7 +644,7 @@ def get_status_route():
         "active_mode_elapsed_seconds": active_mode["active_mode_elapsed_seconds"],
         "active_mode_paused": active_mode["active_mode_paused"],
         "motion_paused": active_mode["motion_paused"],
-        "motion_diagnostics_level": web.settings.motion_diagnostics_level,
+        "motion_diagnostics_level": diagnostics_level,
         "motion_training": web._motion_training_snapshot(),
         "motion_observability": motion_observability,
         **chat_session,

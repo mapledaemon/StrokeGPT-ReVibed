@@ -8,6 +8,21 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #275 - Status Poll Memory And Payload Guards
+-------------------------------------------------------------
+
+Branch: codex/status-payload-optimization
+
+- Bounded per-browser chat update cursors and the legacy UI message queue so
+  abandoned tabs or clients cannot grow server-side bookkeeping indefinitely.
+- Trimmed the 500 ms motion status poll so compact/status diagnostics no
+  longer ship full Handy command history or raw recent SSE payloads; Debug
+  diagnostics and motion transport captures still include the detailed data.
+- Limited motion trace rows returned by the frequent status poll while leaving
+  explicit Diagnostics capture/export paths untouched for deeper real-device
+  debugging.
+
+
 2026-05-19 - PR #274 - Local Voice Memory Guards
 ------------------------------------------------
 

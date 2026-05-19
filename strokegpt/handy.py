@@ -1733,7 +1733,13 @@ class HandyController:
         self._reset_motion_cache()
         return stopped
 
-    def diagnostics(self, *, refresh_hsp_state=False):
+    def diagnostics(
+        self,
+        *,
+        refresh_hsp_state=False,
+        include_history=True,
+        include_recent_events=True,
+    ):
         if refresh_hsp_state:
             try:
                 self.ensure_hsp_state_sse_worker()
@@ -1779,7 +1785,7 @@ class HandyController:
         hsp_refresh_active = bool(hsp_refresh_thread is not None and hsp_refresh_thread.is_alive())
         hsp_sse_thread = self._hsp_state_sse_thread
         hsp_sse_active = bool(hsp_sse_thread is not None and hsp_sse_thread.is_alive())
-        return {
+        result = {
             "relative_speed": int(round(self.last_relative_speed)),
             "physical_speed": int(round(self.last_stroke_speed)),
             "depth": int(round(self.last_depth_pos)),
@@ -1851,12 +1857,6 @@ class HandyController:
                 if isinstance(self._last_handy_sse_event, dict)
                 else ""
             ),
-            "handy_sse_event": (
-                dict(self._last_handy_sse_event)
-                if isinstance(self._last_handy_sse_event, dict)
-                else None
-            ),
-            "handy_sse_recent_events": [dict(event) for event in self._handy_sse_recent_events],
             "device_connection_status": self._device_connection_status,
             "device_connection_message": self._device_connection_message,
             "device_connection_observed_at": (
@@ -1876,8 +1876,17 @@ class HandyController:
             "continuous_streaming_supported": self.supports_continuous_streaming(),
             "hsp_state": hsp_state_snapshot["state"],
             "last_command": self.last_command_result(),
-            "command_history": self.command_history(),
         }
+        if include_recent_events:
+            result["handy_sse_event"] = (
+                dict(self._last_handy_sse_event)
+                if isinstance(self._last_handy_sse_event, dict)
+                else None
+            )
+            result["handy_sse_recent_events"] = [dict(event) for event in self._handy_sse_recent_events]
+        if include_history:
+            result["command_history"] = self.command_history()
+        return result
 
     def nudge(self, direction, min_depth_pct, max_depth_pct, current_pos_mm):
         JOG_STEP_MM = 2.0
