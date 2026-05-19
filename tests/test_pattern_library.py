@@ -285,6 +285,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.original_pattern_feedback = dict(self.web.settings.motion_pattern_feedback)
         self.original_pattern_feedback_history = list(self.web.settings.motion_pattern_feedback_history)
         self.original_pattern_weights = dict(self.web.settings.motion_pattern_weights)
+        self.original_motion_style = self.web.settings.motion_style
         self.original_feedback_auto_disable = self.web.settings.motion_feedback_auto_disable
         self.original_allow_llm_edge_in_chat = self.web.settings.allow_llm_edge_in_chat
         self.original_pattern_library_chat = self.web.settings.motion_pattern_library_enabled_in_chat
@@ -308,6 +309,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_feedback = {}
         self.web.settings.motion_pattern_feedback_history = []
         self.web.settings.motion_pattern_weights = {}
+        self.web.settings.motion_style = "balanced"
         self.web.settings.motion_feedback_auto_disable = False
         self.web.settings.allow_llm_edge_in_chat = True
         self.web.settings.motion_pattern_library_enabled_in_chat = True
@@ -331,6 +333,7 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.web.settings.motion_pattern_feedback = self.original_pattern_feedback
         self.web.settings.motion_pattern_feedback_history = self.original_pattern_feedback_history
         self.web.settings.motion_pattern_weights = self.original_pattern_weights
+        self.web.settings.motion_style = self.original_motion_style
         self.web.settings.motion_feedback_auto_disable = self.original_feedback_auto_disable
         self.web.settings.allow_llm_edge_in_chat = self.original_allow_llm_edge_in_chat
         self.web.settings.motion_pattern_library_enabled_in_chat = self.original_pattern_library_chat
@@ -766,6 +769,45 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(data["prompt"], "")
         self.assertFalse(data["pattern_library_enabled_in_chat"])
         self.assertEqual(data["summary"], "Motion pattern library is disabled for normal chat.")
+
+    def test_motion_preferences_reset_clears_learned_feedback_and_style(self):
+        self.web.settings.motion_pattern_feedback = {
+            "sway": {"thumbs_up": 4, "neutral": 0, "thumbs_down": 1},
+        }
+        self.web.settings.motion_pattern_feedback_history = [{
+            "pattern_id": "sway",
+            "pattern_name": "Sway",
+            "rating": "thumbs_up",
+            "source": "motion training",
+            "weight": 82,
+            "timestamp": 1,
+        }]
+        self.web.settings.motion_pattern_weights = {"sway": 82}
+        self.web.settings.motion_pattern_enabled = {"sway": False}
+        self.web.settings.motion_style = "high_variation"
+        self.web.settings.motion_pattern_library_enabled_in_chat = True
+
+        response = self.client.post("/motion_preferences/reset", json={})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["motion_style"], "balanced")
+        disabled_sway = next(
+            pattern
+            for pattern in data["motion_preferences"]["disabled_fixed_patterns"]
+            if pattern["id"] == "sway"
+        )
+        self.assertEqual(disabled_sway["weight"], 50)
+        self.assertEqual(data["motion_patterns"]["feedback_history"], [])
+        self.assertEqual(self.web.settings.motion_pattern_feedback, {})
+        self.assertEqual(self.web.settings.motion_pattern_feedback_history, [])
+        self.assertEqual(self.web.settings.motion_pattern_weights, {})
+        self.assertEqual(self.web.settings.motion_style, "balanced")
+        self.assertEqual(self.web.settings.motion_pattern_enabled, {"sway": False})
+        sway = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "sway")
+        self.assertFalse(sway["enabled"])
+        self.assertEqual(sway["weight"], 50)
 
     def test_weight_route_persists_fixed_pattern_weight(self):
         response = self.client.post("/motion_patterns/sway/weight", json={"weight": 88})

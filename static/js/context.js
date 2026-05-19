@@ -181,6 +181,7 @@ export const el = {
     motionBackendStatus: D.getElementById('motion-backend-status'),
     motionStyleSelect: D.getElementById('motion-style-select'),
     saveMotionStyleBtn: D.getElementById('save-motion-style-btn'),
+    resetMotionPreferencesBtn: D.getElementById('reset-motion-preferences-btn'),
     motionStyleStatus: D.getElementById('motion-style-status'),
     motionDirectionNormalRadio: D.getElementById('motion-direction-normal'),
     motionDirectionReverseRadio: D.getElementById('motion-direction-reverse'),

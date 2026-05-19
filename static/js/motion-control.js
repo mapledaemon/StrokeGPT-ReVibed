@@ -32,6 +32,7 @@ import {
 import {
     configureMotionFeedbackControls,
     renderMotionFeedbackHistory,
+    resetMotionPreferences,
     saveMotionFeedbackOptions,
 } from './motion/feedback-controls.js';
 import {
@@ -108,6 +109,7 @@ export {
 export {
     configureMotionFeedbackControls,
     renderMotionFeedbackHistory,
+    resetMotionPreferences,
     saveMotionFeedbackOptions,
 } from './motion/feedback-controls.js';
 // Compatibility shim - do not extend. New code imports from './motion/program-list.js'.
@@ -1537,7 +1539,7 @@ async function startFreestyleMode() {
 
 export function initMotionControls({sendUserMessage}) {
     configureMotionPatternList({renderMotionPatterns, setMotionTrainingDetail});
-    configureMotionFeedbackControls({renderMotionPatterns});
+    configureMotionFeedbackControls({renderMotionPatterns, renderMotionStyleOptions});
     configureMotionProgramList({openMotionProgramWindow});
     configureMotionProgramPlayer({renderMotionPatterns, updateMotionTrainingStatus});
     bindMotionProgramControls();
@@ -1552,6 +1554,7 @@ export function initMotionControls({sendUserMessage}) {
     el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);
+    el.resetMotionPreferencesBtn?.addEventListener('click', resetMotionPreferences);
     el.motionStyleSelect?.addEventListener('change', () => updateMotionStyleUi(el.motionStyleSelect.value));
     el.saveMotionReverseDirectionBtn?.addEventListener('click', saveMotionReverseDirection);
     el.motionDirectionNormalRadio?.addEventListener('change', () => updateMotionReverseDirectionUi(false));

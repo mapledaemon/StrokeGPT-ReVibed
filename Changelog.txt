@@ -8,6 +8,18 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #267 - Motion Preference Reset
+------------------------------------------------
+
+Branch: codex/motion-preference-reset
+
+- Added a Settings > Motion reset control for learned motion preferences. The
+  reset clears learned pattern feedback, feedback history, and custom pattern
+  weights, returns Motion Style to Balanced, and leaves backend, speed,
+  library toggles, imported patterns, and enabled/disabled pattern choices
+  unchanged.
+
+
 2026-05-18 - PR #266 - Autospeak Retry Cadence
 ------------------------------------------------
 
