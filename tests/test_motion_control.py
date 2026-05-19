@@ -1715,8 +1715,9 @@ class MotionControllerTests(unittest.TestCase):
             replacement = handy.stream_replacements[0]
             start_time_ms = replacement["start_time_ms"]
             self.assertGreater(start_time_ms, 0)
-            self.assertEqual(replacement["points"][0]["t"], start_time_ms)
-            self.assertTrue(all(point["t"] >= start_time_ms for point in replacement["points"]))
+            point_times = [point["t"] for point in replacement["points"]]
+            self.assertIn(start_time_ms, point_times)
+            self.assertTrue(any(point_time < start_time_ms for point_time in point_times))
             self.assertLess(start_time_ms, handy.stream_starts[0]["points"][-1]["t"])
 
             second_points = [
@@ -1727,11 +1728,15 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("hsp_batch") == "replace"
             ]
             self.assertTrue(second_points)
+            self.assertTrue(second_points[0]["hsp_replacement_bridge"])
             self.assertEqual(second_points[0]["handy_path"], "hsp/add")
-            self.assertGreater(second_points[0]["hsp_replacement_lead_ms"], 0.0)
+            first_replacement_point = next(
+                point for point in second_points if not point.get("hsp_replacement_bridge")
+            )
+            self.assertGreater(first_replacement_point["hsp_replacement_lead_ms"], 0.0)
             self.assertAlmostEqual(
-                second_points[0]["hsp_point_time_ms"],
-                second_points[0]["hsp_play_start_ms"],
+                first_replacement_point["hsp_point_time_ms"],
+                first_replacement_point["hsp_play_start_ms"],
                 delta=1.0,
             )
         finally:
@@ -1775,7 +1780,9 @@ class MotionControllerTests(unittest.TestCase):
                 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS * 1000.0,
             )
             replacement = handy.stream_replacements[0]
-            self.assertEqual(replacement["points"][0]["t"], replacement["start_time_ms"])
+            point_times = [point["t"] for point in replacement["points"]]
+            self.assertIn(replacement["start_time_ms"], point_times)
+            self.assertTrue(any(point_time < replacement["start_time_ms"] for point_time in point_times))
             self.assertLess(replacement["start_time_ms"], handy.stream_starts[0]["points"][-1]["t"])
         finally:
             controller.stop()
@@ -1817,7 +1824,9 @@ class MotionControllerTests(unittest.TestCase):
             self.assertGreaterEqual(second_points[0]["hsp_replacement_lead_ms"], 3200.0)
             self.assertEqual(second_points[0]["hsp_first_point_late_estimate_ms"], 0.0)
             replacement = handy.stream_replacements[0]
-            self.assertEqual(replacement["points"][0]["t"], replacement["start_time_ms"])
+            point_times = [point["t"] for point in replacement["points"]]
+            self.assertIn(replacement["start_time_ms"], point_times)
+            self.assertTrue(any(point_time < replacement["start_time_ms"] for point_time in point_times))
             self.assertLess(replacement["start_time_ms"], handy.stream_starts[0]["points"][-1]["t"])
         finally:
             controller.stop()
@@ -2008,7 +2017,8 @@ class MotionControllerTests(unittest.TestCase):
             if point.get("continuous_schema") == "hsp"
         ]
         self.assertTrue(hsp_points)
-        first = hsp_points[0]
+        self.assertTrue(any(point.get("hsp_replacement_bridge") for point in hsp_points))
+        first = next(point for point in hsp_points if not point.get("hsp_replacement_bridge"))
         expected_phase = controller._continuous_transition_phase_seconds(
             new_plan,
             new_target,
@@ -2235,7 +2245,8 @@ class MotionControllerTests(unittest.TestCase):
                 if point.get("continuous_schema") == "hsp" and point.get("source") == "second"
             ]
             self.assertTrue(second_points)
-            first_point = second_points[0]
+            self.assertTrue(any(point.get("hsp_replacement_bridge") for point in second_points))
+            first_point = next(point for point in second_points if not point.get("hsp_replacement_bridge"))
             replacement_lead = first_point["hsp_replacement_lead_ms"] / 1000.0
             expected_phase = replacement_lead / old_duration
 
@@ -2368,6 +2379,49 @@ class MotionControllerTests(unittest.TestCase):
             self.assertEqual(point["freestyle_pattern_id"], "sway")
             self.assertEqual(point["freestyle_fixed_pattern_transport"], "area_focus")
             self.assertEqual(point["sample_index"], 0)
+        finally:
+            controller.stop()
+
+    def test_freestyle_area_focus_replacement_bridges_transition_lead(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(
+                MotionTarget(54, 50, 78, "freestyle flow"),
+                source="freestyle planner",
+                trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "sway"},
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            time.sleep(0.12)
+            controller.apply_generated_target(
+                MotionTarget(62, 58, 70, "freestyle flow"),
+                source="freestyle planner",
+                trace_metadata={"mode": "freestyle", "freestyle_pattern_id": "wave"},
+            )
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            start_time_ms = replacement["start_time_ms"]
+            point_times = [point["t"] for point in replacement["points"]]
+            self.assertTrue(any(point_time < start_time_ms for point_time in point_times))
+            self.assertIn(start_time_ms, point_times)
+
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("hsp_replacement_bridge")
+                and point.get("source") == "freestyle planner"
+                and point.get("mode") == "freestyle",
+            )
+            bridge_points = [
+                point
+                for point in trace
+                if point.get("hsp_replacement_bridge")
+                and point.get("source") == "freestyle planner"
+            ]
+            self.assertTrue(bridge_points)
+            self.assertLess(bridge_points[0]["hsp_point_time_ms"], bridge_points[0]["hsp_play_start_ms"])
         finally:
             controller.stop()
 

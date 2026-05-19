@@ -7,6 +7,19 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-19 - PR #278 - Freestyle HSP Transition Bridge
+------------------------------------------------------
+
+Branch: codex/freestyle-transition-pauses
+
+- Filled active continuous-HSP replacement lead windows with bridge points
+  sampled from the currently playing stream so Freestyle replacements do not
+  flush the old buffer and then wait on a future first point, which could feel
+  like a regular pause at mode transition boundaries.
+- Added regression coverage for Freestyle area-focus replacement batches so
+  the transport now proves it sends bridge points before the replacement
+  start time while still preserving an exact replacement-start point.
+
 2026-05-19 - PR #277 - Original HAMP Window Cleanup
 ---------------------------------------------------
 
