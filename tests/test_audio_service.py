@@ -53,6 +53,54 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(service._local_preload_phase, "idle")
         self.assertEqual(service._local_preload_error, "")
 
+    def test_disabling_local_voice_unloads_model_and_pending_audio(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_model = object()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._empty_cuda_cache = lambda: None
+        service._enqueue_audio_chunk(b"RIFFpending", "audio/wav")
+        service._tts_request_queue.append("pending text")
+
+        service.configure_local_voice(False, engine=service.local_engine)
+
+        self.assertIsNone(service._local_model)
+        self.assertFalse(service.audio_output_queue)
+        self.assertEqual(service._audio_output_queue_bytes, 0)
+        self.assertFalse(service._tts_request_queue)
+
+    def test_switching_from_local_to_elevenlabs_unloads_model(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_model = object()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._empty_cuda_cache = lambda: None
+
+        service.configure_voice("voice-id", True)
+
+        self.assertEqual(service.provider, "elevenlabs")
+        self.assertIsNone(service._local_model)
+        self.assertEqual(service._local_model_device, "")
+
+    def test_provider_change_unloads_local_model(self):
+        service = AudioService()
+        service.provider = "local"
+        service.is_on = True
+        service._local_model = object()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._empty_cuda_cache = lambda: None
+
+        ok, _message = service.set_provider("elevenlabs", enabled=False)
+
+        self.assertTrue(ok)
+        self.assertIsNone(service._local_model)
+        self.assertEqual(service.provider, "elevenlabs")
+
     def test_local_status_ignores_cached_model_for_previous_engine(self):
         service = AudioService()
         service.local_engine = AudioService.LOCAL_ENGINE_CHATTERBOX_TURBO
@@ -180,6 +228,37 @@ class AudioServiceTests(unittest.TestCase):
         self.assertEqual(calls, [("from_local", cached_path, "cuda")])
         self.assertEqual(service._local_model_engine, service.local_engine)
         self.assertEqual(service._local_model_device, "cuda")
+
+    def test_idle_local_tts_unload_releases_loaded_model(self):
+        service = AudioService()
+        service._local_model = object()
+        service._local_model_engine = service.local_engine
+        service._local_model_device = "cuda"
+        service._local_preload_status = "ready"
+        service._local_preload_phase = "ready"
+        service._local_model_last_used_at = time.monotonic() - 10
+        service.LOCAL_TTS_IDLE_UNLOAD_SECONDS = 1
+        service._empty_cuda_cache = lambda: None
+
+        service._unload_local_model_if_idle()
+
+        self.assertIsNone(service._local_model)
+        self.assertEqual(service._local_preload_status, "idle")
+        self.assertEqual(service._local_preload_phase, "idle")
+
+    def test_audio_output_queue_drops_old_chunks_when_limit_reached(self):
+        service = AudioService()
+        service.AUDIO_OUTPUT_QUEUE_LIMIT = 2
+        service.AUDIO_OUTPUT_QUEUE_BYTES_LIMIT = 100
+
+        service._enqueue_audio_chunk(b"one", "audio/wav")
+        service._enqueue_audio_chunk(b"two", "audio/wav")
+        service._enqueue_audio_chunk(b"three", "audio/wav")
+
+        self.assertEqual(service.audio_output_queue_depth(), 2)
+        self.assertEqual(service.audio_output_queue_bytes(), len(b"twothree"))
+        self.assertEqual(service._audio_output_dropped_count, 1)
+        self.assertEqual(service.wait_for_audio_chunk(0), {"bytes": b"two", "mimetype": "audio/wav"})
 
     def test_local_waveform_suppresses_chatterbox_console_output(self):
         service = AudioService()
