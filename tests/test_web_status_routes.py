@@ -108,6 +108,34 @@ class WebStatusRouteTests(WebTestCase):
             app_state.ui_message_next_id = 0
             app_state.ui_client_cursors.clear()
 
+    def test_ui_client_cursors_are_bounded(self):
+        from strokegpt.app_state import UI_CLIENT_CURSOR_LIMIT
+        from strokegpt.web import add_message_to_queue, app_state
+
+        app_state.messages_for_ui.clear()
+        app_state.ui_message_log.clear()
+        app_state.ui_message_next_id = 0
+        app_state.ui_client_cursors.clear()
+        try:
+            add_message_to_queue(
+                "bounded cursor bookkeeping",
+                add_to_history=False,
+                generate_audio=False,
+            )
+
+            for index in range(UI_CLIENT_CURSOR_LIMIT + 5):
+                response = self.client.get(f"/get_updates?client_id=tab-{index}")
+                response.close()
+
+            self.assertLessEqual(len(app_state.ui_client_cursors), UI_CLIENT_CURSOR_LIMIT)
+            self.assertNotIn("tab-0", app_state.ui_client_cursors)
+            self.assertIn(f"tab-{UI_CLIENT_CURSOR_LIMIT + 4}", app_state.ui_client_cursors)
+        finally:
+            app_state.messages_for_ui.clear()
+            app_state.ui_message_log.clear()
+            app_state.ui_message_next_id = 0
+            app_state.ui_client_cursors.clear()
+
     def test_get_audio_waits_for_that_browser_client_to_poll_chat(self):
         from strokegpt.web import add_message_to_queue, app_state, audio
 
@@ -292,6 +320,90 @@ class WebStatusRouteTests(WebTestCase):
                 motion._last_source = "idle"
                 motion._last_label = "idle"
                 motion._last_command_time = None
+
+    def test_status_payload_omits_bulky_handy_history_until_debug(self):
+        from strokegpt.web import handy, settings
+
+        original_level = settings.motion_diagnostics_level
+        original_history = list(handy._command_history)
+        original_event = handy._last_handy_sse_event
+        original_event_at = handy._last_handy_sse_event_at
+        original_recent = list(handy._handy_sse_recent_events)
+        try:
+            handy._command_history.clear()
+            handy._command_history.append({"path": "hsp/add", "ok": True})
+            handy._last_handy_sse_event = {"type": "device_status", "payload": {"connected": True}}
+            handy._last_handy_sse_event_at = time.time()
+            handy._handy_sse_recent_events.clear()
+            handy._handy_sse_recent_events.append(handy._last_handy_sse_event)
+
+            settings.motion_diagnostics_level = "compact"
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                compact_diagnostics = response.get_json()["motion_observability"]["diagnostics"]
+            finally:
+                response.close()
+
+            self.assertIn("handy_sse_event_type", compact_diagnostics)
+            self.assertNotIn("command_history", compact_diagnostics)
+            self.assertNotIn("handy_sse_event", compact_diagnostics)
+            self.assertNotIn("handy_sse_recent_events", compact_diagnostics)
+
+            settings.motion_diagnostics_level = "debug"
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                debug_diagnostics = response.get_json()["motion_observability"]["diagnostics"]
+            finally:
+                response.close()
+
+            self.assertEqual([command["path"] for command in debug_diagnostics["command_history"]], ["hsp/add"])
+            self.assertEqual(debug_diagnostics["handy_sse_event"]["type"], "device_status")
+            self.assertEqual(debug_diagnostics["handy_sse_recent_events"][0]["type"], "device_status")
+        finally:
+            settings.motion_diagnostics_level = original_level
+            handy._command_history.clear()
+            handy._command_history.extend(original_history)
+            handy._last_handy_sse_event = original_event
+            handy._last_handy_sse_event_at = original_event_at
+            handy._handy_sse_recent_events.clear()
+            handy._handy_sse_recent_events.extend(original_recent)
+
+    def test_status_payload_limits_trace_rows_for_polling(self):
+        from strokegpt.motion import MotionTarget
+        import strokegpt.web as web
+
+        original_level = web.settings.motion_diagnostics_level
+        try:
+            web.settings.motion_diagnostics_level = "debug"
+            with web.motion._observability_lock:
+                web.motion._trace.clear()
+                web.motion._last_source = "idle"
+                web.motion._last_label = "idle"
+                web.motion._last_command_time = None
+            for index in range(web.STATUS_OBSERVABILITY_TRACE_LIMIT + 12):
+                web.motion._record_target(
+                    MotionTarget(20, 30, 40, label=f"trace {index}"),
+                    source="unit test",
+                )
+
+            response = self.client.get("/get_status")
+            try:
+                self.assertEqual(response.status_code, 200)
+                trace = response.get_json()["motion_observability"]["trace"]
+            finally:
+                response.close()
+
+            self.assertEqual(len(trace), web.STATUS_OBSERVABILITY_TRACE_LIMIT)
+            self.assertEqual(trace[-1]["label"], f"trace {web.STATUS_OBSERVABILITY_TRACE_LIMIT + 11}")
+        finally:
+            web.settings.motion_diagnostics_level = original_level
+            with web.motion._observability_lock:
+                web.motion._trace.clear()
+                web.motion._last_source = "idle"
+                web.motion._last_label = "idle"
+                web.motion._last_command_time = None
 
     def test_status_payload_reports_active_mode_elapsed_time(self):
         import strokegpt.web as web

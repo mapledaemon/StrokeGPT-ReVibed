@@ -3,6 +3,11 @@ from dataclasses import dataclass, field
 import threading
 
 
+UI_MESSAGE_LOG_LIMIT = 200
+UI_LEGACY_MESSAGE_QUEUE_LIMIT = UI_MESSAGE_LOG_LIMIT
+UI_CLIENT_CURSOR_LIMIT = 32
+
+
 def default_ollama_pull_state():
     return {
         "state": "idle",
@@ -29,8 +34,8 @@ def default_motion_training_state():
 class AppState:
     lock: threading.RLock = field(default_factory=threading.RLock)
     chat_history: deque = field(default_factory=lambda: deque(maxlen=20))
-    messages_for_ui: deque = field(default_factory=deque)
-    ui_message_log: deque = field(default_factory=lambda: deque(maxlen=200))
+    messages_for_ui: deque = field(default_factory=lambda: deque(maxlen=UI_LEGACY_MESSAGE_QUEUE_LIMIT))
+    ui_message_log: deque = field(default_factory=lambda: deque(maxlen=UI_MESSAGE_LOG_LIMIT))
     ui_message_next_id: int = 0
     ui_client_cursors: dict = field(default_factory=dict)
     mode_status_message: str = ""

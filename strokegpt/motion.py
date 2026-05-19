@@ -3542,7 +3542,12 @@ class MotionController:
         finally:
             self._set_frame_playback_active(False)
 
-    def observability_snapshot(self, handy_diagnostics: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def observability_snapshot(
+        self,
+        handy_diagnostics: Optional[dict[str, Any]] = None,
+        *,
+        trace_limit: Optional[int] = None,
+    ) -> dict[str, Any]:
         if handy_diagnostics is None:
             if hasattr(self.handy, "diagnostics"):
                 handy_diagnostics = self.handy.diagnostics()
@@ -3559,6 +3564,13 @@ class MotionController:
             label = self._last_label
             last_command_time = self._last_command_time
             playback_active = self._frame_playback_active
+        if trace_limit is not None:
+            try:
+                trace_limit = max(1, int(trace_limit))
+            except (TypeError, ValueError):
+                trace_limit = None
+            if trace_limit is not None and len(trace) > trace_limit:
+                trace = trace[-trace_limit:]
         return {
             "backend": self.backend,
             "source": source,
