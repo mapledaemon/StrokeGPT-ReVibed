@@ -149,6 +149,10 @@ class HandyController:
         self._last_handy_sse_event = None
         self._last_handy_sse_event_at = None
         self._handy_sse_recent_events = deque(maxlen=HANDY_SSE_RECENT_EVENTS_LIMIT)
+        self._device_connection_status = "unknown"
+        self._device_connection_message = ""
+        self._device_connection_observed_at = None
+        self._device_connection_event_type = ""
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
 
@@ -522,6 +526,35 @@ class HandyController:
         self._last_handy_sse_event = None
         self._last_handy_sse_event_at = None
         self._handy_sse_recent_events.clear()
+        self._clear_device_connection_status()
+
+    def _clear_device_connection_status(self):
+        self._device_connection_status = "unknown"
+        self._device_connection_message = ""
+        self._device_connection_observed_at = None
+        self._device_connection_event_type = ""
+
+    def _record_device_connection_status(self, status, message="", *, event_type=""):
+        self._device_connection_status = str(status or "unknown")[:40]
+        self._device_connection_message = str(message or "")[:180]
+        self._device_connection_observed_at = time.time()
+        self._device_connection_event_type = str(event_type or "")[:80]
+
+    def _device_status_payload_data(self, payload):
+        if not isinstance(payload, dict):
+            return {}
+        data = payload.get("data")
+        if isinstance(data, dict) and isinstance(data.get("data"), dict):
+            return data.get("data") or {}
+        return data if isinstance(data, dict) else {}
+
+    def _device_status_message(self, status_data, fallback):
+        if isinstance(status_data, dict):
+            for key in ("message", "reason", "description", "name", "code"):
+                value = status_data.get(key)
+                if value not in (None, ""):
+                    return str(value)[:180]
+        return fallback
 
     def _hsp_state_clock_ms(self, state):
         if not isinstance(state, dict):
@@ -1416,19 +1449,51 @@ class HandyController:
         self._record_hsp_state_sse_event(event_type)
         self._record_handy_sse_event(event_type, payload, event_id=event.get("id"))
         if event_type == "device_disconnected":
+            status_data = self._device_status_payload_data(payload)
+            self._record_device_connection_status(
+                "offline",
+                self._device_status_message(status_data, "Handy SSE reports the device disconnected."),
+                event_type=event_type,
+            )
             self._hsp_streaming = False
             self._hamp_started = False
             self._current_mode = None
             self._reset_motion_cache()
             return True
+        if event_type == "device_connected":
+            status_data = self._device_status_payload_data(payload)
+            self._record_device_connection_status(
+                "online",
+                self._device_status_message(status_data, "Handy SSE reports the device is online."),
+                event_type=event_type,
+            )
+            return True
+        if event_type == "device_error":
+            status_data = self._device_status_payload_data(payload)
+            self._record_device_connection_status(
+                "error",
+                self._device_status_message(status_data, "Handy SSE reported a device error."),
+                event_type=event_type,
+            )
+            return True
         if event_type == "device_status":
-            data = payload.get("data") if isinstance(payload, dict) else None
-            status_data = data.get("data") if isinstance(data, dict) and isinstance(data.get("data"), dict) else data
+            status_data = self._device_status_payload_data(payload)
             if isinstance(status_data, dict) and status_data.get("connected") is False:
+                self._record_device_connection_status(
+                    "offline",
+                    self._device_status_message(status_data, "Handy SSE reports the device is offline."),
+                    event_type=event_type,
+                )
                 self._hsp_streaming = False
                 self._hamp_started = False
                 self._current_mode = None
                 self._reset_motion_cache()
+            elif isinstance(status_data, dict) and status_data.get("connected") is True:
+                self._record_device_connection_status(
+                    "online",
+                    self._device_status_message(status_data, "Handy SSE reports the device is online."),
+                    event_type=event_type,
+                )
             return True
         if event_type not in HSP_STATE_SSE_STATE_EVENTS:
             return True
@@ -1707,6 +1772,9 @@ class HandyController:
         handy_sse_event_age_ms = None
         if self._last_handy_sse_event_at is not None:
             handy_sse_event_age_ms = round(max(0.0, time.time() - self._last_handy_sse_event_at) * 1000.0, 1)
+        device_connection_age_ms = None
+        if self._device_connection_observed_at is not None:
+            device_connection_age_ms = round(max(0.0, time.time() - self._device_connection_observed_at) * 1000.0, 1)
         hsp_refresh_thread = self._hsp_state_refresh_thread
         hsp_refresh_active = bool(hsp_refresh_thread is not None and hsp_refresh_thread.is_alive())
         hsp_sse_thread = self._hsp_state_sse_thread
@@ -1789,6 +1857,15 @@ class HandyController:
                 else None
             ),
             "handy_sse_recent_events": [dict(event) for event in self._handy_sse_recent_events],
+            "device_connection_status": self._device_connection_status,
+            "device_connection_message": self._device_connection_message,
+            "device_connection_observed_at": (
+                round(float(self._device_connection_observed_at), 3)
+                if self._device_connection_observed_at is not None
+                else None
+            ),
+            "device_connection_age_ms": device_connection_age_ms,
+            "device_connection_event_type": self._device_connection_event_type,
             "firmware_version": self.firmware_version,
             "api_v3_enabled": self.supports_api_v3_control(),
             "api_v3_key_configured": bool(self._effective_api_v3_key()),
