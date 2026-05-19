@@ -44,15 +44,21 @@ function stubCanvas(canvas, width = 400, height = 220) {
     canvas.getBoundingClientRect = () => ({top: 0, left: 0, right: width, bottom: height, width, height});
     const context = {
         bezierCurveCalls: 0,
+        clipCalls: 0,
+        rectCalls: [],
         beginPath() {},
         arc() {},
         bezierCurveTo() { this.bezierCurveCalls += 1; },
         clearRect() {},
+        clip() { this.clipCalls += 1; },
         fill() {},
         fillRect() {},
         fillText() {},
         lineTo() {},
         moveTo() {},
+        rect(x, y, rectWidth, rectHeight) { this.rectCalls.push({x, y, width: rectWidth, height: rectHeight}); },
+        restore() {},
+        save() {},
         stroke() {},
         set fillStyle(_value) {},
         set font(_value) {},
@@ -174,6 +180,8 @@ describe('motion pattern studio helpers', () => {
         }, 'Empty');
 
         assert.ok(canvas.__testContext.bezierCurveCalls > 0);
+        assert.strictEqual(canvas.__testContext.clipCalls, 1);
+        assert.deepStrictEqual(canvas.__testContext.rectCalls.at(-1), {x: 34, y: 34, width: 332, height: 152});
     });
 
     it('smooths sparse controls without flattening peaks and troughs', () => {
@@ -332,6 +340,18 @@ describe('motion pattern studio edit-tool helpers', () => {
         assert.strictEqual(action.at, Math.round(metrics.duration / 4));
         // Half the inner height maps to pos 50 (top of canvas = pos 100).
         assert.strictEqual(action.pos, 50);
+    });
+
+    it('clamps pixels outside the graph to the valid pattern bounds', () => {
+        const highLeft = studioActionFromPixel(metrics.pad - 80, metrics.pad - 40, metrics);
+        const lowRight = studioActionFromPixel(
+            metrics.width - metrics.pad + 80,
+            metrics.height - metrics.pad + 40,
+            metrics,
+        );
+
+        assert.deepStrictEqual(highLeft, {at: 0, pos: 100});
+        assert.deepStrictEqual(lowRight, {at: metrics.duration, pos: 0});
     });
 
     it('opens edit and draw tools for existing library patterns', () => {
