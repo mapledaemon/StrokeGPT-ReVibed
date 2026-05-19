@@ -509,9 +509,6 @@ manual browser/device smoke, or are guardrails for future diagnostics changes.
   static during normal app use.
 - Make the local network address easy to open from the command-line
   output where the terminal supports clickable links.
-- Add a setup verifier command that checks Python, dependencies, Ollama,
-  Chatterbox availability, Torch/CUDA, port availability, and writable
-  user-data folders.
 - Add a Python 3.12 compatibility lane before changing the Windows installer
   default away from Python 3.11. Use 3.12 as the first newer-version target
   because it is far enough ahead to expose 3.11-only assumptions while still

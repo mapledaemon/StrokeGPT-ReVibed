@@ -119,6 +119,10 @@ If port 5000 is busy, the app picks the next free local port.
    isn't installed yet (can pull several GB through Ollama).
 3. Optional: **Settings > Diagnostics > Run Setup Checks** verifies Ollama,
    model GPU use, and voice dependencies.
+   From PowerShell you can also run `.\scripts\verify_setup.ps1` before
+   launching the app. It checks Python, required imports, Ollama reachability,
+   Torch/CUDA, local port availability, and writable runtime folders without
+   downloading models.
 4. Optional: enable voice in **Settings > Voice**. See
    [docs/voice_input.md](docs/voice_input.md) and
    [docs/local_voice_setup.md](docs/local_voice_setup.md) for low-latency

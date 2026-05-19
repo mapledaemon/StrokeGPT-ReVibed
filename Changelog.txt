@@ -8,6 +8,32 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #271 - Setup Verifier
+--------------------------------------
+
+Branch: codex/setup-verifier
+
+- Added `scripts/verify_setup.ps1`, a PowerShell setup verifier that checks
+  Python, required imports, Ollama reachability, Chatterbox/faster-whisper
+  availability, Torch/CUDA status, local port availability, and writable
+  runtime folders without downloading models.
+- Documented the verifier in the first-run diagnostics flow and removed the
+  completed setup-verifier item from the roadmap.
+
+
+2026-05-19 - PR #270 - Handy Device Status Clarity
+--------------------------------------------------
+
+Branch: codex/handy-status-clarity
+
+- Added Handy diagnostics fields for live device online/offline/error state
+  from the existing firmware v4 SSE events, so UI status can distinguish
+  target-device presence from a previous successful API command.
+- Updated the sidebar and Device-tab status labels to show `Device online`,
+  `Device offline`, `Key saved`, or `Command OK` instead of implying a
+  physical device is connected when only the last command path succeeded.
+
+
 2026-05-19 - PR #269 - Motion Style Roadmap Cleanup
 ----------------------------------------------------
 
