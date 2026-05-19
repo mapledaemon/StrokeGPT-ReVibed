@@ -1,4 +1,5 @@
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
+from .motion_tags import motion_tag_suggestions
 from .settings import (
     CUSTOM_LLM_PROMPT_PREFIX,
     DIAGNOSTICS_LEVELS,
@@ -917,6 +918,7 @@ def motion_pattern_catalog_payload(pattern_library, settings, feedback_history_l
         pattern_library.catalog(settings.motion_pattern_enabled, settings.motion_pattern_feedback),
         settings.motion_pattern_weights,
     )
+    payload["tag_suggestions"] = motion_tag_suggestions()
     payload["feedback_history"] = list(settings.motion_pattern_feedback_history[:feedback_history_limit])
     return payload
 
@@ -932,5 +934,5 @@ def motion_pattern_summary(record, weight_overrides=None, *, include_actions=Fal
     return record.to_summary_dict(include_actions=include_actions)
 
 
-def motion_preference_payload(catalog, excluded_llm_pattern_ids=None):
-    return build_motion_preference_payload(catalog, excluded_llm_pattern_ids)
+def motion_preference_payload(catalog, excluded_llm_pattern_ids=None, program_catalog=None):
+    return build_motion_preference_payload(catalog, excluded_llm_pattern_ids, program_catalog)

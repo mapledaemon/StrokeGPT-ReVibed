@@ -10,6 +10,7 @@ import { getStubElement, resetStubElement } from './_harness.mjs';
 import { initAudioControls, updateLocalTtsStatus } from '../../static/js/audio.js';
 import { initMotionControls, populateMotionSettings } from '../../static/js/motion-control.js';
 import {
+    createPatternTagsButton,
     resetMotionPatternFeedback,
     setMotionPatternEnabled,
     setMotionPatternTags,
@@ -258,6 +259,33 @@ describe('motion/audio save feedback', () => {
             {tags: ['tip', 'teasing']},
         ]]);
         assert.strictEqual(getStubElement('status-text').textContent, 'Updated tags for Pulse.');
+    });
+
+    it('pattern tag prompts show the suggested tag list', () => {
+        const originalPrompt = globalThis.window.prompt;
+        let promptMessage = '';
+        let promptDefault = '';
+        state.motionTagSuggestions = ['tip', 'full shaft', 'teasing'];
+        globalThis.window.prompt = (message, current) => {
+            promptMessage = message;
+            promptDefault = current;
+            return null;
+        };
+
+        try {
+            const button = createPatternTagsButton({
+                id: 'pulse',
+                name: 'Pulse',
+                source: 'imported',
+                readonly: false,
+                tags: ['teasing'],
+            });
+            button.click();
+        } finally {
+            globalThis.window.prompt = originalPrompt;
+        }
+        assert.match(promptMessage, /Suggestions: tip, full shaft, teasing/);
+        assert.strictEqual(promptDefault, 'teasing');
     });
 
     it('saveMotionFeedbackOptions surfaces the backend message on pattern status', async () => {

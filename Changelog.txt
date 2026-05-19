@@ -8,6 +8,27 @@ has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
 
+2026-05-19 - PR #276 - Library Tag Suggestions And Prompt Hints
+-----------------------------------------------------------------
+
+Branch: codex/library-tag-suggestions
+
+- Added shared Motion Pattern and Program tag suggestions so tag editing
+  prompts show common labels such as full shaft, tip, base, teasing, slow,
+  edging, and intensity/style tags.
+- Normalized saved Motion Pattern and Program tags case-insensitively so
+  duplicate labels from prompt editing do not persist with casing drift.
+- Included saved user-pattern and Program tags in the LLM-facing motion
+  preference prompt as semantic hints for future content-aware planning while
+  keeping authored content out of direct `move.pattern` choices unless the
+  fixed-pattern list explicitly exposes it.
+- Removed the completed Shareable Library Export And Tags item from the
+  roadmap now that export, tag editing, suggestions, and LLM-facing tag
+  summaries are covered.
+- Synchronized a timing-sensitive continuous HSP replacement trace test so CI
+  waits for the replacement trace row before asserting its fields.
+
+
 2026-05-19 - PR #275 - Status Poll Memory And Payload Guards
 -------------------------------------------------------------
 

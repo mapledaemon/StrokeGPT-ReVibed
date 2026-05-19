@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .motion_tags import motion_tag_suggestions, safe_motion_tags
 from .motion_patterns import PatternAction, normalize_actions
 from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
@@ -31,14 +32,7 @@ def _safe_text(value, default="", max_length=240):
 
 
 def _safe_tags(value):
-    if not isinstance(value, list):
-        return ()
-    tags = []
-    for item in value[:30]:
-        tag = _safe_text(item, max_length=40)
-        if tag and tag not in tags:
-            tags.append(tag)
-    return tuple(tags)
+    return safe_motion_tags(value, max_tags=30)
 
 
 def _title_from_payload(payload, fallback_id):
@@ -282,6 +276,7 @@ class ProgramLibrary:
         return {
             "schema_version": PROGRAM_SCHEMA_VERSION,
             "program_dir": str(self.user_program_dir),
+            "tag_suggestions": motion_tag_suggestions(),
             "programs": [record.to_summary_dict() for record in records],
             "errors": errors,
         }

@@ -1,5 +1,6 @@
 import { D, apiCall, el, fetchWithConnectionState, reportSaveFailure, setStatusMessage, state } from '../context.js';
 import { formatPatternDuration } from './pattern-list.js';
+import { normalizeMotionTagList, tagPromptMessage, updateMotionTagSuggestions } from './tag-editor.js';
 
 
 const TRASH_ICON = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm3 0v7h2v-7h-2Z"></path></svg>';
@@ -120,7 +121,7 @@ function createProgramTagsButton(program) {
     tagsButton.addEventListener('click', event => {
         event.stopPropagation?.();
         const current = Array.isArray(program.tags) ? program.tags.join(', ') : '';
-        const next = window.prompt?.('Program tags, comma-separated', current);
+        const next = window.prompt?.(tagPromptMessage('Program'), current);
         if (next === null || next === undefined) return;
         setMotionProgramTags(program.id, next);
     });
@@ -183,9 +184,7 @@ export async function renameMotionProgram(program, nextName) {
 export async function setMotionProgramTags(program, tags) {
     const programId = typeof program === 'string' ? program : program?.id;
     if (!programId) return null;
-    const tagList = Array.isArray(tags)
-        ? tags
-        : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const tagList = normalizeMotionTagList(tags);
     const data = await apiCall(`/motion_programs/${encodeURIComponent(programId)}/tags`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -224,6 +223,7 @@ export async function deleteMotionProgram(program) {
 
 
 export function renderMotionPrograms(catalog = {}) {
+    updateMotionTagSuggestions(catalog);
     const programs = Array.isArray(catalog.programs) ? catalog.programs : [];
     state.motionPrograms = programs;
     if (!el.motionProgramList) return;

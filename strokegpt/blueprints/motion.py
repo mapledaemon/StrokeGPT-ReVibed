@@ -366,7 +366,7 @@ def set_motion_program_tags_route(program_id):
         "status": "success",
         "message": f"Updated tags for {updated.name}.",
         "program": updated.to_summary_dict(include_actions=True),
-        "motion_programs": web.motion_program_library.catalog(),
+        "motion_programs": web._motion_program_catalog_payload(),
     })
 
 

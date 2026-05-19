@@ -259,6 +259,7 @@ class MotionProgramRouteTests(unittest.TestCase):
         catalog_response = self.client.get("/motion_programs")
         self.assertEqual(catalog_response.status_code, 200)
         catalog = catalog_response.get_json()
+        self.assertIn("full shaft", catalog["tag_suggestions"])
         self.assertIn("long-wave", {program["id"] for program in catalog["programs"]})
 
         detail_response = self.client.get("/motion_programs/long-wave")
@@ -382,6 +383,35 @@ class MotionProgramRouteTests(unittest.TestCase):
 
         saved = json.loads((Path(self.temp_dir.name) / f"long-wave{PROGRAM_FILE_SUFFIX}").read_text(encoding="utf-8"))
         self.assertEqual(saved["tags"], ["teasing", "long-form", "program", "funscript"])
+
+    def test_motion_preferences_prompt_includes_saved_library_tags(self):
+        self.web.settings.motion_pattern_library_enabled_in_chat = True
+        self.web.motion_pattern_library.import_payload(
+            {
+                "id": "clip-loop",
+                "name": "Clip Loop",
+                "actions": [{"at": 0, "pos": 10}, {"at": 500, "pos": 90}],
+                "tags": ["Tip", "teasing", "tip"],
+            },
+            filename="clip-loop.json",
+        )
+        self.web.motion_program_library.import_payload(
+            {
+                **long_program_payload(action_count=6, step_ms=1000),
+                "tags": ["full shaft", "slow"],
+            },
+            filename="long-wave.funscript",
+        )
+
+        response = self.client.get("/motion_preferences")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("Saved user pattern tags: clip-loop tags:tip/teasing", data["prompt"])
+        self.assertIn("Saved long program tags: long-wave tags:full shaft/slow", data["prompt"])
+        self.assertIn("Saved library tags available for 2 item(s).", data["summary"])
+        self.assertEqual(data["library_tagged_patterns"][0]["tags"], ["tip", "teasing"])
+        self.assertEqual(data["library_tagged_programs"][0]["tags"], ["full shaft", "slow"])
 
     def test_motion_library_export_zip_contains_shareable_patterns_programs_and_safe_preferences(self):
         self.web.settings.persona_desc = "Test persona text"

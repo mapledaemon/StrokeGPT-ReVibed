@@ -198,6 +198,50 @@ describe('motion program list helpers', () => {
         assert.equal(el.statusText.textContent, 'Updated tags for Long Wave.');
     });
 
+    it('program tag prompts use catalog-provided suggestions', async () => {
+        const calls = [];
+        let promptMessage = '';
+        let promptDefault = '';
+        globalThis.window.prompt = (message, current) => {
+            promptMessage = message;
+            promptDefault = current;
+            return 'Full Shaft, Slow, slow';
+        };
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, options});
+            return jsonResponse(200, {
+                status: 'success',
+                program: {id: 'long-wave', name: 'Long Wave', tags: ['full shaft', 'slow', 'program']},
+                motion_programs: {
+                    tag_suggestions: ['full shaft', 'slow'],
+                    programs: [{id: 'long-wave', name: 'Long Wave', tags: ['full shaft', 'slow', 'program']}],
+                    errors: [],
+                },
+            });
+        };
+        renderMotionPrograms({
+            tag_suggestions: ['Full Shaft', 'Slow'],
+            programs: [{
+                id: 'long-wave',
+                name: 'Long Wave',
+                source: 'imported',
+                duration_ms: 600_000,
+                action_count: 2501,
+                tags: ['program'],
+            }],
+            errors: [],
+        });
+
+        const tagsButton = el.motionProgramList.children[0].children[1].children[2];
+        tagsButton.click();
+        await flushAsyncClickHandlers();
+
+        assert.match(promptMessage, /Suggestions: full shaft, slow/);
+        assert.equal(promptDefault, 'program');
+        assert.equal(calls[0].endpoint, '/motion_programs/long-wave/tags');
+        assert.deepEqual(JSON.parse(calls[0].options.body), {tags: ['full shaft', 'slow']});
+    });
+
     it('renames a Program and updates an open Program player title', async () => {
         const calls = [];
         state.motionProgramSelected = {

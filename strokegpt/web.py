@@ -1207,7 +1207,7 @@ def _motion_preference_payload():
     excluded = set()
     if not settings.allow_llm_edge_in_chat:
         excluded.update(_edge_pattern_ids())
-    payload = payloads.motion_preference_payload(catalog, excluded)
+    payload = payloads.motion_preference_payload(catalog, excluded, _motion_program_catalog_payload())
     payload["pattern_library_enabled_in_chat"] = True
     return payload
 
