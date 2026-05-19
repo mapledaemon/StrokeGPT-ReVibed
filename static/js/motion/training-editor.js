@@ -17,6 +17,9 @@ const DRAWN_PATTERN_INTERPOLATION = 'cubic';
 const DRAW_CAPTURE_MIN_EVENT_MS = 16;
 const DRAW_CAPTURE_MIN_PATTERN_MS = 24;
 const DRAW_CAPTURE_MIN_POS_DELTA = 1.0;
+const SMOOTH_NEIGHBOR_WEIGHT = 0.18;
+const SMOOTH_EXTREME_PROMINENCE = 6;
+const SMOOTH_EXTREME_BLEND = 0.35;
 const DRAW_DETAIL_PRESETS = {
     1: {label: 'Low', epsilon: 4.2, maxPointsPerSecond: 2.5, minPoints: 8, absoluteMaxPoints: 60, minSpacingMs: 140},
     2: {label: 'Medium', epsilon: 2.35, maxPointsPerSecond: 4.5, minPoints: 12, absoluteMaxPoints: 100, minSpacingMs: 75},
@@ -221,6 +224,44 @@ function downsampleActions(actions, maxActions = STUDIO_MAX_ACTIONS) {
     const last = actions[actions.length - 1];
     if (selected[selected.length - 1] !== last) selected[selected.length - 1] = last;
     return selected;
+}
+
+function actionRange(actions) {
+    if (!actions.length) return {min: 50, max: 50, range: 0, center: 50};
+    const positions = actions.map(action => clampNumber(action.pos, 0, 100, 50));
+    const min = Math.min(...positions);
+    const max = Math.max(...positions);
+    return {min, max, range: max - min, center: (min + max) / 2};
+}
+
+function smoothActionPosition(actions, index) {
+    const action = actions[index];
+    const before = actions[index - 1].pos;
+    const after = actions[index + 1].pos;
+    const weighted = (before * SMOOTH_NEIGHBOR_WEIGHT)
+        + (action.pos * (1 - (SMOOTH_NEIGHBOR_WEIGHT * 2)))
+        + (after * SMOOTH_NEIGHBOR_WEIGHT);
+    const localMaxProminence = action.pos - Math.max(before, after);
+    const localMinProminence = Math.min(before, after) - action.pos;
+    const prominence = Math.max(localMaxProminence, localMinProminence, 0);
+    const blend = prominence >= SMOOTH_EXTREME_PROMINENCE ? SMOOTH_EXTREME_BLEND : 1;
+    return clampNumber(action.pos + ((weighted - action.pos) * blend), 0, 100, action.pos);
+}
+
+function preserveSmoothedEnvelope(originalActions, smoothedActions) {
+    const original = actionRange(originalActions);
+    const smoothed = actionRange(smoothedActions);
+    if (original.range < 4 || smoothed.range <= 0.001 || smoothed.range >= original.range * 0.96) {
+        return smoothedActions;
+    }
+    const scale = original.range / smoothed.range;
+    return smoothedActions.map((action, index) => {
+        if (index === 0 || index === smoothedActions.length - 1) return action;
+        return {
+            ...action,
+            pos: clampNumber(original.center + ((action.pos - smoothed.center) * scale), 0, 100, action.pos),
+        };
+    });
 }
 
 function studioTimelineZoom() {
@@ -508,13 +549,15 @@ function setStudioEditedPattern(pattern, message, {dirty = true, sourcePattern =
 export function smoothEditedPattern() {
     const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
     if (actions.length < 3) return;
-    const smoothed = actions.map((action, index) => {
-        if (index === 0 || index === actions.length - 1) return action;
-        const before = actions[index - 1].pos;
-        const after = actions[index + 1].pos;
-        return {...action, pos: (before * 0.25) + (action.pos * 0.5) + (after * 0.25)};
-    });
-    setEditedPatternActions(smoothed, 'Smoothed the existing control points without adding new points.');
+    const smoothed = actions.map((action, index) => (
+        index === 0 || index === actions.length - 1
+            ? action
+            : {...action, pos: smoothActionPosition(actions, index)}
+    ));
+    setEditedPatternActions(
+        preserveSmoothedEnvelope(actions, smoothed),
+        'Smoothed jitter while preserving the pattern envelope.',
+    );
 }
 
 export function simplifyEditedPattern() {
