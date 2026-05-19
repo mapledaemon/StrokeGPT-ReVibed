@@ -2290,6 +2290,7 @@ def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
         'remember_pattern_id': _remember_live_motion_pattern_id,
         'freestyle_candidates': _freestyle_candidate_patterns,
         'motion_pattern_library_enabled_in_freestyle': lambda: settings.motion_pattern_library_enabled_in_freestyle,
+        'motion_style': lambda: settings.motion_style,
         'allow_llm_edge_in_freestyle': lambda: settings.allow_llm_edge_in_freestyle,
         'autospeak_enabled': lambda: settings.autospeak_enabled,
         'autospeak_range': lambda: (settings.autospeak_min_seconds, settings.autospeak_max_seconds),
