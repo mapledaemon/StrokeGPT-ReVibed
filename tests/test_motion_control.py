@@ -982,11 +982,10 @@ class MotionControllerTests(unittest.TestCase):
                 ),
             )
 
-            hsp_points = [
-                point
-                for point in controller.observability_snapshot()["trace"]
-                if point.get("continuous_schema") == "hsp"
-            ]
+            hsp_points = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("hsp_authored_point") is True,
+            )
             self.assertTrue(any(point.get("hsp_authored_point") is True for point in hsp_points))
         finally:
             controller.stop()
@@ -1737,16 +1736,11 @@ class MotionControllerTests(unittest.TestCase):
             time.sleep(0.22)
             controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
-            self.assertTrue(
-                self.wait_until(
-                    lambda: any(
-                        point.get("continuous_schema") == "hsp"
-                        and point.get("source") == "second"
-                        and point.get("hsp_batch") == "replace"
-                        for point in controller.observability_snapshot()["trace"]
-                    )
-                ),
-                controller.observability_snapshot()["trace"],
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+                and not point.get("hsp_replacement_bridge"),
             )
 
             replacement = handy.stream_replacements[0]
@@ -1759,7 +1753,7 @@ class MotionControllerTests(unittest.TestCase):
 
             second_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp"
                 and point.get("source") == "second"
                 and point.get("hsp_batch") == "replace"
@@ -1790,21 +1784,15 @@ class MotionControllerTests(unittest.TestCase):
 
             controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
-            self.assertTrue(
-                self.wait_until(
-                    lambda: any(
-                        point.get("continuous_schema") == "hsp"
-                        and point.get("source") == "second"
-                        and point.get("hsp_batch") == "replace"
-                        for point in controller.observability_snapshot()["trace"]
-                    )
-                ),
-                controller.observability_snapshot()["trace"],
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace",
             )
 
             second_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp"
                 and point.get("source") == "second"
                 and point.get("hsp_batch") == "replace"
@@ -1836,21 +1824,15 @@ class MotionControllerTests(unittest.TestCase):
 
             controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
-            self.assertTrue(
-                self.wait_until(
-                    lambda: any(
-                        point.get("continuous_schema") == "hsp"
-                        and point.get("source") == "second"
-                        and point.get("hsp_batch") == "replace"
-                        for point in controller.observability_snapshot()["trace"]
-                    )
-                ),
-                controller.observability_snapshot()["trace"],
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace",
             )
 
             second_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp"
                 and point.get("source") == "second"
                 and point.get("hsp_batch") == "replace"
@@ -1919,9 +1901,14 @@ class MotionControllerTests(unittest.TestCase):
             controller.apply_continuous_target(MotionTarget(70, 50, 80, "wave"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
 
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace",
+            )
             replacement_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp"
                 and point.get("source") == "second"
                 and point.get("hsp_batch") == "replace"
@@ -2276,9 +2263,14 @@ class MotionControllerTests(unittest.TestCase):
                 controller.apply_generated_target(second, source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
 
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and not point.get("hsp_replacement_bridge"),
+            )
             second_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
+                for point in trace
                 if point.get("continuous_schema") == "hsp" and point.get("source") == "second"
             ]
             self.assertTrue(second_points)

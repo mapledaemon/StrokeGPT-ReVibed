@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-19 - PR #283 - CI HSP Replacement Trace Waits
+-----------------------------------------------------
+
+Branch: codex/ci-hsp-replacement-trace-wait
+
+- Hardened continuous-HSP replacement regression tests so CI waits for the
+  specific replacement trace rows under assertion instead of racing on the
+  first bridge row recorded for a replacement batch.
+
 2026-05-19 - PR #282 - Motion Studio Preview Clipping
 -----------------------------------------------------
 
