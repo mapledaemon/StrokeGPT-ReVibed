@@ -988,10 +988,36 @@ class HandyController:
         absolute_pos_pct = self._relative_depth_to_physical_percent(depth)
         return self.FULL_TRAVEL_MM * (absolute_pos_pct / 100.0)
 
+    def _calibrated_depth_bounds(self):
+        min_depth = self._safe_percent(self.min_handy_depth)
+        max_depth = self._safe_percent(self.max_handy_depth)
+        if min_depth <= max_depth:
+            return min_depth, max_depth
+        return max_depth, min_depth
+
     def _relative_depth_to_physical_percent(self, depth):
         relative_pos_pct = self._safe_percent(depth)
-        calibrated_width = self.max_handy_depth - self.min_handy_depth
-        return self.min_handy_depth + calibrated_width * (relative_pos_pct / 100.0)
+        min_depth, max_depth = self._calibrated_depth_bounds()
+        calibrated_width = max_depth - min_depth
+        return min_depth + calibrated_width * (relative_pos_pct / 100.0)
+
+    def _hamp_window_for_relative_motion(self, depth, stroke_range):
+        relative_pos_pct = self._safe_percent(depth)
+        relative_range_pct = self._safe_percent(stroke_range)
+        min_depth, max_depth = self._calibrated_depth_bounds()
+        absolute_center_pct = self._relative_depth_to_physical_percent(relative_pos_pct)
+        span_abs = ((max_depth - min_depth) * (relative_range_pct / 100.0)) / 2.0
+        min_zone_abs = max(min_depth, absolute_center_pct - span_abs)
+        max_zone_abs = min(max_depth, absolute_center_pct + span_abs)
+        slide_min, slide_max = self._normalize_slide_bounds(
+            round(100 - max_zone_abs),
+            round(100 - min_zone_abs),
+        )
+        stroke_zone = {
+            "min": int(round(min_zone_abs)),
+            "max": int(round(max_zone_abs)),
+        }
+        return relative_pos_pct, relative_range_pct, stroke_zone, (slide_min, slide_max)
 
     def velocity_for_depth_interval(self, speed, start_depth, end_depth, duration_seconds):
         max_velocity = self.max_absolute_velocity_for_relative_speed(speed)
@@ -1039,24 +1065,10 @@ class HandyController:
         if not self._ensure_hamp():
             return False
 
-        # Set slide range based on depth and stroke_range
-        relative_pos_pct = self._safe_percent(depth)
-        absolute_center_pct = self.min_handy_depth + (self.max_handy_depth - self.min_handy_depth) * (relative_pos_pct / 100.0)
-        calibrated_range_width = self.max_handy_depth - self.min_handy_depth
-        
-        relative_range_pct = self._safe_percent(stroke_range)
-        span_abs = (calibrated_range_width * (relative_range_pct / 100.0)) / 2.0
-        
-        min_zone_abs = absolute_center_pct - span_abs
-        max_zone_abs = absolute_center_pct + span_abs
-        
-        clamped_min_zone = max(self.min_handy_depth, min_zone_abs)
-        clamped_max_zone = min(self.max_handy_depth, max_zone_abs)
-        
-        slide_min = round(100 - clamped_max_zone)
-        slide_max = round(100 - clamped_min_zone)
-
-        slide_min, slide_max = self._normalize_slide_bounds(slide_min, slide_max)
+        relative_pos_pct, relative_range_pct, _stroke_zone, slide_bounds = (
+            self._hamp_window_for_relative_motion(depth, stroke_range)
+        )
+        slide_min, slide_max = slide_bounds
 
         # Calculate and set the final velocity
         relative_speed_pct = self._safe_percent(speed)
@@ -1761,16 +1773,13 @@ class HandyController:
                 "max": max(0, min(100, int(round(100 - self._last_slide_bounds[0])))),
             }
         if stroke_zone is None:
-            physical_depth = self._relative_depth_to_physical_percent(self.last_depth_pos)
-            calibrated_range_width = self.max_handy_depth - self.min_handy_depth
-            span = (calibrated_range_width * (self._safe_percent(self.last_stroke_range) / 100.0)) / 2.0
-            stroke_zone = {
-                "min": int(round(max(self.min_handy_depth, physical_depth - span))),
-                "max": int(round(min(self.max_handy_depth, physical_depth + span))),
-            }
+            _relative_depth, _relative_range, stroke_zone, _slide_bounds = (
+                self._hamp_window_for_relative_motion(self.last_depth_pos, self.last_stroke_range)
+            )
         physical_depth = self._relative_depth_to_physical_percent(self.last_depth_pos)
-        calibrated_min = max(0, min(100, int(round(min(self.min_handy_depth, self.max_handy_depth)))))
-        calibrated_max = max(0, min(100, int(round(max(self.min_handy_depth, self.max_handy_depth)))))
+        calibrated_min_pct, calibrated_max_pct = self._calibrated_depth_bounds()
+        calibrated_min = int(round(calibrated_min_pct))
+        calibrated_max = int(round(calibrated_max_pct))
         hsp_state_age_ms = None
         hsp_state_snapshot = self._hsp_state_cache_snapshot()
         if hsp_state_snapshot["observed_at"] is not None:
