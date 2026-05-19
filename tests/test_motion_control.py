@@ -1781,6 +1781,17 @@ class MotionControllerTests(unittest.TestCase):
 
             controller.apply_continuous_target(MotionTarget(70, 50, 80, "stroke"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        point.get("continuous_schema") == "hsp"
+                        and point.get("source") == "second"
+                        and point.get("hsp_batch") == "replace"
+                        for point in controller.observability_snapshot()["trace"]
+                    )
+                ),
+                controller.observability_snapshot()["trace"],
+            )
 
             second_points = [
                 point

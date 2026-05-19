@@ -12,6 +12,7 @@ import { initMotionControls, populateMotionSettings } from '../../static/js/moti
 import {
     resetMotionPatternFeedback,
     setMotionPatternEnabled,
+    setMotionPatternTags,
     setMotionPatternWeight,
 } from '../../static/js/motion/pattern-list.js';
 import { resetMotionPreferences, saveMotionFeedbackOptions } from '../../static/js/motion/feedback-controls.js';
@@ -225,6 +226,38 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('motion-pattern-status');
         assert.strictEqual(status.textContent, 'Pattern feedback reset failed.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('setMotionPatternTags sends tag lists and updates the global status', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                message: 'Updated tags for Pulse.',
+                pattern: {id: 'pulse', name: 'Pulse', tags: ['tip', 'teasing']},
+                motion_patterns: {
+                    patterns: [{
+                        id: 'pulse',
+                        name: 'Pulse',
+                        source: 'imported',
+                        enabled: true,
+                        duration_ms: 500,
+                        action_count: 2,
+                        tags: ['tip', 'teasing'],
+                    }],
+                    errors: [],
+                },
+            });
+        };
+
+        await setMotionPatternTags('pulse', 'tip, teasing');
+
+        assert.deepStrictEqual(requests, [[
+            '/motion_patterns/pulse/tags',
+            {tags: ['tip', 'teasing']},
+        ]]);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Updated tags for Pulse.');
     });
 
     it('saveMotionFeedbackOptions surfaces the backend message on pattern status', async () => {

@@ -1,6 +1,8 @@
 import io
 import json
 import threading
+import time
+import zipfile
 
 from flask import Blueprint, jsonify, request, send_file
 from werkzeug.utils import secure_filename
@@ -26,6 +28,84 @@ def _pattern_summary(web, record, *, include_actions=False):
     )
 
 
+def _tags_from_request(data):
+    raw_tags = data.get("tags") if isinstance(data, dict) else []
+    if isinstance(raw_tags, str):
+        return [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
+    if isinstance(raw_tags, list):
+        return [str(tag).strip() for tag in raw_tags if str(tag).strip()]
+    return []
+
+
+def _safe_motion_preferences_export(web, pattern_count, program_count):
+    return {
+        "motion_style": web.settings.motion_style,
+        "motion_pattern_library_enabled_in_freestyle": bool(web.settings.motion_pattern_library_enabled_in_freestyle),
+        "motion_pattern_library_enabled_in_chat": bool(web.settings.motion_pattern_library_enabled_in_chat),
+        "motion_feedback_auto_disable": bool(web.settings.motion_feedback_auto_disable),
+        "motion_pattern_enabled": dict(web.settings.motion_pattern_enabled),
+        "motion_pattern_weights": dict(web.settings.motion_pattern_weights),
+        "motion_pattern_feedback": dict(web.settings.motion_pattern_feedback),
+        "exported_pattern_count": pattern_count,
+        "exported_program_count": program_count,
+    }
+
+
+def _motion_library_export_zip(web):
+    patterns, pattern_errors = web.motion_pattern_library.load_user_patterns()
+    programs, program_errors = web.motion_program_library.load_programs()
+    manifest = {
+        "schema_version": 1,
+        "kind": "strokegpt_library_export",
+        "app": "StrokeGPT-ReVibed",
+        "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "counts": {
+            "patterns": len(patterns),
+            "programs": len(programs),
+            "pattern_errors": len(pattern_errors),
+            "program_errors": len(program_errors),
+        },
+        "source_library_paths": {
+            "patterns": "user_data/patterns",
+            "programs": "user_data/programs",
+        },
+        "excluded": [
+            "Handy connection keys",
+            "Handy API v3 application IDs",
+            "hosted TTS API keys",
+            "local voice samples",
+            "runtime caches",
+        ],
+        "errors": {
+            "patterns": pattern_errors,
+            "programs": program_errors,
+        },
+    }
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, indent=2) + "\n")
+        archive.writestr(
+            "preferences/motion_preferences.json",
+            json.dumps(_safe_motion_preferences_export(web, len(patterns), len(programs)), indent=2) + "\n",
+        )
+        archive.writestr("prompts/persona.txt", str(web.settings.persona_desc or "").strip() + "\n")
+        for record in patterns:
+            filename = secure_filename(f"{record.pattern_id}.strokegpt-pattern.json")
+            archive.writestr(
+                f"patterns/{filename}",
+                json.dumps(record.to_export_dict(), indent=2) + "\n",
+            )
+        for record in programs:
+            filename = secure_filename(f"{record.program_id}.strokegpt-program.json")
+            archive.writestr(
+                f"programs/{filename}",
+                json.dumps(record.to_export_dict(), indent=2) + "\n",
+            )
+    buffer.seek(0)
+    return buffer
+
+
 @motion_blueprint.route('/motion_patterns')
 def motion_patterns_route():
     web = _web()
@@ -44,6 +124,17 @@ def motion_preferences_route():
     payload = web._motion_preference_payload()
     payload["status"] = "success"
     return jsonify(payload)
+
+
+@motion_blueprint.route('/motion_library/export')
+def export_motion_library_route():
+    web = _web()
+    return send_file(
+        _motion_library_export_zip(web),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="strokegpt-library-export.zip",
+    )
 
 
 @motion_blueprint.route('/motion_preferences/reset', methods=['POST'])
@@ -119,6 +210,29 @@ def export_motion_pattern_route(pattern_id):
         as_attachment=True,
         download_name=f"{record.pattern_id}.strokegpt-pattern.json",
     )
+
+
+@motion_blueprint.route('/motion_patterns/<pattern_id>/tags', methods=['POST'])
+def set_motion_pattern_tags_route(pattern_id):
+    web = _web()
+    record = web._motion_pattern_record(pattern_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    if record.readonly:
+        return jsonify({"status": "error", "message": "Built-in pattern tags are read-only."}), 400
+    try:
+        updated = web.motion_pattern_library.update_tags(pattern_id, _tags_from_request(web._request_json()))
+    except web.PatternValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not updated:
+        return jsonify({"status": "error", "message": "Pattern not found."}), 404
+    return jsonify({
+        "status": "success",
+        "message": f"Updated tags for {updated.name}.",
+        "pattern": _pattern_summary(web, updated, include_actions=True),
+        "motion_patterns": web._motion_pattern_catalog_payload(),
+        "motion_preferences": web._motion_preference_payload(),
+    })
 
 
 @motion_blueprint.route('/import_motion_pattern', methods=['POST'])
@@ -234,6 +348,26 @@ def export_motion_program_route(program_id):
         as_attachment=True,
         download_name=f"{record.program_id}.strokegpt-program.json",
     )
+
+
+@motion_blueprint.route('/motion_programs/<program_id>/tags', methods=['POST'])
+def set_motion_program_tags_route(program_id):
+    web = _web()
+    record = web._motion_program_record(program_id)
+    if not record:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    try:
+        updated = web.motion_program_library.update_tags(program_id, _tags_from_request(web._request_json()))
+    except web.ProgramValidationError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    if not updated:
+        return jsonify({"status": "error", "message": "Program not found."}), 404
+    return jsonify({
+        "status": "success",
+        "message": f"Updated tags for {updated.name}.",
+        "program": updated.to_summary_dict(include_actions=True),
+        "motion_programs": web.motion_program_library.catalog(),
+    })
 
 
 @motion_blueprint.route('/import_motion_program', methods=['POST'])

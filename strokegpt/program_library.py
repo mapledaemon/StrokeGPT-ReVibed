@@ -163,6 +163,14 @@ class ProgramRecord:
             payload["actions"] = [{"at": action.at, "pos": action.pos} for action in self.actions]
         return payload
 
+    def with_tags(self, tags):
+        clean = list(_safe_tags(tags))
+        if "program" not in clean:
+            clean.append("program")
+        if "funscript" in self.tags and "funscript" not in clean:
+            clean.append("funscript")
+        return replace(self, tags=tuple(clean))
+
     def section_bounds(self, start_ms=None, end_ms=None, *, min_duration_ms=1):
         duration = self.duration_ms
         if duration <= 0:
@@ -359,6 +367,31 @@ class ProgramLibrary:
                 tmp_path.replace(path)
             except OSError as exc:
                 raise ProgramValidationError(f"Could not rename program file: {exc}") from exc
+            return updated
+        return None
+
+    def update_tags(self, program_id, tags):
+        requested = slugify_pattern_id(program_id)
+        try:
+            files = self.user_program_files()
+        except OSError as exc:
+            raise ProgramValidationError(f"Could not read program directory: {exc}") from exc
+
+        for path in files:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                record = record_from_payload(payload, fallback_id=path.stem, readonly=False)
+            except (OSError, json.JSONDecodeError, ProgramValidationError):
+                continue
+            if record.program_id != requested:
+                continue
+            updated = record.with_tags(tags)
+            try:
+                tmp_path = path.with_name(f"{path.name}.tmp")
+                tmp_path.write_text(json.dumps(updated.to_export_dict(), indent=2) + "\n", encoding="utf-8")
+                tmp_path.replace(path)
+            except OSError as exc:
+                raise ProgramValidationError(f"Could not update program tags: {exc}") from exc
             return updated
         return None
 

@@ -46,8 +46,9 @@ mode controls still have rough edges that block daily use.
 
 Status note: Partial. Trace/status diagnostics, continuous-motion metadata,
 motion transport capture, sanitized Handy command history, and HSP/HDSP/HAMP
-summary reporting have landed. The remaining work is real-device verification
-and planner/control fixes, not more basic instrumentation.
+summary reporting have landed, and offline capture replay/analyzer scripting is
+available for exported Diagnostics captures. The remaining work is real-device
+verification and planner/control fixes, not more basic instrumentation.
 
 - Use the PR #42 trace fields and the expanded status/debug diagnostics UI
   during manual Freestyle testing to identify whether stops are planner-side,
@@ -299,19 +300,16 @@ explicit pattern/script tags let users exchange useful content now and provide
 the metadata needed for later LLM-curated playback without waiting for the
 larger curation architecture.
 
-- Add a one-click library backup/export action that downloads a zip containing
-  user-customized prompts, saved Motion Patterns, tags, and imported Programs /
-  funscripts so users can share, move, or preserve curated content before
-  reset, reinstall, or branch testing.
-- Include a simple manifest with schema/app version, exported item counts, and
-  source library paths. Do not include secrets such as Handy keys, hosted TTS
-  keys, local voice samples, or unrelated settings in the collaboration export.
-- Add visible tag editors for Motion Patterns and Programs / funscripts, with
-  suggested tags such as intense, full shaft, mid shaft, tip, base, teasing,
-  slow, and edging.
-- Include saved tags in the LLM-facing pattern/program catalog summaries so the
-  local model can choose scripts by user-visible semantics instead of relying
-  only on names, feedback weights, or recent playback history.
+Status note: Partial. One-click zip export and visible tag editing have landed
+for saved Motion Patterns and imported Programs. The remaining work is to make
+tags more ergonomic and connect them to the future LLM-curated playback path.
+
+- Add tag suggestions or a small controlled tag picker with labels such as
+  intense, full shaft, mid shaft, tip, base, teasing, slow, and edging.
+- Include saved user-pattern and program tags in the LLM-facing library/catalog
+  summaries when a future planner is allowed to choose authored content by
+  semantic tags, not only by names, feedback weights, or recent playback
+  history.
 
 ## Queued
 

@@ -200,6 +200,9 @@ class PatternRecord:
     def with_feedback(self, feedback):
         return replace(self, feedback=_safe_feedback(feedback))
 
+    def with_tags(self, tags):
+        return replace(self, tags=_safe_tags(tags))
+
 
 def _style_from_payload(payload):
     style = payload.get("style") if isinstance(payload.get("style"), dict) else {}
@@ -408,4 +411,29 @@ class PatternLibrary:
             except OSError as exc:
                 raise PatternValidationError(f"Could not delete pattern file: {exc}") from exc
             return record
+        return None
+
+    def update_tags(self, pattern_id, tags):
+        requested = slugify_pattern_id(pattern_id)
+        try:
+            files = self.user_pattern_files()
+        except OSError as exc:
+            raise PatternValidationError(f"Could not read pattern directory: {exc}") from exc
+
+        for path in files:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                record = record_from_payload(payload, fallback_id=path.stem, readonly=False)
+            except (OSError, json.JSONDecodeError, PatternValidationError):
+                continue
+            if record.pattern_id != requested:
+                continue
+            updated = record.with_tags(tags)
+            try:
+                tmp_path = path.with_name(f"{path.name}.tmp")
+                tmp_path.write_text(json.dumps(updated.to_export_dict(), indent=2) + "\n", encoding="utf-8")
+                tmp_path.replace(path)
+            except OSError as exc:
+                raise PatternValidationError(f"Could not update pattern tags: {exc}") from exc
+            return updated
         return None

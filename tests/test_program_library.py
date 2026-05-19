@@ -5,6 +5,7 @@ import shutil
 import time
 import unittest
 import uuid
+import zipfile
 from pathlib import Path
 
 from strokegpt.program_library import (
@@ -200,6 +201,14 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.original_apply_position_frames = self.web.motion.apply_position_frames
         self.original_apply_authored_actions = self.web.motion.apply_authored_actions
         self.original_motion_stop = self.web.motion.stop
+        self.original_persona_desc = self.web.settings.persona_desc
+        self.original_motion_style = self.web.settings.motion_style
+        self.original_pattern_library_freestyle = self.web.settings.motion_pattern_library_enabled_in_freestyle
+        self.original_pattern_library_chat = self.web.settings.motion_pattern_library_enabled_in_chat
+        self.original_feedback_auto_disable = self.web.settings.motion_feedback_auto_disable
+        self.original_pattern_enabled = dict(self.web.settings.motion_pattern_enabled)
+        self.original_pattern_weights = dict(self.web.settings.motion_pattern_weights)
+        self.original_pattern_feedback = dict(self.web.settings.motion_pattern_feedback)
         self.web.motion_program_library = ProgramLibrary(self.temp_dir.name)
         self.web.motion_pattern_library = PatternLibrary(self.pattern_temp_dir.name)
         self.stop_calls = []
@@ -223,6 +232,14 @@ class MotionProgramRouteTests(unittest.TestCase):
         self.web.motion.apply_position_frames = self.original_apply_position_frames
         self.web.motion.apply_authored_actions = self.original_apply_authored_actions
         self.web.motion.stop = self.original_motion_stop
+        self.web.settings.persona_desc = self.original_persona_desc
+        self.web.settings.motion_style = self.original_motion_style
+        self.web.settings.motion_pattern_library_enabled_in_freestyle = self.original_pattern_library_freestyle
+        self.web.settings.motion_pattern_library_enabled_in_chat = self.original_pattern_library_chat
+        self.web.settings.motion_feedback_auto_disable = self.original_feedback_auto_disable
+        self.web.settings.motion_pattern_enabled = self.original_pattern_enabled
+        self.web.settings.motion_pattern_weights = self.original_pattern_weights
+        self.web.settings.motion_pattern_feedback = self.original_pattern_feedback
         self.temp_dir.cleanup()
         self.pattern_temp_dir.cleanup()
 
@@ -348,6 +365,68 @@ class MotionProgramRouteTests(unittest.TestCase):
 
         blank_response = self.client.post("/motion_programs/long-wave/rename", json={"name": "   "})
         self.assertEqual(blank_response.status_code, 400)
+
+    def test_program_tags_route_updates_catalog_and_open_detail(self):
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.post(
+            "/motion_programs/long-wave/tags",
+            json={"tags": " teasing, long-form, teasing "},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["program"]["tags"], ["teasing", "long-form", "program", "funscript"])
+        self.assertEqual(data["motion_programs"]["programs"][0]["tags"], ["teasing", "long-form", "program", "funscript"])
+
+        saved = json.loads((Path(self.temp_dir.name) / f"long-wave{PROGRAM_FILE_SUFFIX}").read_text(encoding="utf-8"))
+        self.assertEqual(saved["tags"], ["teasing", "long-form", "program", "funscript"])
+
+    def test_motion_library_export_zip_contains_shareable_patterns_programs_and_safe_preferences(self):
+        self.web.settings.persona_desc = "Test persona text"
+        self.web.settings.motion_style = "teasing"
+        self.web.settings.motion_pattern_library_enabled_in_freestyle = True
+        self.web.settings.motion_pattern_library_enabled_in_chat = False
+        self.web.settings.motion_feedback_auto_disable = True
+        self.web.settings.motion_pattern_enabled = {"stroke": False}
+        self.web.settings.motion_pattern_weights = {"stroke": 72}
+        self.web.settings.motion_pattern_feedback = {"stroke": {"thumbs_up": 2, "neutral": 0, "thumbs_down": 1}}
+        self.web.motion_pattern_library.import_payload(
+            {
+                "id": "clip-loop",
+                "name": "Clip Loop",
+                "actions": [{"at": 0, "pos": 10}, {"at": 500, "pos": 90}],
+                "tags": ["tip"],
+            },
+            filename="clip-loop.json",
+        )
+        self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")
+
+        response = self.client.get("/motion_library/export")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/zip")
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            names = set(archive.namelist())
+            self.assertIn("manifest.json", names)
+            self.assertIn("preferences/motion_preferences.json", names)
+            self.assertIn("prompts/persona.txt", names)
+            self.assertIn("patterns/clip-loop.strokegpt-pattern.json", names)
+            self.assertIn("programs/long-wave.strokegpt-program.json", names)
+
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            self.assertEqual(manifest["kind"], "strokegpt_library_export")
+            self.assertEqual(manifest["counts"]["patterns"], 1)
+            self.assertEqual(manifest["counts"]["programs"], 1)
+            self.assertIn("Handy connection keys", manifest["excluded"])
+
+            preferences = json.loads(archive.read("preferences/motion_preferences.json").decode("utf-8"))
+            self.assertEqual(preferences["motion_style"], "teasing")
+            self.assertTrue(preferences["motion_pattern_library_enabled_in_freestyle"])
+            self.assertFalse(preferences["motion_pattern_library_enabled_in_chat"])
+            self.assertEqual(preferences["motion_pattern_weights"], {"stroke": 72})
+            self.assertEqual(archive.read("prompts/persona.txt").decode("utf-8"), "Test persona text\n")
 
     def test_program_section_save_route_writes_short_pattern(self):
         self.web.motion_program_library.import_payload(long_program_payload(action_count=6, step_ms=1000), filename="long-wave.funscript")

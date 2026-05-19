@@ -394,6 +394,37 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(exported["id"], "uploaded-loop")
         self.assertEqual(exported["source"], "imported")
 
+    def test_tags_route_updates_imported_patterns_only(self):
+        payload = {
+            "id": "uploaded-loop",
+            "name": "Uploaded Loop",
+            "actions": [{"at": 0, "pos": 5}, {"at": 300, "pos": 95}, {"at": 600, "pos": 10}],
+        }
+        self.client.post(
+            "/import_motion_pattern",
+            data={"pattern": (io.BytesIO(json.dumps(payload).encode("utf-8")), "uploaded-loop.funscript")},
+            content_type="multipart/form-data",
+        )
+
+        response = self.client.post(
+            "/motion_patterns/uploaded-loop/tags",
+            json={"tags": [" tip ", "teasing", "tip", ""]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["pattern"]["tags"], ["tip", "teasing"])
+        catalog_record = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "uploaded-loop")
+        self.assertEqual(catalog_record["tags"], ["tip", "teasing"])
+
+        saved = json.loads((Path(self.temp_dir.name) / "uploaded-loop.strokegpt-pattern.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved["tags"], ["tip", "teasing"])
+
+        readonly_response = self.client.post("/motion_patterns/stroke/tags", json={"tags": ["builtin"]})
+        self.assertEqual(readonly_response.status_code, 400)
+        self.assertIn("read-only", readonly_response.get_json()["message"])
+
     def test_import_route_rejects_invalid_files(self):
         response = self.client.post(
             "/import_motion_pattern",

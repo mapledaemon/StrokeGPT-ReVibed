@@ -46,6 +46,11 @@ function formatPatternFeedback(pattern) {
     return `feedback +${counts.thumbsUp} / ${counts.neutral} / -${counts.thumbsDown}`;
 }
 
+function formatPatternTags(pattern) {
+    const tags = Array.isArray(pattern.tags) ? pattern.tags.map(tag => String(tag).trim()).filter(Boolean) : [];
+    return tags.length ? `tags ${tags.join(', ')}` : '';
+}
+
 export function formatPatternMetadata(pattern, {compact = false} = {}) {
     const parts = compact
         ? [
@@ -62,6 +67,8 @@ export function formatPatternMetadata(pattern, {compact = false} = {}) {
         ];
     if (pattern.source === 'fixed') parts.push(`weight ${pattern.weight ?? 50}/100`);
     if (!pattern.enabled) parts.push('disabled');
+    const tags = formatPatternTags(pattern);
+    if (tags) parts.push(tags);
     return parts.join(' | ');
 }
 
@@ -97,6 +104,27 @@ export function createPatternExportButton(pattern) {
         window.location.href = `/motion_patterns/${encodeURIComponent(pattern.id)}/export`;
     });
     return exportButton;
+}
+
+export function createPatternTagsButton(pattern) {
+    const tagsButton = D.createElement('button');
+    tagsButton.type = 'button';
+    tagsButton.className = 'my-button motion-pattern-tags';
+    tagsButton.textContent = 'Tags';
+    markRequiresBackend(tagsButton);
+    const readonly = Boolean(pattern.readonly || pattern.source === 'fixed');
+    tagsButton.disabled = readonly;
+    tagsButton.title = readonly
+        ? 'Built-in pattern tags are read-only.'
+        : `Edit tags for ${patternDisplayName(pattern)}`;
+    tagsButton.addEventListener('click', event => {
+        event.stopPropagation();
+        const current = Array.isArray(pattern.tags) ? pattern.tags.join(', ') : '';
+        const next = window.prompt?.('Pattern tags, comma-separated', current);
+        if (next === null || next === undefined) return;
+        setMotionPatternTags(pattern.id, next);
+    });
+    return tagsButton;
 }
 
 export function createPatternFeedbackResetButton(pattern) {
@@ -247,6 +275,7 @@ export function renderCompactMotionPatternList(patterns) {
 
         if (pattern.source === 'fixed') actions.append(createPatternWeightControl(pattern));
         if (patternHasFeedbackState(pattern)) actions.append(createPatternFeedbackResetButton(pattern));
+        actions.append(createPatternTagsButton(pattern));
         actions.append(createPatternExportButton(pattern));
         actions.append(createPatternDeleteButton(pattern));
         main.append(checkbox, text);
@@ -299,6 +328,27 @@ export async function resetMotionPatternFeedback(patternId) {
     } else {
         reportSaveFailure(el.motionPatternStatus, data, 'Could not reset pattern feedback.');
     }
+}
+
+export async function setMotionPatternTags(patternId, tags) {
+    const tagList = Array.isArray(tags)
+        ? tags
+        : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const data = await apiCall(`/motion_patterns/${encodeURIComponent(patternId)}/tags`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tags: tagList}),
+    });
+    if (data && data.status === 'success') {
+        renderMotionPatternsCallback(data.motion_patterns);
+        if (data.pattern && data.pattern.id === state.motionTrainingSelectedPatternId) {
+            setMotionTrainingDetailCallback(data.pattern);
+        }
+        el.statusText.textContent = data.message || 'Pattern tags updated.';
+    } else {
+        reportSaveFailure(el.motionPatternStatus, data, 'Could not update pattern tags.');
+    }
+    return data;
 }
 
 export async function deleteMotionPattern(pattern) {
