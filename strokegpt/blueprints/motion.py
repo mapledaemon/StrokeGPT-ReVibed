@@ -602,6 +602,7 @@ def test_depth_range_route():
     max_depth = max(0, min(100, max(depth1, depth2)))
     if not web.app_state.depth_test_lock.acquire(blocking=False):
         return jsonify({"status": "busy", "min_depth": min_depth, "max_depth": max_depth})
+    web._clear_chat_motion_keepalive()
     web.motion.stop()
 
     def run_depth_test():

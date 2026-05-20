@@ -7,6 +7,16 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-20 - PR #284 - Chat Motion Keepalive
+--------------------------------------------
+
+Branch: codex/chat-motion-never-auto-stop
+
+- Added a normal-chat motion keepalive so the last chat-applied motion target is
+  retried if playback falls inactive during chat or Autospeak turns, while
+  explicit stops, mode takeovers, training playback, and depth tests clear the
+  saved target instead of restarting motion unexpectedly.
+
 2026-05-19 - PR #283 - CI HSP Replacement Trace Waits
 -----------------------------------------------------
 
