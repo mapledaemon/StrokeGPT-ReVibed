@@ -28,6 +28,7 @@ from strokegpt.settings import (
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
     default_settings_dict,
+    default_user_profile,
     normalize_ollama_model,
 )
 
@@ -94,6 +95,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["allow_llm_edge_in_chat"])
         self.assertFalse(saved["allow_llm_mode_actions_in_chat"])
         self.assertFalse(saved["autospeak_enabled"])
+        self.assertEqual(saved["user_profile"], default_user_profile())
+        self.assertTrue(saved["use_long_term_memory"])
         self.assertEqual(saved["autospeak_min_seconds"], DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(saved["autospeak_max_seconds"], DEFAULT_AUTOSPEAK_MAX_SECONDS)
         self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
@@ -177,6 +180,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.allow_llm_edge_in_chat)
         self.assertFalse(settings.allow_llm_mode_actions_in_chat)
         self.assertFalse(settings.autospeak_enabled)
+        self.assertTrue(settings.use_long_term_memory)
         self.assertEqual(settings.autospeak_min_seconds, DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
         self.assertEqual(settings.autospeak_cadence_default_version, AUTOSPEAK_CADENCE_DEFAULT_VERSION)
@@ -1083,6 +1087,42 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.reset_to_defaults(save=False)
 
         self.assertEqual(settings.to_dict(), default_settings_dict())
+
+    def test_long_term_memory_preference_is_normalized_and_saved(self):
+        settings = SettingsManager("settings.json")
+        settings.apply_dict({"use_long_term_memory": "off"})
+
+        self.assertFalse(settings.use_long_term_memory)
+        self.assertFalse(settings.to_dict()["use_long_term_memory"])
+
+        settings.apply_dict({"use_long_term_memory": "yes"})
+
+        self.assertTrue(settings.use_long_term_memory)
+        self.assertTrue(settings.to_dict()["use_long_term_memory"])
+
+    def test_save_skips_profile_consolidation_when_long_term_memory_disabled(self):
+        fake_path = FakePath()
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.use_long_term_memory = False
+        settings.user_profile = {"name": "Saved", "likes": [], "dislikes": [], "key_memories": []}
+        llm_service = mock.Mock()
+        llm_service.consolidate_user_profile.return_value = {
+            "name": "Changed",
+            "likes": ["new"],
+            "dislikes": [],
+            "key_memories": [],
+        }
+
+        settings.save(
+            llm_service=llm_service,
+            chat_history_to_save=[{"role": "user", "content": "remember this"}],
+        )
+
+        llm_service.consolidate_user_profile.assert_not_called()
+        saved = json.loads(fake_path.written)
+        self.assertEqual(saved["user_profile"]["name"], "Saved")
+        self.assertFalse(saved["use_long_term_memory"])
 
     def test_voice_input_settings_are_normalized_for_hands_free_control(self):
         settings = SettingsManager("settings.json")

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 
-from ..settings import normalize_ollama_model
+from ..settings import default_user_profile, normalize_ollama_model
 
 
 settings_blueprint = Blueprint("settings", __name__)
@@ -280,7 +280,35 @@ def toggle_memory_route():
         use_long_term_memory = not web.app_state.use_long_term_memory
     with web.app_state.lock:
         web.app_state.use_long_term_memory = use_long_term_memory
-    return jsonify({"status": "success", "use_long_term_memory": use_long_term_memory})
+    web.settings.use_long_term_memory = use_long_term_memory
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "use_long_term_memory": use_long_term_memory,
+        "memory_status": web.payloads.long_term_memory_payload(
+            web.settings,
+            use_long_term_memory,
+        ),
+    })
+
+
+@settings_blueprint.route('/clear_memory', methods=['POST'])
+def clear_memory_route():
+    web = _web()
+    with web.app_state.lock:
+        web.app_state.chat_history.clear()
+        use_long_term_memory = web.app_state.use_long_term_memory
+    web.settings.user_profile = default_user_profile()
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "use_long_term_memory": use_long_term_memory,
+        "memory_status": web.payloads.long_term_memory_payload(
+            web.settings,
+            use_long_term_memory,
+        ),
+        "chat_history_cleared": True,
+    })
 
 
 @settings_blueprint.route('/set_profile_picture', methods=['POST'])

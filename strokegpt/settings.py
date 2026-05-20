@@ -236,6 +236,7 @@ def default_settings_dict():
         "autospeak_cadence_default_version": AUTOSPEAK_CADENCE_DEFAULT_VERSION,
         "rules": [],
         "user_profile": default_user_profile(),
+        "use_long_term_memory": True,
         "min_depth": 5,
         "max_depth": 100,
         "min_speed": 10,
@@ -434,6 +435,10 @@ class SettingsManager:
         self.user_profile = data.get("user_profile", default_user_profile())
         if not isinstance(self.user_profile, dict):
             self.user_profile = default_user_profile()
+        self.use_long_term_memory = _as_bool(
+            data.get("use_long_term_memory", defaults["use_long_term_memory"]),
+            defaults["use_long_term_memory"],
+        )
         self.session_liked_patterns = []
 
         self.audio_provider = data.get("audio_provider", defaults["audio_provider"])
@@ -658,6 +663,7 @@ class SettingsManager:
             "autospeak_cadence_default_version": self.autospeak_cadence_default_version,
             "rules": self.rules,
             "user_profile": self.user_profile,
+            "use_long_term_memory": bool(self.use_long_term_memory),
             "min_depth": self.min_depth,
             "max_depth": self.max_depth,
             "min_speed": self.min_speed,
@@ -672,7 +678,7 @@ class SettingsManager:
 
     def save(self, llm_service=None, chat_history_to_save=None):
         with self._save_lock:
-            if llm_service and chat_history_to_save:
+            if self.use_long_term_memory and llm_service and chat_history_to_save:
                 self.user_profile = llm_service.consolidate_user_profile(
                     list(chat_history_to_save),
                     self.user_profile,

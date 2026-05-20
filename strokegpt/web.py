@@ -1231,6 +1231,8 @@ def apply_settings_to_services():
     llm.set_model(settings.ollama_model)
     llm.set_thinking_enabled(settings.ollama_thinking_enabled)
     llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
+    with app_state.lock:
+        app_state.use_long_term_memory = bool(settings.use_long_term_memory)
 
     audio.set_provider(settings.audio_provider, settings.audio_enabled)
     voice_input.configure(
@@ -2008,7 +2010,7 @@ def reset_runtime_state():
         app_state.chat_intensity_guide_started_at = None
         app_state.motion_pause_active = False
         app_state.edging_start_time = None
-        app_state.use_long_term_memory = True
+        app_state.use_long_term_memory = bool(settings.use_long_term_memory)
         app_state.chat_motion_keepalive_target = None
         app_state.chat_motion_keepalive_last_attempt_at = 0.0
         app_state.special_persona_mode = None

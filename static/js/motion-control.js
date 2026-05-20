@@ -53,6 +53,7 @@ import {
 } from './motion/program-player.js';
 import { updateMotionTagSuggestions } from './motion/tag-editor.js';
 import { updateHandyConnectionStatusFromMotion } from './device-control.js';
+import { populateLongTermMemorySetting } from './settings.js';
 import {
     bindMotionPatternStudioControls,
     drawMotionTrainingPreview,
@@ -281,6 +282,9 @@ function updateMemoryToggleUi(enabled) {
     if (!el.toggleMemoryBtn) return;
     el.toggleMemoryBtn.textContent = `Memories: ${state.useLongTermMemory ? 'ON' : 'OFF'}`;
     el.toggleMemoryBtn.setAttribute('aria-pressed', state.useLongTermMemory ? 'true' : 'false');
+    if (el.longTermMemoryCheckbox) {
+        el.longTermMemoryCheckbox.checked = state.useLongTermMemory;
+    }
 }
 
 function updateAutospeakToggleUi(enabled) {
@@ -410,7 +414,7 @@ async function saveMotionSpeedLimits() {
 async function toggleLongTermMemory() {
     const data = await apiCall('/toggle_memory', {method: 'POST'});
     if (data && data.status === 'success') {
-        updateMemoryToggleUi(data.use_long_term_memory);
+        populateLongTermMemorySetting(data.memory_status, data.use_long_term_memory);
         el.statusText.textContent = `Long-term memories ${data.use_long_term_memory ? 'enabled' : 'disabled'}.`;
     } else {
         reportSaveFailure(el.statusText, data, 'Could not toggle long-term memory.');

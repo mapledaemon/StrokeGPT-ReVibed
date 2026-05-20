@@ -231,6 +231,19 @@
                         <button id="save-ollama-thinking-btn" class="my-button" data-requires-backend>Save Thinking</button>
                         <span id="ollama-thinking-status" class="settings-status-line">Thinking is off for faster chat.</span>
                     </div>
+                    <div class="settings-subsection memory-settings-panel">
+                        <h4>Model Memory</h4>
+                        <label class="settings-checkbox-line">
+                            <input type="checkbox" id="long-term-memory-checkbox" data-requires-backend>
+                            Use saved long-term memories
+                        </label>
+                        <div class="settings-help">Saved profile memory persists across restarts. The active chat window context is temporary.</div>
+                        <div class="model-actions model-actions-wide">
+                            <button id="clear-long-term-memory-btn" class="my-button" data-requires-backend>Clear Memories</button>
+                            <span id="long-term-memory-status" class="settings-status-line">Memory status not loaded yet.</span>
+                        </div>
+                        <pre id="long-term-memory-preview" class="diagnostics-output memory-preview-output">No memory loaded.</pre>
+                    </div>
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">

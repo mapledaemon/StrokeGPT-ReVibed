@@ -7,6 +7,7 @@ import {
     fillPersonaPromptSelect,
     normalizePersonaPrompt,
     populateDiagnosticsSettings,
+    populateLongTermMemorySetting,
     populateModelOptions,
     populateOllamaThinkingSetting,
     populatePersonaPromptOptions,
@@ -266,6 +267,7 @@ export async function startupCheck() {
         }
         populateModelOptions(data.ollama_models, data.ollama_model, data.ollama_status);
         populateOllamaThinkingSetting(data.ollama_thinking_enabled);
+        populateLongTermMemorySetting(data.memory_status, data.use_long_term_memory);
         populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
         populateUserGenitaliaSetting(data.user_genitalia, data.user_genitalia_custom, data.user_genitalia_options);
         populateDiagnosticsSettings(data);
@@ -288,6 +290,7 @@ export async function startupCheck() {
         populatePersonaPromptOptions(data && data.persona_prompts, data && data.persona);
         populateModelOptions(data && data.ollama_models, data && data.ollama_model, data && data.ollama_status);
         populateOllamaThinkingSetting(data && data.ollama_thinking_enabled);
+        populateLongTermMemorySetting(data && data.memory_status, data && data.use_long_term_memory);
         populatePromptModeSetting(data && data.llm_prompt_mode, data && data.llm_prompt_mode_options);
         populateUserGenitaliaSetting(data && data.user_genitalia, data && data.user_genitalia_custom, data && data.user_genitalia_options);
         populateDiagnosticsSettings(data || {});

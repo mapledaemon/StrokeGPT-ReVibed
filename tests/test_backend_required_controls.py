@@ -76,6 +76,8 @@ class BackendRequiredControlLockTests(unittest.TestCase):
             "start-auto-btn",
             "stop-auto-btn",
             "toggle-memory-btn",
+            "long-term-memory-checkbox",
+            "clear-long-term-memory-btn",
             "edging-mode-btn",
             "milking-mode-btn",
             "freestyle-mode-btn",
