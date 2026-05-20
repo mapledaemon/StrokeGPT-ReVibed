@@ -81,6 +81,7 @@ export const el = {
     longTermMemoryCheckbox: D.getElementById('long-term-memory-checkbox'),
     clearLongTermMemoryBtn: D.getElementById('clear-long-term-memory-btn'),
     longTermMemoryStatus: D.getElementById('long-term-memory-status'),
+    longTermMemoryItems: D.getElementById('long-term-memory-items'),
     longTermMemoryPreview: D.getElementById('long-term-memory-preview'),
     downloadOllamaModelBtn: D.getElementById('download-ollama-model-btn'),
     refreshOllamaStatusBtn: D.getElementById('refresh-ollama-status-btn'),

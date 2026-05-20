@@ -70,6 +70,7 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         resetStubElement('long-term-memory-checkbox');
         resetStubElement('clear-long-term-memory-btn');
         resetStubElement('long-term-memory-status');
+        resetStubElement('long-term-memory-items');
         resetStubElement('long-term-memory-preview');
         resetStubElement('ollama-model-required-dialog');
         resetStubElement('close-ollama-model-required-btn');
@@ -343,6 +344,7 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         const sidebarToggle = getStubElement('toggle-memory-btn');
         const checkbox = getStubElement('long-term-memory-checkbox');
         const status = getStubElement('long-term-memory-status');
+        const items = getStubElement('long-term-memory-items');
         const preview = getStubElement('long-term-memory-preview');
 
         populateLongTermMemorySetting({
@@ -364,6 +366,11 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.strictEqual(checkbox.checked, false);
         assert.match(status.textContent, /Disabled; name: Tester/);
         assert.strictEqual(status.style.color, 'var(--yellow)');
+        assert.strictEqual(items.children.length, 3);
+        assert.strictEqual(items.children[0].children[0].textContent, 'Name');
+        assert.strictEqual(items.children[1].children[0].textContent, 'Like');
+        assert.strictEqual(items.children[1].children[1].textContent, 'smooth motion');
+        assert.strictEqual(items.children[1].children[2].textContent, 'x');
         assert.match(preview.textContent, /"name": "Tester"/);
         assert.match(preview.textContent, /"smooth motion"/);
     });
@@ -422,6 +429,62 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.match(getStubElement('long-term-memory-status').textContent, /Enabled; No saved/);
         assert.strictEqual(getStubElement('long-term-memory-preview').textContent, 'No saved long-term memories.');
         assert.strictEqual(getStubElement('status-text').textContent, 'Long-term memories cleared.');
+    });
+
+    it('individual memory remove buttons delete one saved memory item', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                use_long_term_memory: true,
+                chat_history_cleared: true,
+                memory_status: {
+                    enabled: true,
+                    persistent: true,
+                    has_memory: true,
+                    profile: {
+                        name: 'Tester',
+                        likes: ['fast motion'],
+                        dislikes: [],
+                        key_memories: [],
+                    },
+                    items: [
+                        {field: 'name', index: null, label: 'Name', text: 'Tester'},
+                        {field: 'likes', index: 0, label: 'Like', text: 'fast motion'},
+                    ],
+                    summary: 'name: Tester, 1 like(s)',
+                },
+            });
+        };
+
+        populateLongTermMemorySetting({
+            enabled: true,
+            persistent: true,
+            has_memory: true,
+            profile: {
+                name: 'Tester',
+                likes: ['smooth motion', 'fast motion'],
+                dislikes: [],
+                key_memories: [],
+            },
+            items: [
+                {field: 'name', index: null, label: 'Name', text: 'Tester'},
+                {field: 'likes', index: 0, label: 'Like', text: 'smooth motion'},
+                {field: 'likes', index: 1, label: 'Like', text: 'fast motion'},
+            ],
+            summary: 'name: Tester, 2 like(s)',
+        }, true);
+
+        const list = getStubElement('long-term-memory-items');
+        list.children[1].children[2].click();
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests[0], ['/delete_memory_item', {field: 'likes', index: 0}]);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Saved memory removed.');
+        assert.strictEqual(list.children.length, 2);
+        assert.strictEqual(list.children[1].children[1].textContent, 'fast motion');
+        assert.match(getStubElement('long-term-memory-status').textContent, /Enabled; name: Tester, 1 like/);
     });
 
     it('populateModelOptions renders model row actions and posts delete/download requests', async () => {

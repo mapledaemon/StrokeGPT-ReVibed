@@ -170,12 +170,14 @@ def long_term_memory_payload(settings, use_long_term_memory):
     dislikes = profile.get("dislikes") if isinstance(profile.get("dislikes"), list) else []
     key_memories = profile.get("key_memories") if isinstance(profile.get("key_memories"), list) else []
     name = str(profile.get("name") or "").strip()
+    items = long_term_memory_items(profile)
     has_memory = (
         profile != default_profile
         or bool(likes)
         or bool(dislikes)
         or bool(key_memories)
         or bool(name and name.lower() != "unknown")
+        or bool(items)
     )
     counts = {
         "likes": len(likes),
@@ -196,9 +198,60 @@ def long_term_memory_payload(settings, use_long_term_memory):
         "persistent": True,
         "has_memory": bool(has_memory),
         "profile": profile,
+        "items": items,
         "counts": counts,
         "summary": ", ".join(summary_parts) if summary_parts else "No saved long-term memories yet.",
     }
+
+
+def long_term_memory_items(profile):
+    if not isinstance(profile, dict):
+        return []
+    items = []
+    name = str(profile.get("name") or "").strip()
+    if name and name.lower() != "unknown":
+        items.append({
+            "field": "name",
+            "index": None,
+            "kind": "name",
+            "label": "Name",
+            "text": name,
+        })
+
+    known_fields = ("likes", "dislikes", "key_memories")
+    extra_fields = sorted(
+        key
+        for key, value in profile.items()
+        if key not in (*known_fields, "name") and isinstance(value, list)
+    )
+    for field in (*known_fields, *extra_fields):
+        values = profile.get(field)
+        if not isinstance(values, list):
+            continue
+        for index, value in enumerate(values):
+            text = str(value).strip()
+            if not text:
+                continue
+            items.append({
+                "field": field,
+                "index": index,
+                "kind": "list",
+                "label": _memory_field_label(field),
+                "text": text,
+            })
+    return items
+
+
+def _memory_field_label(field):
+    labels = {
+        "likes": "Like",
+        "dislikes": "Dislike",
+        "key_memories": "Key Memory",
+    }
+    if field in labels:
+        return labels[field]
+    words = str(field or "memory").replace("_", " ").split()
+    return " ".join(word.capitalize() for word in words) or "Memory"
 
 
 def persona_prompts_for_ui(settings):

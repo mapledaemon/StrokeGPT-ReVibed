@@ -1,4 +1,4 @@
-import { D, apiCall, el, formatPercent, reportSaveFailure, setStatusMessage, state } from './context.js';
+import { D, apiCall, el, formatPercent, markRequiresBackend, reportSaveFailure, setStatusMessage, state } from './context.js';
 import { updateAudioProviderUi } from './audio.js';
 import { refreshSystemStatus } from './setup-check.js';
 
@@ -619,12 +619,89 @@ function memoryPreviewText(memoryStatus = {}) {
     }
 }
 
+function memoryFieldLabel(field) {
+    if (field === 'likes') return 'Like';
+    if (field === 'dislikes') return 'Dislike';
+    if (field === 'key_memories') return 'Key Memory';
+    return String(field || 'memory')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, char => char.toUpperCase()) || 'Memory';
+}
+
+function memoryItemsFromProfile(profile = {}) {
+    if (!profile || typeof profile !== 'object') return [];
+    const items = [];
+    const name = String(profile.name || '').trim();
+    if (name && name.toLowerCase() !== 'unknown') {
+        items.push({field: 'name', index: null, kind: 'name', label: 'Name', text: name});
+    }
+    const knownFields = ['likes', 'dislikes', 'key_memories'];
+    const extraFields = Object.keys(profile)
+        .filter(field => !knownFields.includes(field) && field !== 'name' && Array.isArray(profile[field]))
+        .sort();
+    for (const field of [...knownFields, ...extraFields]) {
+        const values = Array.isArray(profile[field]) ? profile[field] : [];
+        values.forEach((value, index) => {
+            const text = String(value || '').trim();
+            if (!text) return;
+            items.push({
+                field,
+                index,
+                kind: 'list',
+                label: memoryFieldLabel(field),
+                text,
+            });
+        });
+    }
+    return items;
+}
+
+function renderLongTermMemoryItems(items = []) {
+    if (!el.longTermMemoryItems) return;
+    el.longTermMemoryItems.replaceChildren();
+    if (!items.length) {
+        const empty = D.createElement('div');
+        empty.className = 'memory-item-empty';
+        empty.textContent = 'No individually removable saved memory items.';
+        el.longTermMemoryItems.appendChild(empty);
+        return;
+    }
+    items.forEach(item => {
+        const row = D.createElement('div');
+        row.className = 'memory-item-row';
+
+        const type = D.createElement('div');
+        type.className = 'memory-item-type';
+        type.textContent = item.label || 'Memory';
+
+        const text = D.createElement('div');
+        text.className = 'memory-item-text';
+        text.textContent = item.text || '';
+        text.title = item.text || '';
+
+        const remove = D.createElement('button');
+        remove.type = 'button';
+        remove.className = 'my-button memory-item-remove';
+        remove.textContent = 'x';
+        remove.title = `Remove ${item.label || 'memory'}: ${item.text || ''}`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.dataset.requiresBackend = 'true';
+        markRequiresBackend(remove);
+        remove.addEventListener('click', () => deleteLongTermMemoryItem(item));
+
+        row.append(type, text, remove);
+        el.longTermMemoryItems.appendChild(row);
+    });
+}
+
 export function populateLongTermMemorySetting(memoryStatus = {}, fallbackEnabled = state.useLongTermMemory) {
+    const profile = memoryStatus.profile || {};
     const normalized = {
         enabled: Boolean(memoryStatus.enabled ?? fallbackEnabled),
         persistent: memoryStatus.persistent !== false,
         has_memory: Boolean(memoryStatus.has_memory),
-        profile: memoryStatus.profile || {},
+        profile,
+        items: Array.isArray(memoryStatus.items) ? memoryStatus.items : memoryItemsFromProfile(profile),
         counts: memoryStatus.counts || {},
         summary: memoryStatus.summary || 'No saved long-term memories yet.',
     };
@@ -644,6 +721,7 @@ export function populateLongTermMemorySetting(memoryStatus = {}, fallbackEnabled
     if (el.longTermMemoryPreview) {
         el.longTermMemoryPreview.textContent = memoryPreviewText(normalized);
     }
+    renderLongTermMemoryItems(normalized.items);
     return normalized;
 }
 
@@ -1001,6 +1079,31 @@ async function clearLongTermMemory() {
         el.statusText.textContent = 'Long-term memories cleared.';
     } else {
         reportSaveFailure(el.longTermMemoryStatus || el.statusText, data, 'Could not clear long-term memories.');
+    }
+    return data;
+}
+
+async function deleteLongTermMemoryItem(item) {
+    if (!item || !item.field) return null;
+    const label = `${item.label || 'Memory'}: ${item.text || ''}`;
+    const ok = window.confirm(`Remove this saved memory?\n\n${label}\n\nCurrent backend chat context will also be cleared so it is not saved again.`);
+    if (!ok) return null;
+    if (el.longTermMemoryStatus) {
+        el.longTermMemoryStatus.textContent = 'Removing saved memory...';
+        el.longTermMemoryStatus.style.color = 'var(--comment)';
+    }
+    const body = {field: item.field};
+    if (Number.isInteger(item.index)) body.index = item.index;
+    const data = await apiCall('/delete_memory_item', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    if (data && data.status === 'success') {
+        populateLongTermMemorySetting(data.memory_status, data.use_long_term_memory);
+        el.statusText.textContent = 'Saved memory removed.';
+    } else {
+        reportSaveFailure(el.longTermMemoryStatus || el.statusText, data, 'Could not remove saved memory.');
     }
     return data;
 }

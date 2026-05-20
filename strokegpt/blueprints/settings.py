@@ -311,6 +311,53 @@ def clear_memory_route():
     })
 
 
+@settings_blueprint.route('/delete_memory_item', methods=['POST'])
+def delete_memory_item_route():
+    web = _web()
+    data = web._request_json()
+    field = str(data.get("field") or "").strip()
+    if not field:
+        return jsonify({"status": "error", "message": "Missing memory field."}), 400
+
+    profile = web.settings.user_profile if isinstance(web.settings.user_profile, dict) else default_user_profile()
+    removed = None
+    if field == "name":
+        name = str(profile.get("name") or "").strip()
+        if not name or name.lower() == "unknown":
+            return jsonify({"status": "error", "message": "Saved name memory was not found."}), 404
+        removed = name
+        profile["name"] = "Unknown"
+    else:
+        values = profile.get(field)
+        if not isinstance(values, list):
+            return jsonify({"status": "error", "message": "Saved memory list was not found."}), 404
+        try:
+            index = int(data.get("index"))
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "Missing memory item index."}), 400
+        if index < 0 or index >= len(values):
+            return jsonify({"status": "error", "message": "Saved memory item was not found."}), 404
+        removed = values.pop(index)
+        if field not in {"likes", "dislikes", "key_memories"} and not values:
+            profile.pop(field, None)
+
+    with web.app_state.lock:
+        web.app_state.chat_history.clear()
+        use_long_term_memory = web.app_state.use_long_term_memory
+    web.settings.user_profile = profile
+    web.settings.save()
+    return jsonify({
+        "status": "success",
+        "removed": {"field": field, "text": str(removed or "")},
+        "use_long_term_memory": use_long_term_memory,
+        "memory_status": web.payloads.long_term_memory_payload(
+            web.settings,
+            use_long_term_memory,
+        ),
+        "chat_history_cleared": True,
+    })
+
+
 @settings_blueprint.route('/set_profile_picture', methods=['POST'])
 def set_pfp_route():
     web = _web()
