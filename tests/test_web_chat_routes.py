@@ -1488,6 +1488,97 @@ class WebChatRouteTests(WebTestCase):
             web.app_state.chat_history.clear()
             web.app_state.chat_history.extend(original_history)
 
+    def test_delete_memory_item_route_removes_one_saved_list_item(self):
+        import strokegpt.web as web
+
+        original_profile = web.settings.user_profile
+        original_runtime = web.app_state.use_long_term_memory
+        original_history = list(web.app_state.chat_history)
+        try:
+            web.settings.user_profile = {
+                "name": "Tester",
+                "likes": ["smooth motion", "fast motion"],
+                "dislikes": [],
+                "key_memories": ["prefers quiet narration"],
+            }
+            web.app_state.use_long_term_memory = True
+            web.app_state.chat_history.clear()
+            web.app_state.chat_history.append({"role": "user", "content": "likes smooth motion"})
+
+            with mock.patch.object(web.settings, "save") as save:
+                response = self.client.post("/delete_memory_item", json={
+                    "field": "likes",
+                    "index": 0,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["chat_history_cleared"])
+            self.assertEqual(data["removed"]["text"], "smooth motion")
+            self.assertEqual(web.settings.user_profile["likes"], ["fast motion"])
+            self.assertEqual(list(web.app_state.chat_history), [])
+            self.assertEqual(data["memory_status"]["counts"]["likes"], 1)
+            self.assertTrue(any(
+                item["field"] == "likes" and item["text"] == "fast motion"
+                for item in data["memory_status"]["items"]
+            ))
+            save.assert_called_once()
+        finally:
+            web.settings.user_profile = original_profile
+            web.app_state.use_long_term_memory = original_runtime
+            web.app_state.chat_history.clear()
+            web.app_state.chat_history.extend(original_history)
+
+    def test_delete_memory_item_route_resets_saved_name(self):
+        import strokegpt.web as web
+
+        original_profile = web.settings.user_profile
+        try:
+            web.settings.user_profile = {
+                "name": "Tester",
+                "likes": [],
+                "dislikes": [],
+                "key_memories": [],
+            }
+
+            with mock.patch.object(web.settings, "save") as save:
+                response = self.client.post("/delete_memory_item", json={
+                    "field": "name",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["removed"]["text"], "Tester")
+            self.assertEqual(web.settings.user_profile["name"], "Unknown")
+            self.assertFalse(data["memory_status"]["has_memory"])
+            save.assert_called_once()
+        finally:
+            web.settings.user_profile = original_profile
+
+    def test_delete_memory_item_route_rejects_missing_items(self):
+        import strokegpt.web as web
+
+        original_profile = web.settings.user_profile
+        try:
+            web.settings.user_profile = {
+                "name": "Unknown",
+                "likes": ["smooth motion"],
+                "dislikes": [],
+                "key_memories": [],
+            }
+
+            response = self.client.post("/delete_memory_item", json={
+                "field": "likes",
+                "index": 4,
+            })
+
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.get_json()["status"], "error")
+            self.assertEqual(web.settings.user_profile["likes"], ["smooth motion"])
+        finally:
+            web.settings.user_profile = original_profile
+
     def test_start_freestyle_route_uses_adaptive_mode(self):
         import strokegpt.web as web
 

@@ -438,6 +438,12 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-checkbox-line input { flex: 0 0 auto; }
 .diagnostics-output { margin: 0; max-height: 180px; overflow: auto; padding: 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.78rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memory-preview-output { max-height: 120px; }
+.memory-item-list { display: flex; flex-direction: column; gap: 6px; }
+.memory-item-row { display: grid; grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr) 2rem; gap: 8px; align-items: center; padding: 7px 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--foreground); font-size: 0.82rem; }
+.memory-item-type { color: var(--comment); font-weight: 700; }
+.memory-item-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-item-remove { width: 2rem; min-width: 0; min-height: 2rem; padding: 0; border-radius: 6px; }
+.memory-item-empty { padding: 7px 8px; border: 1px dashed #2d333d; border-radius: 6px; color: var(--comment); font-size: 0.82rem; }
 .motion-feedback-history { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-lighter); color: var(--comment); font-size: 0.78rem; line-height: 1.35; overflow-wrap: anywhere; }
 .motion-feedback-history-title { color: var(--foreground); font-weight: 700; }
 .motion-feedback-history-empty { color: var(--comment); }
