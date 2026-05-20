@@ -1486,6 +1486,16 @@ def _chat_claims_motion_change(text):
     clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
     return any(re.search(pattern, clean) for pattern in CHAT_MOTION_CLAIM_PATTERNS)
 
+
+def _chat_turn_requested_motion(user_input, response=None, context=None):
+    chat_claims_motion = False
+    if isinstance(response, dict):
+        chat_claims_motion = _chat_claims_motion_change(response.get("chat"))
+    if isinstance(context, dict) and context.get("autospeak_event"):
+        return chat_claims_motion
+    return _looks_like_motion_request(user_input) or chat_claims_motion
+
+
 def _target_numeric_delta_exceeds_noise(current, target):
     current = current.rounded()
     target = target.rounded()
@@ -2836,7 +2846,10 @@ def _finalize_llm_chat_response(
     if is_llm_transport_error:
         motion_keepalive_restarted = False
         if not app_state.auto_mode_active_task:
-            motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive after model error")
+            if _chat_turn_requested_motion(user_input, llm_response, context):
+                _clear_chat_motion_keepalive()
+            else:
+                motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive after model error")
         autospeak_scheduled = False
         if settings.autospeak_enabled and not app_state.auto_mode_active_task:
             autospeak_scheduled = _schedule_standalone_autospeak(_autospeak_retry_delay_after_failure())
@@ -2908,7 +2921,10 @@ def _finalize_llm_chat_response(
         if target is not None:
             _remember_chat_motion_target(target)
         else:
-            motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive")
+            if _chat_turn_requested_motion(user_input, llm_response, context):
+                _clear_chat_motion_keepalive()
+            else:
+                motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive")
         _remember_motion_pattern_from_target(target)
         timings["motion_apply_ms"] = int((time.perf_counter() - motion_started) * 1000)
     autospeak_scheduled = False
@@ -2970,7 +2986,7 @@ def handle_user_message():
     context["mode_action_request_source"] = mode_action_source
     context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
     current_before_llm = _motion_semantic_target()
-    if not active_mode_before_llm:
+    if not active_mode_before_llm and not _looks_like_motion_request(user_input):
         _chat_motion_keepalive_once("chat preflight")
     timings = {}
     try:
@@ -3044,7 +3060,7 @@ def handle_user_message_stream():
         context["mode_action_request_source"] = mode_action_source
         context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
         current_before_llm = _motion_semantic_target()
-        if not active_mode_before_llm:
+        if not active_mode_before_llm and not _looks_like_motion_request(user_input):
             _chat_motion_keepalive_once("chat preflight")
         timings = {}
         stream_extractor = _StreamingChatTextExtractor()

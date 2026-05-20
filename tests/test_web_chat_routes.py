@@ -530,6 +530,108 @@ class WebChatRouteTests(WebTestCase):
                 app_state.chat_motion_keepalive_target = original_target
                 app_state.chat_motion_keepalive_last_attempt_at = original_attempt
 
+    def test_motion_request_without_effect_clears_stale_chat_keepalive(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        stale_target = MotionTarget(42, 55, 70, "llm+wave")
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = stale_target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I'll switch to something different.",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(llm, "repair_motion_response", return_value={
+                "chat": "I tried to switch it up.",
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
+                response = self.client.post("/send_message", json={
+                    "message": "switch to another rhythm",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["motion_applied"])
+            self.assertFalse(data["motion_keepalive_restarted"])
+            apply_generated_target.assert_not_called()
+            self.assertIsNone(app_state.chat_motion_keepalive_target)
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_motion_request_model_error_clears_stale_chat_keepalive(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        stale_target = MotionTarget(34, 50, 88, "llm+milk")
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = stale_target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            error_text = "LLM Connection Error: HTTPConnectionPool read timed out"
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": error_text,
+                "move": None,
+                "new_mood": None,
+            }), mock.patch.object(llm, "repair_motion_response") as repair_motion_response, \
+                    mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(audio, "enqueue_text_for_audio") as enqueue_audio:
+                response = self.client.post("/send_message", json={
+                    "message": "switch to another rhythm",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "model_error")
+            self.assertFalse(data["motion_keepalive_restarted"])
+            self.assertFalse(data["motion_applied"])
+            self.assertIsNone(app_state.chat_motion_keepalive_target)
+            apply_generated_target.assert_not_called()
+            repair_motion_response.assert_not_called()
+            enqueue_audio.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_standalone_autospeak_turn_retries_after_model_error(self):
         import strokegpt.web as web
         from strokegpt.web import app_state, audio, handy, llm, settings
