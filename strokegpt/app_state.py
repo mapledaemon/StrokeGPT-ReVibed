@@ -67,6 +67,9 @@ class AppState:
     motion_training_stop_event: threading.Event = field(default_factory=threading.Event)
     motion_training_state: dict = field(default_factory=default_motion_training_state)
     last_live_motion_pattern_id: str = ""
+    chat_motion_keepalive_target: object | None = None
+    chat_motion_keepalive_thread: threading.Thread | None = None
+    chat_motion_keepalive_last_attempt_at: float = 0.0
     special_persona_mode: str | None = None
     special_persona_interactions_left: int = 0
 

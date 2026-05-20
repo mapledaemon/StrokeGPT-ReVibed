@@ -411,6 +411,125 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_standalone_autospeak_preflight_recovers_inactive_chat_motion(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+        )
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        original_live_pattern = app_state.last_live_motion_pattern_id
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        target = MotionTarget(34, 50, 88, "llm+milk")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 0
+            settings.autospeak_max_seconds = 12
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(llm, "get_chat_response", return_value={
+                        "chat": "Still with you.",
+                        "move": None,
+                        "new_mood": None,
+                        "autospeak_seconds": 6,
+                    }), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True):
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            apply_generated_target.assert_called_once_with(target, source="autospeak preflight")
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+            ) = original_settings
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+                app_state.last_live_motion_pattern_id = original_live_pattern
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_chat_motion_keepalive_restarts_saved_target_when_playback_is_inactive(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        original_live_pattern = app_state.last_live_motion_pattern_id
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_called_once_with(target, source="unit keepalive")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+                app_state.last_live_motion_pattern_id = original_live_pattern
+
+    def test_chat_motion_keepalive_skips_when_playback_is_active(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
     def test_standalone_autospeak_turn_retries_after_model_error(self):
         import strokegpt.web as web
         from strokegpt.web import app_state, audio, handy, llm, settings
@@ -922,15 +1041,19 @@ class WebChatRouteTests(WebTestCase):
 
     def test_stop_command_uses_status_instead_of_bot_chat_bubble(self):
         from strokegpt.web import app_state, handy, settings
+        from strokegpt.motion import MotionTarget
 
         original_key = handy.handy_key
         original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
         app_state.messages_for_ui.clear()
         app_state.chat_history.clear()
         app_state.mode_status_message = ""
         try:
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = MotionTarget(30, 50, 70, "llm+milk")
 
             with mock.patch("strokegpt.web.motion.stop", return_value=None):
                 response = self.client.post("/send_message", json={
@@ -943,6 +1066,7 @@ class WebChatRouteTests(WebTestCase):
             self.assertEqual(response.get_json()["status"], "stopped")
             self.assertEqual(list(app_state.messages_for_ui), [])
             self.assertEqual(list(app_state.chat_history), [{"role": "user", "content": "stop"}])
+            self.assertIsNone(app_state.chat_motion_keepalive_target)
 
             updates = self.client.get("/get_updates")
             try:
@@ -954,6 +1078,8 @@ class WebChatRouteTests(WebTestCase):
         finally:
             handy.handy_key = original_key
             settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
             app_state.mode_status_message = ""

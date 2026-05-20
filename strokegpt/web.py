@@ -77,6 +77,8 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
+CHAT_MOTION_KEEPALIVE_INTERVAL_SECONDS = 3.0
+CHAT_MOTION_KEEPALIVE_RETRY_FLOOR_SECONDS = 1.0
 CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
 STATUS_OBSERVABILITY_TRACE_LIMIT = 96
 CHAT_INTENSITY_ARC_SECONDS = 600
@@ -513,6 +515,109 @@ def _set_motion_paused(paused):
         elif hasattr(motion, "resume"):
             motion.resume()
     return _active_mode_snapshot()
+
+
+def _clear_chat_motion_keepalive():
+    with app_state.lock:
+        app_state.chat_motion_keepalive_target = None
+        app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+
+def _chat_motion_training_active():
+    with app_state.lock:
+        state = str(app_state.motion_training_state.get("state") or "").lower()
+        thread = app_state.motion_training_thread
+    return state in {"starting", "playing"} or bool(thread and thread.is_alive())
+
+
+def _chat_motion_keepalive_candidate():
+    with app_state.lock:
+        target = app_state.chat_motion_keepalive_target
+        blocked = (
+            app_state.auto_mode_active_task is not None
+            or app_state.motion_pause_active
+        )
+    if not target or blocked or _chat_motion_training_active() or not handy.handy_key:
+        return None
+    if getattr(motion, "is_paused", lambda: False)():
+        return None
+    return target
+
+
+def _chat_motion_playback_active():
+    try:
+        snapshot = motion.observability_snapshot(trace_limit=1)
+    except TypeError:
+        snapshot = motion.observability_snapshot()
+    except Exception as exc:
+        print(f"[WARN] Chat motion keepalive could not read motion status: {exc}")
+        return True
+    return bool(snapshot.get("playback_active"))
+
+
+def _chat_motion_keepalive_once(source="chat motion keepalive"):
+    target = _chat_motion_keepalive_candidate()
+    if not target or _chat_motion_playback_active():
+        return False
+    now = time.monotonic()
+    with app_state.lock:
+        if app_state.chat_motion_keepalive_target != target:
+            return False
+        last_attempt = float(app_state.chat_motion_keepalive_last_attempt_at or 0.0)
+        if now - last_attempt < CHAT_MOTION_KEEPALIVE_RETRY_FLOOR_SECONDS:
+            return False
+        app_state.chat_motion_keepalive_last_attempt_at = now
+    try:
+        motion.apply_generated_target(target, source=source)
+        _remember_motion_pattern_from_target(target)
+        return True
+    except Exception as exc:
+        print(f"[WARN] Chat motion keepalive failed: {exc}")
+        return False
+
+
+def _chat_motion_keepalive_worker():
+    try:
+        while True:
+            time.sleep(CHAT_MOTION_KEEPALIVE_INTERVAL_SECONDS)
+            with app_state.lock:
+                if app_state.chat_motion_keepalive_target is None:
+                    return
+            _chat_motion_keepalive_once()
+    finally:
+        current = threading.current_thread()
+        with app_state.lock:
+            if app_state.chat_motion_keepalive_thread is current:
+                app_state.chat_motion_keepalive_thread = None
+
+
+def _ensure_chat_motion_keepalive_thread():
+    if app.config.get("DISABLE_CHAT_MOTION_KEEPALIVE"):
+        return
+    with app_state.lock:
+        if app_state.chat_motion_keepalive_target is None:
+            return
+        thread = app_state.chat_motion_keepalive_thread
+        if thread and thread.is_alive():
+            return
+        thread = threading.Thread(
+            target=_chat_motion_keepalive_worker,
+            daemon=True,
+            name="chat-motion-keepalive",
+        )
+        app_state.chat_motion_keepalive_thread = thread
+    thread.start()
+
+
+def _remember_chat_motion_target(target):
+    if not target:
+        return None
+    target = target.clamped() if hasattr(target, "clamped") else target
+    with app_state.lock:
+        app_state.chat_motion_keepalive_target = target
+    _ensure_chat_motion_keepalive_thread()
+    return target
+
 
 def get_ollama_models_for_ui():
     return payloads.ollama_models_for_ui(settings, llm)
@@ -1786,6 +1891,7 @@ def _start_motion_training_record(record, *, preview=False):
         return jsonify({"status": "error", "message": "Set a Handy connection key before playing motion training patterns."}), 400
     if app_state.auto_mode_active_task:
         return jsonify({"status": "error", "message": "Stop the active mode before playing a training pattern."}), 409
+    _clear_chat_motion_keepalive()
 
     with app_state.lock:
         if app_state.motion_training_thread and app_state.motion_training_thread.is_alive():
@@ -1813,6 +1919,7 @@ def _start_motion_program_record(record, *, start_ms=None, end_ms=None):
         return jsonify({"status": "error", "message": "Set a Handy connection key before playing Programs."}), 400
     if app_state.auto_mode_active_task:
         return jsonify({"status": "error", "message": "Stop the active mode before playing a Program."}), 409
+    _clear_chat_motion_keepalive()
     section_name = _program_section_message(record, start_ms, end_ms)
 
     with app_state.lock:
@@ -1852,6 +1959,7 @@ def _save_motion_program_section_pattern(record, data):
     )
 
 def _stop_motion_training():
+    _clear_chat_motion_keepalive()
     app_state.motion_training_stop_event.set()
     snapshot = _motion_training_snapshot()
     if snapshot.get("state") in {"playing", "starting"}:
@@ -1901,6 +2009,8 @@ def reset_runtime_state():
         app_state.motion_pause_active = False
         app_state.edging_start_time = None
         app_state.use_long_term_memory = True
+        app_state.chat_motion_keepalive_target = None
+        app_state.chat_motion_keepalive_last_attempt_at = 0.0
         app_state.special_persona_mode = None
         app_state.special_persona_interactions_left = 0
     _set_motion_training_state(
@@ -2189,6 +2299,7 @@ def _run_standalone_autospeak_turn(token):
     context = get_current_context()
     context["autospeak_event"] = True
     current_before_llm = _motion_semantic_target()
+    _chat_motion_keepalive_once("autospeak preflight")
     autospeak_user_input = _standalone_autospeak_user_message(history_snapshot)
     messages = history_snapshot + [{"role": "user", "content": autospeak_user_input}]
     request_started = time.perf_counter()
@@ -2249,6 +2360,7 @@ def _schedule_standalone_autospeak(delay_seconds=None):
 
 def start_background_mode(mode_logic: ModeLogic, initial_message, mode_name):
     _cancel_standalone_autospeak()
+    _clear_chat_motion_keepalive()
     with app_state.lock:
         active_task = app_state.auto_mode_active_task
     if active_task:
@@ -2364,6 +2476,7 @@ def _handle_chat_commands(text, allow_motion=True):
     intent = intent_matcher.parse(text, _motion_semantic_target())
     if intent.kind == "stop":
         _clear_motion_pause_state()
+        _clear_chat_motion_keepalive()
         if app_state.auto_mode_active_task:
             app_state.auto_mode_active_task.stop()
         _stop_motion_training()
@@ -2380,6 +2493,7 @@ def _handle_chat_commands(text, allow_motion=True):
         return True, jsonify({"status": "freestyle_started"})
     if intent.kind == "auto_off" and app_state.auto_mode_active_task:
         _clear_motion_pause_state()
+        _clear_chat_motion_keepalive()
         app_state.auto_mode_active_task.stop()
         return True, jsonify({"status": "auto_stopped"})
     if intent.kind == "milking" and _active_mode_can_receive_close_signal():
@@ -2401,6 +2515,7 @@ def _handle_chat_commands(text, allow_motion=True):
             return False, None
         target = _patternless_chat_target(intent.target)
         motion.apply_generated_target(target, source=f"chat command: {intent.matched or 'move'}")
+        _remember_chat_motion_target(target)
         _remember_motion_pattern_from_target(target)
         add_mode_status_message("Adjusting.")
         autospeak_scheduled = _schedule_standalone_autospeak(0)
@@ -2542,6 +2657,7 @@ def _apply_llm_mode_action(response):
         return action, ok, message
     if action == "stop_mode":
         _clear_motion_pause_state()
+        _clear_chat_motion_keepalive()
         if app_state.auto_mode_active_task:
             app_state.auto_mode_active_task.stop()
         _stop_motion_training()
@@ -2716,6 +2832,9 @@ def _finalize_llm_chat_response(
     message_metadata = _llm_message_metadata(timings, streamed_to_client=streamed_to_client)
 
     if is_llm_transport_error:
+        motion_keepalive_restarted = False
+        if not app_state.auto_mode_active_task:
+            motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive after model error")
         autospeak_scheduled = False
         if settings.autospeak_enabled and not app_state.auto_mode_active_task:
             autospeak_scheduled = _schedule_standalone_autospeak(_autospeak_retry_delay_after_failure())
@@ -2731,6 +2850,7 @@ def _finalize_llm_chat_response(
             "llm_message_metadata": message_metadata,
             "motion_applied": False,
             "motion_repaired": False,
+            "motion_keepalive_restarted": motion_keepalive_restarted,
             "autospeak_scheduled": autospeak_scheduled,
             "timings": timings,
         }
@@ -2773,6 +2893,7 @@ def _finalize_llm_chat_response(
         _queue_message_to_active_mode(user_input)
         active_mode_message_relayed = True
     motion_applied = False
+    motion_keepalive_restarted = False
     if not app_state.auto_mode_active_task and not mode_action_applied:
         motion_started = time.perf_counter()
         target = _apply_llm_response_move(
@@ -2782,6 +2903,10 @@ def _finalize_llm_chat_response(
             user_input=user_input,
         )
         motion_applied = target is not None
+        if target is not None:
+            _remember_chat_motion_target(target)
+        else:
+            motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive")
         _remember_motion_pattern_from_target(target)
         timings["motion_apply_ms"] = int((time.perf_counter() - motion_started) * 1000)
     autospeak_scheduled = False
@@ -2796,6 +2921,7 @@ def _finalize_llm_chat_response(
         "llm_message_metadata": message_metadata,
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
+        "motion_keepalive_restarted": motion_keepalive_restarted,
         "mode_action": mode_action,
         "mode_action_applied": mode_action_applied,
         "mode_action_message": mode_action_message,
@@ -2842,6 +2968,8 @@ def handle_user_message():
     context["mode_action_request_source"] = mode_action_source
     context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
     current_before_llm = _motion_semantic_target()
+    if not active_mode_before_llm:
+        _chat_motion_keepalive_once("chat preflight")
     timings = {}
     try:
         llm_started = time.perf_counter()
@@ -2914,6 +3042,8 @@ def handle_user_message_stream():
         context["mode_action_request_source"] = mode_action_source
         context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
         current_before_llm = _motion_semantic_target()
+        if not active_mode_before_llm:
+            _chat_motion_keepalive_once("chat preflight")
         timings = {}
         stream_extractor = _StreamingChatTextExtractor()
         try:

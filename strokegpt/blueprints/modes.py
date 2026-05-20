@@ -93,6 +93,7 @@ def start_freestyle_route():
 def stop_auto_route():
     web = _web()
     web._clear_motion_pause_state()
+    web._clear_chat_motion_keepalive()
     active_task = web.app_state.auto_mode_active_task
     if active_task:
         active_task.stop()
