@@ -23,7 +23,7 @@ import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
-import { initSettingsControls, populateModelOptions, setPersonaPrompt, updateOllamaStatus } from '../../static/js/settings.js';
+import { initSettingsControls, populateLongTermMemorySetting, populateModelOptions, setPersonaPrompt, updateOllamaStatus } from '../../static/js/settings.js';
 import { state, reportSaveFailure, apiCall, setStatusMessage } from '../../static/js/context.js';
 
 
@@ -66,6 +66,11 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         resetStubElement('ollama-thinking-enabled-checkbox');
         resetStubElement('save-ollama-thinking-btn');
         resetStubElement('ollama-thinking-status');
+        resetStubElement('toggle-memory-btn');
+        resetStubElement('long-term-memory-checkbox');
+        resetStubElement('clear-long-term-memory-btn');
+        resetStubElement('long-term-memory-status');
+        resetStubElement('long-term-memory-preview');
         resetStubElement('ollama-model-required-dialog');
         resetStubElement('close-ollama-model-required-btn');
         resetStubElement('ollama-model-required-message');
@@ -83,6 +88,8 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         state.ollamaModels = [];
         state.ollamaCurrentModel = '';
         state.ollamaThinkingEnabled = false;
+        state.useLongTermMemory = true;
+        state.longTermMemoryStatus = {};
         state.ollamaModelDetails = {};
         state.ollamaModelPromptDismissedKey = '';
 
@@ -330,6 +337,91 @@ describe('settings-write feedback (KNOWN_PROBLEMS Web UI Partial)', () => {
         assert.deepStrictEqual(requests[0], ['/set_ollama_thinking', { enabled: true }]);
         assert.strictEqual(state.ollamaThinkingEnabled, true);
         assert.match(status.textContent, /Saved\. Thinking is on/);
+    });
+
+    it('populateLongTermMemorySetting renders persistent memory status and preview', () => {
+        const sidebarToggle = getStubElement('toggle-memory-btn');
+        const checkbox = getStubElement('long-term-memory-checkbox');
+        const status = getStubElement('long-term-memory-status');
+        const preview = getStubElement('long-term-memory-preview');
+
+        populateLongTermMemorySetting({
+            enabled: false,
+            persistent: true,
+            has_memory: true,
+            profile: {
+                name: 'Tester',
+                likes: ['smooth motion'],
+                dislikes: [],
+                key_memories: ['prefers quiet narration'],
+            },
+            summary: 'name: Tester, 1 like(s), 1 key memory item(s)',
+        }, true);
+
+        assert.strictEqual(state.useLongTermMemory, false);
+        assert.strictEqual(sidebarToggle.textContent, 'Memories: OFF');
+        assert.strictEqual(sidebarToggle.getAttribute('aria-pressed'), 'false');
+        assert.strictEqual(checkbox.checked, false);
+        assert.match(status.textContent, /Disabled; name: Tester/);
+        assert.strictEqual(status.style.color, 'var(--yellow)');
+        assert.match(preview.textContent, /"name": "Tester"/);
+        assert.match(preview.textContent, /"smooth motion"/);
+    });
+
+    it('long-term memory checkbox saves an explicit enabled value', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, JSON.parse(options.body || '{}')]);
+            return jsonResponse(200, {
+                status: 'success',
+                use_long_term_memory: false,
+                memory_status: {
+                    enabled: false,
+                    persistent: true,
+                    has_memory: false,
+                    profile: {},
+                    summary: 'No saved long-term memories yet.',
+                },
+            });
+        };
+
+        const checkbox = getStubElement('long-term-memory-checkbox');
+        checkbox.checked = false;
+        checkbox.dispatchEvent('change', {target: checkbox});
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests[0], ['/toggle_memory', {enabled: false}]);
+        assert.strictEqual(state.useLongTermMemory, false);
+        assert.match(getStubElement('long-term-memory-status').textContent, /Disabled; No saved/);
+        assert.strictEqual(getStubElement('long-term-memory-preview').textContent, 'No saved long-term memories.');
+    });
+
+    it('clear memories button confirms and clears saved memory context', async () => {
+        const requests = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            requests.push([endpoint, options.method || 'GET']);
+            return jsonResponse(200, {
+                status: 'success',
+                use_long_term_memory: true,
+                chat_history_cleared: true,
+                memory_status: {
+                    enabled: true,
+                    persistent: true,
+                    has_memory: false,
+                    profile: {},
+                    summary: 'No saved long-term memories yet.',
+                },
+            });
+        };
+
+        getStubElement('clear-long-term-memory-btn').click();
+        await flushAsyncClickHandlers();
+
+        assert.deepStrictEqual(requests[0], ['/clear_memory', 'POST']);
+        assert.strictEqual(state.useLongTermMemory, true);
+        assert.match(getStubElement('long-term-memory-status').textContent, /Enabled; No saved/);
+        assert.strictEqual(getStubElement('long-term-memory-preview').textContent, 'No saved long-term memories.');
+        assert.strictEqual(getStubElement('status-text').textContent, 'Long-term memories cleared.');
     });
 
     it('populateModelOptions renders model row actions and posts delete/download requests', async () => {

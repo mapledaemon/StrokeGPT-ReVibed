@@ -1415,26 +1415,78 @@ class WebChatRouteTests(WebTestCase):
     def test_memory_toggle_route_updates_runtime_state(self):
         import strokegpt.web as web
 
-        original = web.app_state.use_long_term_memory
+        original_runtime = web.app_state.use_long_term_memory
+        original_setting = web.settings.use_long_term_memory
         try:
             web.app_state.use_long_term_memory = True
+            web.settings.use_long_term_memory = True
 
             response = self.client.get("/check_settings")
             self.assertTrue(response.get_json()["use_long_term_memory"])
 
-            response = self.client.post("/toggle_memory")
+            with mock.patch.object(web.settings, "save") as save:
+                response = self.client.post("/toggle_memory")
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
             self.assertEqual(data["status"], "success")
             self.assertFalse(data["use_long_term_memory"])
+            self.assertFalse(data["memory_status"]["enabled"])
+            self.assertTrue(data["memory_status"]["persistent"])
             self.assertFalse(web.app_state.use_long_term_memory)
+            self.assertFalse(web.settings.use_long_term_memory)
+            save.assert_called_once()
 
-            response = self.client.post("/toggle_memory", json={"enabled": True})
+            with mock.patch.object(web.settings, "save") as save:
+                response = self.client.post("/toggle_memory", json={"enabled": True})
             self.assertEqual(response.status_code, 200)
-            self.assertTrue(response.get_json()["use_long_term_memory"])
+            data = response.get_json()
+            self.assertTrue(data["use_long_term_memory"])
+            self.assertTrue(data["memory_status"]["enabled"])
             self.assertTrue(web.app_state.use_long_term_memory)
+            self.assertTrue(web.settings.use_long_term_memory)
+            save.assert_called_once()
         finally:
-            web.app_state.use_long_term_memory = original
+            web.app_state.use_long_term_memory = original_runtime
+            web.settings.use_long_term_memory = original_setting
+
+    def test_clear_memory_route_resets_saved_profile_and_current_chat_context(self):
+        import strokegpt.web as web
+        from strokegpt.settings import default_user_profile
+
+        original_profile = web.settings.user_profile
+        original_runtime = web.app_state.use_long_term_memory
+        original_setting = web.settings.use_long_term_memory
+        original_history = list(web.app_state.chat_history)
+        try:
+            web.settings.user_profile = {
+                "name": "Tester",
+                "likes": ["smooth motion"],
+                "dislikes": [],
+                "key_memories": ["prefers quiet narration"],
+            }
+            web.settings.use_long_term_memory = True
+            web.app_state.use_long_term_memory = True
+            web.app_state.chat_history.clear()
+            web.app_state.chat_history.append({"role": "user", "content": "remember this"})
+
+            with mock.patch.object(web.settings, "save") as save:
+                response = self.client.post("/clear_memory")
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertTrue(data["chat_history_cleared"])
+            self.assertTrue(data["use_long_term_memory"])
+            self.assertFalse(data["memory_status"]["has_memory"])
+            self.assertEqual(web.settings.user_profile, default_user_profile())
+            self.assertEqual(list(web.app_state.chat_history), [])
+            save.assert_called_once()
+        finally:
+            web.settings.user_profile = original_profile
+            web.settings.use_long_term_memory = original_setting
+            web.app_state.use_long_term_memory = original_runtime
+            web.app_state.chat_history.clear()
+            web.app_state.chat_history.extend(original_history)
 
     def test_start_freestyle_route_uses_adaptive_mode(self):
         import strokegpt.web as web

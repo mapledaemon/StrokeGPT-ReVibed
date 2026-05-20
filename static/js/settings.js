@@ -603,6 +603,50 @@ export function populateOllamaThinkingSetting(enabled = false) {
     }
 }
 
+function memorySummaryText(memoryStatus = {}) {
+    const enabled = Boolean(memoryStatus.enabled ?? state.useLongTermMemory);
+    const summary = memoryStatus.summary || 'No saved long-term memories yet.';
+    return `${enabled ? 'Enabled' : 'Disabled'}; ${summary}`;
+}
+
+function memoryPreviewText(memoryStatus = {}) {
+    const profile = memoryStatus.profile || {};
+    if (!memoryStatus.has_memory) return 'No saved long-term memories.';
+    try {
+        return JSON.stringify(profile, null, 2);
+    } catch (_err) {
+        return String(profile || 'No saved long-term memories.');
+    }
+}
+
+export function populateLongTermMemorySetting(memoryStatus = {}, fallbackEnabled = state.useLongTermMemory) {
+    const normalized = {
+        enabled: Boolean(memoryStatus.enabled ?? fallbackEnabled),
+        persistent: memoryStatus.persistent !== false,
+        has_memory: Boolean(memoryStatus.has_memory),
+        profile: memoryStatus.profile || {},
+        counts: memoryStatus.counts || {},
+        summary: memoryStatus.summary || 'No saved long-term memories yet.',
+    };
+    state.useLongTermMemory = normalized.enabled;
+    state.longTermMemoryStatus = normalized;
+    if (el.toggleMemoryBtn) {
+        el.toggleMemoryBtn.textContent = `Memories: ${state.useLongTermMemory ? 'ON' : 'OFF'}`;
+        el.toggleMemoryBtn.setAttribute('aria-pressed', state.useLongTermMemory ? 'true' : 'false');
+    }
+    if (el.longTermMemoryCheckbox) {
+        el.longTermMemoryCheckbox.checked = state.useLongTermMemory;
+    }
+    if (el.longTermMemoryStatus) {
+        el.longTermMemoryStatus.textContent = memorySummaryText(normalized);
+        el.longTermMemoryStatus.style.color = state.useLongTermMemory ? 'var(--cyan)' : 'var(--yellow)';
+    }
+    if (el.longTermMemoryPreview) {
+        el.longTermMemoryPreview.textContent = memoryPreviewText(normalized);
+    }
+    return normalized;
+}
+
 export function updateOllamaStatus(status) {
     if (!status) return;
     const download = status.download || {};
@@ -925,6 +969,42 @@ async function saveOllamaThinkingSetting() {
     return data;
 }
 
+async function setLongTermMemoryEnabled(enabled) {
+    if (el.longTermMemoryStatus) {
+        el.longTermMemoryStatus.textContent = 'Saving memory preference...';
+        el.longTermMemoryStatus.style.color = 'var(--comment)';
+    }
+    const data = await apiCall('/toggle_memory', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: Boolean(enabled)}),
+    });
+    if (data && data.status === 'success') {
+        populateLongTermMemorySetting(data.memory_status, data.use_long_term_memory);
+        el.statusText.textContent = `Long-term memories ${data.use_long_term_memory ? 'enabled' : 'disabled'}.`;
+    } else {
+        reportSaveFailure(el.longTermMemoryStatus || el.statusText, data, 'Could not save memory preference.');
+    }
+    return data;
+}
+
+async function clearLongTermMemory() {
+    const ok = window.confirm('Clear saved long-term memories and current chat context? Visible chat bubbles stay, but the model will not reuse them.');
+    if (!ok) return null;
+    if (el.longTermMemoryStatus) {
+        el.longTermMemoryStatus.textContent = 'Clearing memories...';
+        el.longTermMemoryStatus.style.color = 'var(--comment)';
+    }
+    const data = await apiCall('/clear_memory', {method: 'POST'});
+    if (data && data.status === 'success') {
+        populateLongTermMemorySetting(data.memory_status, data.use_long_term_memory);
+        el.statusText.textContent = 'Long-term memories cleared.';
+    } else {
+        reportSaveFailure(el.longTermMemoryStatus || el.statusText, data, 'Could not clear long-term memories.');
+    }
+    return data;
+}
+
 function markOllamaThinkingUnsaved() {
     if (!el.ollamaThinkingStatus) return;
     const enabled = Boolean(el.ollamaThinkingEnabledCheckbox?.checked);
@@ -1157,6 +1237,10 @@ export function initSettingsControls({addChatMessage}) {
     D.getElementById('save-ollama-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelInput.value));
     el.ollamaThinkingEnabledCheckbox?.addEventListener('change', markOllamaThinkingUnsaved);
     el.saveOllamaThinkingBtn?.addEventListener('click', saveOllamaThinkingSetting);
+    el.longTermMemoryCheckbox?.addEventListener('change', () => {
+        setLongTermMemoryEnabled(el.longTermMemoryCheckbox.checked);
+    });
+    el.clearLongTermMemoryBtn?.addEventListener('click', clearLongTermMemory);
     el.downloadOllamaModelBtn.addEventListener('click', downloadOllamaModel);
     el.refreshOllamaStatusBtn.addEventListener('click', refreshOllamaStatus);
     if (el.ollamaModelRequiredSelect) {

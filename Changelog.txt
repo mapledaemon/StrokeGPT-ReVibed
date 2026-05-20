@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-20 - PR #285 - Model Memory Controls
+--------------------------------------------
+
+Branch: codex/model-memory-controls
+
+- Added Model-tab controls that explain long-term memory persistence, persist
+  the memory enable/disable preference across restarts, and clear saved profile
+  memory plus current chat context on request.
+
 2026-05-20 - PR #284 - Chat Motion Keepalive
 --------------------------------------------
 

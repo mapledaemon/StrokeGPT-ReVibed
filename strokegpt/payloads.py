@@ -10,6 +10,7 @@ from .settings import (
     VOICE_INPUT_PROVIDER_LOCAL_FASTER_WHISPER,
     VOICE_INPUT_PROVIDER_LOCAL_NVIDIA_PARAKEET,
     DEFAULT_OLLAMA_MODEL_OPTIONS,
+    default_user_profile,
     normalize_ollama_model,
 )
 
@@ -160,6 +161,44 @@ def ollama_models_for_ui(settings, llm):
     if llm.model not in models:
         models.insert(0, llm.model)
     return models
+
+
+def long_term_memory_payload(settings, use_long_term_memory):
+    profile = settings.user_profile if isinstance(settings.user_profile, dict) else default_user_profile()
+    default_profile = default_user_profile()
+    likes = profile.get("likes") if isinstance(profile.get("likes"), list) else []
+    dislikes = profile.get("dislikes") if isinstance(profile.get("dislikes"), list) else []
+    key_memories = profile.get("key_memories") if isinstance(profile.get("key_memories"), list) else []
+    name = str(profile.get("name") or "").strip()
+    has_memory = (
+        profile != default_profile
+        or bool(likes)
+        or bool(dislikes)
+        or bool(key_memories)
+        or bool(name and name.lower() != "unknown")
+    )
+    counts = {
+        "likes": len(likes),
+        "dislikes": len(dislikes),
+        "key_memories": len(key_memories),
+    }
+    summary_parts = []
+    if name and name.lower() != "unknown":
+        summary_parts.append(f"name: {name}")
+    if counts["likes"]:
+        summary_parts.append(f"{counts['likes']} like(s)")
+    if counts["dislikes"]:
+        summary_parts.append(f"{counts['dislikes']} dislike(s)")
+    if counts["key_memories"]:
+        summary_parts.append(f"{counts['key_memories']} key memory item(s)")
+    return {
+        "enabled": bool(use_long_term_memory),
+        "persistent": True,
+        "has_memory": bool(has_memory),
+        "profile": profile,
+        "counts": counts,
+        "summary": ", ".join(summary_parts) if summary_parts else "No saved long-term memories yet.",
+    }
 
 
 def persona_prompts_for_ui(settings):
@@ -894,6 +933,7 @@ def settings_payload(
         "autospeak_min_seconds": settings.autospeak_min_seconds,
         "autospeak_max_seconds": settings.autospeak_max_seconds,
         "use_long_term_memory": use_long_term_memory,
+        "memory_status": long_term_memory_payload(settings, use_long_term_memory),
         "diagnostics_levels": diagnostics_levels,
         "motion_backends": motion_backends_payload(),
         "motion_patterns": motion_patterns,
