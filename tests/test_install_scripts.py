@@ -190,8 +190,8 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("$script:PythonCommand = @(Find-Python)", script)
         self.assertIn('$TorchIndexUrl = "https://download.pytorch.org/whl/cu128"', script)
         self.assertNotIn("/whl/cu121", script)
-        self.assertIn("--force-reinstall --index-url $TorchIndexUrl torch torchvision torchaudio", script)
-        self.assertIn("--force-reinstall --no-deps --index-url $TorchIndexUrl torch torchvision torchaudio", script)
+        self.assertIn('"--upgrade", "--force-reinstall", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio"', script)
+        self.assertIn('"--upgrade", "--force-reinstall", "--no-deps", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio"', script)
 
     def test_parakeet_installer_preserves_nemo_dependency_pins(self):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")
@@ -200,8 +200,15 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("fsspec==2024.12.0", requirements)
         self.assertIn("setuptools>=79.0.0", requirements)
         self.assertIn("protobuf>=6.31.1,<7", requirements)
-        self.assertIn('pip install "fsspec==2024.12.0" "setuptools>=79.0.0" "protobuf>=6.31.1,<7"', script)
-        self.assertIn("-m pip check", script)
+        self.assertIn("function Invoke-ParakeetPython", script)
+        self.assertIn("function Test-ParakeetProtobufRuntime", script)
+        self.assertIn('$env:PYTHONNOUSERSITE = "1"', script)
+        self.assertIn("Parakeet Python command failed", script)
+        self.assertIn('"--upgrade", "--force-reinstall", "--no-cache-dir", "fsspec==2024.12.0", "setuptools>=79.0.0", "protobuf>=6.31.1,<7"', script)
+        self.assertIn("import google.protobuf", script)
+        self.assertIn("import onnx", script)
+        self.assertIn("Checking ONNX protobuf runtime compatibility", script)
+        self.assertIn('"-m", "pip", "check"', script)
 
 
 if __name__ == "__main__":

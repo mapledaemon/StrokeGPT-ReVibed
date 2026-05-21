@@ -63,9 +63,29 @@ function Invoke-SelectedPython {
     & $exe @prefix @Arguments
 }
 
+function Invoke-ParakeetPython {
+    param([string[]]$Arguments)
+
+    & $VenvPython @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Parakeet Python command failed: $($Arguments -join ' ')"
+    }
+}
+
+function Test-ParakeetProtobufRuntime {
+    $probe = @'
+import google.protobuf
+print("Protobuf runtime:", google.protobuf.__version__)
+import onnx
+print("ONNX:", onnx.__version__)
+'@
+    Invoke-ParakeetPython @("-c", $probe)
+}
+
 Write-Host "== StrokeGPT-ReVibed NVIDIA Parakeet installer =="
 Write-Host "This creates .venv-parakeet so NeMo dependencies do not conflict with the main app environment."
 
+$env:PYTHONNOUSERSITE = "1"
 $script:PythonCommand = @(Find-Python)
 Write-Host "Using Python command: $($script:PythonCommand -join ' ')"
 
@@ -76,15 +96,17 @@ if (-not (Test-Path $VenvPython)) {
 
 Write-Host "Installing CUDA PyTorch and Parakeet dependencies..."
 Write-Host "Using PyTorch wheel index: $TorchIndexUrl"
-& $VenvPython -m pip install --upgrade pip
-& $VenvPython -m pip install --upgrade --force-reinstall --index-url $TorchIndexUrl torch torchvision torchaudio
-& $VenvPython -m pip install -r requirements-parakeet.txt
+Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "pip")
+Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio")
+Invoke-ParakeetPython @("-m", "pip", "install", "-r", "requirements-parakeet.txt")
 Write-Host "Repairing CUDA PyTorch stack after NeMo dependency resolution..."
-& $VenvPython -m pip install --upgrade --force-reinstall --no-deps --index-url $TorchIndexUrl torch torchvision torchaudio
+Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio")
 Write-Host "Reapplying NeMo and ONNX dependency pins..."
-& $VenvPython -m pip install "fsspec==2024.12.0" "setuptools>=79.0.0" "protobuf>=6.31.1,<7"
+Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-cache-dir", "fsspec==2024.12.0", "setuptools>=79.0.0", "protobuf>=6.31.1,<7")
 Write-Host "Checking Python package dependency consistency..."
-& $VenvPython -m pip check
+Invoke-ParakeetPython @("-m", "pip", "check")
+Write-Host "Checking ONNX protobuf runtime compatibility..."
+Test-ParakeetProtobufRuntime
 
 if ($PersistEnv) {
     [Environment]::SetEnvironmentVariable("STROKEGPT_PARAKEET_PYTHON", $VenvPython, "User")
@@ -94,7 +116,7 @@ if ($PersistEnv) {
 $env:STROKEGPT_PARAKEET_PYTHON = $VenvPython
 Write-Host ""
 Write-Host "Checking the Parakeet runtime..."
-& $VenvPython -m strokegpt.parakeet_worker check
+Invoke-ParakeetPython @("-m", "strokegpt.parakeet_worker", "check")
 
 Write-Host ""
 Write-Host "Parakeet runtime path:"
