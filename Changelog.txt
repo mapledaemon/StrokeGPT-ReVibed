@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-21 - PR #288 - Parakeet Protobuf Runtime Pin
+----------------------------------------------------
+
+Branch: codex/parakeet-protobuf-runtime-pin
+
+- Updated the isolated NVIDIA Parakeet installer to reapply a protobuf runtime
+  pin compatible with current ONNX generated modules, fixing installer/runtime
+  failures that reported protobuf gencode 6.31.x with runtime 5.29.x.
+
 2026-05-20 - PR #287 - Chat Keepalive Stale Target Guard
 --------------------------------------------------------
 
