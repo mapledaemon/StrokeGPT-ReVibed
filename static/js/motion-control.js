@@ -298,6 +298,42 @@ function updateAutospeakToggleUi(enabled) {
     else el.topBarAutospeakToggleBtn.classList.remove('is-on');
 }
 
+function autospeakMotionAutonomyDetails(levelId) {
+    return state.autospeakMotionAutonomyOptions.find(level => level.id === levelId) || {
+        id: 'full',
+        label: 'Full motion',
+        description: 'Autospeak may change Motion Style and send direct movement targets between user requests.',
+    };
+}
+
+function updateAutospeakMotionAutonomyUi(levelId) {
+    const validIds = (state.autospeakMotionAutonomyOptions || []).map(level => level.id);
+    state.autospeakMotionAutonomy = validIds.includes(levelId) ? levelId : 'full';
+    if (el.autospeakMotionAutonomySelect) el.autospeakMotionAutonomySelect.value = state.autospeakMotionAutonomy;
+    const details = autospeakMotionAutonomyDetails(state.autospeakMotionAutonomy);
+    if (el.autospeakMotionAutonomyStatus) {
+        el.autospeakMotionAutonomyStatus.textContent = `${details.label}: ${details.description || ''}`.trim();
+    }
+}
+
+function renderAutospeakMotionAutonomyOptions(options = [], currentLevel = 'full') {
+    state.autospeakMotionAutonomyOptions = options.length ? options : [
+        {id: 'chat_only', label: 'Talk only', description: 'Autospeak speaks and keeps the current motion alive, but does not change style or movement.'},
+        {id: 'style', label: 'Style only', description: 'Autospeak may change the saved Motion Style between requests, but cannot send direct movement targets.'},
+        {id: 'full', label: 'Full motion', description: 'Autospeak may change Motion Style and send direct movement targets between user requests.'},
+    ];
+    if (el.autospeakMotionAutonomySelect) {
+        el.autospeakMotionAutonomySelect.replaceChildren();
+        state.autospeakMotionAutonomyOptions.forEach(level => {
+            const option = D.createElement('option');
+            option.value = level.id;
+            option.textContent = level.label || level.id;
+            el.autospeakMotionAutonomySelect.appendChild(option);
+        });
+    }
+    updateAutospeakMotionAutonomyUi(currentLevel);
+}
+
 export function populateMotionSettings(data = {}) {
     const timings = data.timings || {};
     state.motionDiagnosticsLevel = data.motion_diagnostics_level || state.motionDiagnosticsLevel || 'compact';
@@ -309,6 +345,7 @@ export function populateMotionSettings(data = {}) {
     state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
     state.autospeakMinSeconds = data.autospeak_min_seconds ?? state.autospeakMinSeconds ?? 12;
     state.autospeakMaxSeconds = data.autospeak_max_seconds ?? state.autospeakMaxSeconds ?? 45;
+    state.autospeakMotionAutonomy = data.autospeak_motion_autonomy ?? state.autospeakMotionAutonomy ?? 'full';
     updateAutospeakToggleUi(data.autospeak_enabled ?? state.autospeakEnabled ?? false);
     if (el.motionFeedbackAutoDisableCheckbox) {
         el.motionFeedbackAutoDisableCheckbox.checked = Boolean(state.motionFeedbackAutoDisable);
@@ -330,9 +367,14 @@ export function populateMotionSettings(data = {}) {
     }
     if (el.autospeakMinSecondsInput) el.autospeakMinSecondsInput.value = state.autospeakMinSeconds;
     if (el.autospeakMaxSecondsInput) el.autospeakMaxSecondsInput.value = state.autospeakMaxSeconds;
+    renderAutospeakMotionAutonomyOptions(
+        data.autospeak_motion_autonomy_options || state.autospeakMotionAutonomyOptions,
+        state.autospeakMotionAutonomy,
+    );
     readAutospeakTimingPair();
     if (el.llmEdgePermissionsStatus) {
-        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'} (${state.autospeakMinSeconds}-${state.autospeakMaxSeconds}s).`;
+        const autonomy = autospeakMotionAutonomyDetails(state.autospeakMotionAutonomy).label;
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'} (${state.autospeakMinSeconds}-${state.autospeakMaxSeconds}s, ${autonomy}).`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -1488,6 +1530,7 @@ async function saveLlmEdgePermissions() {
             autospeak_enabled: Boolean(state.autospeakEnabled),
             autospeak_min_seconds: autospeakMin,
             autospeak_max_seconds: autospeakMax,
+            autospeak_motion_autonomy: el.autospeakMotionAutonomySelect?.value || state.autospeakMotionAutonomy || 'full',
         }),
     });
     if (data && data.status === 'success') {
@@ -1577,6 +1620,7 @@ export function initMotionControls({sendUserMessage}) {
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.autospeakMinSecondsInput?.addEventListener('change', readAutospeakTimingPair);
     el.autospeakMaxSecondsInput?.addEventListener('change', readAutospeakTimingPair);
+    el.autospeakMotionAutonomySelect?.addEventListener('change', () => updateAutospeakMotionAutonomyUi(el.autospeakMotionAutonomySelect.value));
     el.saveLlmEdgePermissionsBtn?.addEventListener('click', saveLlmEdgePermissions);
     el.topBarAutospeakToggleBtn?.addEventListener('click', async () => {
         await saveAutospeakToggle(!state.autospeakEnabled);

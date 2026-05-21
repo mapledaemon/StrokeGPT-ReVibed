@@ -88,6 +88,8 @@ describe('motion/audio save feedback', () => {
         resetStubElement('top-bar-autospeak-toggle-btn');
         resetStubElement('autospeak-min-seconds');
         resetStubElement('autospeak-max-seconds');
+        resetStubElement('autospeak-motion-autonomy-select');
+        resetStubElement('autospeak-motion-autonomy-status');
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
@@ -103,6 +105,8 @@ describe('motion/audio save feedback', () => {
         state.autospeakEnabled = false;
         state.autospeakMinSeconds = 12;
         state.autospeakMaxSeconds = 45;
+        state.autospeakMotionAutonomy = 'full';
+        state.autospeakMotionAutonomyOptions = [];
         state.motionPatternLibraryEnabledInFreestyle = false;
         state.motionPatternLibraryEnabledInChat = false;
         state.motionFeedbackAutoDisable = false;
@@ -514,15 +518,32 @@ describe('motion/audio save feedback', () => {
                 autospeak_enabled: true,
                 autospeak_min_seconds: 2,
                 autospeak_max_seconds: 12,
+                autospeak_motion_autonomy: 'full',
+                autospeak_motion_autonomy_options: [
+                    {id: 'chat_only', label: 'Talk only', description: 'Only speak.'},
+                    {id: 'style', label: 'Style only', description: 'May change style.'},
+                    {id: 'full', label: 'Full motion', description: 'May change motion.'},
+                ],
                 motion_preferences: {prompt: '', summary: ''},
             });
         };
-        populateMotionSettings({autospeak_enabled: true, autospeak_min_seconds: 2, autospeak_max_seconds: 12});
+        populateMotionSettings({
+            autospeak_enabled: true,
+            autospeak_min_seconds: 2,
+            autospeak_max_seconds: 12,
+            autospeak_motion_autonomy: 'style',
+            autospeak_motion_autonomy_options: [
+                {id: 'chat_only', label: 'Talk only', description: 'Only speak.'},
+                {id: 'style', label: 'Style only', description: 'May change style.'},
+                {id: 'full', label: 'Full motion', description: 'May change motion.'},
+            ],
+        });
         getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
         getStubElement('allow-llm-edge-chat-checkbox').checked = false;
         getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
         getStubElement('autospeak-min-seconds').value = '12';
         getStubElement('autospeak-max-seconds').value = '2';
+        getStubElement('autospeak-motion-autonomy-select').value = 'full';
 
         getStubElement('save-llm-edge-permissions-btn').click();
         await flushAsyncHandlers();
@@ -536,14 +557,17 @@ describe('motion/audio save feedback', () => {
                 autospeak_enabled: true,
                 autospeak_min_seconds: 2,
                 autospeak_max_seconds: 12,
+                autospeak_motion_autonomy: 'full',
             },
         ]]);
         assert.strictEqual(state.allowLlmModeActionsInChat, true);
         assert.strictEqual(state.autospeakEnabled, true);
         assert.strictEqual(state.autospeakMinSeconds, 2);
         assert.strictEqual(state.autospeakMaxSeconds, 12);
+        assert.strictEqual(state.autospeakMotionAutonomy, 'full');
         assert.strictEqual(Number(getStubElement('autospeak-min-seconds').value), 2);
         assert.strictEqual(Number(getStubElement('autospeak-max-seconds').value), 12);
+        assert.strictEqual(getStubElement('autospeak-motion-autonomy-select').value, 'full');
         assert.strictEqual(getStubElement('llm-edge-permissions-status').textContent, 'LLM permissions saved.');
     });
 

@@ -223,6 +223,7 @@ class WebChatRouteTests(WebTestCase):
             settings.autospeak_enabled,
             settings.autospeak_min_seconds,
             settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
         )
         app_state.messages_for_ui.clear()
         app_state.chat_history.clear()
@@ -257,6 +258,7 @@ class WebChatRouteTests(WebTestCase):
                 settings.autospeak_enabled,
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
             ) = original_settings
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
@@ -411,6 +413,212 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_standalone_autospeak_style_autonomy_changes_style_without_direct_motion(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
+            settings.motion_style,
+        )
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        saved_target = MotionTarget(34, 50, 88, "llm+milk")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 0
+            settings.autospeak_max_seconds = 12
+            settings.autospeak_motion_autonomy = "style"
+            settings.motion_style = "balanced"
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = saved_target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(llm, "get_chat_response", return_value={
+                        "chat": "I'm switching the rhythm now.",
+                        "move": {
+                            "sp": 62,
+                            "dp": 18,
+                            "rng": 32,
+                            "zone": "tip",
+                            "pattern": "flutter",
+                        },
+                        "motion_style": "high_variation",
+                        "new_mood": None,
+                        "autospeak_seconds": 6,
+                    }), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), \
+                    mock.patch.object(settings, "save") as save_settings, \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True) as schedule_autospeak:
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            apply_generated_target.assert_not_called()
+            self.assertEqual(app_state.chat_motion_keepalive_target, saved_target)
+            self.assertEqual(settings.motion_style, "high_variation")
+            save_settings.assert_called_once_with()
+            schedule_autospeak.assert_called_once_with(6)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
+                settings.motion_style,
+            ) = original_settings
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_standalone_autospeak_chat_only_blocks_style_and_motion_changes(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
+            settings.motion_style,
+        )
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        saved_target = MotionTarget(34, 50, 88, "llm+milk")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 0
+            settings.autospeak_max_seconds = 12
+            settings.autospeak_motion_autonomy = "chat_only"
+            settings.motion_style = "balanced"
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = saved_target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(llm, "get_chat_response", return_value={
+                        "chat": "I'm changing the rhythm now.",
+                        "move": {"sp": 62, "zone": "tip", "pattern": "flutter"},
+                        "motion_style": "high_variation",
+                        "new_mood": None,
+                        "autospeak_seconds": 6,
+                    }), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), \
+                    mock.patch.object(settings, "save") as save_settings, \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True):
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            apply_generated_target.assert_not_called()
+            self.assertEqual(settings.motion_style, "balanced")
+            save_settings.assert_not_called()
+            self.assertEqual(app_state.chat_motion_keepalive_target, saved_target)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
+                settings.motion_style,
+            ) = original_settings
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_standalone_autospeak_full_autonomy_can_apply_direct_motion(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.autospeak_enabled,
+            settings.autospeak_min_seconds,
+            settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
+        )
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.autospeak_enabled = True
+            settings.autospeak_min_seconds = 0
+            settings.autospeak_max_seconds = 12
+            settings.autospeak_motion_autonomy = "full"
+            app_state.chat_history.append({"role": "user", "content": "hello"})
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = MotionTarget(34, 50, 88, "llm+milk")
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+                app_state.autospeak_generation += 1
+                token = app_state.autospeak_generation
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(llm, "get_chat_response", return_value={
+                        "chat": "I'm switching the rhythm now.",
+                        "move": {"sp": 62, "zone": "base", "pattern": "sway"},
+                        "new_mood": None,
+                        "autospeak_seconds": 6,
+                    }), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), \
+                    mock.patch("strokegpt.web._schedule_standalone_autospeak", return_value=True):
+                self.assertTrue(web._run_standalone_autospeak_turn(token))
+
+            apply_generated_target.assert_called_once()
+            applied_target = apply_generated_target.call_args.args[0]
+            self.assertIn("base", applied_target.label)
+            self.assertEqual(apply_generated_target.call_args.kwargs["source"], "llm")
+            self.assertEqual(app_state.chat_motion_keepalive_target, applied_target.clamped())
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.autospeak_enabled,
+                settings.autospeak_min_seconds,
+                settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
+            ) = original_settings
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_standalone_autospeak_preflight_recovers_inactive_chat_motion(self):
         import strokegpt.web as web
         from strokegpt.motion import MotionTarget
@@ -422,6 +630,7 @@ class WebChatRouteTests(WebTestCase):
             settings.autospeak_enabled,
             settings.autospeak_min_seconds,
             settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
         )
         original_target = app_state.chat_motion_keepalive_target
         original_attempt = app_state.chat_motion_keepalive_last_attempt_at
@@ -462,6 +671,7 @@ class WebChatRouteTests(WebTestCase):
                 settings.autospeak_enabled,
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
             ) = original_settings
             with app_state.lock:
                 app_state.chat_motion_keepalive_target = original_target
@@ -691,13 +901,21 @@ class WebChatRouteTests(WebTestCase):
 
     def test_standalone_autospeak_prompt_asks_for_wording_variety(self):
         import strokegpt.web as web
+        from strokegpt.web import settings
 
-        message = web._standalone_autospeak_user_message([
-            {"role": "assistant", "content": "Stay with me."},
-            {"role": "assistant", "content": "Still with you."},
-        ])
+        original_autonomy = settings.autospeak_motion_autonomy
+        try:
+            settings.autospeak_motion_autonomy = "style"
+            message = web._standalone_autospeak_user_message([
+                {"role": "assistant", "content": "Stay with me."},
+                {"role": "assistant", "content": "Still with you."},
+            ])
+        finally:
+            settings.autospeak_motion_autonomy = original_autonomy
 
         self.assertIn("Do not repeat the previous chat line", message)
+        self.assertIn("Always return move:null", message)
+        self.assertIn("You may set top-level motion_style", message)
         self.assertIn("vary the erotic wording naturally", message)
         self.assertIn("Recent assistant lines to avoid repeating", message)
         self.assertIn('"Stay with me."', message)

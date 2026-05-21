@@ -57,6 +57,8 @@ LEGACY_DEFAULT_AUTOSPEAK_MIN_SECONDS = 0.0
 AUTOSPEAK_CADENCE_DEFAULT_VERSION = 2
 MIN_AUTOSPEAK_SECONDS = 0.0
 MAX_AUTOSPEAK_SECONDS = 300.0
+DEFAULT_AUTOSPEAK_MOTION_AUTONOMY = "full"
+AUTOSPEAK_MOTION_AUTONOMY_LEVELS = {"chat_only", "style", "full"}
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
@@ -233,6 +235,7 @@ def default_settings_dict():
         "autospeak_enabled": False,
         "autospeak_min_seconds": DEFAULT_AUTOSPEAK_MIN_SECONDS,
         "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
+        "autospeak_motion_autonomy": DEFAULT_AUTOSPEAK_MOTION_AUTONOMY,
         "autospeak_cadence_default_version": AUTOSPEAK_CADENCE_DEFAULT_VERSION,
         "rules": [],
         "user_profile": default_user_profile(),
@@ -429,6 +432,9 @@ class SettingsManager:
         self.autospeak_min_seconds, self.autospeak_max_seconds = self._autospeak_timing_pair(
             autospeak_min_raw,
             autospeak_max_raw,
+        )
+        self.autospeak_motion_autonomy = self._normalize_autospeak_motion_autonomy(
+            data.get("autospeak_motion_autonomy", defaults["autospeak_motion_autonomy"])
         )
         self.autospeak_cadence_default_version = AUTOSPEAK_CADENCE_DEFAULT_VERSION
         self.rules = _as_list(data.get("rules", []))
@@ -660,6 +666,9 @@ class SettingsManager:
             "autospeak_enabled": bool(self.autospeak_enabled),
             "autospeak_min_seconds": self.autospeak_min_seconds,
             "autospeak_max_seconds": self.autospeak_max_seconds,
+            "autospeak_motion_autonomy": self._normalize_autospeak_motion_autonomy(
+                self.autospeak_motion_autonomy
+            ),
             "autospeak_cadence_default_version": self.autospeak_cadence_default_version,
             "rules": self.rules,
             "user_profile": self.user_profile,
@@ -935,7 +944,7 @@ class SettingsManager:
             return "fw4"
         return DEFAULT_HANDY_FIRMWARE_VERSION
 
-    def _normalize_motion_style(self, value):
+    def _normalize_motion_style_optional(self, value):
         cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
         if cleaned in {"varied", "default", "normal"}:
             return "balanced"
@@ -945,7 +954,23 @@ class SettingsManager:
             return "full_range"
         if cleaned in MOTION_STYLES:
             return cleaned
+        return None
+
+    def _normalize_motion_style(self, value):
+        normalized = self._normalize_motion_style_optional(value)
+        if normalized:
+            return normalized
         return DEFAULT_MOTION_STYLE
+
+    def _normalize_autospeak_motion_autonomy(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"off", "none", "talk", "talk_only", "chat", "chat_only"}:
+            return "chat_only"
+        if cleaned in {"style", "style_only", "motion_style", "motion_style_only"}:
+            return "style"
+        if cleaned in {"full", "full_motion", "motion", "direct", "direct_motion"}:
+            return "full"
+        return DEFAULT_AUTOSPEAK_MOTION_AUTONOMY
 
     def _normalize_voice_input_provider(self, value):
         cleaned = str(value or "").strip().lower()
