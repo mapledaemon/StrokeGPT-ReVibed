@@ -31,7 +31,8 @@ manually after the normal app setup:
 The installer uses the PyTorch CUDA 12.8 wheel index by default because
 RTX 50-series / Blackwell cards (such as the 5070 Ti) need a newer CUDA
 wheel than the older CUDA 12.1 stack. It also reapplies NeMo's sensitive
-package pins and runs `pip check` before declaring the runtime ready.
+package pins, keeps ONNX's protobuf runtime compatible, and runs `pip check`
+before declaring the runtime ready.
 
 Override with `.\scripts\install_parakeet.ps1 -TorchIndexUrl
 "https://download.pytorch.org/whl/cu130"` only if the official PyTorch
@@ -82,3 +83,8 @@ on that GPU. RTX 50-series cards need the newer installer path; rerun
 PyTorch wheel. If that still fails, switch **Settings > Voice > Voice
 input provider** to **Local faster-whisper** for the full fallback path,
 or install a custom Parakeet runtime built for that GPU/CUDA stack.
+
+**"Detected incompatible Protobuf Gencode/Runtime versions"** — the isolated
+Parakeet runtime has an older protobuf runtime than the ONNX Python modules
+were generated with. Rerun `.\scripts\install_parakeet.ps1` to apply the
+Parakeet dependency pins again, including the protobuf runtime pin.

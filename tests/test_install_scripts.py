@@ -199,7 +199,8 @@ class InstallScriptTests(unittest.TestCase):
 
         self.assertIn("fsspec==2024.12.0", requirements)
         self.assertIn("setuptools>=79.0.0", requirements)
-        self.assertIn('pip install "fsspec==2024.12.0" "setuptools>=79.0.0"', script)
+        self.assertIn("protobuf>=6.31.1,<7", requirements)
+        self.assertIn('pip install "fsspec==2024.12.0" "setuptools>=79.0.0" "protobuf>=6.31.1,<7"', script)
         self.assertIn("-m pip check", script)
 
 
