@@ -5,6 +5,17 @@ import requests
 DEFAULT_MODEL = "nexusriot/Gemma-4-Uncensored-HauhauCS-Aggressive:e4b"
 RECENT_ASSISTANT_LINES_LIMIT = 3
 RECENT_ASSISTANT_LINE_CHARS = 180
+AUTOSPEAK_MOTION_STYLE_IDS = (
+    "balanced",
+    "smooth",
+    "steady",
+    "teasing",
+    "pulsing",
+    "ramping",
+    "high_variation",
+    "full_range",
+    "freestyle",
+)
 
 # Static repair instructions appended to the chat system prompt when the
 # connector retries an LLM response that claimed motion but produced no
@@ -49,6 +60,17 @@ def _context_autospeak_range(context):
     return min(autospeak_min, autospeak_max), max(autospeak_min, autospeak_max)
 
 
+def _context_autospeak_motion_autonomy(context):
+    cleaned = str(context.get("autospeak_motion_autonomy") or "full").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in {"off", "none", "talk", "talk_only", "chat", "chat_only"}:
+        return "chat_only"
+    if cleaned in {"style", "style_only", "motion_style"}:
+        return "style"
+    if cleaned in {"full", "full_motion", "motion", "direct", "direct_motion"}:
+        return "full"
+    return "full"
+
+
 def _format_seconds(value):
     return f"{float(value):g}"
 
@@ -59,13 +81,28 @@ def _autospeak_prompt_suffix(context):
     autospeak_min, autospeak_max = _context_autospeak_range(context)
     autospeak_min_text = _format_seconds(autospeak_min)
     autospeak_max_text = _format_seconds(autospeak_max)
+    autonomy = _context_autospeak_motion_autonomy(context)
     event_line = ""
     if context.get("autospeak_event"):
-        event_line = (
-            "- This request is an Autospeak follow-up. Keep talking without "
-            "waiting for the user; use `move:null` unless you deliberately "
-            "want a motion change.\n"
-        )
+        if autonomy == "full":
+            event_line = (
+                "- This request is an Autospeak follow-up. Keep talking without "
+                "waiting for the user; use `move` or `motion_style` only when "
+                "a deliberate between-request motion change is worth it.\n"
+            )
+        elif autonomy == "style":
+            styles = "|".join(AUTOSPEAK_MOTION_STYLE_IDS)
+            event_line = (
+                "- This request is an Autospeak follow-up. Keep talking without "
+                "waiting for the user; return `move:null`. You may set "
+                f'`motion_style` to one of `{styles}` when the overall style '
+                "should shift, or null to keep it.\n"
+            )
+        else:
+            event_line = (
+                "- This request is an Autospeak follow-up. Keep talking without "
+                "waiting for the user; return `move:null` and `motion_style:null`.\n"
+            )
     zero_rule = (
         "- If the range allows 0, choosing 0 means the shortest natural pause "
         "before the next line, roughly several seconds; do not use it to loop "
@@ -77,7 +114,7 @@ def _autospeak_prompt_suffix(context):
 - Choose lower values for frequent talk and higher values for longer silence. Prefer natural conversational pacing over back-to-back lines.
 - For Autospeak follow-ups, do not repeat the previous chat line or reuse the same sentence frame; vary desire, touch, pressure, rhythm, praise, teasing, and control.
 {zero_rule if autospeak_min == 0 else ""}\
-- Autospeak can be chat-only: use `move:null` when you only want to speak. Include `move` only when you deliberately want the app to change motion.
+- Normal user turns may include `move` when the user asks for motion. Autospeak autonomy is `{autonomy}` for between-request follow-ups: `chat_only` speaks only, `style` may change top-level `motion_style` only, and `full` may also send direct `move`.
 {event_line}"""
 
 
@@ -387,6 +424,8 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
                 f',"autospeak_seconds":<{_format_seconds(autospeak_min)}-'
                 f'{_format_seconds(autospeak_max)}>'
             )
+            if context.get("autospeak_event"):
+                autospeak_schema += ',"motion_style":"<balanced|smooth|steady|teasing|pulsing|ramping|high_variation|full_range|freestyle|null>"'
 
         prompt_mode = str(context.get("llm_prompt_mode") or "revibed").strip().lower()
         if prompt_mode in {"classic", "old", "technical"}:

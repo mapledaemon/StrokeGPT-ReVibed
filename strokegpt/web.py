@@ -1487,12 +1487,56 @@ def _chat_claims_motion_change(text):
     return any(re.search(pattern, clean) for pattern in CHAT_MOTION_CLAIM_PATTERNS)
 
 
+def _autospeak_chat_only_motion_context(context):
+    return (
+        isinstance(context, dict)
+        and bool(context.get("autospeak_event"))
+        and _autospeak_motion_autonomy(context) != "full"
+    )
+
+
+def _autospeak_motion_autonomy(context=None):
+    raw = settings.autospeak_motion_autonomy
+    if isinstance(context, dict):
+        raw = context.get("autospeak_motion_autonomy", raw)
+    return settings._normalize_autospeak_motion_autonomy(raw)
+
+
+def _autospeak_allows_motion_style(context):
+    return (
+        isinstance(context, dict)
+        and bool(context.get("autospeak_event"))
+        and _autospeak_motion_autonomy(context) in {"style", "full"}
+    )
+
+
+def _motion_style_from_llm_response(response):
+    if not isinstance(response, dict):
+        return None
+    for key in ("motion_style", "next_motion_style", "style"):
+        normalized = settings._normalize_motion_style_optional(response.get(key))
+        if normalized:
+            return normalized
+    return None
+
+
+def _apply_llm_motion_style(response, context):
+    if not _autospeak_allows_motion_style(context):
+        return None
+    motion_style = _motion_style_from_llm_response(response)
+    if not motion_style or motion_style == settings.motion_style:
+        return None
+    settings.motion_style = motion_style
+    settings.save()
+    return motion_style
+
+
 def _chat_turn_requested_motion(user_input, response=None, context=None):
     chat_claims_motion = False
     if isinstance(response, dict):
         chat_claims_motion = _chat_claims_motion_change(response.get("chat"))
-    if isinstance(context, dict) and context.get("autospeak_event"):
-        return chat_claims_motion
+    if _autospeak_chat_only_motion_context(context):
+        return False
     return _looks_like_motion_request(user_input) or chat_claims_motion
 
 
@@ -1599,6 +1643,11 @@ def _target_from_llm_response_move(response, current, user_input=""):
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):
         return response, False
+    context = context if isinstance(context, dict) else {}
+    if _autospeak_chat_only_motion_context(context):
+        return response, False
+    if _autospeak_allows_motion_style(context) and _motion_style_from_llm_response(response):
+        return response, False
     if (
         (context.get("mode_actions_enabled") or context.get("handsfree_mode_actions_enabled"))
         and _normalize_llm_mode_action(response.get("mode_action"))
@@ -1623,7 +1672,9 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
         return response, False
     return repaired, True
 
-def _apply_llm_response_move(response, current, source="llm", user_input=""):
+def _apply_llm_response_move(response, current, source="llm", user_input="", context=None):
+    if _autospeak_chat_only_motion_context(context):
+        return None
     target = _target_from_llm_response_move(response, current, user_input=user_input)
     if not _target_has_motion_effect(current, target):
         return None
@@ -2086,6 +2137,7 @@ def get_current_context():
         'autospeak_enabled': settings.autospeak_enabled,
         'autospeak_min_seconds': settings.autospeak_min_seconds,
         'autospeak_max_seconds': settings.autospeak_max_seconds,
+        'autospeak_motion_autonomy': settings.autospeak_motion_autonomy,
         'active_mode': active_mode_name,
         'edging_elapsed_time': None, 'special_persona_mode': special_persona_mode
     }
@@ -2284,11 +2336,23 @@ def _llm_message_metadata(timings, *, streamed_to_client=False):
 
 def _standalone_autospeak_user_message(chat_history=None):
     min_seconds, max_seconds = _autospeak_timing_pair()
+    autonomy = settings._normalize_autospeak_motion_autonomy(settings.autospeak_motion_autonomy)
+    if autonomy == "full":
+        autonomy_instruction = (
+            "You may include move or top-level motion_style only when a deliberate "
+            "between-request motion change is worth it."
+        )
+    elif autonomy == "style":
+        autonomy_instruction = (
+            "Always return move:null. You may set top-level motion_style when "
+            "the overall motion style should shift, or null to keep it."
+        )
+    else:
+        autonomy_instruction = "Always return move:null and motion_style:null; do not change motion."
     message = (
         "Autospeak is due. Keep the conversation going with one short "
-        "in-character chat line. Use move:null when no motion change is "
-        "needed, or include move only if you deliberately want to change "
-        "motion. Do not repeat the previous chat line or reuse the same "
+        f"in-character chat line. {autonomy_instruction} "
+        "Do not repeat the previous chat line or reuse the same "
         "sentence frame; vary the erotic wording naturally. Choose "
         "autospeak_seconds between "
         f"{min_seconds:g} and {max_seconds:g}. If the range allows 0, "
@@ -2892,6 +2956,7 @@ def _finalize_llm_chat_response(
     if new_mood := llm_response.get("new_mood"):
         with app_state.lock:
             app_state.current_mood = new_mood
+    motion_style_applied = _apply_llm_motion_style(llm_response, context)
     mode_action = ""
     mode_action_applied = False
     mode_action_message = ""
@@ -2916,12 +2981,15 @@ def _finalize_llm_chat_response(
             current_before_llm,
             source="llm repair" if motion_repaired else "llm",
             user_input=user_input,
+            context=context,
         )
         motion_applied = target is not None
         if target is not None:
             _remember_chat_motion_target(target)
         else:
-            if _chat_turn_requested_motion(user_input, llm_response, context):
+            if motion_style_applied and _autospeak_allows_motion_style(context):
+                motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive")
+            elif _chat_turn_requested_motion(user_input, llm_response, context):
                 _clear_chat_motion_keepalive()
             else:
                 motion_keepalive_restarted = _chat_motion_keepalive_once("chat motion keepalive")
@@ -2939,6 +3007,7 @@ def _finalize_llm_chat_response(
         "llm_message_metadata": message_metadata,
         "motion_applied": motion_applied,
         "motion_repaired": motion_repaired,
+        "motion_style_applied": motion_style_applied,
         "motion_keepalive_restarted": motion_keepalive_restarted,
         "mode_action": mode_action,
         "mode_action_applied": mode_action_applied,

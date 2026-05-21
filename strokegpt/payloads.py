@@ -1,6 +1,7 @@
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .motion_tags import motion_tag_suggestions
 from .settings import (
+    AUTOSPEAK_MOTION_AUTONOMY_LEVELS,
     CUSTOM_LLM_PROMPT_PREFIX,
     DIAGNOSTICS_LEVELS,
     LLM_PROMPT_MODES,
@@ -99,6 +100,29 @@ def motion_style_options():
         }
         for style in order
         if style in MOTION_STYLES
+    ]
+
+
+def autospeak_motion_autonomy_options():
+    labels = {
+        "chat_only": "Talk only",
+        "style": "Style only",
+        "full": "Full motion",
+    }
+    descriptions = {
+        "chat_only": "Autospeak speaks and keeps the current motion alive, but does not change style or movement.",
+        "style": "Autospeak may change the saved Motion Style between requests, but cannot send direct movement targets.",
+        "full": "Autospeak may change Motion Style and send direct movement targets between user requests.",
+    }
+    order = ("chat_only", "style", "full")
+    return [
+        {
+            "id": level,
+            "label": labels[level],
+            "description": descriptions[level],
+        }
+        for level in order
+        if level in AUTOSPEAK_MOTION_AUTONOMY_LEVELS
     ]
 
 
@@ -985,6 +1009,8 @@ def settings_payload(
         "autospeak_enabled": settings.autospeak_enabled,
         "autospeak_min_seconds": settings.autospeak_min_seconds,
         "autospeak_max_seconds": settings.autospeak_max_seconds,
+        "autospeak_motion_autonomy": settings.autospeak_motion_autonomy,
+        "autospeak_motion_autonomy_options": autospeak_motion_autonomy_options(),
         "use_long_term_memory": use_long_term_memory,
         "memory_status": long_term_memory_payload(settings, use_long_term_memory),
         "diagnostics_levels": diagnostics_levels,

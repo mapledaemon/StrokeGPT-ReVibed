@@ -16,6 +16,7 @@ from strokegpt.settings import (
     CUSTOM_LLM_PROMPT_PREFIX,
     DEFAULT_AUTOSPEAK_MAX_SECONDS,
     DEFAULT_AUTOSPEAK_MIN_SECONDS,
+    DEFAULT_AUTOSPEAK_MOTION_AUTONOMY,
     DEFAULT_LLM_PROMPT_MODE,
     DEFAULT_HANDY_API_V3_APPLICATION_ID,
     DEFAULT_OLLAMA_MODEL,
@@ -99,6 +100,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(saved["use_long_term_memory"])
         self.assertEqual(saved["autospeak_min_seconds"], DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(saved["autospeak_max_seconds"], DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(saved["autospeak_motion_autonomy"], DEFAULT_AUTOSPEAK_MOTION_AUTONOMY)
         self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
         self.assertTrue(saved["voice_input_noise_suppression"])
         self.assertTrue(saved["voice_input_echo_cancellation"])
@@ -183,6 +185,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(settings.use_long_term_memory)
         self.assertEqual(settings.autospeak_min_seconds, DEFAULT_AUTOSPEAK_MIN_SECONDS)
         self.assertEqual(settings.autospeak_max_seconds, DEFAULT_AUTOSPEAK_MAX_SECONDS)
+        self.assertEqual(settings.autospeak_motion_autonomy, DEFAULT_AUTOSPEAK_MOTION_AUTONOMY)
         self.assertEqual(settings.autospeak_cadence_default_version, AUTOSPEAK_CADENCE_DEFAULT_VERSION)
         self.assertTrue(settings.voice_input_noise_suppression)
         self.assertTrue(settings.voice_input_echo_cancellation)
@@ -344,6 +347,25 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.apply_dict({"motion_style": "bad"})
         self.assertEqual(settings.motion_style, "balanced")
+
+    def test_autospeak_motion_autonomy_setting_is_normalized(self):
+        self.assertEqual(DEFAULT_AUTOSPEAK_MOTION_AUTONOMY, "full")
+
+        fake_path = FakePath(json.dumps({"autospeak_motion_autonomy": "full-motion"}))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        self.assertEqual(settings.autospeak_motion_autonomy, "full")
+        self.assertEqual(saved["autospeak_motion_autonomy"], "full")
+
+        settings.apply_dict({"autospeak_motion_autonomy": "talk only"})
+        self.assertEqual(settings.autospeak_motion_autonomy, "chat_only")
+
+        settings.apply_dict({"autospeak_motion_autonomy": "bad"})
+        self.assertEqual(settings.autospeak_motion_autonomy, DEFAULT_AUTOSPEAK_MOTION_AUTONOMY)
 
     def test_motion_reverse_direction_setting_is_persisted(self):
         fake_path = FakePath(json.dumps({"motion_reverse_direction": "yes"}))
@@ -817,17 +839,22 @@ class ModelConfigurationTests(unittest.TestCase):
             "autospeak_enabled": True,
             "autospeak_min_seconds": 0,
             "autospeak_max_seconds": 12,
+            "autospeak_motion_autonomy": "style",
             "autospeak_event": True,
         })
 
         self.assertIn('"autospeak_seconds":<0-12>', prompt)
+        self.assertIn('"motion_style":"<balanced|smooth|steady|teasing|pulsing|ramping|high_variation|full_range|freestyle|null>"', prompt)
         self.assertIn("Autospeak is enabled", prompt)
         self.assertIn("Include top-level `autospeak_seconds` in every JSON response", prompt)
         self.assertIn("Prefer natural conversational pacing over back-to-back lines", prompt)
         self.assertIn("do not repeat the previous chat line", prompt)
         self.assertIn("shortest natural pause", prompt)
-        self.assertIn("Autospeak can be chat-only", prompt)
+        self.assertIn("Autospeak autonomy is `style`", prompt)
+        self.assertIn("may change top-level `motion_style` only", prompt)
         self.assertIn("This request is an Autospeak follow-up", prompt)
+        self.assertIn("return `move:null`", prompt)
+        self.assertIn("You may set `motion_style`", prompt)
 
     def test_snarky_scientist_prompt_speed_guidance_uses_configured_speed_ceiling(self):
         service = LLMService(url="http://localhost:11434/api/chat")

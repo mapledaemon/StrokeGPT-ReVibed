@@ -504,6 +504,7 @@ class WebSettingsRouteTests(WebTestCase):
             settings.autospeak_enabled,
             settings.autospeak_min_seconds,
             settings.autospeak_max_seconds,
+            settings.autospeak_motion_autonomy,
             app_state.autospeak_wake_requested,
         )
         try:
@@ -518,6 +519,7 @@ class WebSettingsRouteTests(WebTestCase):
                     "autospeak_enabled": True,
                     "autospeak_min_seconds": 8,
                     "autospeak_max_seconds": 2,
+                    "autospeak_motion_autonomy": "full-motion",
                 })
 
             self.assertEqual(response.status_code, 200)
@@ -527,11 +529,14 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertTrue(data["autospeak_enabled"])
             self.assertEqual(data["autospeak_min_seconds"], 2.0)
             self.assertEqual(data["autospeak_max_seconds"], 8.0)
+            self.assertEqual(data["autospeak_motion_autonomy"], "full")
+            self.assertTrue(any(item["id"] == "style" for item in data["autospeak_motion_autonomy_options"]))
             self.assertFalse(settings.allow_llm_edge_in_freestyle)
             self.assertFalse(settings.allow_llm_edge_in_chat)
             self.assertTrue(settings.autospeak_enabled)
             self.assertEqual(settings.autospeak_min_seconds, 2.0)
             self.assertEqual(settings.autospeak_max_seconds, 8.0)
+            self.assertEqual(settings.autospeak_motion_autonomy, "full")
             self.assertIn("motion_preferences", data)
             schedule_autospeak.assert_called_once_with(0)
             self.assertFalse(app_state.autospeak_wake_requested)
@@ -544,6 +549,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertTrue(payload["autospeak_enabled"])
             self.assertEqual(payload["autospeak_min_seconds"], 2.0)
             self.assertEqual(payload["autospeak_max_seconds"], 8.0)
+            self.assertEqual(payload["autospeak_motion_autonomy"], "full")
         finally:
             (
                 settings.allow_llm_edge_in_freestyle,
@@ -551,6 +557,7 @@ class WebSettingsRouteTests(WebTestCase):
                 settings.autospeak_enabled,
                 settings.autospeak_min_seconds,
                 settings.autospeak_max_seconds,
+                settings.autospeak_motion_autonomy,
                 app_state.autospeak_wake_requested,
             ) = original
             app_state.mode_message_event.clear()

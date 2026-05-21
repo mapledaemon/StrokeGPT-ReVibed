@@ -760,6 +760,9 @@ def set_llm_edge_permissions_route():
             data.get("autospeak_max_seconds", web.settings.autospeak_max_seconds),
         )
     )
+    web.settings.autospeak_motion_autonomy = web.settings._normalize_autospeak_motion_autonomy(
+        data.get("autospeak_motion_autonomy", web.settings.autospeak_motion_autonomy)
+    )
     autospeak_range_changed = previous_autospeak_range != (
         web.settings.autospeak_min_seconds,
         web.settings.autospeak_max_seconds,
@@ -784,6 +787,8 @@ def set_llm_edge_permissions_route():
         "autospeak_enabled": web.settings.autospeak_enabled,
         "autospeak_min_seconds": web.settings.autospeak_min_seconds,
         "autospeak_max_seconds": web.settings.autospeak_max_seconds,
+        "autospeak_motion_autonomy": web.settings.autospeak_motion_autonomy,
+        "autospeak_motion_autonomy_options": web.payloads.autospeak_motion_autonomy_options(),
         "motion_preferences": web._motion_preference_payload(),
     })
 
