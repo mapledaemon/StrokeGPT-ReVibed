@@ -16,6 +16,16 @@ Branch: codex/parakeet-protobuf-runtime-pin
   pin compatible with current ONNX generated modules, fixing installer/runtime
   failures that reported protobuf gencode 6.31.x with runtime 5.29.x.
 
+2026-05-21 - PR #290 - Parakeet Installer Protobuf Verification
+----------------------------------------------------------------
+
+Branch: codex/parakeet-installer-protobuf-repair
+
+- Hardened the isolated NVIDIA Parakeet installer so it force-reinstalls the
+  ONNX-compatible protobuf runtime after NeMo dependency resolution, disables
+  user-site package leakage during install checks, and verifies an ONNX import
+  before reporting the runtime ready.
+
 2026-05-20 - PR #287 - Chat Keepalive Stale Target Guard
 --------------------------------------------------------
 
