@@ -1079,6 +1079,37 @@ class ParakeetWorkerRuntimeTests(unittest.TestCase):
         self.assertFalse(calls[0]["kwargs"]["use_lhotse"])
         self.assertFalse(calls[0]["kwargs"]["verbose"])
 
+    def test_transcribe_loaded_model_omits_unsupported_nemo_options(self):
+        from strokegpt import parakeet_worker
+
+        calls = []
+
+        class FakeStrictModel:
+            def transcribe(self, audio_paths, batch_size=None, channel_selector=None, verbose=False):
+                calls.append(
+                    {
+                        "audio_paths": audio_paths,
+                        "batch_size": batch_size,
+                        "channel_selector": channel_selector,
+                        "verbose": verbose,
+                    }
+                )
+                return [types.SimpleNamespace(text=" hello ")]
+
+        payload = parakeet_worker._transcribe_loaded_model(
+            FakeStrictModel(),
+            audio=Path("speech.wav"),
+            language="auto",
+            model_name="nvidia/parakeet-tdt-0.6b-v3",
+            device="cuda",
+        )
+
+        self.assertEqual(payload["transcript"], "hello")
+        self.assertEqual(calls[0]["audio_paths"], ["speech.wav"])
+        self.assertEqual(calls[0]["batch_size"], 1)
+        self.assertEqual(calls[0]["channel_selector"], "average")
+        self.assertFalse(calls[0]["verbose"])
+
     def test_nemo_temp_cleanup_guard_sets_ignore_cleanup_errors(self):
         from strokegpt import parakeet_worker
 
