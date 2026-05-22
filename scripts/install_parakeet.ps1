@@ -73,13 +73,19 @@ function Invoke-ParakeetPython {
 }
 
 function Test-ParakeetProtobufRuntime {
+    $probePath = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), ".py")
     $probe = @'
 import google.protobuf
 print("Protobuf runtime:", google.protobuf.__version__)
 import onnx
 print("ONNX:", onnx.__version__)
 '@
-    Invoke-ParakeetPython @("-c", $probe)
+    try {
+        Set-Content -LiteralPath $probePath -Value $probe -Encoding UTF8
+        Invoke-ParakeetPython @($probePath)
+    } finally {
+        Remove-Item -LiteralPath $probePath -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "== StrokeGPT-ReVibed NVIDIA Parakeet installer =="
