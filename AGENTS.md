@@ -427,7 +427,7 @@ Flask-gated tests in `tests/_web_support.py`.
 Compile-check Python:
 
 ```bash
-python -m py_compile app.py strokegpt/*.py tests/*.py
+python -m compileall -q app.py strokegpt tests
 ```
 
 Run the app:

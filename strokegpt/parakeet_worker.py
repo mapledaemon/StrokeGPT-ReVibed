@@ -145,7 +145,20 @@ def _transcribe_with_nemo(model, audio):
         )
 
 
+def _install_windows_signal_compat():
+    if os.name != "nt":
+        return
+    import signal
+
+    if not hasattr(signal, "SIGKILL") and hasattr(signal, "SIGTERM"):
+        # Windows Python does not expose SIGKILL. Some NeMo transitive
+        # dependencies reference the constant during import, so alias it to
+        # SIGTERM before importing that stack.
+        signal.SIGKILL = signal.SIGTERM
+
+
 def _import_nemo():
+    _install_windows_signal_compat()
     import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
 
     return nemo_asr

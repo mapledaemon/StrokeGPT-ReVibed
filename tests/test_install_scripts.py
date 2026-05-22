@@ -97,6 +97,13 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("[switch]$RunValidation", script)
         self.assertNotIn("ollama pull", script)
 
+    def test_test_and_run_uses_compileall_without_expanding_file_list(self):
+        script = (PROJECT_ROOT / "scripts" / "test_and_run.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('"-m", "compileall", "-q", "app.py", "strokegpt", "tests"', script)
+        self.assertNotIn('"-m", "py_compile"', script)
+        self.assertNotIn('Get-ChildItem -Path "strokegpt", "tests"', script)
+
     def test_setup_verifier_checks_runtime_without_model_downloads(self):
         script = (PROJECT_ROOT / "scripts" / "verify_setup.ps1").read_text(encoding="utf-8")
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
@@ -134,8 +141,10 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('install_windows.ps1', script)
         self.assertIn('Administrator PowerShell is not required', script)
         self.assertIn('Documents")) "StrokeGPT-ReVibed"', script)
+        self.assertIn('--accept-package-agreements --accept-source-agreements --disable-interactivity', script)
+        self.assertIn('Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl', script)
         self.assertIn('raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1', readme)
-        self.assertIn('Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest', readme)
+        self.assertIn('Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest -UseBasicParsing', readme)
         self.assertIn('; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap', readme)
         self.assertIn('no admin needed', readme)
 
@@ -186,8 +195,11 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn('$ErrorActionPreference = "SilentlyContinue"', script)
         self.assertIn('Test-PythonCommand @("py", "-3.11") -MinimumMinor 11', script)
         self.assertIn('Test-PythonCommand @("python")', script)
+        self.assertIn('Programs\\Python\\Python311\\python.exe', script)
+        self.assertIn('Test-Path -LiteralPath $path', script)
         self.assertIn("$command = @($script:PythonCommand)", script)
         self.assertIn("$script:PythonCommand = @(Find-Python)", script)
+        self.assertIn("Python command failed", script)
         self.assertIn('$TorchIndexUrl = "https://download.pytorch.org/whl/cu128"', script)
         self.assertNotIn("/whl/cu121", script)
         self.assertIn('"--upgrade", "--force-reinstall", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio"', script)

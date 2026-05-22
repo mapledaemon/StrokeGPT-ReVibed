@@ -47,6 +47,24 @@ function Find-Python {
         }
     }
 
+    $directPaths = @()
+    if ($env:LocalAppData) {
+        $directPaths += (Join-Path $env:LocalAppData "Programs\Python\Python311\python.exe")
+    }
+    if ($env:ProgramFiles) {
+        $directPaths += (Join-Path $env:ProgramFiles "Python311\python.exe")
+    }
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    if ($programFilesX86) {
+        $directPaths += (Join-Path $programFilesX86 "Python311\python.exe")
+    }
+
+    foreach ($path in $directPaths) {
+        if ((Test-Path -LiteralPath $path) -and (Test-PythonCommand @($path) -MinimumMinor 11)) {
+            return @($path)
+        }
+    }
+
     throw "Python 3.10+ was not found. Install Python 3.11 and enable 'Add python.exe to PATH'."
 }
 
@@ -61,6 +79,9 @@ function Invoke-SelectedPython {
     }
 
     & $exe @prefix @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python command failed: $($Arguments -join ' ')"
+    }
 }
 
 function Invoke-ParakeetPython {

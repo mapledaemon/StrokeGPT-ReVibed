@@ -51,7 +51,7 @@ may show a normal UAC prompt while installing Git, Python, Ollama, or
 driver-adjacent components. Paste this command and press Enter:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1" -OutFile $bootstrap; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $bootstrap = Join-Path $env:TEMP "strokegpt-bootstrap.ps1"; Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/mapledaemon/StrokeGPT-ReVibed/master/scripts/bootstrap_windows.ps1" -OutFile $bootstrap; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap
 ```
 
 The leading `Set-ExecutionPolicy ... -Scope Process` only relaxes script
@@ -253,7 +253,7 @@ Quick checks:
 
 ```bash
 python -m unittest discover -s tests
-python -m py_compile app.py strokegpt/*.py tests/*.py
+python -m compileall -q app.py strokegpt tests
 ```
 
 GitHub Actions runs the same tests on Python 3.11 for pushes to `master`
