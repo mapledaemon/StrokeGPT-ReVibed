@@ -7,6 +7,7 @@ app environment to the Parakeet dependency stack.
 
 import argparse
 import contextlib
+import inspect
 import json
 import os
 import sys
@@ -134,15 +135,28 @@ def _ignore_temporary_directory_cleanup_errors():
 
 
 def _transcribe_with_nemo(model, audio):
+    requested_kwargs = {
+        "batch_size": 1,
+        "channel_selector": "average",
+        "num_workers": 0,
+        "use_lhotse": False,
+        "verbose": False,
+    }
     with _ignore_temporary_directory_cleanup_errors():
         return model.transcribe(
             [str(Path(audio))],
-            batch_size=1,
-            channel_selector="average",
-            num_workers=0,
-            use_lhotse=False,
-            verbose=False,
+            **_transcribe_kwargs_for_model(model, requested_kwargs),
         )
+
+
+def _transcribe_kwargs_for_model(model, requested_kwargs):
+    try:
+        parameters = inspect.signature(model.transcribe).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return dict(requested_kwargs)
+    return {key: value for key, value in requested_kwargs.items() if key in parameters}
 
 
 def _install_windows_signal_compat():
