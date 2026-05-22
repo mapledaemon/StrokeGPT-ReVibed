@@ -95,9 +95,7 @@ if (-not $SkipTests) {
 if (-not $SkipCompile) {
     Write-Host ""
     Write-Host "Compile-checking Python files..."
-    $CompileFiles = @("app.py")
-    $CompileFiles += Get-ChildItem -Path "strokegpt", "tests" -Filter "*.py" -File -Recurse | ForEach-Object { $_.FullName }
-    Invoke-SelectedPython (@("-m", "py_compile") + $CompileFiles)
+    Invoke-SelectedPython @("-m", "compileall", "-q", "app.py", "strokegpt", "tests")
 }
 
 if ($NoRun) {

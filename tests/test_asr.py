@@ -1169,6 +1169,34 @@ class ParakeetWorkerRuntimeTests(unittest.TestCase):
         self.assertFalse(payload["nemo_available"])
         self.assertIn("CUDA test kernel failed", payload["error"])
 
+    def test_parakeet_worker_aliases_windows_sigkill_before_nemo_import(self):
+        from strokegpt import parakeet_worker
+
+        fake_signal = types.SimpleNamespace(SIGTERM=15)
+        fake_nemo = types.ModuleType("nemo")
+        fake_collections = types.ModuleType("nemo.collections")
+        fake_asr = types.ModuleType("nemo.collections.asr")
+        fake_nemo.collections = fake_collections
+        fake_collections.asr = fake_asr
+        module_names = ("signal", "nemo", "nemo.collections", "nemo.collections.asr")
+        original_modules = {name: sys.modules.get(name) for name in module_names}
+        try:
+            sys.modules["signal"] = fake_signal
+            sys.modules["nemo"] = fake_nemo
+            sys.modules["nemo.collections"] = fake_collections
+            sys.modules["nemo.collections.asr"] = fake_asr
+            with mock.patch.object(parakeet_worker.os, "name", "nt"):
+                imported = parakeet_worker._import_nemo()
+        finally:
+            for name, module in original_modules.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+
+        self.assertIs(imported, fake_asr)
+        self.assertEqual(fake_signal.SIGKILL, fake_signal.SIGTERM)
+
 
 if __name__ == "__main__":
     unittest.main()

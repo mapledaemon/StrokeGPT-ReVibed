@@ -84,7 +84,7 @@ function Install-GitIfRequested {
     }
 
     Write-Host "Installing Git for Windows with winget..."
-    & winget install --id Git.Git -e --source winget
+    & winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity
     if ($LASTEXITCODE -ne 0) {
         throw "Git install failed."
     }
@@ -104,7 +104,7 @@ function Download-ZipCheckout {
     $zipPath = Join-Path $tempRoot "StrokeGPT-ReVibed.zip"
 
     Write-Host "Downloading StrokeGPT-ReVibed ZIP..."
-    Invoke-WebRequest -Uri $ZipUrl -OutFile $zipPath
+    Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zipPath
     Expand-Archive -LiteralPath $zipPath -DestinationPath $tempRoot
 
     $expanded = Get-ChildItem -LiteralPath $tempRoot -Directory |

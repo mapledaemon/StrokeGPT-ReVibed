@@ -7,6 +7,23 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-22 - PR #293 - Parakeet Windows Signal Import Shim
+----------------------------------------------------------
+
+Branch: codex/parakeet-windows-signal-shim
+
+- Added a Windows-only `SIGKILL` compatibility alias before the isolated
+  NVIDIA Parakeet worker imports NeMo, fixing runtime checks that failed with
+  `module 'signal' has no attribute 'SIGKILL'`.
+- Hardened the Windows install scripts so the Parakeet installer fails fast if
+  `.venv-parakeet` creation fails, can find common direct Python 3.11 install
+  paths, and the bootstrap script avoids Windows PowerShell 5.1
+  `Invoke-WebRequest` parsing failures while passing noninteractive winget
+  agreement flags for Git installs.
+- Switched the PowerShell validation runner and setup docs from an expanded
+  `py_compile` file list to `compileall`, avoiding long Windows command lines
+  as the codebase grows.
+
 2026-05-22 - PR #292 - Parakeet Probe Quoting Fix
 -------------------------------------------------
 
