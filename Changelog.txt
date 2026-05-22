@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-22 - PR #291 - Parakeet Setuptools Cap
+----------------------------------------------
+
+Branch: codex/parakeet-setuptools-cap
+
+- Capped the isolated NVIDIA Parakeet runtime's setuptools pin below 82 so the
+  PR #290 forced reinstall does not select setuptools 82.0.1, which current
+  CUDA PyTorch 2.11 wheels reject during `pip check`.
+
 2026-05-21 - PR #289 - Autospeak Motion Autonomy Guard
 ------------------------------------------------------
 

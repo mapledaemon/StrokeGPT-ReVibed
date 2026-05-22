@@ -3,10 +3,11 @@
 # Install CUDA-enabled PyTorch separately for practical latency on NVIDIA GPUs.
 nemo_toolkit[asr]
 # NeMo 2.7.x pins fsspec exactly, while its Lightning integration needs a
-# newer setuptools than some resolver paths leave behind. Keep these explicit
-# so the isolated runtime does not finish with pip dependency conflicts.
+# newer setuptools than some resolver paths leave behind. CUDA PyTorch 2.11
+# rejects setuptools 82.0.1+, so cap this below 82 while staying new enough
+# for NeMo's Lightning path.
 fsspec==2024.12.0
-setuptools>=79.0.0
+setuptools>=79.0.0,<82
 # ONNX 1.19+ ships Python protobuf modules generated with protobuf 6.31.x.
 # Keep the runtime new enough so importing NeMo's ONNX path does not fail with
 # "gencode 6.31.1 runtime 5.29.6" style version errors. The installer also
