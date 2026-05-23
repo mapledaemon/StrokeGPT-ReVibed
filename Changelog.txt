@@ -7,6 +7,18 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-23 - PR #298 - Streamed Chat JSON Salvage
+-------------------------------------------------
+
+Branch: codex/streamed-chat-json-salvage
+
+- Preserved complete streamed assistant chat text when a local model returns
+  otherwise malformed JSON, and stopped the browser from replacing visible
+  streamed replies with the generic model-error text after final validation.
+- Marked salvaged malformed-model replies with an inline warning badge whose
+  tooltip explains that the local model produced malformed JSON and suggests
+  clearing model memory or trying another Ollama model if it repeats.
+
 2026-05-23 - PR #296 - Hands-Free Empty Transcript Guard
 --------------------------------------------------------
 
