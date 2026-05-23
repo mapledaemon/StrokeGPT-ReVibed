@@ -15,6 +15,7 @@ const HANDS_FREE_RMS_THRESHOLD_MAX = 0.16;
 const HANDS_FREE_NOISE_MULTIPLIER_MIN = 1.6;
 const HANDS_FREE_NOISE_MULTIPLIER_MAX = 5.0;
 const VOICE_INPUT_NOISE_CALIBRATION_MS = 2000;
+const HANDS_FREE_NO_SPEECH_COOLDOWN_MS = 1500;
 const SLOW_ASR_WARNING_MS = 2500;
 const VOICE_INPUT_TRIM_WINDOW_MS = 20;
 const VOICE_INPUT_TRIM_HEAD_PAD_MS = 100;
@@ -1227,9 +1228,13 @@ async function transcribeVoiceBlob(blob, {source = 'manual'} = {}) {
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
     if (!transcript) {
+        if (source === 'hands_free') {
+            state.voiceInputHandsFreeSuppressUntil = performance.now() + HANDS_FREE_NO_SPEECH_COOLDOWN_MS;
+        }
         voiceStatusMessage(payload?.message || 'No speech detected. Try speaking closer to the microphone, reducing background noise, or using push-to-talk.', 'var(--yellow)', {issue: true});
         return;
     }
+    state.voiceInputHandsFreeSuppressUntil = 0;
     const slowWarning = slowAsrWarning(payload);
     const chatSource = voiceChatSourceForRecording(source);
     if (state.voiceInputSubmitMode === 'auto_submit') {
@@ -1385,7 +1390,8 @@ function monitorHandsFree() {
     const now = performance.now();
     const rms = currentRms();
     const threshold = handsFreeRmsThreshold();
-    if (!state.voiceInputRecording && rms > threshold) {
+    const suppressed = now < (state.voiceInputHandsFreeSuppressUntil || 0);
+    if (!state.voiceInputRecording && !suppressed && rms > threshold) {
         startRecording('hands_free');
     } else if (state.voiceInputRecording) {
         if (rms <= threshold) {
@@ -1427,6 +1433,7 @@ async function startHandsFree() {
         state.voiceInputAnalyser.fftSize = 512;
         state.voiceInputAudioSource.connect(state.voiceInputAnalyser);
         state.voiceInputHandsFreeArmed = true;
+        state.voiceInputHandsFreeSuppressUntil = 0;
         state.voiceInputMonitorFrame = requestAnimationFrame(monitorHandsFree);
         voiceStatusMessage('Hands-free listening armed.', 'var(--comment)', {clearIssue: true});
         setVoiceButtonState();
@@ -1438,6 +1445,7 @@ async function startHandsFree() {
 
 function stopHandsFree(message = 'Hands-free listening stopped.') {
     state.voiceInputHandsFreeArmed = false;
+    state.voiceInputHandsFreeSuppressUntil = 0;
     cancelHandsFreeMonitor();
     if (state.voiceInputRecording) stopRecording();
     else stopMicrophoneStream();

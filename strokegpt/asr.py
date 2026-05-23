@@ -260,6 +260,12 @@ def _transcript_from_segments(segments):
 def _transcript_from_nemo_output(output):
     if output is None:
         return ""
+    if isinstance(output, (list, tuple)):
+        return " ".join(
+            transcript
+            for transcript in (_transcript_from_nemo_output(item) for item in output)
+            if transcript
+        ).strip()
     if hasattr(output, "text"):
         return str(output.text or "").strip()
     if isinstance(output, dict):

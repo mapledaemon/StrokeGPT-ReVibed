@@ -7,6 +7,16 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-23 - PR #296 - Hands-Free Empty Transcript Guard
+--------------------------------------------------------
+
+Branch: codex/handsfree-empty-transcript-guard
+
+- Treated nested empty Parakeet / NeMo transcription results as no-speech
+  instead of converting them into literal strings such as `['']`, and added a
+  short hands-free no-speech cooldown so background noise does not immediately
+  retrigger another transcription loop.
+
 2026-05-22 - PR #295 - Parakeet NumPy Compatibility
 ---------------------------------------------------
 

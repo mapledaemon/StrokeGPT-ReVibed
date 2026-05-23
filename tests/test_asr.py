@@ -774,6 +774,15 @@ class VoiceInputServiceTests(unittest.TestCase):
         self.assertEqual(result["provider"], "local_nvidia_parakeet")
         self.assertEqual(result["model"], "nvidia/parakeet-tdt-0.6b-v3")
 
+    def test_nvidia_parakeet_nested_empty_output_is_no_speech(self):
+        from strokegpt import asr
+
+        self.assertEqual(asr._transcript_from_nemo_output([[""]]), "")
+        self.assertEqual(
+            asr._transcript_from_nemo_output([[types.SimpleNamespace(text=" stop now ")]]),
+            "stop now",
+        )
+
     def test_nvidia_parakeet_external_runtime_normalizes_browser_audio_to_wav(self):
         requests = []
 
@@ -1128,6 +1137,24 @@ class ParakeetWorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(calls[0]["batch_size"], 1)
         self.assertEqual(calls[0]["channel_selector"], "average")
         self.assertFalse(calls[0]["verbose"])
+
+    def test_transcribe_loaded_model_treats_nested_empty_output_as_no_speech(self):
+        from strokegpt import parakeet_worker
+
+        class FakeModel:
+            def transcribe(self, audio_paths, **kwargs):
+                return [[""]]
+
+        payload = parakeet_worker._transcribe_loaded_model(
+            FakeModel(),
+            audio=Path("speech.wav"),
+            language="auto",
+            model_name="nvidia/parakeet-tdt-0.6b-v3",
+            device="cuda",
+        )
+
+        self.assertEqual(payload["status"], "no_speech")
+        self.assertEqual(payload["transcript"], "")
 
     def test_nemo_temp_cleanup_guard_sets_ignore_cleanup_errors(self):
         from strokegpt import parakeet_worker
