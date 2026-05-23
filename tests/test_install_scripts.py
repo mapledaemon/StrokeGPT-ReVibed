@@ -104,6 +104,23 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn('"-m", "py_compile"', script)
         self.assertNotIn('Get-ChildItem -Path "strokegpt", "tests"', script)
 
+    def test_visual_qa_launcher_reports_reachable_app_url(self):
+        script = (PROJECT_ROOT / "scripts" / "start_visual_qa.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('[int]$Port = 5011', script)
+        self.assertIn('[switch]$Json', script)
+        self.assertIn('STROKEGPT_OPEN_BROWSER=0', script)
+        self.assertIn('STROKEGPT_HOST=$(ConvertTo-CmdLiteral $HostName)', script)
+        self.assertIn('STROKEGPT_PORT=$Port', script)
+        self.assertIn('Start-Process -FilePath "cmd.exe"', script)
+        self.assertIn('Invoke-WebRequest -UseBasicParsing -Uri $Url', script)
+        self.assertIn('"Open\\s+(https?://[^\\s]+)"', script)
+        self.assertIn('"Running on\\s+(https?://[^\\s]+)"', script)
+        self.assertIn('user_data\\visual_qa', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_URL=', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_CLEANUP=', script)
+        self.assertIn('ConvertTo-Json -Depth 3', script)
+
     def test_setup_verifier_checks_runtime_without_model_downloads(self):
         script = (PROJECT_ROOT / "scripts" / "verify_setup.ps1").read_text(encoding="utf-8")
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
