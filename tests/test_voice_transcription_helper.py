@@ -146,6 +146,15 @@ class VoiceTranscriptionHelperTests(unittest.TestCase):
         self.assertIn("hideTranscriptPreview", body)
         self.assertIn("voiceInputSubmitMode", body)
         self.assertIn("slowAsrWarning", body)
+        self.assertIn("voiceInputHandsFreeSuppressUntil", body)
+        self.assertIn("HANDS_FREE_NO_SPEECH_COOLDOWN_MS", body)
+
+    def test_hands_free_monitor_honors_no_speech_cooldown(self):
+        body = _function_body(self.script, "function monitorHandsFree(")
+
+        self.assertIn("voiceInputHandsFreeSuppressUntil", body)
+        self.assertIn("const suppressed =", body)
+        self.assertIn("!suppressed && rms > threshold", body)
 
     def test_helper_appears_before_caller(self):
         helper = self.script.find("async function requestVoiceTranscription(")

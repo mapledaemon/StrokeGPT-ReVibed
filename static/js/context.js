@@ -467,6 +467,7 @@ export const state = {
     voiceInputRecordingCleanup: null,
     voiceInputMonitorFrame: null,
     voiceInputSilenceStartedAt: 0,
+    voiceInputHandsFreeSuppressUntil: 0,
     voiceInputPendingTranscript: '',
     voiceInputPendingSource: '',
     systemPromptsLoadedOnce: false,
