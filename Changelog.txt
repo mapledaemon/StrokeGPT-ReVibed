@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-23 - PR #297 - No-Speech Submit Guard
+----------------------------------------------
+
+Branch: codex/no-speech-submit-guard
+
+- Blocked `no_speech`, rejected, empty, and common no-speech sentinel voice
+  input payloads before chat auto-submit so hands-free ASR misses cannot be
+  sent to the LLM even if a provider returns a contradictory transcript.
+
 2026-05-23 - PR #296 - Hands-Free Empty Transcript Guard
 --------------------------------------------------------
 
