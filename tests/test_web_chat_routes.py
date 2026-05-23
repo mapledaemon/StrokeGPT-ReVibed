@@ -977,6 +977,62 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_send_message_stream_salvages_complete_chat_from_invalid_json(self):
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        spoken = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            chunks = iter([
+                '{"chat":"Visible ',
+                'before invalid tail.","move":null,"new_mood":null} trailing text',
+            ])
+            with mock.patch.object(llm, "iter_chat_response_content", return_value=chunks), \
+                    mock.patch.object(audio, "enqueue_text_for_audio", side_effect=lambda text: spoken.append(text)):
+                response = self.client.post("/send_message_stream", json={
+                    "message": "say something",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                }, buffered=True)
+
+            self.assertEqual(response.status_code, 200)
+            events = [
+                json.loads(line)
+                for line in response.get_data(as_text=True).splitlines()
+                if line.strip()
+            ]
+            delta_text = "".join(event.get("text", "") for event in events if event["type"] == "delta")
+            final = [event["data"] for event in events if event["type"] == "final"][-1]
+            self.assertEqual(delta_text, "Visible before invalid tail.")
+            self.assertEqual(final["status"], "ok")
+            self.assertEqual(final["chat"], "Visible before invalid tail.")
+            self.assertTrue(final["chat_queued"])
+            self.assertTrue(final["chat_streamed"])
+            self.assertEqual(final["llm_message_metadata"]["response_warning"], "malformed_json")
+            self.assertTrue(final["timings"]["llm_json_salvaged"])
+
+            updates = self.client.get("/get_updates")
+            try:
+                queued = updates.get_json()["messages"]
+            finally:
+                updates.close()
+            self.assertEqual(queued, ["Visible before invalid tail."])
+            self.assertEqual(list(app_state.chat_history), [
+                {"role": "user", "content": "say something"},
+                {"role": "assistant", "content": "Visible before invalid tail."},
+            ])
+            self.assertEqual(spoken, ["Visible before invalid tail."])
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_send_message_stream_starts_cached_local_voice_preload_before_llm(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -1112,6 +1168,8 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual("".join(deltas), "Line 1\nLine 2 \u2764")
         self.assertEqual(json.loads(extractor.raw_content())["chat"], "Line 1\nLine 2 \u2764")
         self.assertTrue(extractor.has_streamed_text())
+        self.assertTrue(extractor.has_complete_chat_text())
+        self.assertEqual(extractor.chat_text(), "Line 1\nLine 2 \u2764")
 
     def test_send_message_keeps_llm_transport_error_out_of_dialogue_state(self):
         from strokegpt.web import app_state, audio, handy, llm, settings

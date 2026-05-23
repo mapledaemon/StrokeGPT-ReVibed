@@ -71,6 +71,16 @@ function findFirstTag(node, tagName) {
     return null;
 }
 
+function findFirstClass(node, className) {
+    if (!node || typeof node !== 'object') return null;
+    if (String(node.className || '').split(/\s+/).includes(className)) return node;
+    for (const child of node.children || []) {
+        const found = findFirstClass(child, className);
+        if (found) return found;
+    }
+    return null;
+}
+
 function endpointUrl(endpoint) {
     return new NodeURL(String(endpoint), 'http://strokegpt.test');
 }
@@ -229,7 +239,36 @@ describe('chat action statuses', () => {
         assert.match(pfp?.title || '', /Model: local\/test:latest/);
         assert.match(pfp?.title || '', /LLM 42ms/);
         assert.match(pfp?.title || '', /Total 75ms/);
+        assert.strictEqual(findFirstClass(getStubElement('chat-messages-container'), 'message-warning-badge'), null);
         assert.strictEqual(state.pendingQueuedBotEcho, '');
+    });
+
+    it('does not overwrite streamed chat text with a final model error', async () => {
+        state.chatStreamingEnabled = true;
+        globalThis.fetch = async endpoint => {
+            if (endpointPath(endpoint) === '/send_message_stream') return streamResponse([
+                '{"type":"status","status":"generating"}\n',
+                '{"type":"delta","text":"Visible before parse failure."}\n',
+                '{"type":"final","data":{"status":"model_error","message":"Model request failed. Check Ollama status and try again.","chat":"The local model returned an unreadable response. Check Ollama model status and try again.","chat_streamed":true,"chat_queued":false,"llm_message_metadata":{"source":"llm","response_warning":"malformed_json","timings":{"llm_json_invalid":true}}}}\n',
+            ]);
+            return jsonResponse(404, { status: 'error', message: `Unexpected endpoint ${endpoint}` });
+        };
+
+        const result = await sendUserMessage('hello');
+        const chatText = collectText(getStubElement('chat-messages-container'));
+        const badge = findFirstClass(getStubElement('chat-messages-container'), 'message-warning-badge');
+
+        assert.strictEqual(result.handled, false);
+        assert.strictEqual(result.streamed, true);
+        assert.strictEqual(occurrenceCount(chatText, 'Visible before parse failure.'), 1);
+        assert.strictEqual(occurrenceCount(chatText, 'unreadable response'), 0);
+        assert.ok(badge);
+        assert.match(badge.title, /malformed JSON from the local model/);
+        assert.match(badge.title, /clear model memory or try a different Ollama model/);
+        assert.strictEqual(
+            getStubElement('status-text').textContent,
+            'Model request failed. Check Ollama status and try again.',
+        );
     });
 
     it('applies polled LLM metadata to the specific bot profile tooltip', async () => {
