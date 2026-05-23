@@ -96,6 +96,10 @@ behavior, and route motion changes through the shared controller path.
   the local app with browser auto-open disabled, waits for the actual selected
   localhost URL, and prints the URL/PID/log details needed for in-app browser
   screenshots.
+- `scripts/capture_visual_qa.ps1`: fallback screenshot helper for Codex visual
+  QA that uses installed Edge/Chrome in headless mode to save a PNG when the
+  in-app browser can inspect DOM but `Page.captureScreenshot` is unavailable
+  or times out.
 - `tests/`: focused regression tests.
 
 ## Current Progress Snapshot
@@ -449,6 +453,9 @@ Start the app for Codex in-app browser screenshot review on Windows:
 Open the returned `url` with the Browser plugin and clean up with the returned
 `cleanup_command` when finished. Prefer this helper over hand-written
 `Start-Process` commands because it waits for the app's actual selected port.
+If the in-app browser screenshot command times out, run the returned
+`screenshot_command` to capture the same live URL through installed
+Edge/Chrome and inspect the saved PNG.
 
 ## Frontend Behavioral Tests
 
