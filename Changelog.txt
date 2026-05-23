@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-23 - PR #300 - Visual QA Screenshot Fallback
+----------------------------------------------------
+
+Branch: codex/visual-qa-screenshot-fallback
+
+- Added `scripts/capture_visual_qa.ps1`, a headless Edge/Chrome screenshot
+  fallback for Codex visual QA when the in-app browser can load or inspect the
+  app but `Page.captureScreenshot` times out.
+
 2026-05-23 - PR #299 - Visual QA Launcher
 -----------------------------------------
 

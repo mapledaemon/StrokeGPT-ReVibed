@@ -157,6 +157,7 @@ $result = [ordered]@{
     launcher_pid = $launcher.Id
     listener_pid = $listenerPid
     cleanup_command = if ($listenerPid) { "Stop-Process -Id $listenerPid -Force" } else { "Stop-Process -Id $($launcher.Id) -Force" }
+    screenshot_command = ".\scripts\capture_visual_qa.ps1 -Url `"$url`" -Json"
 }
 
 if ($Json) {
@@ -170,4 +171,5 @@ else {
         Write-Host "STROKEGPT_VISUAL_QA_LISTENER_PID=$($result.listener_pid)"
     }
     Write-Host "STROKEGPT_VISUAL_QA_CLEANUP=$($result.cleanup_command)"
+    Write-Host "STROKEGPT_VISUAL_QA_SCREENSHOT_COMMAND=$($result.screenshot_command)"
 }
