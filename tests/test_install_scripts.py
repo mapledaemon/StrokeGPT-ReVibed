@@ -209,6 +209,7 @@ class InstallScriptTests(unittest.TestCase):
         script = (PROJECT_ROOT / "scripts" / "install_parakeet.ps1").read_text(encoding="utf-8")
         requirements = (PROJECT_ROOT / "requirements-parakeet.txt").read_text(encoding="utf-8")
 
+        self.assertIn("numpy>=1.26,<2", requirements)
         self.assertIn("fsspec==2024.12.0", requirements)
         self.assertIn("setuptools>=79.0.0,<82", requirements)
         self.assertIn("protobuf>=6.31.1,<7", requirements)
@@ -216,7 +217,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("function Test-ParakeetProtobufRuntime", script)
         self.assertIn('$env:PYTHONNOUSERSITE = "1"', script)
         self.assertIn("Parakeet Python command failed", script)
-        self.assertIn('"--upgrade", "--force-reinstall", "--no-cache-dir", "fsspec==2024.12.0", "setuptools>=79.0.0,<82", "protobuf>=6.31.1,<7"', script)
+        self.assertIn('"--upgrade", "--force-reinstall", "--no-cache-dir", "numpy>=1.26,<2", "fsspec==2024.12.0", "setuptools>=79.0.0,<82", "protobuf>=6.31.1,<7"', script)
         self.assertIn("GetTempFileName", script)
         self.assertIn("Set-Content -LiteralPath $probePath", script)
         self.assertIn("Invoke-ParakeetPython @($probePath)", script)

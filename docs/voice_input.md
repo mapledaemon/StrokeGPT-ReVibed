@@ -88,3 +88,8 @@ or install a custom Parakeet runtime built for that GPU/CUDA stack.
 Parakeet runtime has an older protobuf runtime than the ONNX Python modules
 were generated with. Rerun `.\scripts\install_parakeet.ps1` to apply the
 Parakeet dependency pins again, including the protobuf runtime pin.
+
+**"`np.sctypes` was removed in the NumPy 2.0 release"** — the isolated
+Parakeet runtime picked a NumPy line newer than parts of the NeMo dependency
+stack currently expect. Update the app and rerun `.\scripts\install_parakeet.ps1`
+to apply the NumPy compatibility pin.

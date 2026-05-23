@@ -627,8 +627,24 @@ class VoiceInputServiceTests(unittest.TestCase):
         fake_asr.models = types.SimpleNamespace(ASRModel=FakeASRModel)
         fake_nemo.collections = fake_collections
         fake_collections.asr = fake_asr
+        fake_numpy = types.SimpleNamespace(
+            int8="int8",
+            int16="int16",
+            int32="int32",
+            int64="int64",
+            uint8="uint8",
+            uint16="uint16",
+            uint32="uint32",
+            uint64="uint64",
+            float16="float16",
+            float32="float32",
+            float64="float64",
+            complex64="complex64",
+            complex128="complex128",
+            bool_="bool_",
+        )
 
-        module_names = ["nemo", "nemo.collections", "nemo.collections.asr"]
+        module_names = ["numpy", "nemo", "nemo.collections", "nemo.collections.asr"]
         original_modules = {name: sys.modules.get(name) for name in module_names}
         env_keys = ["HF_HOME", "HF_HUB_CACHE", "HF_XET_CACHE", "STROKEGPT_PARAKEET_DEVICE"]
         original_env = {key: os.environ.get(key) for key in env_keys}
@@ -639,6 +655,7 @@ class VoiceInputServiceTests(unittest.TestCase):
         try:
             for key in env_keys:
                 os.environ.pop(key, None)
+            sys.modules["numpy"] = fake_numpy
             sys.modules["nemo"] = fake_nemo
             sys.modules["nemo.collections"] = fake_collections
             sys.modules["nemo.collections.asr"] = fake_asr
@@ -663,6 +680,8 @@ class VoiceInputServiceTests(unittest.TestCase):
             self.assertTrue(calls["eval"])
             self.assertEqual(os.environ["HF_HOME"], temp_dir)
             self.assertEqual(os.environ["HF_HUB_CACHE"], str(Path(temp_dir) / "hub"))
+            self.assertEqual(fake_numpy.sctypes["float"], ["float16", "float32", "float64"])
+            self.assertIs(fake_numpy.complex, complex)
         finally:
             for name, module in original_modules.items():
                 if module is None:
@@ -1200,19 +1219,36 @@ class ParakeetWorkerRuntimeTests(unittest.TestCase):
         self.assertFalse(payload["nemo_available"])
         self.assertIn("CUDA test kernel failed", payload["error"])
 
-    def test_parakeet_worker_aliases_windows_sigkill_before_nemo_import(self):
+    def test_parakeet_worker_installs_dependency_compat_before_nemo_import(self):
         from strokegpt import parakeet_worker
 
         fake_signal = types.SimpleNamespace(SIGTERM=15)
+        fake_numpy = types.SimpleNamespace(
+            int8="int8",
+            int16="int16",
+            int32="int32",
+            int64="int64",
+            uint8="uint8",
+            uint16="uint16",
+            uint32="uint32",
+            uint64="uint64",
+            float16="float16",
+            float32="float32",
+            float64="float64",
+            complex64="complex64",
+            complex128="complex128",
+            bool_="bool_",
+        )
         fake_nemo = types.ModuleType("nemo")
         fake_collections = types.ModuleType("nemo.collections")
         fake_asr = types.ModuleType("nemo.collections.asr")
         fake_nemo.collections = fake_collections
         fake_collections.asr = fake_asr
-        module_names = ("signal", "nemo", "nemo.collections", "nemo.collections.asr")
+        module_names = ("signal", "numpy", "nemo", "nemo.collections", "nemo.collections.asr")
         original_modules = {name: sys.modules.get(name) for name in module_names}
         try:
             sys.modules["signal"] = fake_signal
+            sys.modules["numpy"] = fake_numpy
             sys.modules["nemo"] = fake_nemo
             sys.modules["nemo.collections"] = fake_collections
             sys.modules["nemo.collections.asr"] = fake_asr
@@ -1227,6 +1263,10 @@ class ParakeetWorkerRuntimeTests(unittest.TestCase):
 
         self.assertIs(imported, fake_asr)
         self.assertEqual(fake_signal.SIGKILL, fake_signal.SIGTERM)
+        self.assertIn("float32", fake_numpy.sctypes["float"])
+        self.assertIn("complex128", fake_numpy.sctypes["complex"])
+        self.assertIs(fake_numpy.float, float)
+        self.assertIs(fake_numpy.object, object)
 
 
 if __name__ == "__main__":

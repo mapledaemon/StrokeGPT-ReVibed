@@ -7,6 +7,15 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-22 - PR #295 - Parakeet NumPy Compatibility
+---------------------------------------------------
+
+Branch: codex/parakeet-numpy-compat
+
+- Added a NumPy compatibility shim before Parakeet / NeMo imports and pinned
+  the isolated Parakeet runtime to NumPy 1.x, fixing `np.sctypes` failures
+  from NeMo transitive dependencies under NumPy 2.x.
+
 2026-05-22 - PR #294 - Parakeet Transcribe Option Compatibility
 ---------------------------------------------------------------
 

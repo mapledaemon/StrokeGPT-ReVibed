@@ -2,6 +2,10 @@
 # Prefer scripts/install_parakeet.ps1 so NeMo dependencies stay out of .venv.
 # Install CUDA-enabled PyTorch separately for practical latency on NVIDIA GPUs.
 nemo_toolkit[asr]
+# Some NeMo transitive imports still read NumPy 1.x compatibility attributes
+# such as np.sctypes. Keep the isolated Parakeet runtime on the compatible
+# NumPy line until that stack is fully NumPy 2 ready.
+numpy>=1.26,<2
 # NeMo 2.7.x pins fsspec exactly, while its Lightning integration needs a
 # newer setuptools than some resolver paths leave behind. CUDA PyTorch 2.11
 # rejects setuptools 82.0.1+, so cap this below 82 while staying new enough

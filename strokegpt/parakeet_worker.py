@@ -159,6 +159,53 @@ def _transcribe_kwargs_for_model(model, requested_kwargs):
     return {key: value for key, value in requested_kwargs.items() if key in parameters}
 
 
+def _numpy_dtype_values(numpy_module, names):
+    values = []
+    seen = set()
+    for name in names:
+        value = getattr(numpy_module, name, None)
+        if value is None:
+            continue
+        marker = id(value)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        values.append(value)
+    return values
+
+
+def _install_numpy_compat():
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+    except Exception:
+        return
+
+    if not hasattr(np, "sctypes"):
+        # Some NeMo transitive dependencies still read np.sctypes during
+        # import. NumPy 2 removed it, so provide the narrow legacy shape they
+        # expect instead of letting the voice worker fail before model load.
+        np.sctypes = {
+            "int": _numpy_dtype_values(np, ("int8", "int16", "int32", "int64", "int_")),
+            "uint": _numpy_dtype_values(np, ("uint8", "uint16", "uint32", "uint64")),
+            "float": _numpy_dtype_values(np, ("float16", "float32", "float64", "longdouble")),
+            "complex": _numpy_dtype_values(np, ("complex64", "complex128", "clongdouble")),
+            "others": _numpy_dtype_values(np, ("bool_", "bytes_", "str_", "object_", "void")),
+        }
+
+    legacy_aliases = {
+        "bool": getattr(np, "bool_", bool),
+        "int": int,
+        "float": float,
+        "complex": complex,
+        "object": object,
+        "str": str,
+    }
+    numpy_attrs = getattr(np, "__dict__", {})
+    for name, value in legacy_aliases.items():
+        if name not in numpy_attrs:
+            setattr(np, name, value)
+
+
 def _install_windows_signal_compat():
     if os.name != "nt":
         return
@@ -171,8 +218,13 @@ def _install_windows_signal_compat():
         signal.SIGKILL = signal.SIGTERM
 
 
-def _import_nemo():
+def _install_nemo_dependency_compat():
     _install_windows_signal_compat()
+    _install_numpy_compat()
+
+
+def _import_nemo():
+    _install_nemo_dependency_compat()
     import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
 
     return nemo_asr
