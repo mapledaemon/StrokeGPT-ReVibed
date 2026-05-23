@@ -7,6 +7,16 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-23 - PR #299 - Visual QA Launcher
+-----------------------------------------
+
+Branch: codex/visual-qa-launcher
+
+- Added `scripts/start_visual_qa.ps1`, a Windows helper for Codex visual
+  review that launches the live app with browser auto-open disabled, waits for
+  the actual selected localhost URL, reports PID/log/cleanup details, and
+  avoids hard-coded screenshot ports.
+
 2026-05-23 - PR #298 - Streamed Chat JSON Salvage
 -------------------------------------------------
 

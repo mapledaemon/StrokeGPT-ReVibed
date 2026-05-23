@@ -92,6 +92,10 @@ behavior, and route motion changes through the shared controller path.
 - `scripts/update_windows.ps1`: Windows user-update helper for Git
   fast-forward, dependency refresh, optional Parakeet runtime refresh, and
   validation.
+- `scripts/start_visual_qa.ps1`: Codex/browser visual QA helper that launches
+  the local app with browser auto-open disabled, waits for the actual selected
+  localhost URL, and prints the URL/PID/log details needed for in-app browser
+  screenshots.
 - `tests/`: focused regression tests.
 
 ## Current Progress Snapshot
@@ -435,6 +439,16 @@ Run the app:
 ```bash
 python app.py
 ```
+
+Start the app for Codex in-app browser screenshot review on Windows:
+
+```powershell
+.\scripts\start_visual_qa.ps1 -Json
+```
+
+Open the returned `url` with the Browser plugin and clean up with the returned
+`cleanup_command` when finished. Prefer this helper over hand-written
+`Start-Process` commands because it waits for the app's actual selected port.
 
 ## Frontend Behavioral Tests
 
