@@ -129,7 +129,7 @@ Invoke-ParakeetPython @("-m", "pip", "install", "-r", "requirements-parakeet.txt
 Write-Host "Repairing CUDA PyTorch stack after NeMo dependency resolution..."
 Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio")
 Write-Host "Reapplying NeMo and ONNX dependency pins..."
-Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-cache-dir", "fsspec==2024.12.0", "setuptools>=79.0.0,<82", "protobuf>=6.31.1,<7")
+Invoke-ParakeetPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-cache-dir", "numpy>=1.26,<2", "fsspec==2024.12.0", "setuptools>=79.0.0,<82", "protobuf>=6.31.1,<7")
 Write-Host "Checking Python package dependency consistency..."
 Invoke-ParakeetPython @("-m", "pip", "check")
 Write-Host "Checking ONNX protobuf runtime compatibility..."

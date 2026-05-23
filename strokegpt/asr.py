@@ -1121,6 +1121,9 @@ class VoiceInputService:
             self._parakeet_runtime_checked_at = time.monotonic()
             return
         self._prepare_model_cache(configure_hf_home=True)
+        from .parakeet_worker import _install_nemo_dependency_compat
+
+        _install_nemo_dependency_compat()
         import nemo.collections.asr as nemo_asr  # type: ignore[import-not-found]
 
         device = _detect_torch_device(os.getenv("STROKEGPT_PARAKEET_DEVICE"))
