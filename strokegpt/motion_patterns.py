@@ -75,6 +75,7 @@ class ContinuousMotionPlan:
     style: FrameStyle
     duration_seconds: float
     normalized_range: tuple[float, float] = (0.0, 100.0)
+    phase_key: Optional[tuple[Any, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,8 @@ class TimedMotionPoint:
 
 CONTINUOUS_MIN_CYCLE_SECONDS = 1.5
 CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
+CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS = 1.2
+CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 1.35
 CONTINUOUS_MAX_CYCLE_SECONDS = 12.0
 
 
@@ -921,7 +924,42 @@ def _continuous_intent_tempo_scale(speed: float) -> float:
     velocity cap.
     """
 
-    return _clamp(0.5 + _clamp(float(speed or 0.0)) / 100.0, 0.5, 1.5)
+    speed_pct = _clamp(float(speed or 0.0))
+    if speed_pct <= 50.0:
+        return _clamp(0.5 + speed_pct / 100.0, 0.5, 1.0)
+
+    high_ratio = (speed_pct - 50.0) / 50.0
+    return _clamp(1.0 + (high_ratio**1.1) * 3.0, 1.0, 4.0)
+
+
+def _direction_change_count(actions: tuple[PatternAction, ...]) -> int:
+    signs: list[int] = []
+    positions = [float(action.pos) for action in actions]
+    if len(positions) < 3:
+        return 0
+    positions.append(positions[0])
+    for left, right in zip(positions, positions[1:]):
+        delta = right - left
+        if abs(delta) < 1.0:
+            continue
+        sign = 1 if delta > 0 else -1
+        if not signs or signs[-1] != sign:
+            signs.append(sign)
+    if len(signs) < 2:
+        return 0
+    if signs[0] == signs[-1]:
+        signs.pop()
+    return max(0, len(signs) - 1)
+
+
+@lru_cache(maxsize=128)
+def _turn_ease_min_cycle_seconds(actions: tuple[PatternAction, ...]) -> float:
+    turns = _direction_change_count(actions)
+    if turns >= 4:
+        return CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS
+    if turns >= 1:
+        return CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS
+    return CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS
 
 
 def _speed_budget_for_position_rate(
@@ -976,7 +1014,7 @@ def sample_continuous_motion(
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
     effective_duration_seconds = max(
-        CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS,
+        _turn_ease_min_cycle_seconds(plan.actions),
         duration_seconds / tempo_scale,
     )
     raw_phase = (elapsed / effective_duration_seconds) % 1.0

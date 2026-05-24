@@ -7,6 +7,35 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-24 - PR #301 - Motion Speed Calibration
+------------------------------------------------
+
+Branch: codex/motion-speed-calibration
+
+- Treated motion speed percentages as the app-level requested speed and clamped
+  them to the configured user range instead of scaling them through that range a
+  second time, so high LLM-requested speeds can actually reach the saved cap.
+- Expanded the high-speed continuous-pattern tempo curve so fixed-pattern HSP
+  streams can approach the configured transport limit instead of topping out at
+  a much slower authored cadence.
+- Refreshed active HSP/HAMP motion when speed limits change during a running
+  session, so a currently capped target immediately retimes or reissues at the
+  new configured cap instead of waiting for the next LLM/mode command.
+- Reduced first-start HSP buffering so initial chat motion sends a smaller
+  startup batch before playback, then appends the larger latency reserve after
+  movement has begun.
+- Added a turn-sensitive high-speed cycle floor so direction-heavy patterns
+  keep slightly more time around reversals instead of juddering at the fastest
+  speed settings.
+- Kept first HSP `play` startup from blocking on a fresh Handy server-time
+  probe, so the first post-LLM motion command no longer waits behind a slow
+  `/servertime` call before movement can begin.
+- Treated generated area-focus region changes as retarget transitions instead
+  of same-phase drift, and delayed replacement bridge points enough to avoid
+  stale pre-arrival points during normal chat tip/base focus changes.
+- Kept the Handy sidebar from showing a vague connection warning for non-fatal
+  HSP sync/threshold failures while motion is still actively streaming.
+
 2026-05-23 - PR #300 - Visual QA Screenshot Fallback
 ----------------------------------------------------
 
