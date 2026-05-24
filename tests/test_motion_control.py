@@ -34,6 +34,7 @@ from strokegpt.motion_patterns import (
     PatternAction,
     continuous_motion_plan,
     continuous_plan_timed_points,
+    continuous_plan_timed_phase_points,
     continuous_motion_plan_from_pattern,
     sample_continuous_motion,
 )
@@ -1518,6 +1519,20 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(flutter.effective_duration_seconds, 1.35)
         self.assertLess(stroke.effective_duration_seconds, flutter.effective_duration_seconds)
 
+    def test_closed_continuous_patterns_do_not_emit_flat_wrap_pause(self):
+        plan = continuous_motion_plan("stroke")
+        target = MotionTarget(100, 50, 100, "stroke")
+        duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
+
+        phase_points = continuous_plan_timed_phase_points(
+            plan,
+            duration,
+            target_interval_seconds=CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+        )
+        authored_tail = [point for point in phase_points if point.get("authored") and point["phase"] >= 0.9]
+
+        self.assertEqual(len(authored_tail), 1)
+
     def test_speed_limit_refresh_replaces_active_continuous_stream_at_new_cap(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -2014,8 +2029,8 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(replacement_points)
             self.assertEqual(replacement_points[0]["hsp_replacement_kind"], "intent")
-            self.assertGreaterEqual(replacement_points[0]["hsp_replacement_lead_ms"], 400.0)
-            self.assertLess(replacement_points[0]["hsp_replacement_lead_ms"], 900.0)
+            self.assertGreaterEqual(replacement_points[0]["hsp_replacement_lead_ms"], 800.0)
+            self.assertLess(replacement_points[0]["hsp_replacement_lead_ms"], 1100.0)
         finally:
             controller.stop()
 
@@ -2724,6 +2739,7 @@ class MotionControllerTests(unittest.TestCase):
                 (CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS * 1000.0) - 5.0,
             )
             self.assertEqual(first_retarget["hsp_replacement_kind"], "intent")
+            self.assertGreaterEqual(first_retarget["hsp_replacement_lead_ms"], 800.0)
             self.assertEqual(first_retarget["morph_start_source"], "predicted_active_stream")
             self.assertAlmostEqual(
                 first_retarget["output_depth"],

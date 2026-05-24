@@ -127,6 +127,7 @@ CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
 CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS = 1.2
 CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 1.35
 CONTINUOUS_MAX_CYCLE_SECONDS = 12.0
+CONTINUOUS_CLOSED_WRAP_POSITION_EPSILON = 0.5
 
 
 def _duration_ms(actions: tuple[PatternAction, ...]) -> int:
@@ -553,12 +554,11 @@ def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
     """How long the implicit wrap segment from ``actions[-1]`` back to
     ``actions[0]`` should take.
 
-    Scales linearly with the position delta so closed patterns
-    (``actions[-1].pos`` near ``actions[0].pos``) wrap quickly through a
-    near-flat segment, while open patterns (e.g., ``ramp`` going 20 ->
-    100) get a wrap segment long enough that the live controller glides
-    through the gap instead of slewing. The 50 ms floor keeps closed
-    patterns from collapsing the wrap to a one-sample step.
+    Scales linearly with the position delta so open patterns (e.g.,
+    ``ramp`` going 20 -> 100) get a wrap segment long enough that the
+    live controller glides through the gap instead of slewing. Patterns
+    that already end where they start do not need a flat wrap segment;
+    adding one creates a perceptible pause at the turn apex.
 
     Audit of the built-in catalog: 30 of 34 patterns have
     ``actions[-1].pos != actions[0].pos``, which is why this wrap
@@ -568,6 +568,8 @@ def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
     if len(actions) < 2:
         return 0
     pos_delta = abs(actions[0].pos - actions[-1].pos)
+    if pos_delta <= CONTINUOUS_CLOSED_WRAP_POSITION_EPSILON:
+        return 0
     return max(50, int(pos_delta * 10))
 
 
@@ -594,7 +596,8 @@ def continuous_plan_phase_points(plan: ContinuousMotionPlan) -> tuple[tuple[floa
     timing instead of resampling the curve at the controller command cadence.
     The final point closes the implicit wrap segment so the device interpolates
     from the last authored action back to the first across the same span used
-    by the continuous sampler.
+    by the continuous sampler. Closed patterns skip that synthetic point so
+    HSP playback does not pause on two consecutive same-position endpoints.
     """
     actions = tuple(getattr(plan, "actions", ()) or ())
     if not actions:
@@ -609,7 +612,8 @@ def continuous_plan_phase_points(plan: ContinuousMotionPlan) -> tuple[tuple[floa
         (_clamp((action.at - first_at) / cycle_ms, 0.0, 1.0), _clamp(action.pos))
         for action in actions
     ]
-    points.append((1.0, _clamp(actions[0].pos)))
+    if _wrap_segment_ms(actions) > 0:
+        points.append((1.0, _clamp(actions[0].pos)))
     return tuple(points)
 
 
