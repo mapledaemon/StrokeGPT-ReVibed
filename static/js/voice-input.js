@@ -27,6 +27,12 @@ const NVIDIA_PARAKEET_PROVIDER = 'local_nvidia_parakeet';
 const DEFAULT_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
 const LARGE_NVIDIA_PARAKEET_MODEL = 'nvidia/parakeet-tdt-1.1b';
 const VOICE_INPUT_DEVICE_STORAGE_KEY = 'strokegpt.voiceInputDeviceId';
+const VOICE_INPUT_NO_SPEECH_TRANSCRIPTS = new Set([
+    'no_speech',
+    '[no_speech]',
+    '<|nospeech|>',
+    '<|no_speech|>',
+]);
 const FALLBACK_VOICE_INPUT_MODEL_OPTIONS = [
     {id: 'tiny.en', label: 'Fast - tiny.en'},
     {id: 'base.en', label: 'Balanced - base.en'},
@@ -1221,13 +1227,22 @@ function voiceChatSourceForRecording(source) {
     return source === 'hands_free' ? 'voice_hands_free' : 'voice_input';
 }
 
+function voicePayloadHasNoUsableSpeech(payload, transcript) {
+    const status = String(payload?.status || '').trim().toLowerCase();
+    const normalizedTranscript = String(transcript || '').trim().toLowerCase();
+    return status === 'no_speech'
+        || status === 'rejected'
+        || !normalizedTranscript
+        || VOICE_INPUT_NO_SPEECH_TRANSCRIPTS.has(normalizedTranscript);
+}
+
 async function transcribeVoiceBlob(blob, {source = 'manual'} = {}) {
     const prepared = await prepareVoiceBlobForUpload(blob);
     const payload = await requestVoiceTranscription(prepared.blob, prepared.filename, 'Transcribing voice input...');
     if (!payload) return;
     if (payload?.voice_input_status) populateVoiceInputSettings(payload.voice_input_status);
     const transcript = (payload?.transcript || '').trim();
-    if (!transcript) {
+    if (voicePayloadHasNoUsableSpeech(payload, transcript)) {
         if (source === 'hands_free') {
             state.voiceInputHandsFreeSuppressUntil = performance.now() + HANDS_FREE_NO_SPEECH_COOLDOWN_MS;
         }

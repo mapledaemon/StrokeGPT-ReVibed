@@ -67,6 +67,15 @@ Branch: codex/streamed-chat-json-salvage
   tooltip explains that the local model produced malformed JSON and suggests
   clearing model memory or trying another Ollama model if it repeats.
 
+2026-05-23 - PR #297 - No-Speech Submit Guard
+----------------------------------------------
+
+Branch: codex/no-speech-submit-guard
+
+- Blocked `no_speech`, rejected, empty, and common no-speech sentinel voice
+  input payloads before chat auto-submit so hands-free ASR misses cannot be
+  sent to the LLM even if a provider returns a contradictory transcript.
+
 2026-05-23 - PR #296 - Hands-Free Empty Transcript Guard
 --------------------------------------------------------
 

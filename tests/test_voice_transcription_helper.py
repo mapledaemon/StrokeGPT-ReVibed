@@ -148,6 +148,27 @@ class VoiceTranscriptionHelperTests(unittest.TestCase):
         self.assertIn("slowAsrWarning", body)
         self.assertIn("voiceInputHandsFreeSuppressUntil", body)
         self.assertIn("HANDS_FREE_NO_SPEECH_COOLDOWN_MS", body)
+        self.assertIn("voicePayloadHasNoUsableSpeech(payload, transcript)", body)
+
+        no_speech_guard = body.find("voicePayloadHasNoUsableSpeech(payload, transcript)")
+        submit_call = body.find("submitVoiceTranscriptToChat(transcript")
+        self.assertGreaterEqual(no_speech_guard, 0)
+        self.assertGreater(submit_call, no_speech_guard)
+
+    def test_no_speech_status_and_sentinels_are_not_usable_transcripts(self):
+        body = _function_body(self.script, "function voicePayloadHasNoUsableSpeech(")
+
+        self.assertIn("status === 'no_speech'", body)
+        self.assertIn("status === 'rejected'", body)
+        self.assertIn("VOICE_INPUT_NO_SPEECH_TRANSCRIPTS.has(normalizedTranscript)", body)
+        self.assertIn("!normalizedTranscript", body)
+        for sentinel in (
+            "'no_speech'",
+            "'[no_speech]'",
+            "'<|nospeech|>'",
+            "'<|no_speech|>'",
+        ):
+            self.assertIn(sentinel, self.script)
 
     def test_hands_free_monitor_honors_no_speech_cooldown(self):
         body = _function_body(self.script, "function monitorHandsFree(")
