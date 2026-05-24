@@ -7,6 +7,17 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-24 - PR #302 - HSP Transition Direction Smoothing
+----------------------------------------------------------
+
+Branch: codex/hsp-transition-direction-smoothing
+
+- Removed synthetic flat wrap pauses from closed built-in continuous patterns,
+  reducing brief reversal stalls at direction changes.
+- Increased active HSP intent-replacement lead time so pattern and focus-area
+  changes have more future buffer before a flushed replacement reaches the
+  device, reducing reset-like jumps on real REST latency.
+
 2026-05-24 - PR #301 - Motion Speed Calibration
 ------------------------------------------------
 

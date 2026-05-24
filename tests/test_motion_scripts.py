@@ -167,11 +167,11 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertIsNotNone(ramp)
         self.assertAlmostEqual(ramp.duration_seconds, 9.0)
 
-        # Symmetric patterns keep the wrap segment from their original shape,
-        # then stretch the full cycle by the pattern duration scale.
+        # Symmetric patterns that already end where they start skip the
+        # synthetic wrap segment so HSP playback does not pause at the apex.
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
-        self.assertAlmostEqual(stroke.duration_seconds, 4.75)
+        self.assertAlmostEqual(stroke.duration_seconds, 4.5)
 
     def test_builtin_patterns_use_extended_authored_timings(self):
         self.assertEqual([action.at for action in PATTERNS["stroke"].actions], [0, 450, 900])
