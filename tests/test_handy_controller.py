@@ -36,7 +36,7 @@ class RecordingV3HandyController(RecordingHandyController):
         self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
         return True
 
-    def _estimated_server_time_ms(self):
+    def _estimated_server_time_ms(self, **_kwargs):
         return 123456
 
 
@@ -170,7 +170,7 @@ class HandyControllerTests(unittest.TestCase):
 
         diagnostics = handy.diagnostics()
         self.assertEqual(diagnostics["relative_speed"], 50)
-        self.assertEqual(diagnostics["physical_speed"], 45)
+        self.assertEqual(diagnostics["physical_speed"], 50)
         self.assertEqual(diagnostics["depth"], 60)
         self.assertEqual(diagnostics["physical_depth"], 60)
         self.assertEqual(diagnostics["position_mm"], 66.0)
@@ -179,7 +179,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["stroke_zone"], {"min": 25, "max": 95})
         self.assertEqual(diagnostics["full_travel_mm"], handy.FULL_TRAVEL_MM)
         self.assertEqual(diagnostics["slide_bounds"], {"min": 5, "max": 75})
-        self.assertEqual(diagnostics["velocity"], 45)
+        self.assertEqual(diagnostics["velocity"], 50)
         self.assertTrue(diagnostics["hamp_started"])
         self.assertEqual(diagnostics["last_command"]["path"], "hamp/velocity")
         self.assertTrue(diagnostics["last_command"]["ok"])
@@ -406,7 +406,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.commands, [])
         self.assertEqual(handy.v3_commands[0][1], {"mode": 0})
         self.assertEqual(handy.v3_commands[2][1], {"min": 0.38, "max": 0.78})
-        self.assertEqual(handy.v3_commands[3][1], {"velocity": 0.4})
+        self.assertEqual(handy.v3_commands[3][1], {"velocity": 0.5})
 
     def test_fw4_position_move_uses_normalized_xpt_and_duration_from_speed_limits(self):
         handy = RecordingV3HandyController()
@@ -420,7 +420,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.v3_commands[0][1], {"mode": 2})
         body = handy.v3_commands[-1][1]
         self.assertEqual(body["xp"], 0.65)
-        self.assertEqual(body["t"], 206)
+        self.assertEqual(body["t"], 165)
         self.assertTrue(body["stop_on_target"])
         self.assertFalse(body["immediate_rsp"])
 
@@ -517,6 +517,36 @@ class HandyControllerTests(unittest.TestCase):
             mock.patch.object(handy_module.time, "time", side_effect=[1000.0, 1000.1, 1000.2]),
         ):
             self.assertEqual(handy._estimated_server_time_ms(), 1000650)
+
+    def test_hsp_play_uses_local_time_fallback_without_blocking_servertime(self):
+        handy = HandyController(handy_key="test", api_v3_key="app-id", firmware_version="fw4")
+        sent = []
+
+        def fake_send(path, body=None):
+            sent.append((path, body or {}))
+            return True
+
+        with (
+            mock.patch.object(handy, "_send_v3_command", side_effect=fake_send),
+            mock.patch.object(handy, "_refresh_server_time_offset_async", return_value=True) as async_refresh,
+            mock.patch.object(
+                handy,
+                "_refresh_server_time_offset",
+                side_effect=AssertionError("server time refresh must not block hsp/play"),
+            ),
+            mock.patch.object(handy_module.time, "monotonic", return_value=10.0),
+            mock.patch.object(handy_module.time, "time", return_value=1234.567),
+        ):
+            self.assertTrue(handy._send_hsp_play(0))
+
+        async_refresh.assert_called_once_with()
+        self.assertEqual(sent, [("hsp/play", {
+            "start_time": 0,
+            "server_time": 1234567,
+            "playback_rate": 1.0,
+            "pause_on_starving": False,
+            "loop": False,
+        })])
 
     def test_sync_continuous_stream_time_sends_hsp_synctime(self):
         handy = RecordingV3HandyController()
@@ -1116,7 +1146,7 @@ class HandyControllerTests(unittest.TestCase):
 
         velocity = handy.velocity_for_depth_interval(50, 0, 100, 0.1)
 
-        self.assertEqual(velocity, 160)
+        self.assertEqual(velocity, 200)
 
     def test_absolute_velocity_uses_percent_speed_settings_for_position_transport(self):
         handy = RecordingHandyController()
@@ -1125,7 +1155,8 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.min_absolute_user_speed, 40)
         self.assertEqual(handy.max_absolute_user_speed, 320)
         self.assertEqual(handy.max_absolute_velocity_for_relative_speed(0), 40)
-        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(50), 180)
+        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(50), 200)
+        self.assertEqual(handy.max_absolute_velocity_for_relative_speed(80), 320)
         self.assertEqual(handy.max_absolute_velocity_for_relative_speed(100), 320)
 
     def test_position_velocity_never_exceeds_current_max_speed(self):

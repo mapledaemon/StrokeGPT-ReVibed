@@ -1,6 +1,8 @@
 import { D, apiCall, appendQueryParams, el, fetchWithConnectionState, getUiClientId, setStatusMessage, state } from './context.js';
 import { playQueuedAudio, scheduleQueuedAudioPlayback, voiceOutputEnabled } from './audio.js';
 
+const MALFORMED_MODEL_REPLY_TOOLTIP = 'This reply came from malformed JSON from the local model. The readable chat text was preserved, but motion or metadata in that response may have been ignored. If this keeps happening, clear model memory or try a different Ollama model.';
+
 function appendPlainMessageText(parent, text) {
     const parts = String(text || '').split('\n');
     parts.forEach((part, index) => {
@@ -149,13 +151,35 @@ function formatLlmMessageTooltip(metadata = {}) {
 
 function applyBotMessageMetadata(messageEl, metadata = {}, pfpElement = null) {
     const tooltip = formatLlmMessageTooltip(metadata);
-    if (!tooltip) return;
-    messageEl.dataset.llmModel = String(metadata.model || '');
-    messageEl.dataset.llmRunDetails = tooltip;
+    if (tooltip) {
+        messageEl.dataset.llmModel = String(metadata.model || '');
+        messageEl.dataset.llmRunDetails = tooltip;
+    }
     const pfp = pfpElement || messageEl.querySelector?.('.chat-pfp');
-    if (pfp) {
+    if (pfp && tooltip) {
         pfp.title = tooltip;
         pfp.setAttribute('aria-label', tooltip);
+    }
+    const malformed = metadata?.response_warning === 'malformed_json'
+        || Boolean(metadata?.timings?.llm_json_salvaged)
+        || Boolean(metadata?.timings?.llm_json_invalid);
+    if (malformed) messageEl.classList.add('malformed-model-reply');
+    else messageEl.classList.remove('malformed-model-reply');
+    let badge = messageEl._chatWarningBadge || null;
+    if (malformed) {
+        if (!badge) {
+            badge = D.createElement('span');
+            badge.className = 'message-warning-badge';
+            badge.textContent = '!';
+            badge.setAttribute('aria-label', MALFORMED_MODEL_REPLY_TOOLTIP);
+            const speakerName = messageEl._chatSpeakerName || messageEl.querySelector?.('.speaker-name');
+            speakerName?.appendChild(badge);
+            messageEl._chatWarningBadge = badge;
+        }
+        badge.title = MALFORMED_MODEL_REPLY_TOOLTIP;
+    } else if (badge) {
+        badge.parentNode?.removeChild(badge);
+        messageEl._chatWarningBadge = null;
     }
 }
 
@@ -174,19 +198,19 @@ function insertChatMessage(sender, text, {forceScroll = false, metadata = null} 
         pfp.alt = 'pfp';
         messageEl.appendChild(pfp);
     }
-    if (kind === 'bot') applyBotMessageMetadata(messageEl, metadata, pfp);
-
     const content = D.createElement('div');
     content.className = 'message-content';
     const speakerName = D.createElement('p');
     speakerName.className = 'speaker-name';
     speakerName.textContent = speaker;
+    messageEl._chatSpeakerName = speakerName;
     const bubble = D.createElement('div');
     bubble.className = 'message-bubble';
     appendMessageText(bubble, text);
     content.appendChild(speakerName);
     content.appendChild(bubble);
     messageEl.appendChild(content);
+    if (kind === 'bot') applyBotMessageMetadata(messageEl, metadata, pfp);
 
     el.chatMessagesContainer.insertBefore(messageEl, el.typingIndicator);
     if (shouldScroll) {
@@ -380,7 +404,7 @@ async function sendUserMessageStream(requestOptions, startedAt) {
     if (!consumed) return null;
     finishStreamingBotMessage(streamEntry);
 
-    if (streamEntry && finalData?.chat && finalData.chat !== streamedText) {
+    if (streamEntry && finalData?.status !== 'model_error' && finalData?.chat && finalData.chat !== streamedText) {
         streamedText = String(finalData.chat);
         streamEntry.updateText(streamedText);
     }

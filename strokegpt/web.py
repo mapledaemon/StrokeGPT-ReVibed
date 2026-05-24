@@ -2324,13 +2324,19 @@ def _standalone_autospeak_current(token):
 
 
 def _llm_message_metadata(timings, *, streamed_to_client=False):
+    timing_payload = timings if isinstance(timings, dict) else {}
+    response_warning = "malformed_json" if (
+        timing_payload.get("llm_json_salvaged")
+        or timing_payload.get("llm_json_invalid")
+    ) else ""
     return {
         "source": "llm",
         "model": normalize_ollama_model(getattr(llm, "model", "") or ""),
         "prompt_mode": str(getattr(settings, "llm_prompt_mode", "") or ""),
         "thinking_enabled": bool(getattr(llm, "thinking_enabled", False)),
         "streamed": bool(streamed_to_client),
-        "timings": timings if isinstance(timings, dict) else {},
+        "response_warning": response_warning,
+        "timings": timing_payload,
     }
 
 
@@ -2854,8 +2860,14 @@ class _StreamingChatTextExtractor:
     def raw_content(self):
         return "".join(self._raw_parts)
 
+    def chat_text(self):
+        return "".join(self._streamed_chars)
+
     def has_streamed_text(self):
         return bool(self._streamed_chars)
+
+    def has_complete_chat_text(self):
+        return self._complete and self.has_streamed_text()
 
 
 def _chat_stream_event(event_type, **payload):
@@ -3146,11 +3158,20 @@ def handle_user_message_stream():
                 llm_response = json.loads(raw_content)
             except json.JSONDecodeError as exc:
                 print(f"[WARN] LLM streamed invalid JSON: {exc}")
-                llm_response = {
-                    "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
-                    "move": None,
-                    "new_mood": None,
-                }
+                if stream_extractor.has_complete_chat_text():
+                    timings["llm_json_salvaged"] = True
+                    llm_response = {
+                        "chat": stream_extractor.chat_text(),
+                        "move": None,
+                        "new_mood": None,
+                    }
+                else:
+                    timings["llm_json_invalid"] = True
+                    llm_response = {
+                        "chat": "The local model returned an unreadable response. Check Ollama model status and try again.",
+                        "move": None,
+                        "new_mood": None,
+                    }
         except Exception as exc:
             timings["llm_ms"] = int((time.perf_counter() - llm_started) * 1000) if "llm_started" in locals() else 0
             print(f"[ERROR] LLM stream failed: {exc}")

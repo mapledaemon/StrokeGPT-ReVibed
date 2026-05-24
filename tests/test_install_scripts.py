@@ -104,6 +104,53 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn('"-m", "py_compile"', script)
         self.assertNotIn('Get-ChildItem -Path "strokegpt", "tests"', script)
 
+    def test_visual_qa_launcher_reports_reachable_app_url(self):
+        script = (PROJECT_ROOT / "scripts" / "start_visual_qa.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('[int]$Port = 5011', script)
+        self.assertIn('[switch]$Json', script)
+        self.assertIn('STROKEGPT_OPEN_BROWSER=0', script)
+        self.assertIn('STROKEGPT_HOST=$(ConvertTo-CmdLiteral $HostName)', script)
+        self.assertIn('STROKEGPT_PORT=$Port', script)
+        self.assertIn('Start-Process -FilePath "cmd.exe"', script)
+        self.assertIn('Invoke-WebRequest -UseBasicParsing -Uri $Url', script)
+        self.assertIn('"Open\\s+(https?://[^\\s]+)"', script)
+        self.assertIn('"Running on\\s+(https?://[^\\s]+)"', script)
+        self.assertIn('user_data\\visual_qa', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_URL=', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_CLEANUP=', script)
+        self.assertIn('screenshot_command = ".\\scripts\\capture_visual_qa.ps1 -Url `"$url`" -Json"', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_SCREENSHOT_COMMAND=', script)
+        self.assertIn('ConvertTo-Json -Depth 3', script)
+
+    def test_visual_qa_screenshot_helper_uses_headless_chromium(self):
+        script = (PROJECT_ROOT / "scripts" / "capture_visual_qa.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('[string]$Url = $env:STROKEGPT_VISUAL_QA_URL', script)
+        self.assertIn('[int]$Width = 1280', script)
+        self.assertIn('[int]$Height = 720', script)
+        self.assertIn('[int]$VirtualTimeBudgetMilliseconds = 0', script)
+        self.assertIn('[switch]$Json', script)
+        self.assertIn('"msedge.exe"', script)
+        self.assertIn('"chrome.exe"', script)
+        self.assertIn('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', script)
+        self.assertIn('user_data\\visual_qa\\screenshots', script)
+        self.assertIn('"--headless=new"', script)
+        self.assertIn('"--window-size=$Width,$Height"', script)
+        self.assertIn('"--screenshot=$screenshotPath"', script)
+        self.assertIn('"--virtual-time-budget=$VirtualTimeBudgetMilliseconds"', script)
+        self.assertIn('System.Diagnostics.ProcessStartInfo', script)
+        self.assertIn('UseShellExecute = $true', script)
+        self.assertIn('WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden', script)
+        self.assertIn('[System.Diagnostics.Process]::Start($startInfo)', script)
+        self.assertIn('WaitForExit([Math]::Max(5, $TimeoutSeconds) * 1000)', script)
+        self.assertIn('Stop-Process -Id $process.Id -Force', script)
+        self.assertIn('STROKEGPT_VISUAL_QA_SCREENSHOT=', script)
+        self.assertIn('ConvertTo-Json -Depth 3', script)
+
+        self.assertIn("strokegpt-visual-qa-browser-", script)
+        self.assertIn('StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)', script)
+
     def test_setup_verifier_checks_runtime_without_model_downloads(self):
         script = (PROJECT_ROOT / "scripts" / "verify_setup.ps1").read_text(encoding="utf-8")
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")

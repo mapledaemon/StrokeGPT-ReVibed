@@ -12,6 +12,7 @@ function connectionStatusColor(status = 'disconnected') {
     return {
         connected: 'var(--green)',
         api: 'var(--green)',
+        active: 'var(--green)',
         saved: 'var(--comment)',
         disconnected: 'var(--red-hover)',
         offline: 'var(--red-hover)',
@@ -23,6 +24,7 @@ function connectionStatusLabel(status = 'disconnected') {
     return {
         connected: 'Device online',
         api: 'Command OK',
+        active: 'Motion active',
         saved: 'Key saved',
         disconnected: 'Disconnected',
         offline: 'Device offline',
@@ -38,7 +40,7 @@ function normalizeHandyStatus(status = 'disconnected', detail = '') {
     const normalized = String(status || 'disconnected').toLowerCase();
     if (normalized === 'online') return 'connected';
     if (normalized === 'offline' || offlineDetail(detail)) return 'offline';
-    if (normalized === 'api' || normalized === 'saved') return normalized;
+    if (normalized === 'api' || normalized === 'active' || normalized === 'saved') return normalized;
     if (normalized === 'connected' || normalized === 'disconnected' || normalized === 'error') return normalized;
     return 'disconnected';
 }
@@ -164,9 +166,18 @@ export function updateHandyConnectionStatusFromMotion(payload = {}) {
         return;
     }
     const path = String(command.path || 'command').trim();
+    const motionActive = Boolean(payload.playback_active || diagnostics.hsp_streaming || diagnostics.hamp_started);
     if (command.ok === false) {
         const status = command.status_code !== undefined ? ` ${command.status_code}` : '';
         const error = String(command.error || '').trim();
+        const nonFatalActiveHspPath = /^(hsp\/synctime|hsp\/threshold)$/i.test(path);
+        if (motionActive && !offlineDetail(error) && (nonFatalActiveHspPath || !error)) {
+            setHandyConnectionStatus(
+                'active',
+                `Motion is active. Last Handy ${path}${status} command reported a non-fatal issue${error ? `: ${error}` : '.'}`,
+            );
+            return;
+        }
         setHandyConnectionStatus(
             offlineDetail(error) ? 'offline' : 'error',
             `Handy ${path}${status} failed${error ? `: ${error}` : '.'}`,
