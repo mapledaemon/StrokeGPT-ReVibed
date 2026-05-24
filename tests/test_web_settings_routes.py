@@ -370,6 +370,48 @@ class WebSettingsRouteTests(WebTestCase):
             handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
             settings.save()
 
+    def test_speed_limits_refresh_active_motion_with_previous_range(self):
+        from strokegpt.web import handy, motion, settings
+
+        original = (
+            settings.min_speed,
+            settings.max_speed,
+            handy.min_user_speed,
+            handy.max_user_speed,
+        )
+        original_refresh = motion.refresh_speed_limits
+        calls = []
+        try:
+            settings.min_speed = 10
+            settings.max_speed = 80
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+
+            def refresh(previous_min, previous_max, next_min, next_max, **kwargs):
+                calls.append((previous_min, previous_max, next_min, next_max, kwargs))
+                return True
+
+            motion.refresh_speed_limits = refresh
+
+            response = self.client.post("/set_speed_limits", json={
+                "min_speed": 20,
+                "max_speed": 100,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertTrue(data["motion_refreshed"])
+            self.assertEqual(calls, [(10, 80, 20, 100, {})])
+        finally:
+            motion.refresh_speed_limits = original_refresh
+            (
+                settings.min_speed,
+                settings.max_speed,
+                handy.min_user_speed,
+                handy.max_user_speed,
+            ) = original
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+            settings.save()
+
     def test_motion_backend_can_be_selected_and_saved(self):
         from strokegpt.web import motion, settings
 

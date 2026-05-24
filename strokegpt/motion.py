@@ -33,7 +33,7 @@ POSITION_PASS_THROUGH_MIN_SECONDS = 0.35
 CONTINUOUS_SAMPLE_INTERVAL_SECONDS = 0.16
 CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS = 0.08
 CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS = 0.28
-CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 5.2
+CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS = 2.4
 CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
@@ -42,6 +42,7 @@ CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.45
+CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS = 0.28
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
@@ -143,6 +144,7 @@ class ContinuousPhaseState:
     started_at: float
     offset_seconds: float = 0.0
     stream_offset_seconds: float = 0.0
+    stream_tail_seconds: float = 0.0
     phase_rate: float = 1.0
     plan: Any = None
     target: Optional[MotionTarget] = None
@@ -763,6 +765,124 @@ class MotionController:
         else:
             self.reverse_direction = enabled
 
+    @staticmethod
+    def _normalized_speed_limit_pair(min_speed: Any, max_speed: Any) -> tuple[float, float]:
+        try:
+            first = _clamp(float(min_speed))
+        except (TypeError, ValueError):
+            first = 0.0
+        try:
+            second = _clamp(float(max_speed))
+        except (TypeError, ValueError):
+            second = 100.0
+        return min(first, second), max(first, second)
+
+    @classmethod
+    def _retarget_speed_for_limit_change(
+        cls,
+        speed: float,
+        previous_min: Any,
+        previous_max: Any,
+        next_min: Any,
+        next_max: Any,
+    ) -> float:
+        speed = _clamp(float(speed or 0.0))
+        old_min, old_max = cls._normalized_speed_limit_pair(previous_min, previous_max)
+        new_min, new_max = cls._normalized_speed_limit_pair(next_min, next_max)
+        if speed <= 0.0:
+            return 0.0
+
+        # Treat values pinned to the old configured edge as the same user intent
+        # under the new range. Mid-range values keep their literal app percent,
+        # only clamped if the new range no longer permits them.
+        if speed >= old_max - 0.5:
+            return new_max
+        if speed <= old_min + 0.5:
+            return new_min
+        return max(new_min, min(new_max, speed))
+
+    def refresh_speed_limits(
+        self,
+        previous_min: Any,
+        previous_max: Any,
+        next_min: Any,
+        next_max: Any,
+        *,
+        source: str = "settings",
+    ) -> bool:
+        old_min, old_max = self._normalized_speed_limit_pair(previous_min, previous_max)
+        new_min, new_max = self._normalized_speed_limit_pair(next_min, next_max)
+        if abs(old_min - new_min) <= 0.001 and abs(old_max - new_max) <= 0.001:
+            return False
+
+        playback_active = self._is_frame_playback_active()
+        hamp_active = bool(getattr(self.handy, "_hamp_started", False))
+        diagnostics = getattr(self.handy, "diagnostics", None)
+        if callable(diagnostics):
+            try:
+                hamp_active = hamp_active or bool(diagnostics().get("hamp_started"))
+            except Exception:
+                pass
+        if not playback_active and not hamp_active:
+            return False
+
+        target = self.semantic_target()
+        if target.speed <= 0:
+            return False
+        retargeted_speed = self._retarget_speed_for_limit_change(
+            target.speed,
+            old_min,
+            old_max,
+            new_min,
+            new_max,
+        )
+        if abs(retargeted_speed - target.speed) <= 0.001:
+            return False
+
+        adjusted_target = MotionTarget(
+            retargeted_speed,
+            target.depth,
+            target.stroke_range,
+            target.label,
+            motion_program=target.motion_program,
+        ).clamped()
+        trace_metadata = {
+            "settings_speed_limit_refresh": True,
+            "settings_previous_speed_range": f"{int(round(old_min))}-{int(round(old_max))}",
+            "settings_next_speed_range": f"{int(round(new_min))}-{int(round(new_max))}",
+            "settings_previous_target_speed": round(float(target.speed), 3),
+            "settings_next_target_speed": round(float(adjusted_target.speed), 3),
+        }
+
+        with self._lock:
+            state = self._continuous_phase_state
+            generation = self._generation
+        if (
+            playback_active
+            and state is not None
+            and state.generation == generation
+            and state.plan is not None
+            and not state.authored_points
+        ):
+            return self._apply_continuous_plan(
+                state.plan,
+                adjusted_target,
+                source=source,
+                trace_metadata=trace_metadata,
+            )
+
+        if playback_active:
+            self.apply_generated_target(
+                adjusted_target,
+                source=source,
+                trace_metadata=trace_metadata,
+            )
+            return True
+
+        self.apply_target(adjusted_target, smooth=False, source=source)
+        self._augment_last_trace(trace_metadata)
+        return True
+
     def _normalize_backend(self, backend: str) -> str:
         cleaned = str(backend or "").strip().lower().replace("-", "_")
         if cleaned in {"continuous", "continuous_position", "pattern", "pattern_position", "position_continuous"}:
@@ -1112,7 +1232,7 @@ class MotionController:
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
         clean_target, focus_zone = self._area_focus_transport_target(target)
-        plan = self._hsp_area_focus_plan(clean_target)
+        plan = self._hsp_area_focus_plan(clean_target, focus_zone=focus_zone)
         if plan is None:
             return False
         requested_motion_program = ""
@@ -1144,7 +1264,7 @@ class MotionController:
             trace_metadata=metadata,
         )
 
-    def _hsp_area_focus_plan(self, target: MotionTarget):
+    def _hsp_area_focus_plan(self, target: MotionTarget, *, focus_zone: Optional[str] = None):
         from .motion_patterns import ContinuousMotionPlan, FrameStyle, PatternAction
 
         target = target.clamped()
@@ -1161,6 +1281,7 @@ class MotionController:
             style=FrameStyle(name="area_focus", window_scale=0.45),
             duration_seconds=cycle_seconds,
             normalized_range=(0.0, 100.0),
+            phase_key=("area_focus_zone", focus_zone or "general"),
         )
 
     def _apply_live_stroke_continuous_target(
@@ -1930,6 +2051,7 @@ class MotionController:
                 started_at=started_at,
                 offset_seconds=phase_offset_seconds,
                 stream_offset_seconds=stream_offset_seconds,
+                stream_tail_seconds=stream_offset_seconds,
                 plan=plan,
                 target=clamped_target,
             )
@@ -1980,17 +2102,30 @@ class MotionController:
 
     def _continuous_plan_key(self, plan) -> tuple[Any, ...]:
         duration = round(float(getattr(plan, "duration_seconds", 0.0) or 0.0), 4)
-        return (
+        key = (
             str(getattr(plan, "name", "") or ""),
             tuple(getattr(plan, "actions", ()) or ()),
             duration,
         )
+        phase_identity = self._continuous_plan_phase_identity(plan)
+        if phase_identity is not None:
+            return (*key[:-1], phase_identity, key[-1])
+        return key
+
+    def _continuous_plan_phase_identity(self, plan) -> Optional[tuple[Any, ...]]:
+        value = getattr(plan, "phase_key", None)
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return tuple(value)
+        return (value,)
 
     def _continuous_plan_phase_key(self, plan) -> tuple[Any, ...]:
         if plan is None:
             return ()
         # Duration is intentionally excluded: generated area-focus streams can
         # change cadence with speed/range while keeping the same cyclic shape.
+        phase_identity = self._continuous_plan_phase_identity(plan)
         style = getattr(plan, "style", None)
         normalized_range = getattr(plan, "normalized_range", None)
         if normalized_range is not None:
@@ -2000,6 +2135,7 @@ class MotionController:
                 normalized_range = tuple(normalized_range or ())
         return (
             str(getattr(plan, "name", "") or ""),
+            phase_identity,
             tuple(getattr(plan, "actions", ()) or ()),
             str(getattr(style, "name", "") or ""),
             normalized_range,
@@ -2189,12 +2325,23 @@ class MotionController:
         generation: int,
         phase_offset_seconds: float,
         stream_offset_seconds: float | None = None,
+        stream_tail_seconds: float | None = None,
         phase_rate: float = 1.0,
     ) -> None:
         try:
             phase_rate = max(0.0, float(phase_rate))
         except (TypeError, ValueError):
             phase_rate = 1.0
+        stream_offset_value = (
+            stream_offset_seconds
+            if stream_offset_seconds is not None
+            else phase_offset_seconds or 0.0
+        )
+        stream_tail_value = (
+            stream_tail_seconds
+            if stream_tail_seconds is not None
+            else stream_offset_value
+        )
         with self._lock:
             if generation != self._generation:
                 return
@@ -2203,7 +2350,8 @@ class MotionController:
                 generation=generation,
                 started_at=time.monotonic(),
                 offset_seconds=max(0.0, float(phase_offset_seconds or 0.0)),
-                stream_offset_seconds=max(0.0, float(stream_offset_seconds if stream_offset_seconds is not None else phase_offset_seconds or 0.0)),
+                stream_offset_seconds=max(0.0, float(stream_offset_value)),
+                stream_tail_seconds=max(0.0, float(stream_tail_value)),
                 phase_rate=phase_rate,
                 plan=plan,
                 target=target,
@@ -2512,6 +2660,20 @@ class MotionController:
             return False
         stream_duration_seconds = effective_duration_seconds
         hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else 0.0
+        if replacing_active_stream and replacement_phase_state is not None:
+            try:
+                previous_tail_seconds = max(0.0, float(replacement_phase_state.stream_tail_seconds or 0.0))
+            except (TypeError, ValueError, AttributeError):
+                previous_tail_seconds = 0.0
+            buffered_lead_seconds = previous_tail_seconds - hsp_clock_start_seconds
+            if buffered_lead_seconds > CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS:
+                replacement_lead_seconds = min(
+                    replacement_lead_seconds,
+                    max(
+                        CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+                        buffered_lead_seconds - CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+                    ),
+                )
         play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds if replacing_active_stream else 0.0
         morph_start_target = start_target.clamped()
         morph_start_source = "apply_current_target"
@@ -2601,6 +2763,7 @@ class MotionController:
         if bridge_points_pending:
             bridge_start_latency_seconds = max(
                 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+                CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS,
                 self._recent_hsp_command_latency_seconds(),
             )
             latest_bridge_start = max(
@@ -3073,13 +3236,13 @@ class MotionController:
                 if finite_stop_stream_seconds is not None
                 else min(3, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
             )
+            initial_buffer_seconds = CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS
+            if replacing_active_stream:
+                initial_buffer_seconds = max(initial_buffer_seconds, target_buffer_seconds)
             initial_until = (
                 finite_stop_stream_seconds
                 if finite_stop_stream_seconds is not None
-                else play_start_stream_seconds + max(
-                    CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS,
-                    target_buffer_seconds,
-                )
+                else play_start_stream_seconds + initial_buffer_seconds
             )
             initial_points = build_batch(initial_until, min_points=initial_min_points)
             if not initial_points:
@@ -3143,6 +3306,7 @@ class MotionController:
                     generation=generation,
                     phase_offset_seconds=current_phase_seconds,
                     stream_offset_seconds=hsp_elapsed,
+                    stream_tail_seconds=stream_seconds,
                     phase_rate=phase_rate,
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
@@ -3184,6 +3348,16 @@ class MotionController:
                             )
                         if appended is False:
                             return False
+                        self._refresh_continuous_phase_state(
+                            plan=plan,
+                            target=target,
+                            plan_key=plan_key,
+                            generation=generation,
+                            phase_offset_seconds=current_phase_seconds,
+                            stream_offset_seconds=hsp_elapsed,
+                            stream_tail_seconds=stream_seconds,
+                            phase_rate=phase_rate,
+                        )
 
                 if (
                     callable(sync_stream)

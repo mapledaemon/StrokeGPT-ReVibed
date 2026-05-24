@@ -669,16 +669,25 @@ def set_depth_limits_route():
 def set_speed_limits_route():
     web = _web()
     data = web._request_json()
+    previous_min = web.settings.min_speed
+    previous_max = web.settings.max_speed
     speed1 = web._request_int(data, 'min_speed', 10)
     speed2 = web._request_int(data, 'max_speed', 80)
     web.settings.min_speed = max(0, min(100, min(speed1, speed2)))
     web.settings.max_speed = max(0, min(100, max(speed1, speed2)))
     web.handy.update_settings(web.settings.min_speed, web.settings.max_speed, web.settings.min_depth, web.settings.max_depth)
+    motion_refreshed = web.motion.refresh_speed_limits(
+        previous_min,
+        previous_max,
+        web.settings.min_speed,
+        web.settings.max_speed,
+    )
     web.settings.save()
     return jsonify({
         "status": "success",
         "min_speed": web.settings.min_speed,
         "max_speed": web.settings.max_speed,
+        "motion_refreshed": bool(motion_refreshed),
     })
 
 

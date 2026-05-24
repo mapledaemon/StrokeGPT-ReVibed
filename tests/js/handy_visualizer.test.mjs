@@ -550,4 +550,30 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
         assert.equal(getStubElement('sidebar-handy-key-status').title, 'Device connected');
     });
+
+    it('does not show a connection issue for non-fatal active HSP telemetry failures', () => {
+        state.myHandyKey = 'saved-key';
+
+        updateMotionObservability({
+            backend: 'continuous',
+            playback_active: true,
+            diagnostics: {
+                relative_speed: 70,
+                depth: 62,
+                hsp_streaming: true,
+                last_command: {
+                    path: 'hsp/synctime',
+                    ok: false,
+                    status_code: 503,
+                },
+            },
+        });
+
+        assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Motion active');
+        assert.equal(getStubElement('sidebar-handy-key-status').style.color, 'var(--green)');
+        assert.equal(
+            getStubElement('sidebar-handy-key-status').title,
+            'Motion is active. Last Handy hsp/synctime 503 command reported a non-fatal issue.',
+        );
+    });
 });

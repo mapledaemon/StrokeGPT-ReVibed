@@ -155,6 +155,8 @@ class HandyController:
         self._device_connection_event_type = ""
         self._server_time_offset_ms = None
         self._server_time_synced_at = 0.0
+        self._server_time_refresh_thread = None
+        self._server_time_refresh_thread_lock = threading.Lock()
 
     def _normalize_base_url(self, value):
         cleaned = str(value or "").strip() or HANDY_API_V2_BASE_URL
@@ -932,9 +934,29 @@ class HandyController:
         self._server_time_synced_at = started_monotonic
         return True
 
-    def _estimated_server_time_ms(self):
+    def _server_time_offset_is_stale(self):
         offset_age = time.monotonic() - float(self._server_time_synced_at or 0.0)
-        if self._server_time_offset_ms is None or offset_age > HSP_SERVER_TIME_SYNC_TTL_SECONDS:
+        return (
+            self._server_time_offset_ms is None
+            or offset_age > HSP_SERVER_TIME_SYNC_TTL_SECONDS
+        )
+
+    def _refresh_server_time_offset_async(self):
+        with self._server_time_refresh_thread_lock:
+            thread = self._server_time_refresh_thread
+            if thread is not None and thread.is_alive():
+                return False
+            thread = threading.Thread(
+                target=self._refresh_server_time_offset,
+                name="StrokeGPT-HSP-Server-Time",
+                daemon=True,
+            )
+            self._server_time_refresh_thread = thread
+            thread.start()
+        return True
+
+    def _estimated_server_time_ms(self, *, allow_refresh=True):
+        if self._server_time_offset_is_stale() and allow_refresh:
             self._refresh_server_time_offset()
         now_ms = time.time() * 1000.0
         if self._server_time_offset_ms is None:
@@ -949,9 +971,10 @@ class HandyController:
         return max(0.0, min(100.0, p))
 
     def _relative_speed_to_velocity(self, speed):
+        # MotionTarget.speed is already a 0-100 app speed percentage. The
+        # configured user range is a safety clamp, not a second 0-100 scale.
         relative_speed_pct = self._safe_percent(speed)
-        speed_range_width = self.max_user_speed - self.min_user_speed
-        velocity = self.min_user_speed + (speed_range_width * (relative_speed_pct / 100.0))
+        velocity = max(self.min_user_speed, min(self.max_user_speed, relative_speed_pct))
         return int(round(velocity))
 
     def effective_speed_for_relative(self, speed):
@@ -1269,9 +1292,11 @@ class HandyController:
         return current_time > latest_known_point + HSP_STALE_CLOCK_TOLERANCE_MS
 
     def _send_hsp_play(self, start_time_ms):
+        if self._server_time_offset_is_stale():
+            self._refresh_server_time_offset_async()
         body = {
             "start_time": max(0, int(round(start_time_ms))),
-            "server_time": self._estimated_server_time_ms(),
+            "server_time": self._estimated_server_time_ms(allow_refresh=False),
             "playback_rate": 1.0,
             "pause_on_starving": False,
             "loop": False,
