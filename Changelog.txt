@@ -7,6 +7,18 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-25 - PR #303 - Long-Run HSP Morph Smoothing
+----------------------------------------------------
+
+Branch: codex/hsp-long-run-morph-smoothing
+
+- Kept active HSP morph replacements from shortening their latency-safe lead
+  time when the previous stream buffer is nearly exhausted, reducing jittery
+  morph starts that can appear after several minutes of continuous motion.
+- Expanded high-speed continuous-pattern timing and made turn-ease cycle floors
+  speed-sensitive, so 90%+ motion requests no longer flatten into the same
+  moderate cadence on HSP streams.
+
 2026-05-24 - PR #302 - HSP Transition Direction Smoothing
 ----------------------------------------------------------
 

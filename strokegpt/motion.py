@@ -2660,20 +2660,10 @@ class MotionController:
             return False
         stream_duration_seconds = effective_duration_seconds
         hsp_clock_start_seconds = max(0.0, float(stream_offset_seconds or 0.0)) if replacing_active_stream else 0.0
-        if replacing_active_stream and replacement_phase_state is not None:
-            try:
-                previous_tail_seconds = max(0.0, float(replacement_phase_state.stream_tail_seconds or 0.0))
-            except (TypeError, ValueError, AttributeError):
-                previous_tail_seconds = 0.0
-            buffered_lead_seconds = previous_tail_seconds - hsp_clock_start_seconds
-            if buffered_lead_seconds > CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS:
-                replacement_lead_seconds = min(
-                    replacement_lead_seconds,
-                    max(
-                        CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
-                        buffered_lead_seconds - CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
-                    ),
-                )
+        # Keep the latency-safe replacement lead even when the old stream is
+        # near its tail. The replacement batch includes bridge points sampled
+        # from the active plan, so clipping the lead to the remaining old
+        # buffer reintroduces stale, jittery morph starts during long sessions.
         play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds if replacing_active_stream else 0.0
         morph_start_target = start_target.clamped()
         morph_start_source = "apply_current_target"
