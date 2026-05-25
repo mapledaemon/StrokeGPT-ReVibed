@@ -126,6 +126,11 @@ CONTINUOUS_MIN_CYCLE_SECONDS = 1.5
 CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
 CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS = 1.2
 CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 1.35
+CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE = 6.0
+CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT = 1.05
+CONTINUOUS_HIGH_SPEED_TURN_EASE_START_SPEED = 70.0
+CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS = 0.8
+CONTINUOUS_HIGH_SPEED_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 0.92
 CONTINUOUS_MAX_CYCLE_SECONDS = 12.0
 CONTINUOUS_CLOSED_WRAP_POSITION_EPSILON = 0.5
 
@@ -933,7 +938,12 @@ def _continuous_intent_tempo_scale(speed: float) -> float:
         return _clamp(0.5 + speed_pct / 100.0, 0.5, 1.0)
 
     high_ratio = (speed_pct - 50.0) / 50.0
-    return _clamp(1.0 + (high_ratio**1.1) * 3.0, 1.0, 4.0)
+    high_span = CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE - 1.0
+    return _clamp(
+        1.0 + (high_ratio**CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT) * high_span,
+        1.0,
+        CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE,
+    )
 
 
 def _direction_change_count(actions: tuple[PatternAction, ...]) -> int:
@@ -957,13 +967,30 @@ def _direction_change_count(actions: tuple[PatternAction, ...]) -> int:
 
 
 @lru_cache(maxsize=128)
-def _turn_ease_min_cycle_seconds(actions: tuple[PatternAction, ...]) -> float:
+def _turn_ease_cycle_bounds_seconds(actions: tuple[PatternAction, ...]) -> tuple[float, float]:
     turns = _direction_change_count(actions)
     if turns >= 4:
-        return CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS
+        return (
+            CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS,
+            CONTINUOUS_HIGH_SPEED_MULTI_TURN_EASE_MIN_CYCLE_SECONDS,
+        )
     if turns >= 1:
-        return CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS
-    return CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS
+        return (
+            CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS,
+            CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS,
+        )
+    return (CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS, CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS)
+
+
+def _turn_ease_min_cycle_seconds(actions: tuple[PatternAction, ...], speed: float) -> float:
+    moderate_floor, high_speed_floor = _turn_ease_cycle_bounds_seconds(actions)
+    speed_pct = _clamp(float(speed or 0.0))
+    if speed_pct <= CONTINUOUS_HIGH_SPEED_TURN_EASE_START_SPEED:
+        return moderate_floor
+
+    speed_span = max(1.0, 100.0 - CONTINUOUS_HIGH_SPEED_TURN_EASE_START_SPEED)
+    amount = (speed_pct - CONTINUOUS_HIGH_SPEED_TURN_EASE_START_SPEED) / speed_span
+    return _interpolate(moderate_floor, high_speed_floor, amount, "cubic")
 
 
 def _speed_budget_for_position_rate(
@@ -1018,7 +1045,7 @@ def sample_continuous_motion(
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
     effective_duration_seconds = max(
-        _turn_ease_min_cycle_seconds(plan.actions),
+        _turn_ease_min_cycle_seconds(plan.actions, target.speed),
         duration_seconds / tempo_scale,
     )
     raw_phase = (elapsed / effective_duration_seconds) % 1.0
