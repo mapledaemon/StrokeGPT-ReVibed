@@ -69,9 +69,10 @@ class StaleClockV3HandyController(RecordingV3HandyController):
 
 
 class FakeResponse:
-    def __init__(self, status_code=204, payload=None):
+    def __init__(self, status_code=204, payload=None, headers=None):
         self.status_code = status_code
         self.payload = payload or {}
+        self.headers = headers or {}
         self.closed = False
 
     def raise_for_status(self):
@@ -230,6 +231,28 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(handy.supports_continuous_streaming())
         self.assertNotIn("secret", str(handy.diagnostics()["last_command"]))
         self.assertNotIn("app-id", str(handy.diagnostics()["last_command"]))
+
+    def test_send_v3_command_records_rate_limit_headers(self):
+        handy = HandyController(handy_key="secret", api_v3_key="app-id")
+
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(
+                status_code=200,
+                headers={
+                    "X-RateLimit-Limit": "240",
+                    "X-RateLimit-Remaining": "17",
+                    "X-RateLimit-Reset": "12",
+                },
+            ),
+            create=True,
+        ):
+            self.assertTrue(handy._send_v3_command("hsp/add", {"points": []}))
+
+        self.assertEqual(
+            handy.diagnostics()["last_command"]["rate_limit"],
+            {"limit": 240, "remaining": 17, "reset_seconds": 12},
+        )
 
     def test_send_v3_command_requires_app_key(self):
         handy = HandyController(handy_key="secret")
@@ -1061,6 +1084,31 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], [{"t": 480, "x": 65}])
         self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
         self.assertEqual(handy.diagnostics()["relative_speed"], 50)
+
+    def test_append_continuous_stream_throttles_threshold_updates_after_start(self):
+        handy = RecordingV3HandyController()
+
+        self.assertTrue(
+            handy.start_continuous_stream(
+                [
+                    {"t": 0, "x": 20, "intent_speed": 30, "range": 80},
+                    {"t": 160, "x": 70, "intent_speed": 30, "range": 80},
+                ],
+                tail_point_stream_index=2,
+                tail_point_threshold=1,
+            )
+        )
+        paths_before = [path for path, _body in handy.v3_commands]
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual(paths_before[-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
+        self.assertEqual([path for path, _body in handy.v3_commands][len(paths_before):], ["hsp/add"])
 
     def test_start_continuous_stream_keeps_playing_when_threshold_update_fails(self):
         handy = ThresholdFailingV3HandyController()

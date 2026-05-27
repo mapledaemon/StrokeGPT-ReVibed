@@ -7,6 +7,21 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-27 - PR #304 - HSP Command Pressure Guards
+--------------------------------------------------
+
+Branch: codex/hsp-command-pressure-guards
+
+- Serialized continuous HSP start/append/sync commands across replacement
+  workers so stale mode or pattern streams cannot append after a newer
+  replacement has taken over.
+- Reduced routine HSP REST pressure by throttling nonessential threshold
+  updates after stream startup, while still forcing threshold setup on new
+  starts and replacements.
+- Captured Handy API rate-limit headers in command diagnostics and motion
+  traces so 429/timeout reports show whether the device API is actually being
+  pressured.
+
 2026-05-25 - PR #303 - Long-Run HSP Morph Smoothing
 ----------------------------------------------------
 

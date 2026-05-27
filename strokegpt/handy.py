@@ -18,6 +18,7 @@ HSP_POINT_MAX = 100
 HSP_SERVER_TIME_SYNC_TTL_SECONDS = 300.0
 HSP_STREAM_ID_MAX = 4294967295
 HSP_STALE_CLOCK_TOLERANCE_MS = 500
+HSP_THRESHOLD_UPDATE_MIN_INTERVAL_SECONDS = 8.0
 HSP_STATE_REFRESH_MAX_AGE_SECONDS = 0.25
 HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS = 0.25
 HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS = 2.0
@@ -115,6 +116,8 @@ class HandyController:
         self._current_mode = None
         self._hamp_started = False
         self._hsp_streaming = False
+        self._last_hsp_threshold_update_at = 0.0
+        self._last_hsp_threshold_value = None
         self._last_slide_bounds = None
         self._last_v3_stroke_bounds = None
         self._last_velocity = None
@@ -416,6 +419,28 @@ class HandyController:
             return {"hsp_state": state}
         return {}
 
+    def _safe_rate_limit_headers(self, headers):
+        if not headers:
+            return {}
+        result = {}
+        for header, key in (
+            ("X-RateLimit-Limit", "limit"),
+            ("X-RateLimit-Remaining", "remaining"),
+            ("X-RateLimit-Reset", "reset_seconds"),
+        ):
+            value = None
+            try:
+                value = headers.get(header)
+            except AttributeError:
+                value = None
+            if value is None:
+                continue
+            try:
+                result[key] = int(float(value))
+            except (TypeError, ValueError):
+                result[key] = str(value)[:40]
+        return result
+
     def _record_command_result(
         self,
         path,
@@ -426,6 +451,7 @@ class HandyController:
         elapsed_ms=None,
         error="",
         response_payload=None,
+        response_headers=None,
     ):
         result = {
             "path": str(path or ""),
@@ -450,6 +476,9 @@ class HandyController:
             hsp_state = safe_response.get("hsp_state")
             if isinstance(hsp_state, dict):
                 self._update_hsp_state_cache(hsp_state, source="command")
+        rate_limit = self._safe_rate_limit_headers(response_headers)
+        if rate_limit:
+            result["rate_limit"] = rate_limit
         if error:
             result["error"] = str(error)[:180]
         self._last_command_result = result
@@ -755,6 +784,7 @@ class HandyController:
                 status_code=getattr(response, "status_code", None),
                 elapsed_ms=elapsed_ms,
                 response_payload=response_payload,
+                response_headers=getattr(response, "headers", None),
             )
             return True
         except requests.exceptions.RequestException as e:
@@ -772,6 +802,7 @@ class HandyController:
                 elapsed_ms=elapsed_ms,
                 error=e,
                 response_payload=response_payload,
+                response_headers=getattr(error_response, "headers", None),
             )
             print(f"[HANDY ERROR] Problem: {e}", file=sys.stderr)
             return False
@@ -1251,14 +1282,22 @@ class HandyController:
             self._hsp_stream_id = max(1, int(self._hsp_stream_id or 0) + 1)
         return self._hsp_stream_id
 
-    def _send_hsp_threshold(self, tail_point_threshold):
+    def _send_hsp_threshold(self, tail_point_threshold, *, force=False):
         if tail_point_threshold is None:
             return True
         try:
             threshold = max(0, int(tail_point_threshold))
         except (TypeError, ValueError):
             return True
-        return self._send_v3_command("hsp/threshold", {"tail_point_threshold": threshold})
+        now = time.monotonic()
+        if not force and self._last_hsp_threshold_value is not None:
+            if now - self._last_hsp_threshold_update_at < HSP_THRESHOLD_UPDATE_MIN_INTERVAL_SECONDS:
+                return True
+        sent = self._send_v3_command("hsp/threshold", {"tail_point_threshold": threshold})
+        if sent:
+            self._last_hsp_threshold_update_at = now
+            self._last_hsp_threshold_value = threshold
+        return sent
 
     def _hsp_point_time_bounds(self, points):
         times = []
@@ -1341,7 +1380,7 @@ class HandyController:
         if not self._send_v3_command("hsp/add", add):
             return False
         add_result = self._last_command_result
-        if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
+        if not self._send_hsp_threshold(tail_point_threshold, force=True) and self._api_v3_auth_failed:
             return False
         if replace_active_stream:
             restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
