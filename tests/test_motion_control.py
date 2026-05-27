@@ -1834,6 +1834,35 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_continuous_stream_command_skips_superseded_generation(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        lock_ready = threading.Event()
+        release_lock = threading.Event()
+        called = []
+
+        def hold_command_lock():
+            with controller._continuous_stream_command_lock:
+                lock_ready.set()
+                release_lock.wait(timeout=1)
+
+        holder = threading.Thread(target=hold_command_lock)
+        holder.start()
+        self.assertTrue(lock_ready.wait(timeout=1))
+        with controller._lock:
+            stale_generation = controller._generation
+            controller._generation += 1
+        release_lock.set()
+
+        sent, result = controller._send_continuous_stream_command(
+            stale_generation,
+            lambda: called.append(True) or True,
+        )
+        holder.join(timeout=1)
+
+        self.assertFalse(sent)
+        self.assertIsNone(result)
+        self.assertEqual(called, [])
+
     def test_continuous_hsp_periodically_syncs_firmware_clock(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)

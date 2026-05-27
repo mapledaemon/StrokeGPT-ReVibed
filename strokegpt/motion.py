@@ -730,6 +730,7 @@ class MotionController:
         self._lock = threading.Lock()
         self._generation = 0
         self._observability_lock = threading.Lock()
+        self._continuous_stream_command_lock = threading.Lock()
         self._trace = deque(maxlen=180)
         self._last_source = "idle"
         self._last_label = "idle"
@@ -1447,9 +1448,27 @@ class MotionController:
         error = str(last_command.get("error") or "").strip()
         if error:
             extras["handy_error"] = error
+        rate_limit = last_command.get("rate_limit")
+        if isinstance(rate_limit, dict):
+            if "limit" in rate_limit:
+                extras["handy_rate_limit"] = rate_limit.get("limit")
+            if "remaining" in rate_limit:
+                extras["handy_rate_limit_remaining"] = rate_limit.get("remaining")
+            if "reset_seconds" in rate_limit:
+                extras["handy_rate_limit_reset_seconds"] = rate_limit.get("reset_seconds")
         if last_command.get("ok") is False:
             extras["handy_ok"] = False
         return extras
+
+    def _continuous_generation_is_current(self, generation: int) -> bool:
+        with self._lock:
+            return generation == self._generation
+
+    def _send_continuous_stream_command(self, generation: int, callback, *args, **kwargs):
+        with self._continuous_stream_command_lock:
+            if not self._continuous_generation_is_current(generation):
+                return False, None
+            return True, callback(*args, **kwargs)
 
     def _depth_range_for_targets(self, targets: Iterable[Any]) -> Optional[dict[str, int]]:
         depths: list[float] = []
@@ -3239,8 +3258,11 @@ class MotionController:
                 return False
             send_started_at = time.monotonic()
             start_error = ""
+            start_command_sent = True
             try:
-                started = start_stream(
+                start_command_sent, started = self._send_continuous_stream_command(
+                    generation,
+                    start_stream,
                     initial_points,
                     start_time_ms=int(round(play_start_stream_seconds * 1000.0)),
                     tail_point_stream_index=initial_points[-1]["stream_index"],
@@ -3250,6 +3272,8 @@ class MotionController:
                 started = False
                 start_error = str(exc)[:180]
             send_ended_at = time.monotonic()
+            if not start_command_sent:
+                return True
             record_batch(
                 initial_points,
                 result=started,
@@ -3311,8 +3335,11 @@ class MotionController:
                         batch_index += 1
                         send_started_at = time.monotonic()
                         append_error = ""
+                        append_command_sent = True
                         try:
-                            appended = append_stream(
+                            append_command_sent, appended = self._send_continuous_stream_command(
+                                generation,
+                                append_stream,
                                 points,
                                 tail_point_stream_index=points[-1]["stream_index"],
                                 tail_point_threshold=self._hsp_tail_point_threshold(points),
@@ -3321,6 +3348,8 @@ class MotionController:
                             appended = False
                             append_error = str(exc)[:180]
                         send_ended_at = time.monotonic()
+                        if not append_command_sent:
+                            return True
                         record_batch(
                             points,
                             result=appended,
@@ -3356,12 +3385,20 @@ class MotionController:
                     and hsp_elapsed <= stream_seconds
                 ):
                     sync_filter = CONTINUOUS_HSP_SYNC_FILTER
+                    sync_command_sent = True
                     try:
-                        synced = sync_stream(int(round(hsp_elapsed * 1000.0)), filter=sync_filter)
+                        sync_command_sent, synced = self._send_continuous_stream_command(
+                            generation,
+                            sync_stream,
+                            int(round(hsp_elapsed * 1000.0)),
+                            filter=sync_filter,
+                        )
                     except Exception as exc:
                         synced = False
                         sync_extras = {"handy_ok": False, "handy_error": str(exc)[:180]}
                     else:
+                        if not sync_command_sent:
+                            return True
                         sync_extras = self._handy_command_trace_extras(synced)
                     sync_extras.update(
                         {
@@ -3506,8 +3543,11 @@ class MotionController:
                 return False
             send_started_at = time.monotonic()
             start_error = ""
+            start_command_sent = True
             try:
-                started = start_stream(
+                start_command_sent, started = self._send_continuous_stream_command(
+                    generation,
+                    start_stream,
                     initial_points,
                     start_time_ms=int(initial_points[0]["t"]),
                     tail_point_stream_index=initial_points[-1]["stream_index"],
@@ -3517,6 +3557,8 @@ class MotionController:
                 started = False
                 start_error = str(exc)[:180]
             send_ended_at = time.monotonic()
+            if not start_command_sent:
+                return True
             record_batch(
                 initial_points,
                 result=started,
@@ -3564,8 +3606,11 @@ class MotionController:
                         batch_index += 1
                         send_started_at = time.monotonic()
                         append_error = ""
+                        append_command_sent = True
                         try:
-                            appended = append_stream(
+                            append_command_sent, appended = self._send_continuous_stream_command(
+                                generation,
+                                append_stream,
                                 points,
                                 tail_point_stream_index=points[-1]["stream_index"],
                                 tail_point_threshold=self._hsp_tail_point_threshold(points),
@@ -3574,6 +3619,8 @@ class MotionController:
                             appended = False
                             append_error = str(exc)[:180]
                         send_ended_at = time.monotonic()
+                        if not append_command_sent:
+                            return True
                         record_batch(
                             points,
                             result=appended,
@@ -3600,11 +3647,19 @@ class MotionController:
                     and elapsed >= next_sync_elapsed
                     and elapsed <= stream_seconds
                 ):
+                    sync_command_sent = True
                     try:
-                        synced = sync_stream(int(round(elapsed * 1000.0)), filter=CONTINUOUS_HSP_SYNC_FILTER)
+                        sync_command_sent, synced = self._send_continuous_stream_command(
+                            generation,
+                            sync_stream,
+                            int(round(elapsed * 1000.0)),
+                            filter=CONTINUOUS_HSP_SYNC_FILTER,
+                        )
                     except Exception as exc:
                         sync_extras = {"handy_ok": False, "handy_error": str(exc)[:180]}
                     else:
+                        if not sync_command_sent:
+                            return True
                         sync_extras = self._handy_command_trace_extras(synced)
                     sync_extras.update(
                         {
