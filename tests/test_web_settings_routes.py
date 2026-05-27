@@ -440,6 +440,34 @@ class WebSettingsRouteTests(WebTestCase):
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)
 
+    def test_handy_transport_can_be_selected_and_reported(self):
+        from strokegpt.web import handy, settings
+
+        original_setting = settings.handy_transport
+        original_runtime = handy.transport_mode
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_handy_transport", json={"handy_transport": "bluetooth"})
+                self.assertEqual(response.status_code, 200)
+                data = response.get_json()
+                self.assertEqual(data["handy_transport"], "browser_bluetooth")
+                self.assertEqual(settings.handy_transport, "browser_bluetooth")
+                self.assertEqual(handy.transport_mode, "browser_bluetooth")
+                self.assertIn("bluetooth", data)
+
+                response = self.client.get("/check_settings")
+                payload = response.get_json()
+                self.assertEqual(payload["handy_transport"], "browser_bluetooth")
+                self.assertTrue(any(item["id"] == "browser_bluetooth" for item in payload["handy_transport_options"]))
+
+                response = self.client.post("/set_handy_transport", json={"handy_transport": "rest"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["handy_transport"], "rest")
+                self.assertEqual(handy.transport_mode, "rest")
+        finally:
+            settings.handy_transport = original_setting
+            handy.set_transport_mode(original_runtime)
+
     def test_motion_style_can_be_selected_and_reported(self):
         from strokegpt.web import get_current_context, settings
 

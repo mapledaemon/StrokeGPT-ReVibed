@@ -80,6 +80,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["user_genitalia_custom"], "")
         self.assertEqual(saved["handy_firmware_version"], "fw4")
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(saved["handy_transport"], "rest")
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
@@ -575,6 +576,21 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
 
         self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+
+    def test_handy_transport_is_normalized(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "bluetooth"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "browser_bluetooth")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "web-bluetooth"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "browser_bluetooth")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "unknown"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "rest")
 
     def test_diagnostics_levels_are_normalized(self):
         fake_path = FakePath(json.dumps({

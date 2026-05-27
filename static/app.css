@@ -101,6 +101,10 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 .top-bar-actions .top-bar-intensity-guide.is-variable { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
 .top-bar-actions .top-bar-autospeak-toggle { min-width: 5.25rem; }
 .top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
+.top-bar-actions .top-bar-bluetooth-toggle { min-width: 4.75rem; }
+.top-bar-actions .top-bar-bluetooth-toggle.is-connecting { border-color: rgba(216, 182, 106, 0.72); background: #332d20; color: var(--yellow); }
+.top-bar-actions .top-bar-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72); background: #203326; color: var(--green); }
+.top-bar-actions .top-bar-bluetooth-toggle.is-error { border-color: rgba(255, 85, 85, 0.72); background: #3b2024; color: var(--red-hover); }
 #toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size); background: var(--background-lighter); border: 1px solid #2d333d; color: var(--foreground); width: var(--top-bar-button-size); height: var(--top-bar-button-size); border-radius: 50%; cursor: pointer; transition: transform 0.3s ease-in-out, background-color 0.2s ease; font-size: 1.2em; display: flex; align-items: center; justify-content: center; }
 #toggle-sidebar-btn:hover { background-color: var(--comment); }
 body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }

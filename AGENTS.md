@@ -45,6 +45,8 @@ behavior, and route motion changes through the shared controller path.
   holds the split motion sub-modules (sequence log, pause/hotkey controls,
   pattern list, feedback controls, training editor); `motion-control.js`
   stays as the top-level wiring boundary with compatibility re-exports.
+  `handy-bluetooth.js` and `handy-bluetooth-codec.js` hold the experimental
+  browser-owned Web Bluetooth HSP transport and protobuf subset.
 - `strokegpt/web.py`: Flask app composition, shared services, chat/update
   runtime, and compatibility exports.
 - `strokegpt/app_state.py`: mutable web runtime state and shared `RLock`
@@ -57,6 +59,8 @@ behavior, and route motion changes through the shared controller path.
   LAN browser voice input.
 - `strokegpt/settings.py`: JSON-backed user/app settings.
 - `strokegpt/handy.py`: The Handy API wrapper.
+- `strokegpt/handy_bluetooth_bridge.py`: synchronous bridge between
+  server-side Handy commands and the active browser's Web Bluetooth link.
 - `strokegpt/llm.py`: Ollama API integration and prompt construction.
 - `strokegpt/motion.py`: deterministic intent matching, safety clamping, and smooth transitions.
 - `strokegpt/motion_anchors.py`: soft anchor-loop program parsing and
@@ -259,6 +263,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   continuous motion, check
   `api_v3_enabled`, `api_v3_key_configured`, `api_v3_auth_failed`, and
   `api_v3_unavailable_reason` before changing sampler math.
+  `handy_transport=browser_bluetooth` is an experimental local transport that
+  keeps the Python motion planner and HandyController semantics but dispatches
+  firmware v4 HSP/HDSP/HAMP protobuf commands through the active browser's Web
+  Bluetooth connection. Keep it optional, browser-owned, and acknowledged
+  through `HandyBluetoothBridge`; do not silently fall back to cloud REST while
+  local Bluetooth is selected.
 - Continuous position keeps semantic intent speed separate from the transport
   schema. `MotionTarget.speed` remains the user/LLM speed intent. HSP encodes
   speed as timed point spacing and position deltas; direct-position HDSP paths

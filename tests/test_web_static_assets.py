@@ -19,6 +19,8 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/voice-input.js": "text/javascript",
             "/static/js/responsive-layout.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
+            "/static/js/handy-bluetooth.js": "text/javascript",
+            "/static/js/handy-bluetooth-codec.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
             "/static/js/setup-check.js": "text/javascript",
             "/static/js/motion/feedback-controls.js": "text/javascript",
@@ -87,6 +89,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="top-bar-intensity-guide-btn" class="my-button top-bar-toggle-button top-bar-intensity-guide" type="button" title="Cycle LLM intensity arc guide" aria-label="Intensity arc steady" aria-pressed="false" data-requires-backend>Arc Steady</button>', page)
             self.assertIn('id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>', page)
             self.assertIn('id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>', page)
+            self.assertIn('id="top-bar-bluetooth-btn" class="my-button top-bar-toggle-button top-bar-bluetooth-toggle" type="button" title="Connect local Handy Bluetooth" aria-label="Handy Bluetooth disconnected" aria-pressed="false" data-requires-backend>BT Off</button>', page)
             self.assertIn('id="profile-menu-btn" class="profile-menu-button"', page)
             self.assertIn('id="profile-menu-pfp" src="/static/default-pfp.png"', page)
             self.assertIn('id="profile-menu-popover" class="profile-menu-popover" role="menu" hidden', page)
@@ -255,6 +258,9 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="save-persona-prompt-btn"', page)
             self.assertIn('data-settings-tab="device"', page)
             self.assertIn('id="settings-tab-device"', page)
+            self.assertIn('id="handy-transport-select"', page)
+            self.assertIn('id="save-handy-transport-btn"', page)
+            self.assertIn('id="handy-transport-status"', page)
             self.assertIn('id="handy-key-input"', page)
             self.assertIn('id="handy-firmware-select"', page)
             self.assertIn('id="handy-api-v3-key-input"', page)
@@ -544,6 +550,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".top-bar-actions .top-bar-intensity-guide.is-ramp-down", css)
             self.assertIn(".top-bar-actions .top-bar-intensity-guide.is-variable", css)
             self.assertIn(".top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72);", css)
+            self.assertIn(".top-bar-actions .top-bar-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72);", css)
             self.assertIn('#toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size);', css)
             self.assertIn("body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }", css)
             self.assertIn("#top-bar h1 { grid-area: title; min-width: 0;", css)
@@ -1505,6 +1512,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("./js/chat.js", app_script)
         self.assertIn("./js/audio.js", app_script)
         self.assertIn("./js/device-control.js", app_script)
+        self.assertIn("./js/handy-bluetooth.js", app_script)
         self.assertIn("./js/motion-control.js", app_script)
         self.assertIn("./js/responsive-layout.js", app_script)
         self.assertIn("./js/setup.js", app_script)
@@ -1512,6 +1520,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("initSingleActiveTabWarning()", app_script)
         self.assertIn("initCompactMotionPanels()", app_script)
         self.assertIn("initDiagnosticsControls()", app_script)
+        self.assertIn("initHandyBluetoothControls()", app_script)
 
 
 if __name__ == "__main__":

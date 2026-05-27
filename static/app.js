@@ -9,6 +9,7 @@ import { initDiagnosticsControls } from './js/setup-check.js';
 import { initVoiceInputControls } from './js/voice-input.js';
 import { initSingleActiveTabWarning } from './js/browser-session.js';
 import { initAppViewportHeightSync, initCompactMotionPanels } from './js/responsive-layout.js';
+import { initHandyBluetoothControls } from './js/handy-bluetooth.js';
 
 function startPollingLoops() {
     startGuardedPoll(pollChatUpdates, 1500);
@@ -45,6 +46,7 @@ function initApp() {
     initAudioControls();
     initVoiceInputControls({sendUserMessage});
     initDeviceControls();
+    initHandyBluetoothControls();
     initMotionControls({sendUserMessage});
     startPollingLoops();
     startupCheck();

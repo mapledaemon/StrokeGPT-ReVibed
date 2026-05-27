@@ -916,7 +916,10 @@ def settings_payload(
 ):
     local_tts_status = local_tts_status or audio.local_status()
     payload = {
-        "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
+        "configured": bool(
+            (settings.handy_key or settings.handy_transport == "browser_bluetooth")
+            and settings.min_depth < settings.max_depth
+        ),
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
         "llm_prompt_mode": settings.llm_prompt_mode,
@@ -927,6 +930,19 @@ def settings_payload(
         "handy_key": settings.handy_key,
         "handy_firmware_version": settings.handy_firmware_version,
         "handy_api_v3_key": settings.handy_api_v3_key,
+        "handy_transport": settings.handy_transport,
+        "handy_transport_options": [
+            {
+                "id": "rest",
+                "label": "Cloud REST",
+                "description": "Use Handy cloud REST API with the saved connection key.",
+            },
+            {
+                "id": "browser_bluetooth",
+                "label": "Local Bluetooth",
+                "description": "Experimental browser Web Bluetooth HSP transport for local timed-point streaming.",
+            },
+        ],
         "handy_firmware_options": [
             {
                 "id": "fw4",
@@ -941,8 +957,10 @@ def settings_payload(
         ],
         "handy_api_v3_enabled": bool(
             settings.handy_firmware_version == "fw4"
-            and settings.handy_key
-            and settings.handy_api_v3_key
+            and (
+                settings.handy_transport == "browser_bluetooth"
+                or (settings.handy_key and settings.handy_api_v3_key)
+            )
         ),
         "handy_api_v3_key_configured": bool(settings.handy_api_v3_key),
         "ai_name": settings.ai_name,

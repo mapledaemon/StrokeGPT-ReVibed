@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from .app_state import APP_STATE_EXPORTS, UI_CLIENT_CURSOR_LIMIT, AppState
 from .settings import SettingsManager, normalize_ollama_model
 from .handy import HandyController
+from .handy_bluetooth_bridge import HandyBluetoothBridge
 from .llm import LLMService, recent_assistant_lines_prompt
 from .audio import AudioService
 from .asr import VoiceInputService
@@ -233,11 +234,14 @@ OLLAMA_BASE_URL = os.getenv("STROKEGPT_OLLAMA_BASE_URL", "http://127.0.0.1:11434
 LLM_URL = f"{OLLAMA_BASE_URL}/api/chat"
 settings = SettingsManager(settings_file_path="my_settings.json")
 settings.load()
+handy_bluetooth_bridge = HandyBluetoothBridge()
 
 handy = HandyController(
     settings.handy_key,
     api_v3_key=settings.handy_api_v3_key,
     firmware_version=settings.handy_firmware_version,
+    transport_mode=settings.handy_transport,
+    bluetooth_bridge=handy_bluetooth_bridge,
 )
 handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
 motion = MotionController(handy)

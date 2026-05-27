@@ -12,6 +12,9 @@ MODE_HDSP = 2
 MODE_HSP = 4
 HANDY_API_V2_BASE_URL = "https://www.handyfeeling.com/api/handy/v2/"
 HANDY_API_V3_BASE_URL = "https://www.handyfeeling.com/api/handy-rest/v3/"
+HANDY_TRANSPORT_REST = "rest"
+HANDY_TRANSPORT_BROWSER_BLUETOOTH = "browser_bluetooth"
+HANDY_TRANSPORTS = {HANDY_TRANSPORT_REST, HANDY_TRANSPORT_BROWSER_BLUETOOTH}
 HANDY_COMMAND_HISTORY_LIMIT = 60
 HANDY_COMMAND_POINTS_PREVIEW = 12
 HSP_POINT_MAX = 100
@@ -90,6 +93,8 @@ class HandyController:
         api_v3_key=None,
         api_v3_base_url=HANDY_API_V3_BASE_URL,
         firmware_version="fw4",
+        transport_mode=HANDY_TRANSPORT_REST,
+        bluetooth_bridge=None,
     ):
         self.handy_key = handy_key
         self.base_url = self._normalize_base_url(base_url)
@@ -104,6 +109,8 @@ class HandyController:
         self.api_v3_base_url = self._normalize_base_url(
             os.getenv("STROKEGPT_HANDY_API_V3_BASE_URL", api_v3_base_url) or HANDY_API_V3_BASE_URL
         )
+        self.transport_mode = self._normalize_transport_mode(transport_mode)
+        self.bluetooth_bridge = bluetooth_bridge
         self.last_stroke_speed = 0
         self.last_depth_pos = 50
         self.last_stroke_range = 50
@@ -172,6 +179,47 @@ class HandyController:
         if cleaned in {"4", "v4", "fw4", "firmware4", "firmwarev4"}:
             return "fw4"
         return "fw4"
+
+    def _normalize_transport_mode(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"bluetooth", "ble", "browser_ble", "web_bluetooth", "local_bluetooth"}:
+            return HANDY_TRANSPORT_BROWSER_BLUETOOTH
+        if cleaned in HANDY_TRANSPORTS:
+            return cleaned
+        return HANDY_TRANSPORT_REST
+
+    def set_transport_mode(self, mode):
+        normalized = self._normalize_transport_mode(mode)
+        if normalized != self.transport_mode:
+            self._current_mode = None
+            self._hamp_started = False
+            self._hsp_streaming = False
+            self._hsp_stream_id = 0
+            self._clear_hsp_state_cache()
+            self._server_time_offset_ms = None
+            self._server_time_synced_at = 0.0
+            self._reset_motion_cache()
+        self.transport_mode = normalized
+
+    def set_bluetooth_bridge(self, bridge):
+        self.bluetooth_bridge = bridge
+
+    def _using_browser_bluetooth(self):
+        return self.transport_mode == HANDY_TRANSPORT_BROWSER_BLUETOOTH
+
+    def _bluetooth_ready(self):
+        bridge = self.bluetooth_bridge
+        return bool(bridge is not None and getattr(bridge, "is_ready", lambda: False)())
+
+    def _has_control_connection(self):
+        if self._using_browser_bluetooth():
+            return self._bluetooth_ready()
+        return bool(self.handy_key)
+
+    def _control_connection_error(self):
+        if self._using_browser_bluetooth():
+            return "Handy Bluetooth is not connected in the active browser"
+        return "missing Handy key"
 
     def set_api_key(self, key):
         if key != self.handy_key or self._api_v3_auth_failed:
@@ -491,6 +539,14 @@ class HandyController:
         return [dict(command) for command in self._command_history]
 
     def _send_command(self, path, body=None):
+        if self._using_browser_bluetooth():
+            self._record_command_result(
+                path,
+                body,
+                ok=False,
+                error="local Bluetooth transport only supports API v3/HSP commands",
+            )
+            return False
         if not self.handy_key:
             self._record_command_result(path, body, ok=False, error="missing Handy key")
             return False
@@ -498,6 +554,8 @@ class HandyController:
         return self._send_put(self.base_url, path, body, headers=headers)
 
     def _send_v3_command(self, path, body=None):
+        if self._using_browser_bluetooth():
+            return self._send_bluetooth_command(path, body)
         if not self.handy_key:
             self._record_command_result(path, body, ok=False, error="missing Handy key")
             return False
@@ -519,6 +577,23 @@ class HandyController:
                     error=last_command.get("error") or "Unauthorized",
                 )
         return ok
+
+    def _send_bluetooth_command(self, path, body=None):
+        bridge = self.bluetooth_bridge
+        if bridge is None:
+            self._record_command_result(path, body, ok=False, error="Bluetooth bridge is unavailable")
+            return False
+        result = bridge.send_command(path, body or {})
+        response_payload = result.get("response") if isinstance(result, dict) else None
+        self._record_command_result(
+            path,
+            body,
+            ok=bool(isinstance(result, dict) and result.get("ok")),
+            elapsed_ms=result.get("elapsed_ms") if isinstance(result, dict) else None,
+            error=(result.get("error") if isinstance(result, dict) else "Bluetooth command failed"),
+            response_payload=response_payload,
+        )
+        return bool(isinstance(result, dict) and result.get("ok"))
 
     def _effective_api_v3_key(self):
         return str(self.api_v3_key or "").strip()
@@ -570,6 +645,35 @@ class HandyController:
         self._device_connection_message = str(message or "")[:180]
         self._device_connection_observed_at = time.time()
         self._device_connection_event_type = str(event_type or "")[:80]
+
+    def apply_bluetooth_status(self, payload):
+        if not isinstance(payload, dict):
+            return False
+        connected = bool(payload.get("connected"))
+        status = "online" if connected else "offline"
+        event_type = str(payload.get("event_type") or payload.get("type") or "bluetooth_status")[:80]
+        message = str(
+            payload.get("message")
+            or ("Handy Bluetooth connected." if connected else "Handy Bluetooth disconnected.")
+        )[:180]
+        self._record_device_connection_status(status, message, event_type=event_type)
+        safe_event = {
+            "connected": connected,
+            "status": status,
+            "message": message,
+        }
+        if payload.get("device_name"):
+            safe_event["device_name"] = str(payload.get("device_name"))[:80]
+        self._record_handy_sse_event(event_type, {"data": safe_event})
+        hsp_state = payload.get("hsp_state")
+        if isinstance(hsp_state, dict) and hsp_state:
+            self._update_hsp_state_cache(hsp_state, source="bluetooth")
+        if not connected:
+            self._hsp_streaming = False
+            self._hamp_started = False
+            self._current_mode = None
+            self._reset_motion_cache()
+        return True
 
     def _device_status_payload_data(self, payload):
         if not isinstance(payload, dict):
@@ -748,6 +852,8 @@ class HandyController:
         return record
 
     def supports_api_v3_control(self):
+        if self._using_browser_bluetooth():
+            return bool(self.firmware_version == "fw4" and self._bluetooth_ready())
         return bool(
             self.firmware_version == "fw4"
             and self.handy_key
@@ -758,6 +864,10 @@ class HandyController:
     def api_v3_unavailable_reason(self):
         if self.firmware_version != "fw4":
             return "firmware_v3_legacy"
+        if self._using_browser_bluetooth():
+            if not self._bluetooth_ready():
+                return "bluetooth_not_connected"
+            return ""
         if not self.handy_key:
             return "missing_connection_key"
         if not self._effective_api_v3_key():
@@ -810,6 +920,28 @@ class HandyController:
     def check_connection(self):
         """Probe the current Handy key without starting motion."""
         path = "slide/position/absolute"
+        if self._using_browser_bluetooth():
+            snapshot = (
+                self.bluetooth_bridge.snapshot()
+                if self.bluetooth_bridge is not None
+                else {"connected": False, "message": "Bluetooth bridge is unavailable."}
+            )
+            connected = bool(snapshot.get("connected"))
+            self._record_command_result(
+                "bluetooth/status",
+                ok=connected,
+                error="" if connected else snapshot.get("message", "Bluetooth is not connected."),
+            )
+            return {
+                "status": "connected" if connected else "error",
+                "connected": connected,
+                "message": snapshot.get("message") or (
+                    "Handy Bluetooth connected." if connected else "Bluetooth is not connected."
+                ),
+                "transport": "browser_bluetooth",
+                "bluetooth": snapshot,
+                "last_command": self.last_command_result(),
+            }
         if not self.handy_key:
             self._record_command_result(path, ok=False, error="missing Handy key")
             return {
@@ -1102,8 +1234,8 @@ class HandyController:
         A simpler move function that expects complete instructions from the AI.
         It scales the provided values to the user's calibrated limits.
         """
-        if not self.handy_key:
-            self._record_command_result("hamp/move", ok=False, error="missing Handy key")
+        if not self._has_control_connection():
+            self._record_command_result("hamp/move", ok=False, error=self._control_connection_error())
             return False
 
         # A speed of 0 is a special command to stop all movement.
@@ -1150,8 +1282,8 @@ class HandyController:
 
     def move_to_depth(self, speed, depth, *, stop_on_target=True, velocity=None, intent_speed=None, duration_ms=None):
         """Move to a single calibrated depth target for pattern previews."""
-        if not self.handy_key:
-            self._record_command_result("hdsp/xava", ok=False, error="missing Handy key")
+        if not self._has_control_connection():
+            self._record_command_result("hdsp/xava", ok=False, error=self._control_connection_error())
             return False
         if speed is not None and speed == 0:
             self.stop()
@@ -1237,7 +1369,15 @@ class HandyController:
 
     def _ensure_hsp(self, stream_id=None):
         if not self.supports_continuous_streaming():
-            self._record_command_result("hsp/setup", ok=False, error="Handy firmware v4 and connection key required")
+            self._record_command_result(
+                "hsp/setup",
+                ok=False,
+                error=(
+                    "Handy firmware v4 and local Bluetooth connection required"
+                    if self._using_browser_bluetooth()
+                    else "Handy firmware v4 and connection key required"
+                ),
+            )
             return False
         if self._hamp_started:
             if not self._send_hamp_stop():
@@ -1429,7 +1569,15 @@ class HandyController:
 
     def sync_continuous_stream_time(self, current_time_ms, *, filter=0.5):
         if not self.supports_continuous_streaming():
-            self._record_command_result("hsp/synctime", ok=False, error="Handy firmware v4 and connection key required")
+            self._record_command_result(
+                "hsp/synctime",
+                ok=False,
+                error=(
+                    "Handy firmware v4 and local Bluetooth connection required"
+                    if self._using_browser_bluetooth()
+                    else "Handy firmware v4 and connection key required"
+                ),
+            )
             return False
         try:
             current_time = max(0, int(round(float(current_time_ms))))
@@ -1461,6 +1609,7 @@ class HandyController:
         return (
             generation == self._hsp_state_sse_generation
             and self.supports_api_v3_control()
+            and not self._using_browser_bluetooth()
         )
 
     def _iter_hsp_state_sse_events(self, response, generation):
@@ -1628,7 +1777,7 @@ class HandyController:
                     pass
 
     def ensure_hsp_state_sse_worker(self):
-        if not self.supports_api_v3_control():
+        if self._using_browser_bluetooth() or not self.supports_api_v3_control():
             return False
         with self._hsp_state_sse_thread_lock:
             thread = self._hsp_state_sse_thread
@@ -1658,6 +1807,8 @@ class HandyController:
             time.sleep(max(0.05, float(sleep_seconds)))
 
     def refresh_hsp_state(self, *, max_age_seconds=0.25):
+        if self._using_browser_bluetooth():
+            return bool(self._hsp_state_cache_snapshot()["state"])
         if not self._hsp_streaming or not self.supports_continuous_streaming():
             return False
         now = time.time()
@@ -1714,6 +1865,8 @@ class HandyController:
         return self._update_hsp_state_cache(state, source="poll")
 
     def ensure_hsp_state_refresh_worker(self):
+        if self._using_browser_bluetooth():
+            return False
         if not self._hsp_streaming or not self.supports_continuous_streaming():
             return False
         with self._hsp_state_refresh_thread_lock:
@@ -1730,7 +1883,11 @@ class HandyController:
         return True
 
     def _hsp_state_refresh_loop(self):
-        while self._hsp_streaming and self.supports_continuous_streaming():
+        while (
+            self._hsp_streaming
+            and self.supports_continuous_streaming()
+            and not self._using_browser_bluetooth()
+        ):
             try:
                 self.refresh_hsp_state(max_age_seconds=HSP_STATE_REFRESH_MAX_AGE_SECONDS)
             except Exception as exc:
@@ -1858,6 +2015,16 @@ class HandyController:
         hsp_refresh_active = bool(hsp_refresh_thread is not None and hsp_refresh_thread.is_alive())
         hsp_sse_thread = self._hsp_state_sse_thread
         hsp_sse_active = bool(hsp_sse_thread is not None and hsp_sse_thread.is_alive())
+        bluetooth_snapshot = (
+            self.bluetooth_bridge.snapshot()
+            if self.bluetooth_bridge is not None
+            else {
+                "transport": HANDY_TRANSPORT_BROWSER_BLUETOOTH,
+                "connected": False,
+                "status": "unavailable",
+                "message": "Bluetooth bridge is unavailable.",
+            }
+        )
         result = {
             "relative_speed": int(round(self.last_relative_speed)),
             "physical_speed": int(round(self.last_stroke_speed)),
@@ -1940,6 +2107,8 @@ class HandyController:
             "device_connection_age_ms": device_connection_age_ms,
             "device_connection_event_type": self._device_connection_event_type,
             "firmware_version": self.firmware_version,
+            "transport_mode": self.transport_mode,
+            "bluetooth": bluetooth_snapshot,
             "api_v3_enabled": self.supports_api_v3_control(),
             "api_v3_key_configured": bool(self._effective_api_v3_key()),
             "api_v3_auth_failed": self._api_v3_auth_failed,

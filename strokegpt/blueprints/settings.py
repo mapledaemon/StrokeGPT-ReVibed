@@ -442,6 +442,7 @@ def set_handy_device_config_route():
 
     v4_ready = bool(web.handy.supports_api_v3_control())
     missing_v3_key = firmware_version == "fw4" and bool(web.settings.handy_key) and not api_v3_key
+    bluetooth_transport = web.settings.handy_transport == "browser_bluetooth"
     return jsonify({
         "status": "success",
         "handy_firmware_version": firmware_version,
@@ -453,10 +454,40 @@ def set_handy_device_config_route():
         "message": (
             "Handy firmware set to v4; API v3 HSP streaming is enabled."
             if v4_ready
+            else "Handy firmware set to v4; connect local Bluetooth from the top bar to enable HSP streaming."
+            if bluetooth_transport and firmware_version == "fw4"
             else "Handy firmware set to v4; add a Handy API v3 Application ID to enable HSP streaming."
             if missing_v3_key
             else "Handy firmware set to v4; connect a Handy key to use API v3 HSP streaming."
             if firmware_version == "fw4"
             else "Handy firmware set to v3 legacy mode."
         ),
+    })
+
+
+@settings_blueprint.route('/set_handy_transport', methods=['POST'])
+def set_handy_transport_route():
+    web = _web()
+    data = web._request_json()
+    transport = web.settings._normalize_handy_transport(
+        data.get("handy_transport", web.settings.handy_transport)
+    )
+    web.settings.handy_transport = transport
+    web.handy.set_transport_mode(transport)
+    web.settings.save()
+    bluetooth = web.handy_bluetooth_bridge.snapshot()
+    if transport == "browser_bluetooth":
+        message = (
+            "Local Bluetooth selected. Connect from the top bar before starting motion."
+            if not bluetooth.get("connected")
+            else "Local Bluetooth selected and connected."
+        )
+    else:
+        message = "Cloud REST transport selected."
+    return jsonify({
+        "status": "success",
+        "handy_transport": transport,
+        "bluetooth": bluetooth,
+        "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
+        "message": message,
     })

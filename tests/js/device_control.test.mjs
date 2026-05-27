@@ -43,10 +43,15 @@ describe('Device Handy connection controls', () => {
             'sidebar-handy-key-status',
             'save-handy-key-btn',
             'sidebar-save-handy-key-btn',
+            'handy-rest-connection-controls',
+            'sidebar-handy-rest-controls',
             'handy-firmware-select',
             'handy-api-v3-key-input',
             'save-handy-device-config-btn',
             'handy-firmware-status',
+            'handy-transport-select',
+            'save-handy-transport-btn',
+            'handy-transport-status',
             'motion-depth-min-slider',
             'motion-depth-max-slider',
             'motion-depth-min-val',
@@ -70,14 +75,20 @@ describe('Device Handy connection controls', () => {
             'sidebar-handy-key-input',
             'handy-key-status',
             'sidebar-handy-key-status',
+            'handy-rest-connection-controls',
+            'sidebar-handy-rest-controls',
             'handy-firmware-select',
             'handy-api-v3-key-input',
             'handy-firmware-status',
+            'handy-transport-select',
+            'handy-transport-status',
             'status-text',
         ].forEach(resetStubElement);
         state.myHandyKey = '';
         state.handyFirmwareVersion = 'fw4';
         state.handyApiV3Key = '';
+        state.handyTransport = 'rest';
+        state.handyTransportOptions = [];
         state.connectionLost = false;
     });
 
@@ -172,6 +183,43 @@ describe('Device Handy connection controls', () => {
         assert.equal(
             getStubElement('status-text').textContent,
             'Handy firmware set to v4; API v3 HSP streaming is enabled.',
+        );
+    });
+
+    it('Save transport selects local Bluetooth without requiring a Handy key', async () => {
+        const calls = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, body: JSON.parse(options.body)});
+            return jsonResponse(200, {
+                status: 'success',
+                handy_transport: 'browser_bluetooth',
+                bluetooth: {
+                    connected: false,
+                    status: 'disconnected',
+                    message: 'Local Bluetooth selected; connect from the top bar.',
+                },
+                message: 'Local Bluetooth selected. Connect from the top bar before starting motion.',
+            });
+        };
+
+        getStubElement('handy-transport-select').value = 'browser_bluetooth';
+        getStubElement('save-handy-transport-btn').click();
+        await flushAsyncHandlers();
+
+        assert.deepEqual(calls, [{
+            endpoint: '/set_handy_transport',
+            body: {handy_transport: 'browser_bluetooth'},
+        }]);
+        assert.equal(state.handyTransport, 'browser_bluetooth');
+        assert.equal(getStubElement('handy-rest-connection-controls').hidden, true);
+        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, true);
+        assert.equal(
+            getStubElement('handy-transport-status').textContent,
+            'Local Bluetooth selected; connect from the top bar before starting motion.',
+        );
+        assert.equal(
+            getStubElement('status-text').textContent,
+            'Local Bluetooth selected. Connect from the top bar before starting motion.',
         );
     });
 });

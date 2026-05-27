@@ -7,6 +7,21 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-05-27 - PR #305 - Experimental Local Bluetooth HSP
+-------------------------------------------------------
+
+Branch: codex/experimental-bluetooth-hsp
+
+- Added an experimental browser-owned local Bluetooth transport for Handy
+  firmware v4 HSP commands, using the same server-side motion planner but
+  dispatching timed-point setup/add/play/stop commands through Web Bluetooth.
+- Added a top-bar Bluetooth connect button, a Device-tab transport selector,
+  and diagnostics/status plumbing so local Bluetooth can be selected without
+  requiring a cloud Handy connection key.
+- Added a synchronous backend bridge for browser Bluetooth command
+  acknowledgements, including HSP response-state propagation into existing
+  motion diagnostics.
+
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
 
