@@ -72,8 +72,10 @@ function makeStubElement(tag = 'div') {
             add(...cls) { for (const c of cls) classes.add(c); },
             remove(...cls) { for (const c of cls) classes.delete(c); },
             contains(c) { return classes.has(c); },
-            toggle(c) {
-                if (classes.has(c)) classes.delete(c);
+            toggle(c, force) {
+                if (force === true) classes.add(c);
+                else if (force === false) classes.delete(c);
+                else if (classes.has(c)) classes.delete(c);
                 else classes.add(c);
                 return classes.has(c);
             },

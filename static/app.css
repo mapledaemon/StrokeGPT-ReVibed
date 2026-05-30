@@ -101,10 +101,32 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 .top-bar-actions .top-bar-intensity-guide.is-variable { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
 .top-bar-actions .top-bar-autospeak-toggle { min-width: 5.25rem; }
 .top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72); background: #2b2940; color: var(--purple); }
+.top-bar-bluetooth-menu { position: relative; flex: 0 0 auto; }
 .top-bar-actions .top-bar-bluetooth-toggle { min-width: 4.75rem; }
 .top-bar-actions .top-bar-bluetooth-toggle.is-connecting { border-color: rgba(216, 182, 106, 0.72); background: #332d20; color: var(--yellow); }
 .top-bar-actions .top-bar-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72); background: #203326; color: var(--green); }
 .top-bar-actions .top-bar-bluetooth-toggle.is-error { border-color: rgba(255, 85, 85, 0.72); background: #3b2024; color: var(--red-hover); }
+.top-bar-actions .top-bar-bluetooth-toggle[aria-expanded="true"] { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(169, 154, 239, 0.28); }
+.top-bar-bluetooth-popover { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 8500; width: min(20rem, calc(100vw - 1.5rem)); padding: var(--space-2); border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); box-shadow: 0 12px 28px var(--shadow); display: grid; gap: var(--space-2); color: var(--foreground); }
+.top-bar-bluetooth-popover[hidden] { display: none; }
+.bluetooth-popover-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.bluetooth-popover-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cyan); font-size: 0.95rem; }
+.bluetooth-state-pill { flex: 0 0 auto; max-width: 9rem; padding: 0.22rem 0.48rem; border: 1px solid rgba(102, 112, 127, 0.55); border-radius: 999px; background: rgba(34, 38, 45, 0.8); color: var(--comment); font-size: 0.72rem; font-weight: 800; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bluetooth-state-pill.is-on { border-color: rgba(127, 183, 163, 0.7); color: var(--green); background: rgba(32, 51, 38, 0.84); }
+.bluetooth-state-pill.is-waiting { border-color: rgba(216, 182, 106, 0.72); color: var(--yellow); background: rgba(51, 45, 32, 0.86); }
+.bluetooth-state-pill.is-error { border-color: rgba(255, 85, 85, 0.72); color: var(--red-hover); background: rgba(59, 32, 36, 0.9); }
+.bluetooth-status-grid { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
+.bluetooth-status-grid > div { min-width: 0; padding: 0.45rem 0.5rem; border: 1px solid #2d333d; border-radius: 6px; background: rgba(34, 38, 45, 0.68); }
+.bluetooth-status-grid dt { margin: 0 0 0.18rem; color: var(--comment); font-size: 0.68rem; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+.bluetooth-status-grid dd { margin: 0; min-width: 0; color: var(--foreground); font-size: 0.82rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.bluetooth-menu-message { margin: 0; min-height: 2.1rem; padding: 0.45rem 0.55rem; border: 1px solid #2d333d; border-radius: 6px; background: rgba(14, 15, 18, 0.72); color: var(--comment); font-size: 0.8rem; line-height: 1.35; overflow-wrap: anywhere; }
+.bluetooth-menu-message[data-status-tone="success"] { color: var(--cyan); }
+.bluetooth-menu-message[data-status-tone="warning"] { color: var(--yellow); }
+.bluetooth-menu-message[data-status-tone="info"] { color: var(--comment); }
+.bluetooth-menu-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
+.bluetooth-menu-actions .my-button { width: 100%; min-width: 0; min-height: 2.25rem; padding: 0.48rem 0.65rem; font-size: 0.84rem; }
+.bluetooth-menu-secondary { background: transparent; color: var(--foreground); box-shadow: none; }
+.bluetooth-menu-secondary:hover { background: var(--background-lighter); }
 #toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size); background: var(--background-lighter); border: 1px solid #2d333d; color: var(--foreground); width: var(--top-bar-button-size); height: var(--top-bar-button-size); border-radius: 50%; cursor: pointer; transition: transform 0.3s ease-in-out, background-color 0.2s ease; font-size: 1.2em; display: flex; align-items: center; justify-content: center; }
 #toggle-sidebar-btn:hover { background-color: var(--comment); }
 body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }
@@ -634,6 +656,8 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .top-bar-actions .top-bar-intensity-guide { min-width: 5.25rem; }
     .top-bar-actions .top-bar-voice-toggle { min-width: 5rem; }
     .top-bar-actions .top-bar-autospeak-toggle { min-width: 4.75rem; }
+    .top-bar-bluetooth-popover { right: calc(-1 * (var(--top-bar-button-size) + var(--space-1))); width: min(19rem, calc(100vw - 1rem)); }
+    .bluetooth-status-grid { grid-template-columns: 1fr; }
     #chat-view, #bottom-input-area { padding: var(--space-2); }
     #bottom-input-area { padding-bottom: calc(max(var(--space-2), env(safe-area-inset-bottom), var(--mobile-browser-bottom-reserve)) + var(--visual-viewport-bottom-inset)); }
     #chat-messages-container { padding: var(--space-2); border-radius: 6px; }

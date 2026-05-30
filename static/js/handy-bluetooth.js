@@ -1,4 +1,5 @@
 import {
+    D,
     appendQueryParams,
     apiCall,
     el,
@@ -7,6 +8,7 @@ import {
     setStatusMessage,
     state,
 } from './context.js';
+import { openSettings } from './settings.js';
 import {
     HANDY_BLE_RX_UUID,
     HANDY_BLE_SERVICE_UUID,
@@ -27,23 +29,124 @@ function bluetoothConnected() {
     return Boolean(state.handyBluetoothDevice?.gatt?.connected && state.handyBluetoothTx && state.handyBluetoothRx);
 }
 
-function updateBluetoothButton(status = state.handyBluetoothStatus) {
-    if (!el.topBarBluetoothBtn) return;
+function bluetoothStateLabel(status = state.handyBluetoothStatus) {
+    const localConnected = bluetoothConnected();
+    if (localConnected) return 'Connected';
+    if (status?.connected) return 'Bridge active';
+    if (status?.status === 'connecting') return 'Connecting';
+    if (status?.status === 'stale') return 'Stale';
+    if (status?.status === 'error') return 'Error';
+    return 'Disconnected';
+}
+
+function bluetoothSupportLabel() {
+    return bluetoothSupported() ? 'Available' : 'Unavailable';
+}
+
+function bluetoothTransportLabel(status = state.handyBluetoothStatus) {
+    if (state.handyTransport === 'browser_bluetooth' || status?.connected || bluetoothConnected()) {
+        return 'Local Bluetooth';
+    }
+    return 'Cloud REST';
+}
+
+function bluetoothDeviceLabel(status = state.handyBluetoothStatus) {
+    const name = status?.device_name || state.handyBluetoothDevice?.name || '';
+    if (name) return name;
+    return Boolean(status?.connected || bluetoothConnected()) ? 'Handy' : 'None';
+}
+
+function bluetoothBridgeLabel(status = state.handyBluetoothStatus) {
+    const pending = Number(status?.pending ?? 0);
+    const inflight = Number(status?.inflight ?? 0);
+    if (pending || inflight) return `${pending} queued / ${inflight} active`;
+    const ack = status?.last_ack;
+    if (ack && Number.isFinite(Number(ack.elapsed_ms))) {
+        return `${ack.ok === false ? 'Last failed' : 'Last OK'} (${Math.round(Number(ack.elapsed_ms))} ms)`;
+    }
+    return Boolean(status?.connected || bluetoothConnected()) ? 'Ready' : 'Idle';
+}
+
+function bluetoothMessage(status = state.handyBluetoothStatus) {
+    if (!bluetoothSupported()) return 'Web Bluetooth is not available in this browser.';
+    if (status?.last_error) return status.last_error;
+    if (status?.message) return status.message;
+    if (state.handyTransport !== 'browser_bluetooth') {
+        return 'Cloud REST is selected. Connect here to switch this session to local Bluetooth.';
+    }
+    return Boolean(status?.connected || bluetoothConnected())
+        ? 'Local Bluetooth is connected and ready for HSP commands.'
+        : 'Local Bluetooth is selected. Connect before starting motion.';
+}
+
+function setBluetoothMenuOpen(isOpen) {
+    const open = Boolean(isOpen && el.topBarBluetoothPopover && el.topBarBluetoothBtn);
+    state.handyBluetoothMenuOpen = open;
+    if (el.topBarBluetoothPopover) el.topBarBluetoothPopover.hidden = !open;
+    if (el.topBarBluetoothBtn) el.topBarBluetoothBtn.setAttribute('aria-expanded', String(open));
+}
+
+function bluetoothMenuContains(target) {
+    let node = target;
+    while (node) {
+        if (node === el.topBarBluetoothMenu) return true;
+        node = node.parentNode;
+    }
+    return target === el.topBarBluetoothBtn
+        || target === el.topBarBluetoothPopover
+        || target === el.bluetoothMenuActionBtn
+        || target === el.bluetoothMenuSettingsBtn;
+}
+
+function updateBluetoothMenu(status = state.handyBluetoothStatus) {
     const connected = Boolean(status?.connected || bluetoothConnected());
     const connecting = status?.status === 'connecting';
     const error = status?.status === 'error' || status?.status === 'stale';
-    el.topBarBluetoothBtn.classList.toggle('is-on', connected);
-    el.topBarBluetoothBtn.classList.toggle('is-connecting', connecting);
-    el.topBarBluetoothBtn.classList.toggle('is-error', !connected && error);
-    el.topBarBluetoothBtn.textContent = connecting ? 'BT ...' : connected ? 'BT On' : 'BT Off';
-    el.topBarBluetoothBtn.setAttribute('aria-pressed', String(connected));
-    el.topBarBluetoothBtn.setAttribute(
-        'aria-label',
-        connected ? 'Handy Bluetooth connected' : connecting ? 'Handy Bluetooth connecting' : 'Handy Bluetooth disconnected',
-    );
-    el.topBarBluetoothBtn.title = status?.message || (
-        connected ? 'Disconnect local Handy Bluetooth' : 'Connect local Handy Bluetooth'
-    );
+    if (el.bluetoothMenuState) {
+        el.bluetoothMenuState.textContent = bluetoothStateLabel(status);
+        el.bluetoothMenuState.classList.toggle('is-on', connected);
+        el.bluetoothMenuState.classList.toggle('is-waiting', connecting);
+        el.bluetoothMenuState.classList.toggle('is-error', !connected && error);
+    }
+    if (el.bluetoothMenuTransport) el.bluetoothMenuTransport.textContent = bluetoothTransportLabel(status);
+    if (el.bluetoothMenuSupport) el.bluetoothMenuSupport.textContent = bluetoothSupportLabel();
+    if (el.bluetoothMenuDevice) el.bluetoothMenuDevice.textContent = bluetoothDeviceLabel(status);
+    if (el.bluetoothMenuQueue) el.bluetoothMenuQueue.textContent = bluetoothBridgeLabel(status);
+    if (el.bluetoothMenuMessage) {
+        el.bluetoothMenuMessage.textContent = bluetoothMessage(status);
+        el.bluetoothMenuMessage.dataset.statusTone = !connected && error ? 'warning' : connected ? 'success' : 'info';
+    }
+    if (el.bluetoothMenuActionBtn) {
+        el.bluetoothMenuActionBtn.textContent = bluetoothConnected()
+            ? 'Disconnect'
+            : connecting
+                ? 'Connecting...'
+                : connected
+                    ? 'Reconnect'
+                    : 'Connect';
+        el.bluetoothMenuActionBtn.disabled = connecting;
+    }
+}
+
+function updateBluetoothButton(status = state.handyBluetoothStatus) {
+    const connected = Boolean(status?.connected || bluetoothConnected());
+    const connecting = status?.status === 'connecting';
+    const error = status?.status === 'error' || status?.status === 'stale';
+    if (el.topBarBluetoothBtn) {
+        el.topBarBluetoothBtn.classList.toggle('is-on', connected);
+        el.topBarBluetoothBtn.classList.toggle('is-connecting', connecting);
+        el.topBarBluetoothBtn.classList.toggle('is-error', !connected && error);
+        el.topBarBluetoothBtn.textContent = connecting ? 'BT ...' : connected ? 'BT On' : 'BT Off';
+        el.topBarBluetoothBtn.setAttribute('aria-pressed', String(connected));
+        el.topBarBluetoothBtn.setAttribute(
+            'aria-label',
+            connected ? 'Handy Bluetooth connected' : connecting ? 'Handy Bluetooth connecting' : 'Handy Bluetooth disconnected',
+        );
+        el.topBarBluetoothBtn.title = status?.message
+            ? `${status.message} Open for Bluetooth details.`
+            : 'Show local Handy Bluetooth status';
+    }
+    updateBluetoothMenu(status);
 }
 
 export function updateHandyBluetoothStatus(status = {}) {
@@ -400,15 +503,33 @@ export async function refreshHandyBluetoothStatus() {
     if (data?.handy_transport) {
         state.handyTransport = data.handy_transport;
         if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
+        updateBluetoothButton(state.handyBluetoothStatus);
     }
     return data;
 }
 
 export function initHandyBluetoothControls() {
     updateBluetoothButton();
-    el.topBarBluetoothBtn?.addEventListener('click', () => {
+    el.topBarBluetoothBtn?.addEventListener('click', event => {
+        event.stopPropagation?.();
+        setBluetoothMenuOpen(!state.handyBluetoothMenuOpen);
+    });
+    el.bluetoothMenuActionBtn?.addEventListener('click', event => {
+        event.stopPropagation?.();
         if (bluetoothConnected()) disconnectHandyBluetooth();
         else connectHandyBluetooth();
+    });
+    el.bluetoothMenuSettingsBtn?.addEventListener('click', event => {
+        event.stopPropagation?.();
+        setBluetoothMenuOpen(false);
+        openSettings('device');
+    });
+    D.addEventListener('click', event => {
+        if (!state.handyBluetoothMenuOpen) return;
+        if (!bluetoothMenuContains(event.target)) setBluetoothMenuOpen(false);
+    });
+    D.addEventListener('keydown', event => {
+        if (event.key === 'Escape') setBluetoothMenuOpen(false);
     });
     refreshHandyBluetoothStatus();
 }

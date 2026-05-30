@@ -24,6 +24,9 @@ Branch: codex/experimental-bluetooth-hsp
 - Hardened the browser bridge so active long-polling clients do not go stale
   while idle and queued commands fail instead of crossing to a newly connected
   browser/device.
+- Replaced the bare top-bar Bluetooth toggle with a compact status dropdown
+  showing transport, browser support, device, bridge queue/ack state, last
+  message, and explicit Connect/Disconnect plus Device Settings actions.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
