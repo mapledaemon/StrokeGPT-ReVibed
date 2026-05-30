@@ -27,9 +27,9 @@ Branch: codex/experimental-bluetooth-hsp
 - Replaced the bare Bluetooth toggle with a compact sidebar status dropdown
   showing transport, browser support, device, bridge queue/ack state, last
   message, and explicit Connect/Disconnect plus Device Settings actions.
-- Tightened the Bluetooth trigger to an icon-only control inside the Handy
-  Connection panel, keeping state available through color, tooltip, ARIA label,
-  and the dropdown details without adding top-bar clutter.
+- Tightened the Bluetooth trigger to an icon-only control in the Handy
+  Connection panel header, keeping state available through color, tooltip,
+  ARIA label, and the dropdown details without adding top-bar clutter.
 - Let chat-generated continuous motion fall back to the normal live-motion path
   when HSP/continuous streaming is unavailable, so a selected but disconnected
   Bluetooth transport records a real Handy command failure instead of swallowing
