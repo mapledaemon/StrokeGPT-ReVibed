@@ -38,6 +38,8 @@ Branch: codex/experimental-bluetooth-hsp
 - Kept the sidebar Handy connection-key controls visible even when Local
   Bluetooth is selected, and made that Connect action switch back to Cloud REST
   before saving the key so users have an obvious recovery path at startup.
+- Renamed the sidebar connection-key label to "WiFi" and styled it as a small
+  distinct transport badge above the key field.
 - Let chat-generated continuous motion fall back to the normal live-motion path
   when HSP/continuous streaming is unavailable, so a selected but disconnected
   Bluetooth transport records a real Handy command failure instead of swallowing
