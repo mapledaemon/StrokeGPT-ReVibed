@@ -18,7 +18,7 @@ import {
 } from './handy-bluetooth-codec.js';
 
 const COMMAND_WAIT_SECONDS = 6;
-const HSP_ADD_CHUNK_POINTS = 48;
+const HSP_ADD_CHUNK_POINTS = 36;
 const RESPONSE_TIMEOUT_MS = 5000;
 const POPOVER_GAP_PX = 8;
 const POPOVER_MARGIN_PX = 8;
@@ -271,16 +271,38 @@ function nextMessageId() {
 async function writeBluetoothValue(bytes) {
     if (!state.handyBluetoothTx) throw new Error('Bluetooth TX characteristic is not ready.');
     if (bytes.length > 512) throw new Error(`Bluetooth command is too large (${bytes.length} bytes).`);
-    if (typeof state.handyBluetoothTx.writeValueWithoutResponse === 'function') {
+    const canWriteWithResponse = state.handyBluetoothTx.properties?.write;
+    const canWriteWithoutResponse = state.handyBluetoothTx.properties?.writeWithoutResponse;
+    if (canWriteWithResponse && typeof state.handyBluetoothTx.writeValueWithResponse === 'function') {
+        await state.handyBluetoothTx.writeValueWithResponse(bytes);
+    } else if (canWriteWithResponse && typeof state.handyBluetoothTx.writeValue === 'function') {
+        await state.handyBluetoothTx.writeValue(bytes);
+    } else if (canWriteWithoutResponse && typeof state.handyBluetoothTx.writeValueWithoutResponse === 'function') {
+        await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
+    } else if (typeof state.handyBluetoothTx.writeValueWithResponse === 'function') {
+        try {
+            await state.handyBluetoothTx.writeValueWithResponse(bytes);
+        } catch (error) {
+            if (typeof state.handyBluetoothTx.writeValueWithoutResponse !== 'function') throw error;
+            await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
+        }
+    } else if (typeof state.handyBluetoothTx.writeValue === 'function') {
+        await state.handyBluetoothTx.writeValue(bytes);
+    } else if (typeof state.handyBluetoothTx.writeValueWithoutResponse === 'function') {
         await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
     } else {
-        await state.handyBluetoothTx.writeValue(bytes);
+        throw new Error('Bluetooth TX characteristic does not support writes.');
     }
 }
 
-async function sendBleRequest(path, body = {}) {
+async function sendBleRequest(path, body = {}, options = {}) {
+    const waitForResponse = options.waitForResponse !== false;
     const id = nextMessageId();
     const bytes = encodeHandyRequest(path, body, id);
+    if (!waitForResponse) {
+        await writeBluetoothValue(bytes);
+        return {ok: true, response_pending: true};
+    }
     const responsePromise = new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             state.handyBluetoothPendingResponses.delete(id);
@@ -398,7 +420,7 @@ function bodyWithLocalServerTime(path, body = {}) {
 async function executeHspAdd(body = {}) {
     const points = Array.isArray(body.points) ? body.points : [];
     if (points.length <= HSP_ADD_CHUNK_POINTS) {
-        return sendBleRequest('hsp/add', body);
+        return sendBleRequest('hsp/add', body, {waitForResponse: false});
     }
     let lastResponse = null;
     const tailIndex = Number(body.tail_point_stream_index || points.length);
@@ -411,7 +433,7 @@ async function executeHspAdd(body = {}) {
             flush: offset === 0 ? Boolean(body.flush) : false,
             tail_point_stream_index: baseTail + chunkEnd,
             tail_point_threshold: chunkEnd >= points.length ? body.tail_point_threshold : undefined,
-        });
+        }, {waitForResponse: false});
     }
     return lastResponse || {ok: true};
 }
@@ -423,7 +445,7 @@ async function executeBridgeCommand(command) {
         const body = bodyWithLocalServerTime(command.path, command.body || {});
         const response = command.path === 'hsp/add'
             ? await executeHspAdd(body)
-            : await sendBleRequest(command.path, body);
+            : await sendBleRequest(command.path, body, {waitForResponse: false});
         const elapsedMs = performance.now() - started;
         await apiCall('/handy_bluetooth/ack', {
             method: 'POST',
@@ -451,6 +473,8 @@ async function executeBridgeCommand(command) {
         });
     }
 }
+
+export const executeBridgeCommandForTests = executeBridgeCommand;
 
 async function commandLoop() {
     if (state.handyBluetoothCommandLoopActive) return;

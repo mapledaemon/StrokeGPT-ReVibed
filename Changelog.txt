@@ -48,6 +48,11 @@ Branch: codex/experimental-bluetooth-hsp
   the request as a successful no-op.
 - Avoided unnecessary scrollbars in the local Bluetooth flyout by enabling
   menu scrolling only when the viewport genuinely constrains the popup height.
+- Kept local Bluetooth motion commands moving by acknowledging backend bridge
+  commands after confirmed GATT writes instead of blocking every command on an
+  optional RPC notification, respecting the characteristic's advertised write
+  mode, and mapping app HSP point depths onto the Handy BLE protocol's uint8
+  point range.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

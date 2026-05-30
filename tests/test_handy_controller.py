@@ -50,6 +50,27 @@ class ThresholdFailingV3HandyController(RecordingV3HandyController):
         return True
 
 
+class RecordingBluetoothBridge:
+    def __init__(self):
+        self.commands = []
+
+    def is_ready(self):
+        return True
+
+    def send_command(self, path, body=None):
+        self.commands.append((path, body or {}))
+        return {"ok": True, "elapsed_ms": 2.0}
+
+    def snapshot(self):
+        return {
+            "transport": "browser_bluetooth",
+            "connected": True,
+            "status": "connected",
+            "pending": 0,
+            "inflight": 0,
+        }
+
+
 class StaleClockV3HandyController(RecordingV3HandyController):
     def _send_v3_command(self, path, body=None):
         self.v3_commands.append((path, body or {}))
@@ -501,6 +522,41 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
         self.assertEqual(handy.diagnostics()["depth"], 0)
+
+    def test_browser_bluetooth_continuous_stream_uses_hsp_bridge_commands(self):
+        bridge = RecordingBluetoothBridge()
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+        handy.update_settings(10, 70, 10, 90)
+
+        result = handy.start_continuous_stream(
+            [
+                {"t": 0, "x": 0, "intent_speed": 30, "range": 80},
+                {"t": 160, "x": 50, "intent_speed": 30, "range": 80},
+                {"t": 320, "x": 100, "intent_speed": 30, "range": 80},
+            ],
+            tail_point_stream_index=3,
+            tail_point_threshold=1,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [path for path, _body in bridge.commands],
+            ["mode2", "slider/stroke", "hsp/setup", "hsp/add", "hsp/threshold", "hsp/play"],
+        )
+        self.assertEqual(bridge.commands[0][1], {"mode": 4})
+        self.assertEqual(bridge.commands[1][1], {"min": 0.1, "max": 0.9})
+        self.assertEqual(bridge.commands[2][1], {"stream_id": 1})
+        add = bridge.commands[3][1]
+        self.assertTrue(add["flush"])
+        self.assertEqual(add["tail_point_stream_index"], 3)
+        self.assertEqual(add["points"][-1], {"t": 320, "x": 100})
+        self.assertEqual(bridge.commands[4][1], {"tail_point_threshold": 1})
+        self.assertEqual(bridge.commands[5][0], "hsp/play")
+        self.assertEqual(handy.diagnostics()["transport_mode"], "browser_bluetooth")
 
     def test_start_continuous_stream_rounds_hsp_points_to_api_integer_schema(self):
         handy = RecordingV3HandyController()

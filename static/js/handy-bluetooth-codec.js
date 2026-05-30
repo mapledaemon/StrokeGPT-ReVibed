@@ -12,6 +12,7 @@ const WIRE_FIXED32 = 5;
 const MESSAGE_TYPE_REQUEST = 1;
 const MESSAGE_TYPE_RESPONSE = 3;
 const MESSAGE_TYPE_NOTIFICATION = 4;
+const HSP_POINT_PROTOCOL_MAX = 255;
 
 const REQUEST_FIELDS = {
     mode2: 701,
@@ -105,9 +106,10 @@ function lengthField(field, bytes) {
 }
 
 function pointMessage(point = {}) {
+    const normalizedPos = Math.max(0, Math.min(100, Number(point.x ?? point.pos ?? point.depth ?? 50) || 0));
     return concatBytes([
         uintField(1, Math.max(0, Math.round(Number(point.t ?? point.at ?? 0) || 0))),
-        uintField(2, Math.max(0, Math.min(100, Math.round(Number(point.x ?? point.pos ?? point.depth ?? 50) || 0)))),
+        uintField(2, Math.round((normalizedPos / 100) * HSP_POINT_PROTOCOL_MAX)),
     ]);
 }
 
