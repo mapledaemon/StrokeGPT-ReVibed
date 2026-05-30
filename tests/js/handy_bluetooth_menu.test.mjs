@@ -86,7 +86,20 @@ describe('Handy Bluetooth sidebar menu', () => {
         state.handyBluetoothRx = null;
         state.handyBluetoothPendingResponses = new Map();
         state.handyBluetoothMenuOpen = false;
-        getStubElement('handy-bluetooth-popover').hidden = true;
+        getStubElement('handy-bluetooth-btn').getBoundingClientRect = () => ({
+            top: 500,
+            bottom: 532,
+            left: 900,
+            right: 932,
+            width: 32,
+            height: 32,
+        });
+        const popover = getStubElement('handy-bluetooth-popover');
+        popover.hidden = true;
+        popover.scrollHeight = 260;
+        popover.offsetHeight = 260;
+        globalThis.window.innerWidth = 1000;
+        globalThis.window.innerHeight = 700;
         if (globalThis.navigator) {
             globalThis.navigator.bluetooth = {requestDevice: async () => ({})};
         }
@@ -111,6 +124,10 @@ describe('Handy Bluetooth sidebar menu', () => {
         getStubElement('handy-bluetooth-btn').click();
 
         assert.equal(getStubElement('handy-bluetooth-popover').hidden, false);
+        assert.equal(getStubElement('handy-bluetooth-popover').style.position, 'fixed');
+        assert.equal(getStubElement('handy-bluetooth-popover').dataset.placement, 'top');
+        assert.match(getStubElement('handy-bluetooth-popover').style.left, /px$/);
+        assert.match(getStubElement('handy-bluetooth-popover').style.maxHeight, /px$/);
         assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-expanded'), 'true');
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Disconnected');
         assert.equal(getStubElement('bluetooth-menu-action-btn').textContent, 'Connect');
@@ -151,6 +168,8 @@ describe('Handy Bluetooth sidebar menu', () => {
         await flushAsyncHandlers();
 
         assert.equal(getStubElement('handy-bluetooth-popover').hidden, true);
+        assert.equal(getStubElement('handy-bluetooth-popover').dataset.placement, undefined);
+        assert.equal(getStubElement('handy-bluetooth-popover').style.top, '');
         assert.equal(getStubElement('settings-dialog').classList.contains('open'), true);
     });
 });

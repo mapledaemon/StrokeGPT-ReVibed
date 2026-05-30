@@ -32,6 +32,9 @@ Branch: codex/experimental-bluetooth-hsp
   ARIA label, and the dropdown details without adding top-bar clutter.
 - Added an explicit experimental warning to the Bluetooth menu so users do not
   mistake the local browser Bluetooth transport for the proven Cloud REST path.
+- Made the Handy Connection Bluetooth trigger smaller and changed its status
+  menu to a viewport-positioned flyout that flips above or below the icon
+  instead of extending the sidebar page.
 - Let chat-generated continuous motion fall back to the normal live-motion path
   when HSP/continuous streaming is unavailable, so a selected but disconnected
   Bluetooth transport records a real Handy command failure instead of swallowing

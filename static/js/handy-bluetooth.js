@@ -20,6 +20,10 @@ import {
 const COMMAND_WAIT_SECONDS = 6;
 const HSP_ADD_CHUNK_POINTS = 48;
 const RESPONSE_TIMEOUT_MS = 5000;
+const POPOVER_GAP_PX = 8;
+const POPOVER_MARGIN_PX = 8;
+const POPOVER_MIN_HEIGHT_PX = 120;
+const POPOVER_WIDTH_PX = 240;
 
 function bluetoothSupported() {
     return Boolean(globalThis.navigator?.bluetooth?.requestDevice);
@@ -79,11 +83,95 @@ function bluetoothMessage(status = state.handyBluetoothStatus) {
         : 'Local Bluetooth is selected. Connect before starting motion.';
 }
 
+function viewportMetric(name, fallback) {
+    const visualViewport = globalThis.visualViewport || globalThis.window?.visualViewport;
+    const value = visualViewport?.[name] ?? globalThis.window?.[name] ?? globalThis[name];
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function clampPopoverPosition(value, min, max) {
+    if (max <= min) return min;
+    return Math.min(max, Math.max(min, value));
+}
+
+function clearBluetoothPopoverPosition() {
+    const popover = el.handyBluetoothPopover;
+    if (!popover) return;
+    delete popover.dataset.placement;
+    popover.style.left = '';
+    popover.style.top = '';
+    popover.style.right = '';
+    popover.style.bottom = '';
+    popover.style.width = '';
+    popover.style.maxHeight = '';
+    popover.style.overflowY = '';
+}
+
+function positionBluetoothPopover() {
+    if (!state.handyBluetoothMenuOpen || !el.handyBluetoothPopover || !el.handyBluetoothBtn) return;
+    const popover = el.handyBluetoothPopover;
+    const buttonRect = el.handyBluetoothBtn.getBoundingClientRect();
+    const viewportWidth = viewportMetric('innerWidth', 1024);
+    const viewportHeight = viewportMetric('innerHeight', 768);
+    const popoverWidth = Math.max(
+        180,
+        Math.min(POPOVER_WIDTH_PX, viewportWidth - POPOVER_MARGIN_PX * 2),
+    );
+
+    popover.style.position = 'fixed';
+    popover.style.width = `${Math.round(popoverWidth)}px`;
+    popover.style.right = 'auto';
+    popover.style.bottom = 'auto';
+    popover.style.maxHeight = '';
+    popover.style.overflowY = '';
+
+    const contentHeight = Math.max(
+        POPOVER_MIN_HEIGHT_PX,
+        Number(popover.scrollHeight || 0),
+        Number(popover.offsetHeight || 0),
+    );
+    const aboveSpace = Math.max(0, Number(buttonRect.top || 0) - POPOVER_MARGIN_PX - POPOVER_GAP_PX);
+    const belowSpace = Math.max(0, viewportHeight - Number(buttonRect.bottom || 0) - POPOVER_MARGIN_PX - POPOVER_GAP_PX);
+    const openAbove = aboveSpace >= Math.min(contentHeight, POPOVER_MIN_HEIGHT_PX) || aboveSpace > belowSpace;
+    const availableHeight = Math.max(
+        POPOVER_MIN_HEIGHT_PX,
+        Math.min(viewportHeight - POPOVER_MARGIN_PX * 2, openAbove ? aboveSpace : belowSpace),
+    );
+    const popoverHeight = Math.min(contentHeight, availableHeight);
+    const maxLeft = viewportWidth - POPOVER_MARGIN_PX - popoverWidth;
+    const left = clampPopoverPosition(
+        Number(buttonRect.right || 0) - popoverWidth,
+        POPOVER_MARGIN_PX,
+        maxLeft,
+    );
+    const top = openAbove
+        ? clampPopoverPosition(Number(buttonRect.top || 0) - POPOVER_GAP_PX - popoverHeight, POPOVER_MARGIN_PX, viewportHeight - POPOVER_MARGIN_PX - popoverHeight)
+        : clampPopoverPosition(Number(buttonRect.bottom || 0) + POPOVER_GAP_PX, POPOVER_MARGIN_PX, viewportHeight - POPOVER_MARGIN_PX - popoverHeight);
+
+    popover.dataset.placement = openAbove ? 'top' : 'bottom';
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    popover.style.maxHeight = `${Math.round(popoverHeight)}px`;
+    popover.style.overflowY = contentHeight > popoverHeight ? 'auto' : '';
+}
+
+function requestBluetoothPopoverPosition() {
+    positionBluetoothPopover();
+    const requestFrame = globalThis.requestAnimationFrame || globalThis.window?.requestAnimationFrame;
+    if (typeof requestFrame === 'function') requestFrame(positionBluetoothPopover);
+}
+
 function setBluetoothMenuOpen(isOpen) {
     const open = Boolean(isOpen && el.handyBluetoothPopover && el.handyBluetoothBtn);
     state.handyBluetoothMenuOpen = open;
     if (el.handyBluetoothPopover) el.handyBluetoothPopover.hidden = !open;
     if (el.handyBluetoothBtn) el.handyBluetoothBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+        requestBluetoothPopoverPosition();
+    } else {
+        clearBluetoothPopoverPosition();
+    }
 }
 
 function bluetoothMenuContains(target) {
@@ -126,6 +214,7 @@ function updateBluetoothMenu(status = state.handyBluetoothStatus) {
                     : 'Connect';
         el.bluetoothMenuActionBtn.disabled = connecting;
     }
+    requestBluetoothPopoverPosition();
 }
 
 function updateBluetoothButton(status = state.handyBluetoothStatus) {
@@ -528,8 +617,14 @@ export function initHandyBluetoothControls() {
         if (!state.handyBluetoothMenuOpen) return;
         if (!bluetoothMenuContains(event.target)) setBluetoothMenuOpen(false);
     });
+    D.addEventListener('scroll', () => {
+        if (state.handyBluetoothMenuOpen) requestBluetoothPopoverPosition();
+    }, true);
     D.addEventListener('keydown', event => {
         if (event.key === 'Escape') setBluetoothMenuOpen(false);
+    });
+    globalThis.window?.addEventListener?.('resize', () => {
+        if (state.handyBluetoothMenuOpen) requestBluetoothPopoverPosition();
     });
     refreshHandyBluetoothStatus();
 }
