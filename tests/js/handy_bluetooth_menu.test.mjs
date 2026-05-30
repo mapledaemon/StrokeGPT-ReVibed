@@ -132,7 +132,8 @@ describe('Handy Bluetooth top-bar menu', () => {
             message: 'Connected to Handy Test Unit over local Bluetooth.',
         });
 
-        assert.equal(getStubElement('top-bar-bluetooth-btn').textContent, 'BT On');
+        assert.equal(getStubElement('top-bar-bluetooth-btn').getAttribute('aria-label'), 'Handy Bluetooth connected');
+        assert.equal(getStubElement('top-bar-bluetooth-btn').classList.contains('is-on'), true);
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Connected');
         assert.equal(getStubElement('bluetooth-menu-transport').textContent, 'Local Bluetooth');
         assert.equal(getStubElement('bluetooth-menu-device').textContent, 'Handy Test Unit');

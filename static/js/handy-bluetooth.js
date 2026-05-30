@@ -136,7 +136,7 @@ function updateBluetoothButton(status = state.handyBluetoothStatus) {
         el.topBarBluetoothBtn.classList.toggle('is-on', connected);
         el.topBarBluetoothBtn.classList.toggle('is-connecting', connecting);
         el.topBarBluetoothBtn.classList.toggle('is-error', !connected && error);
-        el.topBarBluetoothBtn.textContent = connecting ? 'BT ...' : connected ? 'BT On' : 'BT Off';
+        el.topBarBluetoothBtn.dataset.bluetoothState = connecting ? 'connecting' : connected ? 'connected' : 'disconnected';
         el.topBarBluetoothBtn.setAttribute('aria-pressed', String(connected));
         el.topBarBluetoothBtn.setAttribute(
             'aria-label',

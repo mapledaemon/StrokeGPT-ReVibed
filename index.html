@@ -39,7 +39,11 @@
                 <button id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>
                 <button id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>
                 <div id="top-bar-bluetooth-menu" class="top-bar-bluetooth-menu">
-                    <button id="top-bar-bluetooth-btn" class="my-button top-bar-toggle-button top-bar-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="top-bar-bluetooth-popover" aria-expanded="false">BT Off</button>
+                    <button id="top-bar-bluetooth-btn" class="my-button top-bar-toggle-button top-bar-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="top-bar-bluetooth-popover" aria-expanded="false">
+                        <svg class="bluetooth-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="m7 7 10 10-5 5V2l5 5L7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
                     <div id="top-bar-bluetooth-popover" class="top-bar-bluetooth-popover" role="dialog" aria-label="Handy Bluetooth status" hidden>
                         <div class="bluetooth-popover-header">
                             <strong>Local Bluetooth</strong>

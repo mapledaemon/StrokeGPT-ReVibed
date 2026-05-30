@@ -27,6 +27,8 @@ Branch: codex/experimental-bluetooth-hsp
 - Replaced the bare top-bar Bluetooth toggle with a compact status dropdown
   showing transport, browser support, device, bridge queue/ack state, last
   message, and explicit Connect/Disconnect plus Device Settings actions.
+- Tightened the top-bar Bluetooth trigger to an icon-only control while keeping
+  state available through color, tooltip, ARIA label, and the dropdown details.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
