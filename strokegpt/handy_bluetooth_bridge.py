@@ -33,11 +33,18 @@ class HandyBluetoothBridge:
     def _is_current_client_locked(self, client_id):
         return bool(client_id) and str(client_id) == self._active_client_id
 
+    def _is_stale_locked(self):
+        return (
+            self._connected
+            and bool(self._active_client_id)
+            and self._now() - float(self._last_seen_at or 0.0) > BLUETOOTH_CLIENT_STALE_SECONDS
+        )
+
     def _is_ready_locked(self):
         return (
             self._connected
             and bool(self._active_client_id)
-            and self._now() - float(self._last_seen_at or 0.0) <= BLUETOOTH_CLIENT_STALE_SECONDS
+            and not self._is_stale_locked()
         )
 
     def is_ready(self):
@@ -50,6 +57,8 @@ class HandyBluetoothBridge:
             return self.snapshot()
         with self._condition:
             now = self._now()
+            if self._active_client_id and client_id != self._active_client_id:
+                self._fail_all_locked("Bluetooth client changed.")
             self._active_client_id = client_id
             self._connected = True
             self._device_name = str(device_name or "")[:80]
@@ -57,7 +66,6 @@ class HandyBluetoothBridge:
             self._message = str(message or "Handy Bluetooth connected.")[:180]
             self._last_seen_at = now
             self._last_error = ""
-            self._fail_other_inflight_locked(client_id, "Bluetooth client changed.")
             self._condition.notify_all()
             return self._snapshot_locked()
 
@@ -65,6 +73,8 @@ class HandyBluetoothBridge:
         client_id = str(client_id or "").strip()
         with self._condition:
             if client_id:
+                if self._active_client_id and client_id != self._active_client_id and self._connected:
+                    return self._snapshot_locked()
                 self._active_client_id = client_id
             if device_name:
                 self._device_name = str(device_name)[:80]
@@ -107,7 +117,11 @@ class HandyBluetoothBridge:
             if not self._is_ready_locked():
                 return {
                     "ok": False,
-                    "error": self._message or "Handy Bluetooth is not connected.",
+                    "error": (
+                        "Bluetooth browser bridge is stale."
+                        if self._is_stale_locked()
+                        else self._message or "Handy Bluetooth is not connected."
+                    ),
                     "transport": "browser_bluetooth",
                 }
             command_id = self._next_command_id
@@ -151,6 +165,7 @@ class HandyBluetoothBridge:
             while not self._pending:
                 if not self._is_current_client_locked(client_id) or not self._connected:
                     return []
+                self._last_seen_at = self._now()
                 remaining = deadline - self._now()
                 if remaining <= 0:
                     return []
@@ -198,17 +213,6 @@ class HandyBluetoothBridge:
         self._pending = deque(command for command in self._pending if int(command.get("id", 0)) != command_id)
         self._inflight.pop(command_id, None)
 
-    def _fail_other_inflight_locked(self, client_id, error):
-        for command_id, command in list(self._inflight.items()):
-            if command.get("client_id") and command.get("client_id") == client_id:
-                continue
-            self._acks[int(command_id)] = {
-                "ok": False,
-                "error": error,
-                "transport": "browser_bluetooth",
-            }
-            self._inflight.pop(command_id, None)
-
     def _fail_all_locked(self, error):
         for command in list(self._pending):
             self._acks[int(command.get("id", 0))] = {
@@ -226,11 +230,7 @@ class HandyBluetoothBridge:
             self._inflight.pop(command_id, None)
 
     def _snapshot_locked(self):
-        stale = (
-            self._connected
-            and self._active_client_id
-            and self._now() - float(self._last_seen_at or 0.0) > BLUETOOTH_CLIENT_STALE_SECONDS
-        )
+        stale = self._is_stale_locked()
         status = "stale" if stale else self._status
         connected = bool(self._connected and not stale)
         return {

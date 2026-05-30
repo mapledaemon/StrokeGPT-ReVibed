@@ -21,6 +21,9 @@ Branch: codex/experimental-bluetooth-hsp
 - Added a synchronous backend bridge for browser Bluetooth command
   acknowledgements, including HSP response-state propagation into existing
   motion diagnostics.
+- Hardened the browser bridge so active long-polling clients do not go stale
+  while idle and queued commands fail instead of crossing to a newly connected
+  browser/device.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
