@@ -95,9 +95,8 @@ function hasUnsavedHandyKeyDraft() {
 
 function updateHandyRestConnectionVisibility() {
     const bluetoothSelected = state.handyTransport === 'browser_bluetooth';
-    [el.handyRestConnectionControls, el.sidebarHandyRestControls].filter(Boolean).forEach(section => {
-        section.hidden = bluetoothSelected;
-    });
+    if (el.handyRestConnectionControls) el.handyRestConnectionControls.hidden = bluetoothSelected;
+    if (el.sidebarHandyRestControls) el.sidebarHandyRestControls.hidden = false;
 }
 
 function normalizeMotionDepthRange() {
@@ -279,15 +278,28 @@ async function saveMotionDepthRange() {
 }
 
 async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
-    if (state.handyTransport === 'browser_bluetooth') {
-        setHandyConnectionStatus('disconnected', 'Local Bluetooth selected; connect from Handy Connection.');
-        setStatusMessage(el.statusText, 'Local Bluetooth is selected. Use the Handy Connection Bluetooth button to connect.', 'info');
-        return;
-    }
     const key = (sourceInput?.value || '').trim();
     if (!key) {
         setHandyConnectionStatus('disconnected', 'Enter a Handy connection key first.');
         return;
+    }
+    if (state.handyTransport === 'browser_bluetooth') {
+        setStatusMessage(el.statusText, 'Switching to Cloud REST before connecting...', 'neutral');
+        const transportRes = await apiCall('/set_handy_transport', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({handy_transport: 'rest'}),
+        });
+        if (!transportRes || transportRes.status !== 'success') {
+            reportSaveFailure(el.handyTransportStatus || el.statusText, transportRes, 'Could not switch to Cloud REST before connecting.');
+            return;
+        }
+        state.handyTransport = transportRes.handy_transport || 'rest';
+        if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
+        if (transportRes.bluetooth) updateHandyBluetoothStatus(transportRes.bluetooth);
+        updateHandyRestConnectionVisibility();
+        updateHandyTransportStatus(transportRes);
+        updateHandyFirmwareStatus(transportRes);
     }
     setStatusMessage(el.statusText, 'Connecting to Handy...', 'neutral');
     const res = await apiCall('/set_handy_key', {
