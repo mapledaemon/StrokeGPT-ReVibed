@@ -15,7 +15,7 @@ Branch: codex/experimental-bluetooth-hsp
 - Added an experimental browser-owned local Bluetooth transport for Handy
   firmware v4 HSP commands, using the same server-side motion planner but
   dispatching timed-point setup/add/play/stop commands through Web Bluetooth.
-- Added a top-bar Bluetooth connect button, a Device-tab transport selector,
+- Added a Handy Connection Bluetooth control, a Device-tab transport selector,
   and diagnostics/status plumbing so local Bluetooth can be selected without
   requiring a cloud Handy connection key.
 - Added a synchronous backend bridge for browser Bluetooth command
@@ -24,11 +24,16 @@ Branch: codex/experimental-bluetooth-hsp
 - Hardened the browser bridge so active long-polling clients do not go stale
   while idle and queued commands fail instead of crossing to a newly connected
   browser/device.
-- Replaced the bare top-bar Bluetooth toggle with a compact status dropdown
+- Replaced the bare Bluetooth toggle with a compact sidebar status dropdown
   showing transport, browser support, device, bridge queue/ack state, last
   message, and explicit Connect/Disconnect plus Device Settings actions.
-- Tightened the top-bar Bluetooth trigger to an icon-only control while keeping
-  state available through color, tooltip, ARIA label, and the dropdown details.
+- Tightened the Bluetooth trigger to an icon-only control inside the Handy
+  Connection panel, keeping state available through color, tooltip, ARIA label,
+  and the dropdown details without adding top-bar clutter.
+- Let chat-generated continuous motion fall back to the normal live-motion path
+  when HSP/continuous streaming is unavailable, so a selected but disconnected
+  Bluetooth transport records a real Handy command failure instead of swallowing
+  the request as a successful no-op.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

@@ -196,9 +196,9 @@ describe('Device Handy connection controls', () => {
                 bluetooth: {
                     connected: false,
                     status: 'disconnected',
-                    message: 'Local Bluetooth selected; connect from the top bar.',
+                    message: 'Local Bluetooth selected; connect from Handy Connection.',
                 },
-                message: 'Local Bluetooth selected. Connect from the top bar before starting motion.',
+                message: 'Local Bluetooth selected. Connect from Handy Connection before starting motion.',
             });
         };
 
@@ -215,11 +215,11 @@ describe('Device Handy connection controls', () => {
         assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, true);
         assert.equal(
             getStubElement('handy-transport-status').textContent,
-            'Local Bluetooth selected; connect from the top bar before starting motion.',
+            'Local Bluetooth selected; connect from Handy Connection before starting motion.',
         );
         assert.equal(
             getStubElement('status-text').textContent,
-            'Local Bluetooth selected. Connect from the top bar before starting motion.',
+            'Local Bluetooth selected. Connect from Handy Connection before starting motion.',
         );
     });
 });

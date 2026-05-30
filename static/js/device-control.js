@@ -126,7 +126,7 @@ export function populateDeviceSettings(data = {}) {
     setHandyConnectionStatus(
         bluetoothSelected ? 'disconnected' : state.myHandyKey ? 'saved' : 'disconnected',
         bluetoothSelected
-            ? 'Local Bluetooth selected; connect from the top bar.'
+            ? 'Local Bluetooth selected; connect from Handy Connection.'
             : state.myHandyKey
                 ? 'Handy key saved; waiting for a device status or command result.'
                 : 'No Handy connection key saved.',
@@ -165,7 +165,7 @@ function updateHandyTransportStatus(data = {}) {
             el.handyTransportStatus,
             bluetooth.connected
                 ? (bluetooth.message || 'Local Bluetooth connected.')
-                : 'Local Bluetooth selected; connect from the top bar before starting motion.',
+                : 'Local Bluetooth selected; connect from Handy Connection before starting motion.',
             bluetooth.connected ? 'success' : 'info',
         );
         return;
@@ -180,7 +180,7 @@ function updateHandyFirmwareStatus(data = {}) {
     const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured));
     if (firmware === 'fw4') {
         if (state.handyTransport === 'browser_bluetooth') {
-            el.handyFirmwareStatus.textContent = 'Firmware v4 selected. Local Bluetooth HSP streaming is enabled after the top-bar Bluetooth connection is active.';
+            el.handyFirmwareStatus.textContent = 'Firmware v4 selected. Local Bluetooth HSP streaming is enabled after the Handy Connection Bluetooth link is active.';
             return;
         }
         el.handyFirmwareStatus.textContent = v4Ready
@@ -202,7 +202,7 @@ export function updateHandyConnectionStatusFromMotion(payload = {}) {
         if (bluetooth.connected) {
             setHandyConnectionStatus('connected', bluetooth.message || 'Handy Bluetooth connected.');
         } else {
-            setHandyConnectionStatus('disconnected', bluetooth.message || 'Local Bluetooth selected; connect from the top bar.');
+            setHandyConnectionStatus('disconnected', bluetooth.message || 'Local Bluetooth selected; connect from Handy Connection.');
         }
         return;
     }
@@ -280,8 +280,8 @@ async function saveMotionDepthRange() {
 
 async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
     if (state.handyTransport === 'browser_bluetooth') {
-        setHandyConnectionStatus('disconnected', 'Local Bluetooth selected; connect from the top bar.');
-        setStatusMessage(el.statusText, 'Local Bluetooth is selected. Use the top-bar Bluetooth button to connect.', 'info');
+        setHandyConnectionStatus('disconnected', 'Local Bluetooth selected; connect from Handy Connection.');
+        setStatusMessage(el.statusText, 'Local Bluetooth is selected. Use the Handy Connection Bluetooth button to connect.', 'info');
         return;
     }
     const key = (sourceInput?.value || '').trim();

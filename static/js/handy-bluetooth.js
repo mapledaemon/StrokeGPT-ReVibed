@@ -72,7 +72,7 @@ function bluetoothMessage(status = state.handyBluetoothStatus) {
     if (status?.last_error) return status.last_error;
     if (status?.message) return status.message;
     if (state.handyTransport !== 'browser_bluetooth') {
-        return 'Cloud REST is selected. Connect here to switch this session to local Bluetooth.';
+        return 'Cloud REST is selected. Connect here to switch Handy control to local Bluetooth.';
     }
     return Boolean(status?.connected || bluetoothConnected())
         ? 'Local Bluetooth is connected and ready for HSP commands.'
@@ -80,20 +80,20 @@ function bluetoothMessage(status = state.handyBluetoothStatus) {
 }
 
 function setBluetoothMenuOpen(isOpen) {
-    const open = Boolean(isOpen && el.topBarBluetoothPopover && el.topBarBluetoothBtn);
+    const open = Boolean(isOpen && el.handyBluetoothPopover && el.handyBluetoothBtn);
     state.handyBluetoothMenuOpen = open;
-    if (el.topBarBluetoothPopover) el.topBarBluetoothPopover.hidden = !open;
-    if (el.topBarBluetoothBtn) el.topBarBluetoothBtn.setAttribute('aria-expanded', String(open));
+    if (el.handyBluetoothPopover) el.handyBluetoothPopover.hidden = !open;
+    if (el.handyBluetoothBtn) el.handyBluetoothBtn.setAttribute('aria-expanded', String(open));
 }
 
 function bluetoothMenuContains(target) {
     let node = target;
     while (node) {
-        if (node === el.topBarBluetoothMenu) return true;
+        if (node === el.handyBluetoothMenu) return true;
         node = node.parentNode;
     }
-    return target === el.topBarBluetoothBtn
-        || target === el.topBarBluetoothPopover
+    return target === el.handyBluetoothBtn
+        || target === el.handyBluetoothPopover
         || target === el.bluetoothMenuActionBtn
         || target === el.bluetoothMenuSettingsBtn;
 }
@@ -132,17 +132,17 @@ function updateBluetoothButton(status = state.handyBluetoothStatus) {
     const connected = Boolean(status?.connected || bluetoothConnected());
     const connecting = status?.status === 'connecting';
     const error = status?.status === 'error' || status?.status === 'stale';
-    if (el.topBarBluetoothBtn) {
-        el.topBarBluetoothBtn.classList.toggle('is-on', connected);
-        el.topBarBluetoothBtn.classList.toggle('is-connecting', connecting);
-        el.topBarBluetoothBtn.classList.toggle('is-error', !connected && error);
-        el.topBarBluetoothBtn.dataset.bluetoothState = connecting ? 'connecting' : connected ? 'connected' : 'disconnected';
-        el.topBarBluetoothBtn.setAttribute('aria-pressed', String(connected));
-        el.topBarBluetoothBtn.setAttribute(
+    if (el.handyBluetoothBtn) {
+        el.handyBluetoothBtn.classList.toggle('is-on', connected);
+        el.handyBluetoothBtn.classList.toggle('is-connecting', connecting);
+        el.handyBluetoothBtn.classList.toggle('is-error', !connected && error);
+        el.handyBluetoothBtn.dataset.bluetoothState = connecting ? 'connecting' : connected ? 'connected' : 'disconnected';
+        el.handyBluetoothBtn.setAttribute('aria-pressed', String(connected));
+        el.handyBluetoothBtn.setAttribute(
             'aria-label',
             connected ? 'Handy Bluetooth connected' : connecting ? 'Handy Bluetooth connecting' : 'Handy Bluetooth disconnected',
         );
-        el.topBarBluetoothBtn.title = status?.message
+        el.handyBluetoothBtn.title = status?.message
             ? `${status.message} Open for Bluetooth details.`
             : 'Show local Handy Bluetooth status';
     }
@@ -162,7 +162,7 @@ export function updateHandyBluetoothStatus(status = {}) {
             state.handyBluetoothStatus.message || (
                 state.handyBluetoothStatus.connected
                     ? 'Local Bluetooth connected.'
-                    : 'Local Bluetooth selected; connect from the top bar.'
+                    : 'Local Bluetooth selected; connect from Handy Connection.'
             ),
             state.handyBluetoothStatus.connected ? 'success' : 'info',
         );
@@ -510,7 +510,7 @@ export async function refreshHandyBluetoothStatus() {
 
 export function initHandyBluetoothControls() {
     updateBluetoothButton();
-    el.topBarBluetoothBtn?.addEventListener('click', event => {
+    el.handyBluetoothBtn?.addEventListener('click', event => {
         event.stopPropagation?.();
         setBluetoothMenuOpen(!state.handyBluetoothMenuOpen);
     });

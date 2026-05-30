@@ -1,4 +1,4 @@
-// Behavioral coverage for the top-bar Handy Bluetooth status menu.
+// Behavioral coverage for the sidebar Handy Bluetooth status menu.
 
 import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,9 +32,9 @@ async function flushAsyncHandlers() {
 }
 
 const MENU_IDS = [
-    'top-bar-bluetooth-menu',
-    'top-bar-bluetooth-btn',
-    'top-bar-bluetooth-popover',
+    'handy-bluetooth-menu',
+    'handy-bluetooth-btn',
+    'handy-bluetooth-popover',
     'bluetooth-menu-state',
     'bluetooth-menu-transport',
     'bluetooth-menu-support',
@@ -49,7 +49,7 @@ const MENU_IDS = [
     'status-text',
 ];
 
-describe('Handy Bluetooth top-bar menu', () => {
+describe('Handy Bluetooth sidebar menu', () => {
     let originalFetch;
     let originalBluetooth;
 
@@ -57,7 +57,7 @@ describe('Handy Bluetooth top-bar menu', () => {
         originalFetch = globalThis.fetch;
         originalBluetooth = globalThis.navigator?.bluetooth;
         MENU_IDS.forEach(resetStubElement);
-        getStubElement('top-bar-bluetooth-popover').hidden = true;
+        getStubElement('handy-bluetooth-popover').hidden = true;
         globalThis.fetch = async () => jsonResponse(200, {
             status: 'success',
             handy_transport: 'rest',
@@ -86,7 +86,7 @@ describe('Handy Bluetooth top-bar menu', () => {
         state.handyBluetoothRx = null;
         state.handyBluetoothPendingResponses = new Map();
         state.handyBluetoothMenuOpen = false;
-        getStubElement('top-bar-bluetooth-popover').hidden = true;
+        getStubElement('handy-bluetooth-popover').hidden = true;
         if (globalThis.navigator) {
             globalThis.navigator.bluetooth = {requestDevice: async () => ({})};
         }
@@ -108,10 +108,10 @@ describe('Handy Bluetooth top-bar menu', () => {
             },
         };
 
-        getStubElement('top-bar-bluetooth-btn').click();
+        getStubElement('handy-bluetooth-btn').click();
 
-        assert.equal(getStubElement('top-bar-bluetooth-popover').hidden, false);
-        assert.equal(getStubElement('top-bar-bluetooth-btn').getAttribute('aria-expanded'), 'true');
+        assert.equal(getStubElement('handy-bluetooth-popover').hidden, false);
+        assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-expanded'), 'true');
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Disconnected');
         assert.equal(getStubElement('bluetooth-menu-action-btn').textContent, 'Connect');
         assert.equal(requestDeviceCalls, 0);
@@ -132,8 +132,8 @@ describe('Handy Bluetooth top-bar menu', () => {
             message: 'Connected to Handy Test Unit over local Bluetooth.',
         });
 
-        assert.equal(getStubElement('top-bar-bluetooth-btn').getAttribute('aria-label'), 'Handy Bluetooth connected');
-        assert.equal(getStubElement('top-bar-bluetooth-btn').classList.contains('is-on'), true);
+        assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-label'), 'Handy Bluetooth connected');
+        assert.equal(getStubElement('handy-bluetooth-btn').classList.contains('is-on'), true);
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Connected');
         assert.equal(getStubElement('bluetooth-menu-transport').textContent, 'Local Bluetooth');
         assert.equal(getStubElement('bluetooth-menu-device').textContent, 'Handy Test Unit');
@@ -146,11 +146,11 @@ describe('Handy Bluetooth top-bar menu', () => {
     });
 
     it('opens Device settings from the menu', async () => {
-        getStubElement('top-bar-bluetooth-btn').click();
+        getStubElement('handy-bluetooth-btn').click();
         getStubElement('bluetooth-menu-settings-btn').click();
         await flushAsyncHandlers();
 
-        assert.equal(getStubElement('top-bar-bluetooth-popover').hidden, true);
+        assert.equal(getStubElement('handy-bluetooth-popover').hidden, true);
         assert.equal(getStubElement('settings-dialog').classList.contains('open'), true);
     });
 });

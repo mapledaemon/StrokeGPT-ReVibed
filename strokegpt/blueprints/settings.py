@@ -454,7 +454,7 @@ def set_handy_device_config_route():
         "message": (
             "Handy firmware set to v4; API v3 HSP streaming is enabled."
             if v4_ready
-            else "Handy firmware set to v4; connect local Bluetooth from the top bar to enable HSP streaming."
+            else "Handy firmware set to v4; connect local Bluetooth from Handy Connection to enable HSP streaming."
             if bluetooth_transport and firmware_version == "fw4"
             else "Handy firmware set to v4; add a Handy API v3 Application ID to enable HSP streaming."
             if missing_v3_key
@@ -478,7 +478,7 @@ def set_handy_transport_route():
     bluetooth = web.handy_bluetooth_bridge.snapshot()
     if transport == "browser_bluetooth":
         message = (
-            "Local Bluetooth selected. Connect from the top bar before starting motion."
+            "Local Bluetooth selected. Connect from Handy Connection before starting motion."
             if not bluetooth.get("connected")
             else "Local Bluetooth selected and connected."
         )

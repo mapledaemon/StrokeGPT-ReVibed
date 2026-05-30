@@ -2420,6 +2420,24 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_generated_pattern_falls_back_to_live_move_when_hsp_is_unavailable(self):
+        handy = FakeHandy()
+        controller = MotionController(handy, step_delay=0)
+
+        try:
+            controller.apply_generated_target(MotionTarget(80, 50, 80, "flick"), source="unit test")
+
+            trace = controller.observability_snapshot()["trace"]
+            self.assertTrue(
+                any(point.get("continuous_schema") == "hsp_unavailable" for point in trace),
+                trace,
+            )
+            self.assertTrue(handy.moves)
+            self.assertEqual(handy.moves[-1], (80, 50, 80))
+            self.assertEqual(handy.position_moves, [])
+        finally:
+            controller.stop()
+
     def test_continuous_backend_preserves_same_pattern_phase_on_update(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0)

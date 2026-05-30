@@ -116,7 +116,8 @@ If port 5000 is busy, the app picks the next free local port.
 ## First run
 
 1. In **Profile menu > Settings > Device**, use Cloud REST with your Handy
-   connection key, or select Local Bluetooth and connect from the top bar.
+   connection key, or select Local Bluetooth and connect from **Handy
+   Connection** in the sidebar.
 2. Pick a model in **Settings > Model**. Click **Download Model** if it
    isn't installed yet (can pull several GB through Ollama).
 3. Optional: **Settings > Diagnostics > Run Setup Checks** verifies Ollama,

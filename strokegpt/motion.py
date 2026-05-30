@@ -2042,7 +2042,7 @@ class MotionController:
                 source=source,
                 trace_metadata=trace_metadata,
             )
-            return True
+            return False
 
         self._set_semantic_target(clamped_target)
         replacement_phase_state = None
@@ -2487,7 +2487,7 @@ class MotionController:
                 source=source,
                 trace_metadata=trace_metadata,
             )
-            return True
+            return False
 
         return self._run_continuous_stream_plan(
             plan,
