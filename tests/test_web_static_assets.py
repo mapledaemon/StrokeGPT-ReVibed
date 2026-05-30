@@ -701,7 +701,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".sidebar-handy-panel { display: grid; gap: var(--space-2); }", css)
             self.assertIn(".sidebar-handy-status { min-height: 2.1rem;", css)
             self.assertIn("color: var(--red-hover); font-size: 0.78rem; font-weight: 700;", css)
-            self.assertIn(".settings-field-label.sidebar-handy-connection-label { width: fit-content; margin: 0;", css)
+            self.assertIn(".settings-field-label.sidebar-handy-connection-label { display: flex; align-items: center; width: fit-content; margin: 0 0 var(--space-1);", css)
             self.assertIn("text-transform: none;", css)
             self.assertIn(".sidebar-handy-key-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(4rem, auto);", css)
             self.assertIn(".sidebar-handy-key-row .input-text { min-width: 0; min-height: var(--sidebar-control-min-height);", css)
