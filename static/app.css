@@ -110,7 +110,7 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 .handy-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72); background: #203326; color: var(--green); }
 .handy-bluetooth-toggle.is-error { border-color: rgba(255, 85, 85, 0.72); background: #3b2024; color: var(--red-hover); }
 .handy-bluetooth-toggle[aria-expanded="true"] { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(169, 154, 239, 0.28); }
-.handy-bluetooth-popover { position: fixed; top: 0; left: 0; right: auto; z-index: 8900; width: min(15rem, calc(100vw - 1rem)); max-height: min(28rem, calc(100vh - 1rem)); overflow-y: auto; padding: var(--space-2); border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32); display: grid; gap: var(--space-2); color: var(--foreground); }
+.handy-bluetooth-popover { position: fixed; top: 0; left: 0; right: auto; z-index: 8900; width: min(15rem, calc(100vw - 1rem)); max-height: min(28rem, calc(100vh - 1rem)); overflow-y: visible; padding: var(--space-2); border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32); display: grid; gap: var(--space-2); color: var(--foreground); }
 .handy-bluetooth-popover[hidden] { display: none; }
 .handy-bluetooth-popover[data-placement="top"] { transform-origin: bottom right; }
 .handy-bluetooth-popover[data-placement="bottom"] { transform-origin: top right; }

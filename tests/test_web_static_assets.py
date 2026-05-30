@@ -567,6 +567,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".bluetooth-button-icon { width: 1.25rem; min-width: 1.25rem; height: 1.25rem;", css)
             self.assertIn(".handy-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72);", css)
             self.assertIn(".handy-bluetooth-popover { position: fixed; top: 0; left: 0;", css)
+            self.assertIn("max-height: min(28rem, calc(100vh - 1rem)); overflow-y: visible;", css)
             self.assertIn('.handy-bluetooth-popover[data-placement="top"] { transform-origin: bottom right;', css)
             self.assertIn(".bluetooth-status-grid { margin: 0; display: grid;", css)
             self.assertIn(".bluetooth-menu-warning { margin: 0; padding: 0.42rem 0.5rem;", css)

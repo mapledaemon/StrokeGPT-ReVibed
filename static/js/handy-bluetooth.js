@@ -23,6 +23,7 @@ const RESPONSE_TIMEOUT_MS = 5000;
 const POPOVER_GAP_PX = 8;
 const POPOVER_MARGIN_PX = 8;
 const POPOVER_MIN_HEIGHT_PX = 120;
+const POPOVER_SCROLL_TOLERANCE_PX = 4;
 const POPOVER_WIDTH_PX = 240;
 
 function bluetoothSupported() {
@@ -138,7 +139,8 @@ function positionBluetoothPopover() {
         POPOVER_MIN_HEIGHT_PX,
         Math.min(viewportHeight - POPOVER_MARGIN_PX * 2, openAbove ? aboveSpace : belowSpace),
     );
-    const popoverHeight = Math.min(contentHeight, availableHeight);
+    const needsScroll = contentHeight - availableHeight > POPOVER_SCROLL_TOLERANCE_PX;
+    const popoverHeight = needsScroll ? availableHeight : contentHeight;
     const maxLeft = viewportWidth - POPOVER_MARGIN_PX - popoverWidth;
     const left = clampPopoverPosition(
         Number(buttonRect.right || 0) - popoverWidth,
@@ -152,8 +154,10 @@ function positionBluetoothPopover() {
     popover.dataset.placement = openAbove ? 'top' : 'bottom';
     popover.style.left = `${Math.round(left)}px`;
     popover.style.top = `${Math.round(top)}px`;
-    popover.style.maxHeight = `${Math.round(popoverHeight)}px`;
-    popover.style.overflowY = contentHeight > popoverHeight ? 'auto' : '';
+    popover.style.maxHeight = needsScroll
+        ? `${Math.floor(popoverHeight)}px`
+        : `${Math.ceil(popoverHeight + POPOVER_SCROLL_TOLERANCE_PX)}px`;
+    popover.style.overflowY = needsScroll ? 'auto' : 'visible';
 }
 
 function requestBluetoothPopoverPosition() {

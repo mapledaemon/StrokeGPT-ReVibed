@@ -128,10 +128,31 @@ describe('Handy Bluetooth sidebar menu', () => {
         assert.equal(getStubElement('handy-bluetooth-popover').dataset.placement, 'top');
         assert.match(getStubElement('handy-bluetooth-popover').style.left, /px$/);
         assert.match(getStubElement('handy-bluetooth-popover').style.maxHeight, /px$/);
+        assert.equal(getStubElement('handy-bluetooth-popover').style.overflowY, 'visible');
         assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-expanded'), 'true');
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Disconnected');
         assert.equal(getStubElement('bluetooth-menu-action-btn').textContent, 'Connect');
         assert.equal(requestDeviceCalls, 0);
+    });
+
+    it('scrolls the status menu only when viewport space is constrained', () => {
+        getStubElement('handy-bluetooth-btn').getBoundingClientRect = () => ({
+            top: 220,
+            bottom: 252,
+            left: 900,
+            right: 932,
+            width: 32,
+            height: 32,
+        });
+        const popover = getStubElement('handy-bluetooth-popover');
+        popover.scrollHeight = 420;
+        popover.offsetHeight = 420;
+        globalThis.window.innerHeight = 300;
+
+        getStubElement('handy-bluetooth-btn').click();
+
+        assert.equal(popover.hidden, false);
+        assert.equal(popover.style.overflowY, 'auto');
     });
 
     it('renders selected transport, device, and bridge queue details', () => {

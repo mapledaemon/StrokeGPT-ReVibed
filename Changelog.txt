@@ -46,6 +46,8 @@ Branch: codex/experimental-bluetooth-hsp
   when HSP/continuous streaming is unavailable, so a selected but disconnected
   Bluetooth transport records a real Handy command failure instead of swallowing
   the request as a successful no-op.
+- Avoided unnecessary scrollbars in the local Bluetooth flyout by enabling
+  menu scrolling only when the viewport genuinely constrains the popup height.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
