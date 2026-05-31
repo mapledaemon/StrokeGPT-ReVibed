@@ -556,6 +556,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(add["points"][-1], {"t": 320, "x": 100})
         self.assertEqual(bridge.commands[4][1], {"tail_point_threshold": 1})
         self.assertEqual(bridge.commands[5][0], "hsp/play")
+        self.assertTrue(bridge.commands[5][1]["pause_on_starving"])
         self.assertEqual(handy.diagnostics()["transport_mode"], "browser_bluetooth")
 
     def test_start_continuous_stream_rounds_hsp_points_to_api_integer_schema(self):

@@ -1477,7 +1477,7 @@ class HandyController:
             "start_time": max(0, int(round(start_time_ms))),
             "server_time": self._estimated_server_time_ms(allow_refresh=False),
             "playback_rate": 1.0,
-            "pause_on_starving": False,
+            "pause_on_starving": self._using_browser_bluetooth(),
             "loop": False,
         }
         return self._send_v3_command("hsp/play", body)

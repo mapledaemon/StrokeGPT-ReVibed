@@ -18,7 +18,8 @@ import {
 } from './handy-bluetooth-codec.js';
 
 const COMMAND_WAIT_SECONDS = 6;
-const HSP_ADD_CHUNK_POINTS = 36;
+const HSP_ADD_CHUNK_POINTS = 20;
+const WRITE_WITHOUT_RESPONSE_SETTLE_MS = 20;
 const RESPONSE_TIMEOUT_MS = 5000;
 const POPOVER_GAP_PX = 8;
 const POPOVER_MARGIN_PX = 8;
@@ -275,21 +276,31 @@ async function writeBluetoothValue(bytes) {
     const canWriteWithoutResponse = state.handyBluetoothTx.properties?.writeWithoutResponse;
     if (canWriteWithResponse && typeof state.handyBluetoothTx.writeValueWithResponse === 'function') {
         await state.handyBluetoothTx.writeValueWithResponse(bytes);
+        return 'with-response';
     } else if (canWriteWithResponse && typeof state.handyBluetoothTx.writeValue === 'function') {
         await state.handyBluetoothTx.writeValue(bytes);
+        return 'with-response';
     } else if (canWriteWithoutResponse && typeof state.handyBluetoothTx.writeValueWithoutResponse === 'function') {
         await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
+        await new Promise(resolve => setTimeout(resolve, WRITE_WITHOUT_RESPONSE_SETTLE_MS));
+        return 'without-response';
     } else if (typeof state.handyBluetoothTx.writeValueWithResponse === 'function') {
         try {
             await state.handyBluetoothTx.writeValueWithResponse(bytes);
+            return 'with-response';
         } catch (error) {
             if (typeof state.handyBluetoothTx.writeValueWithoutResponse !== 'function') throw error;
             await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
+            await new Promise(resolve => setTimeout(resolve, WRITE_WITHOUT_RESPONSE_SETTLE_MS));
+            return 'without-response';
         }
     } else if (typeof state.handyBluetoothTx.writeValue === 'function') {
         await state.handyBluetoothTx.writeValue(bytes);
+        return 'with-response';
     } else if (typeof state.handyBluetoothTx.writeValueWithoutResponse === 'function') {
         await state.handyBluetoothTx.writeValueWithoutResponse(bytes);
+        await new Promise(resolve => setTimeout(resolve, WRITE_WITHOUT_RESPONSE_SETTLE_MS));
+        return 'without-response';
     } else {
         throw new Error('Bluetooth TX characteristic does not support writes.');
     }
@@ -300,8 +311,8 @@ async function sendBleRequest(path, body = {}, options = {}) {
     const id = nextMessageId();
     const bytes = encodeHandyRequest(path, body, id);
     if (!waitForResponse) {
-        await writeBluetoothValue(bytes);
-        return {ok: true, response_pending: true};
+        const write_mode = await writeBluetoothValue(bytes);
+        return {ok: true, response_pending: true, write_mode};
     }
     const responsePromise = new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -369,6 +380,15 @@ function handleBleMessage(event) {
             clearTimeout(pending.timer);
             state.handyBluetoothPendingResponses.delete(response.id);
             pending.resolve(response);
+        }
+        if (response.error?.message) {
+            postBluetoothStatus({
+                status: 'error',
+                event_type: 'bluetooth_rpc_error',
+                error: response.error.message,
+                message: response.error.message,
+            });
+            return;
         }
         if (response.hsp_state) {
             postBluetoothStatus({

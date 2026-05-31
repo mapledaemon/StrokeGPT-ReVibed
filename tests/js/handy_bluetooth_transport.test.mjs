@@ -106,4 +106,46 @@ describe('Handy Bluetooth command transport', () => {
         assert.equal(acknowledgements[0].body.id, 43);
         assert.equal(acknowledgements[0].body.ok, true);
     });
+
+    it('splits HSP add payloads into conservative BLE-sized writes', async () => {
+        const writes = [];
+        const acknowledgements = [];
+        state.handyBluetoothTx = {
+            properties: {write: false, writeWithoutResponse: true},
+            async writeValueWithoutResponse(bytes) {
+                writes.push(new Uint8Array(bytes));
+            },
+        };
+        globalThis.fetch = async (endpoint, options = {}) => {
+            acknowledgements.push({
+                endpoint,
+                body: JSON.parse(options.body || '{}'),
+            });
+            return jsonResponse(200, {
+                status: 'success',
+                bluetooth: {connected: true, status: 'connected'},
+            });
+        };
+        const points = Array.from({length: 60}, (_, index) => ({
+            t: index * 50,
+            x: index % 2 === 0 ? 15 : 85,
+        }));
+
+        await executeBridgeCommandForTests({
+            id: 44,
+            path: 'hsp/add',
+            body: {
+                points,
+                flush: true,
+                tail_point_stream_index: points.length,
+                tail_point_threshold: 48,
+            },
+        });
+
+        assert.equal(writes.length, 3);
+        assert.ok(writes.every(bytes => bytes.length <= 244), writes.map(bytes => bytes.length).join(', '));
+        assert.equal(acknowledgements.length, 1);
+        assert.equal(acknowledgements[0].body.id, 44);
+        assert.equal(acknowledgements[0].body.ok, true);
+    });
 });

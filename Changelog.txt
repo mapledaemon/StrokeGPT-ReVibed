@@ -53,6 +53,10 @@ Branch: codex/experimental-bluetooth-hsp
   optional RPC notification, respecting the characteristic's advertised write
   mode, and mapping app HSP point depths onto the Handy BLE protocol's uint8
   point range.
+- Made local Bluetooth HSP playback less likely to die after the first burst by
+  shrinking `hsp/add` chunks under common BLE ATT payload limits, pacing
+  write-without-response traffic, surfacing asynchronous RPC errors, and asking
+  HSP to pause/resume rather than stop when a BLE buffer briefly starves.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

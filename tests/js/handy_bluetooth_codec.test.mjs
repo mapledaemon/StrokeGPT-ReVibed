@@ -60,19 +60,19 @@ function firstHspPoint(encoded) {
 
 
 describe('Handy Bluetooth protobuf codec', () => {
-    it('keeps one HSP add chunk under the Handy BLE payload cap', () => {
-        const points = Array.from({length: 48}, (_, index) => ({
-            t: index * 50,
+    it('keeps one HSP add chunk under the common BLE ATT payload cap', () => {
+        const points = Array.from({length: 20}, (_, index) => ({
+            t: 21600000 + index * 50,
             x: index % 2 === 0 ? 20 : 80,
         }));
         const encoded = encodeHandyRequest('hsp/add', {
             points,
             flush: true,
-            tail_point_stream_index: points.length,
-            tail_point_threshold: 24,
+            tail_point_stream_index: 999999,
+            tail_point_threshold: 999995,
         }, 7);
         assert.ok(encoded.length > 0);
-        assert.ok(encoded.length <= 512, `encoded payload was ${encoded.length} bytes`);
+        assert.ok(encoded.length <= 244, `encoded payload was ${encoded.length} bytes`);
     });
 
     it('maps app HSP point depth onto the BLE uint8 point range', () => {
