@@ -51,11 +51,21 @@ function firstField(fields, field) {
     return fields.find(item => item.field === field);
 }
 
+function floatValue(item) {
+    return new DataView(item.value.buffer, item.value.byteOffset, item.value.byteLength).getFloat32(0, true);
+}
+
 function firstHspPoint(encoded) {
     const rpc = parseFields(encoded);
     const request = parseFields(firstField(rpc, 2).value);
     const hspAdd = parseFields(firstField(request, 861).value);
     return parseFields(firstField(hspAdd, 1).value);
+}
+
+function requestBody(encoded, field) {
+    const rpc = parseFields(encoded);
+    const request = parseFields(firstField(rpc, 2).value);
+    return parseFields(firstField(request, field).value);
 }
 
 
@@ -75,7 +85,7 @@ describe('Handy Bluetooth protobuf codec', () => {
         assert.ok(encoded.length <= 244, `encoded payload was ${encoded.length} bytes`);
     });
 
-    it('maps app HSP point depth onto the BLE uint8 point range', () => {
+    it('maps app HSP point depth onto the BLE HSP point range', () => {
         const encoded = encodeHandyRequest('hsp/add', {
             points: [{t: 10, x: 100}],
             flush: true,
@@ -83,12 +93,34 @@ describe('Handy Bluetooth protobuf codec', () => {
         const point = firstHspPoint(encoded);
 
         assert.equal(firstField(point, 1).value, 10);
-        assert.equal(firstField(point, 2).value, 255);
+        assert.equal(firstField(point, 2).value, 1000);
+    });
+
+    it('maps REST-normalized stroke windows onto BLE percent stroke fields', () => {
+        const encoded = encodeHandyRequest('slider/stroke', {
+            min: 0.1,
+            max: 0.9,
+        }, 10);
+        const body = requestBody(encoded, 841);
+
+        assert.equal(Math.round(floatValue(firstField(body, 1))), 10);
+        assert.equal(Math.round(floatValue(firstField(body, 2))), 90);
+    });
+
+    it('encodes HSP resume pick-up requests for starving Bluetooth streams', () => {
+        const encoded = encodeHandyRequest('hsp/resume', {pick_up: true}, 9);
+        const body = requestBody(encoded, 866);
+
+        assert.equal(firstField(body, 1).value, 1);
     });
 
     it('rejects commands outside the implemented local Bluetooth subset', () => {
         assert.throws(
             () => encodeHandyRequest('unknown/path', {}, 1),
+            /not implemented/,
+        );
+        assert.throws(
+            () => encodeHandyRequest('hsp/threshold', {tail_point_threshold: 1}, 1),
             /not implemented/,
         );
     });

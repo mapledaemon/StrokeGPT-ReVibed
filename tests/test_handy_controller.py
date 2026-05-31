@@ -545,7 +545,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(
             [path for path, _body in bridge.commands],
-            ["mode2", "slider/stroke", "hsp/setup", "hsp/add", "hsp/threshold", "hsp/play"],
+            ["mode2", "slider/stroke", "hsp/setup", "hsp/add", "hsp/play"],
         )
         self.assertEqual(bridge.commands[0][1], {"mode": 4})
         self.assertEqual(bridge.commands[1][1], {"min": 0.1, "max": 0.9})
@@ -553,10 +553,10 @@ class HandyControllerTests(unittest.TestCase):
         add = bridge.commands[3][1]
         self.assertTrue(add["flush"])
         self.assertEqual(add["tail_point_stream_index"], 3)
+        self.assertEqual(add["tail_point_threshold"], 1)
         self.assertEqual(add["points"][-1], {"t": 320, "x": 100})
-        self.assertEqual(bridge.commands[4][1], {"tail_point_threshold": 1})
-        self.assertEqual(bridge.commands[5][0], "hsp/play")
-        self.assertTrue(bridge.commands[5][1]["pause_on_starving"])
+        self.assertEqual(bridge.commands[4][0], "hsp/play")
+        self.assertTrue(bridge.commands[4][1]["pause_on_starving"])
         self.assertEqual(handy.diagnostics()["transport_mode"], "browser_bluetooth")
 
     def test_start_continuous_stream_rounds_hsp_points_to_api_integer_schema(self):
@@ -1141,6 +1141,31 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], [{"t": 480, "x": 65}])
         self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
         self.assertEqual(handy.diagnostics()["relative_speed"], 50)
+
+    def test_browser_bluetooth_append_continuous_stream_inlines_threshold_and_resumes(self):
+        bridge = RecordingBluetoothBridge()
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual([path for path, _body in bridge.commands], ["hsp/add", "hsp/resume"])
+        add = bridge.commands[0][1]
+        self.assertFalse(add["flush"])
+        self.assertEqual(add["tail_point_stream_index"], 4)
+        self.assertEqual(add["tail_point_threshold"], 2)
+        self.assertEqual(add["points"], [{"t": 480, "x": 65}])
+        self.assertEqual(bridge.commands[1][1], {"pick_up": True})
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
 
     def test_append_continuous_stream_throttles_threshold_updates_after_start(self):
         handy = RecordingV3HandyController()

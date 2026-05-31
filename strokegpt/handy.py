@@ -1439,6 +1439,40 @@ class HandyController:
             self._last_hsp_threshold_value = threshold
         return sent
 
+    def _hsp_add_body(
+        self,
+        stream_points,
+        *,
+        flush,
+        tail_point_stream_index,
+        tail_point_threshold=None,
+    ):
+        body = {
+            "points": stream_points[:100],
+            "flush": bool(flush),
+            "tail_point_stream_index": max(1, int(tail_point_stream_index)),
+        }
+        if self._using_browser_bluetooth() and tail_point_threshold is not None:
+            try:
+                body["tail_point_threshold"] = max(0, int(tail_point_threshold))
+            except (TypeError, ValueError):
+                pass
+        return body
+
+    def _send_hsp_threshold_after_add(self, tail_point_threshold, *, force=False):
+        if self._using_browser_bluetooth():
+            return True
+        return self._send_hsp_threshold(tail_point_threshold, force=force)
+
+    def _resume_hsp_after_bluetooth_add(self, add_result):
+        if not self._using_browser_bluetooth():
+            return True
+        if not self._send_v3_command("hsp/resume", {"pick_up": True}):
+            return False
+        if add_result is not None:
+            self._last_command_result = add_result
+        return True
+
     def _hsp_point_time_bounds(self, points):
         times = []
         for point in points or ():
@@ -1512,19 +1546,22 @@ class HandyController:
             return False
 
         tail_index = int(tail_point_stream_index or len(stream_points))
-        add = {
-            "points": stream_points[:100],
-            "flush": True,
-            "tail_point_stream_index": max(1, tail_index),
-        }
+        add = self._hsp_add_body(
+            stream_points,
+            flush=True,
+            tail_point_stream_index=tail_index,
+            tail_point_threshold=tail_point_threshold,
+        )
         if not self._send_v3_command("hsp/add", add):
             return False
         add_result = self._last_command_result
-        if not self._send_hsp_threshold(tail_point_threshold, force=True) and self._api_v3_auth_failed:
+        if not self._send_hsp_threshold_after_add(tail_point_threshold, force=True) and self._api_v3_auth_failed:
             return False
         if replace_active_stream:
             restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
             if restarted is False:
+                return False
+            if restarted is not True and not self._resume_hsp_after_bluetooth_add(add_result):
                 return False
             if add_result is not None and restarted is not True:
                 self._last_command_result = add_result
@@ -1549,18 +1586,21 @@ class HandyController:
         stream_points = self._stream_points_body(points)
         if not stream_points:
             return True
-        body = {
-            "points": stream_points[:100],
-            "flush": False,
-            "tail_point_stream_index": max(1, int(tail_point_stream_index)),
-        }
+        body = self._hsp_add_body(
+            stream_points,
+            flush=False,
+            tail_point_stream_index=tail_point_stream_index,
+            tail_point_threshold=tail_point_threshold,
+        )
         if not self._send_v3_command("hsp/add", body):
             return False
         add_result = self._last_command_result
-        if not self._send_hsp_threshold(tail_point_threshold) and self._api_v3_auth_failed:
+        if not self._send_hsp_threshold_after_add(tail_point_threshold) and self._api_v3_auth_failed:
             return False
         restarted = self._restart_hsp_if_clock_is_stale(stream_points)
         if restarted is False:
+            return False
+        if restarted is not True and not self._resume_hsp_after_bluetooth_add(add_result):
             return False
         if add_result is not None and restarted is not True:
             self._last_command_result = add_result

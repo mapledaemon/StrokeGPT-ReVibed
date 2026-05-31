@@ -12,7 +12,7 @@ const WIRE_FIXED32 = 5;
 const MESSAGE_TYPE_REQUEST = 1;
 const MESSAGE_TYPE_RESPONSE = 3;
 const MESSAGE_TYPE_NOTIFICATION = 4;
-const HSP_POINT_PROTOCOL_MAX = 255;
+const HSP_POINT_PROTOCOL_MAX = 1000;
 
 const REQUEST_FIELDS = {
     mode2: 701,
@@ -27,9 +27,10 @@ const REQUEST_FIELDS = {
     'hsp/flush': 862,
     'hsp/play': 863,
     'hsp/stop': 864,
+    'hsp/pause': 865,
+    'hsp/resume': 866,
     'hsp/state': 867,
     'hsp/synctime': 868,
-    'hsp/threshold': 869,
     'clock/offset/get': 712,
     'clock/offset/set': 709,
 };
@@ -96,6 +97,13 @@ function floatField(field, value) {
     return concatBytes([fieldKey(field, WIRE_FIXED32), bytes]);
 }
 
+function strokePercentValue(value, fallback) {
+    const number = Number(value);
+    const safe = Number.isFinite(number) ? number : fallback;
+    const percent = safe >= 0 && safe <= 1 ? safe * 100 : safe;
+    return Math.max(0, Math.min(100, percent));
+}
+
 function stringField(field, value) {
     const bytes = encoder.encode(String(value || ''));
     return lengthField(field, bytes);
@@ -121,6 +129,7 @@ function requestBodyForPath(path, body = {}) {
         case 'hamp/stop':
         case 'hsp/flush':
         case 'hsp/stop':
+        case 'hsp/pause':
         case 'hsp/state':
         case 'clock/offset/get':
             return new Uint8Array();
@@ -129,8 +138,8 @@ function requestBodyForPath(path, body = {}) {
         case 'hamp/stroke':
         case 'slider/stroke':
             return concatBytes([
-                floatField(1, body.min ?? 0),
-                floatField(2, body.max ?? 1),
+                floatField(1, strokePercentValue(body.min, 0)),
+                floatField(2, strokePercentValue(body.max, 100)),
             ]);
         case 'hdsp/xpt':
             return concatBytes([
@@ -169,8 +178,8 @@ function requestBodyForPath(path, body = {}) {
                 uintField(2, body.server_time ?? Date.now()),
                 floatField(3, body.filter ?? 0.5),
             ]);
-        case 'hsp/threshold':
-            return uintField(1, body.tail_point_threshold ?? 0);
+        case 'hsp/resume':
+            return boolField(1, Boolean(body.pick_up ?? body.pickUp ?? true));
         case 'clock/offset/set':
             return concatBytes([
                 sint64Field(1, body.clock_offset ?? 0),

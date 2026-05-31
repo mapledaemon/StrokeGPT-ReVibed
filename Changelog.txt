@@ -51,12 +51,20 @@ Branch: codex/experimental-bluetooth-hsp
 - Kept local Bluetooth motion commands moving by acknowledging backend bridge
   commands after confirmed GATT writes instead of blocking every command on an
   optional RPC notification, respecting the characteristic's advertised write
-  mode, and mapping app HSP point depths onto the Handy BLE protocol's uint8
-  point range.
+  mode, and mapping app HSP point depths onto the Handy BLE protocol's
+  0-1000 HSP point range.
 - Made local Bluetooth HSP playback less likely to die after the first burst by
   shrinking `hsp/add` chunks under common BLE ATT payload limits, pacing
   write-without-response traffic, surfacing asynchronous RPC errors, and asking
   HSP to pause/resume rather than stop when a BLE buffer briefly starves.
+- Kept chat and Freestyle on the shared continuous-motion pipeline while making
+  the Bluetooth-specific HSP command shape match the browser reference more
+  closely: `hsp/add` now carries the tail threshold inline, append/replacement
+  batches explicitly send `hsp/resume`, and the separate REST `hsp/threshold`
+  command is no longer sent over local Bluetooth.
+- Translated REST-normalized stroke bounds into Bluetooth percent units in the
+  browser codec so local Bluetooth HSP uses the same physical stroke window as
+  the internet REST pathway instead of compressing motion into a tiny range.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
