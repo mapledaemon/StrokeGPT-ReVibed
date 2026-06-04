@@ -1,6 +1,10 @@
 from flask import Blueprint, jsonify
 
-from ..settings import default_user_profile, normalize_ollama_model
+from ..settings import (
+    DEFAULT_HANDY_API_V3_APPLICATION_ID,
+    default_user_profile,
+    normalize_ollama_model,
+)
 
 
 settings_blueprint = Blueprint("settings", __name__)
@@ -432,7 +436,10 @@ def set_handy_device_config_route():
     firmware_version = web.settings._normalize_handy_firmware_version(
         data.get("handy_firmware_version", web.settings.handy_firmware_version)
     )
-    api_v3_key = str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
+    api_v3_key = (
+        str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
+        or DEFAULT_HANDY_API_V3_APPLICATION_ID
+    )
 
     web.settings.handy_firmware_version = firmware_version
     web.settings.handy_firmware_version_user_selected = True

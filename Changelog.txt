@@ -85,6 +85,9 @@ Branch: codex/experimental-bluetooth-hsp
 - Restored firmware v4/API v3 as the migrated default unless the user
   explicitly saves legacy firmware v3, and changed WiFi connection-key checks
   to use the Handy `/connected` endpoint instead of probing slide position.
+- Prevented blank Device-tab Application ID saves from disabling API v3, and
+  made firmware v4 WiFi connection checks retry API v3 `/connected` even after
+  a stale app-key auth failure instead of falling back to API v2.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

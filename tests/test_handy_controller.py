@@ -11,6 +11,7 @@ sys.modules.setdefault("requests", requests_module)
 
 import strokegpt.handy as handy_module
 from strokegpt.handy import HandyController
+from strokegpt.settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
 
 
 class RecordingHandyController(HandyController):
@@ -283,16 +284,22 @@ class HandyControllerTests(unittest.TestCase):
             {"limit": 240, "remaining": 17, "reset_seconds": 12},
         )
 
-    def test_send_v3_command_requires_app_key(self):
-        handy = HandyController(handy_key="secret")
+    def test_blank_v3_app_key_uses_default_application_id(self):
+        handy = HandyController(handy_key="secret", api_v3_key="")
 
-        self.assertFalse(handy._send_v3_command("mode2", {"mode": 0}))
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=200),
+            create=True,
+        ) as put:
+            self.assertTrue(handy._send_v3_command("mode2", {"mode": 0}))
 
+        _args, kwargs = put.call_args
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         diagnostics = handy.diagnostics()
-        self.assertFalse(diagnostics["api_v3_enabled"])
-        self.assertFalse(diagnostics["api_v3_key_configured"])
-        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "missing_api_v3_key")
-        self.assertEqual(diagnostics["last_command"]["error"], "missing Handy API v3 Application ID")
+        self.assertTrue(diagnostics["api_v3_enabled"])
+        self.assertTrue(diagnostics["api_v3_key_configured"])
+        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "")
 
     def test_send_command_records_failure_instead_of_raising_name_error(self):
         handy = HandyController(handy_key="secret")
@@ -310,7 +317,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertIn("device offline", diagnostics["last_command"]["error"])
 
     def test_check_connection_probes_connected_without_motion(self):
-        handy = HandyController(handy_key="secret")
+        handy = HandyController(handy_key="secret", firmware_version="fw3")
 
         with mock.patch(
             "strokegpt.handy.requests.get",
@@ -328,6 +335,22 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 200)
         self.assertNotIn("secret", str(result))
+
+    def test_check_connection_blank_app_key_uses_api_v3_default(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
 
     def test_check_connection_uses_api_v3_connected_for_fw4_rest(self):
         handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
@@ -347,6 +370,40 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(result["connected"])
         self.assertEqual(result["last_command"]["path"], "connected")
         self.assertTrue(result["last_command"]["ok"])
+
+    def test_check_connection_retries_api_v3_after_prior_auth_failure(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
+        handy._disable_api_v3_control(path="hsp/add", error="old auth failure")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+
+    def test_check_connection_reports_api_v3_app_key_failure(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="bad-app-id")
+        error = handy_module.requests.exceptions.RequestException("400 Client Error: Bad Request")
+        error.response = FakeResponse(status_code=400, payload={"error": {"message": "bad app key"}})
+
+        with mock.patch("strokegpt.handy.requests.get", side_effect=error, create=True) as get:
+            result = handy.check_connection()
+
+        args, _kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("Application ID", result["message"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 400)
 
     def test_check_connection_reports_offline_connected_probe(self):
         handy = HandyController(handy_key="secret")
@@ -491,14 +548,18 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
-    def test_supports_continuous_streaming_requires_connection_and_app_key(self):
+    def test_supports_continuous_streaming_uses_default_app_key_for_fw4(self):
         handy = RecordingHandyController()
 
         self.assertFalse(handy.supports_continuous_streaming())
         handy.set_firmware_version("fw4")
 
+        self.assertTrue(handy.supports_continuous_streaming())
+        self.assertEqual(handy.api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(handy.api_v3_unavailable_reason(), "")
+        handy._disable_api_v3_control(path="hsp/add", error="Unauthorized")
         self.assertFalse(handy.supports_continuous_streaming())
-        self.assertEqual(handy.api_v3_unavailable_reason(), "missing_api_v3_key")
+        self.assertEqual(handy.api_v3_unavailable_reason(), "api_v3_auth_failed")
         handy.set_handy_api_key("app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         handy.set_firmware_version("v3")

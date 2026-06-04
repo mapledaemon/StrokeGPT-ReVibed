@@ -229,6 +229,45 @@ class WebSettingsRouteTests(WebTestCase):
             handy.set_handy_api_key(original_runtime["api_v3_key"])
             handy.set_transport_mode(original_runtime["transport"])
 
+    def test_set_handy_device_config_blank_v3_key_restores_default_application_id(self):
+        from strokegpt.settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
+        from strokegpt.web import handy, settings
+
+        original = settings.to_dict()
+        original_runtime = {
+            "handy_key": handy.handy_key,
+            "firmware": handy.firmware_version,
+            "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
+        }
+        try:
+            settings.handy_key = "saved-key"
+            settings.handy_transport = "rest"
+            handy.set_api_key("saved-key")
+            handy.set_transport_mode("rest")
+
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/set_handy_device_config", json={
+                    "handy_firmware_version": "v4",
+                    "handy_api_v3_key": "",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["handy_firmware_version"], "fw4")
+            self.assertEqual(data["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            self.assertTrue(data["handy_api_v3_key_configured"])
+            self.assertTrue(data["handy_api_v3_enabled"])
+            self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            self.assertEqual(handy.api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            save.assert_called_once()
+        finally:
+            settings.apply_dict(original)
+            handy.set_api_key(original_runtime["handy_key"])
+            handy.set_firmware_version(original_runtime["firmware"])
+            handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
+
     def test_numeric_routes_fall_back_on_invalid_values(self):
         from strokegpt.web import handy, settings
 

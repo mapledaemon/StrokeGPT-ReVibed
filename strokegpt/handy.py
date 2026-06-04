@@ -7,6 +7,8 @@ from collections import deque
 from urllib.parse import urlencode
 import requests
 
+from .settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
+
 MODE_HAMP = 0
 MODE_HDSP = 2
 MODE_HSP = 4
@@ -103,9 +105,10 @@ class HandyController:
             os.getenv("STROKEGPT_HANDY_API_V3_APPLICATION_ID", "")
             or os.getenv("STROKEGPT_HANDY_API_KEY", "")
         )
-        self.api_v3_key = str(
-            api_v3_key if api_v3_key is not None else env_api_v3_application_id or ""
-        ).strip()
+        self.api_v3_key = (
+            str(api_v3_key if api_v3_key is not None else env_api_v3_application_id or "").strip()
+            or DEFAULT_HANDY_API_V3_APPLICATION_ID
+        )
         self.api_v3_base_url = self._normalize_base_url(
             os.getenv("STROKEGPT_HANDY_API_V3_BASE_URL", api_v3_base_url) or HANDY_API_V3_BASE_URL
         )
@@ -239,7 +242,7 @@ class HandyController:
     def set_handy_api_key(self, key):
         # Compatibility shim - do not extend. The persisted setting name says
         # "key", but API v3 HSP uses a public Application ID in X-Api-Key.
-        cleaned = str(key or "").strip()
+        cleaned = str(key or "").strip() or DEFAULT_HANDY_API_V3_APPLICATION_ID
         if cleaned != self.api_v3_key or self._api_v3_auth_failed:
             self._current_mode = None
             self._hamp_started = False
@@ -970,7 +973,7 @@ class HandyController:
                 "last_command": self.last_command_result(),
             }
 
-        use_api_v3 = self.supports_api_v3_control()
+        use_api_v3 = bool(self.firmware_version == "fw4" and self.handy_key and self._effective_api_v3_key())
         base_url = self.api_v3_base_url if use_api_v3 else self.base_url
         headers = {"X-Connection-Key": self.handy_key}
         if use_api_v3:
@@ -1021,10 +1024,17 @@ class HandyController:
             if use_api_v3 and getattr(error_response, "status_code", None) == 401:
                 self._disable_api_v3_control(path=path, error=str(e))
             print(f"[HANDY ERROR] Connection check failed: {e}", file=sys.stderr)
+            status_code = getattr(error_response, "status_code", None)
+            message = f"Handy connection failed: {e}"
+            if use_api_v3 and status_code in {400, 401, 403}:
+                message = (
+                    "Handy API v3 connection check failed. Check the Device tab "
+                    f"Application ID and Handy connection key. ({e})"
+                )
             return {
                 "status": "error",
                 "connected": False,
-                "message": f"Handy connection failed: {e}",
+                "message": message,
                 "last_command": self.last_command_result(),
             }
 
