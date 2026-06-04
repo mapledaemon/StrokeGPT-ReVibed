@@ -1575,6 +1575,20 @@ def _target_has_motion_effect(current, target):
         or current.stroke_range != target.stroke_range
     )
 
+
+def _target_should_apply_motion(current, target):
+    if _target_has_motion_effect(current, target):
+        return True
+    if not target:
+        return False
+    try:
+        if float(getattr(target, "speed", 0) or 0) <= 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    return not _chat_motion_playback_active()
+
+
 def _user_requested_specific_focus(text):
     clean = re.sub(r"\s+", " ", str(text or "").lower()).strip()
     return bool(clean and LLM_SPECIFIC_FOCUS_REQUEST_RE.search(clean))
@@ -1667,7 +1681,7 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
         return response, False
     needs_repair = (
         (_looks_like_motion_request(user_input) or _chat_claims_motion_change(response.get("chat")))
-        and not _target_has_motion_effect(current, target)
+        and not _target_should_apply_motion(current, target)
     )
     if not needs_repair:
         return response, False
@@ -1685,7 +1699,7 @@ def _apply_llm_response_move(response, current, source="llm", user_input="", con
     if _autospeak_chat_only_motion_context(context):
         return None
     target = _target_from_llm_response_move(response, current, user_input=user_input)
-    if not _target_has_motion_effect(current, target):
+    if not _target_should_apply_motion(current, target):
         return None
     motion.apply_generated_target(target, source=source)
     return target
@@ -2125,6 +2139,7 @@ def get_current_context():
         special_persona_mode = app_state.special_persona_mode
         active_mode_name = _active_mode_name()
     semantic_target = _motion_semantic_target()
+    motion_playback_active = _chat_motion_playback_active()
     chat_session = _chat_session_snapshot()
     context = {
         'persona_desc': settings.persona_desc, 'current_mood': current_mood,
@@ -2139,6 +2154,7 @@ def get_current_context():
         'motion_reverse_direction': settings.motion_reverse_direction,
         'rules': settings.rules, 'last_stroke_speed': semantic_target.speed,
         'last_depth_pos': semantic_target.depth, 'last_stroke_range': semantic_target.stroke_range,
+        'motion_playback_active': motion_playback_active,
         'min_speed': settings.min_speed, 'max_speed': settings.max_speed,
         'use_long_term_memory': use_long_term_memory,
         'allow_llm_edge_in_chat': settings.allow_llm_edge_in_chat,

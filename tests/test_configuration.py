@@ -632,6 +632,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "last_stroke_speed": 20,
             "last_depth_pos": 30,
             "last_stroke_range": 40,
+            "motion_playback_active": False,
             "min_speed": 10,
             "max_speed": 80,
             "motion_preferences": "Available fixed move.pattern weights from 0-100.\nsway=74",
@@ -643,6 +644,8 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("full_range - favor longer travel", prompt)
         self.assertIn("bounded bias", prompt)
         self.assertIn("sway=74", prompt)
+        self.assertIn("Motion: stopped. Handy target: 20% speed, 30% depth, 40% range.", prompt)
+        self.assertIn("If the Current State says Motion is stopped", prompt)
         self.assertIn('{"chat":"<in-character reply>","move":', prompt)
         self.assertIn('"motion":"<anchor_loop|null>"', prompt)
         self.assertIn("Motion requests need a non-null `move`", prompt)
@@ -669,6 +672,18 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("vary the sentence shape", prompt)
         self.assertIn("stock compliment", prompt)
         self.assertIn("adjust the motion", prompt)
+
+        active_prompt = service._build_system_prompt({
+            "persona_desc": "An energetic and passionate girlfriend",
+            "current_mood": "Curious",
+            "last_stroke_speed": 20,
+            "last_depth_pos": 30,
+            "last_stroke_range": 40,
+            "motion_playback_active": True,
+            "min_speed": 10,
+            "max_speed": 80,
+        })
+        self.assertIn("Motion: active. Handy target: 20% speed, 30% depth, 40% range.", active_prompt)
 
     def test_llm_prompt_separates_user_anatomy_from_partner_persona(self):
         service = LLMService(url="http://localhost:11434/api/chat")
