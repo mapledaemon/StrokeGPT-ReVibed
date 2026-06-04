@@ -450,12 +450,14 @@ def set_handy_device_config_route():
 
     v4_ready = bool(web.handy.supports_api_v3_control())
     missing_v3_key = firmware_version == "fw4" and bool(web.settings.handy_key) and not api_v3_key
+    invalid_v3_key = web.handy.api_v3_unavailable_reason() == "invalid_connection_key_format"
     bluetooth_transport = web.settings.handy_transport == "browser_bluetooth"
     return jsonify({
         "status": "success",
         "handy_firmware_version": firmware_version,
         "handy_api_v3_key": api_v3_key,
         "handy_api_v3_enabled": v4_ready,
+        "handy_api_v3_connection_key_valid": not invalid_v3_key,
         "handy_api_v3_key_configured": bool(api_v3_key),
         "handy_api_v3_unavailable_reason": web.handy.api_v3_unavailable_reason(),
         "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
@@ -464,6 +466,8 @@ def set_handy_device_config_route():
             if v4_ready
             else "Handy firmware set to v4; connect local Bluetooth from Handy Connection to enable HSP streaming."
             if bluetooth_transport and firmware_version == "fw4"
+            else "Handy firmware set to v4; the saved Handy connection key is not valid for API v3. Re-copy the key without spaces or punctuation."
+            if invalid_v3_key
             else "Handy firmware set to v4; add a Handy API v3 Application ID to enable HSP streaming."
             if missing_v3_key
             else "Handy firmware set to v4; connect a Handy key to use API v3 HSP streaming."

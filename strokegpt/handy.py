@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -17,6 +18,7 @@ HANDY_API_V3_BASE_URL = "https://www.handyfeeling.com/api/handy-rest/v3/"
 HANDY_TRANSPORT_REST = "rest"
 HANDY_TRANSPORT_BROWSER_BLUETOOTH = "browser_bluetooth"
 HANDY_TRANSPORTS = {HANDY_TRANSPORT_REST, HANDY_TRANSPORT_BROWSER_BLUETOOTH}
+HANDY_API_V3_CONNECTION_KEY_RE = re.compile(r"^[A-Za-z0-9]{1,128}$")
 HANDY_COMMAND_HISTORY_LIMIT = 60
 HANDY_COMMAND_POINTS_PREVIEW = 12
 HSP_POINT_MAX = 100
@@ -468,7 +470,55 @@ class HandyController:
         state = self._extract_hsp_state(payload)
         if state:
             return {"hsp_state": state}
+        error_detail = self._response_error_detail(payload)
+        if error_detail:
+            return {"error": error_detail}
         return {}
+
+    def _redact_response_text(self, value):
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        for secret in (self.handy_key, self._effective_api_v3_key()):
+            secret_text = str(secret or "").strip()
+            if secret_text:
+                text = text.replace(secret_text, "[redacted]")
+        return text[:180]
+
+    def _response_error_detail(self, payload):
+        if payload is None:
+            return ""
+        if isinstance(payload, str):
+            return self._redact_response_text(payload)
+        if isinstance(payload, (int, float, bool)):
+            return self._redact_response_text(payload)
+        if isinstance(payload, list):
+            parts = [self._response_error_detail(item) for item in payload[:3]]
+            return "; ".join(part for part in parts if part)[:180]
+        if not isinstance(payload, dict):
+            return ""
+
+        parts = []
+
+        def add(value):
+            detail = self._response_error_detail(value)
+            if detail and detail not in parts:
+                parts.append(detail)
+
+        for key in ("name", "code", "errorCode", "title", "type", "message", "detail", "description"):
+            if key in payload:
+                add(payload.get(key))
+        error = payload.get("error")
+        if isinstance(error, dict):
+            for key in ("name", "code", "errorCode", "title", "type", "message", "detail", "description"):
+                if key in error:
+                    add(error.get(key))
+        elif error is not None:
+            add(error)
+        errors = payload.get("errors")
+        if isinstance(errors, list):
+            add(errors)
+        return "; ".join(parts)[:180]
 
     def _safe_rate_limit_headers(self, headers):
         if not headers:
@@ -566,6 +616,10 @@ class HandyController:
         if not api_key:
             self._record_command_result(path, body, ok=False, error="missing Handy API v3 Application ID")
             return False
+        format_error = self._api_v3_connection_key_format_error()
+        if format_error:
+            self._record_command_result(path, body, ok=False, error=format_error)
+            return False
         headers = {
             "Content-Type": "application/json",
             "X-Connection-Key": self.handy_key,
@@ -600,6 +654,19 @@ class HandyController:
 
     def _effective_api_v3_key(self):
         return str(self.api_v3_key or "").strip()
+
+    def _api_v3_connection_key_format_valid(self):
+        key = str(self.handy_key or "").strip()
+        return bool(HANDY_API_V3_CONNECTION_KEY_RE.fullmatch(key))
+
+    def _api_v3_connection_key_format_error(self):
+        if self._api_v3_connection_key_format_valid():
+            return ""
+        return (
+            "Handy API v3 requires a connection key with only letters and numbers "
+            "(1-128 characters). Re-copy the connection key from Handy setup without "
+            "spaces or punctuation, or use firmware v3 legacy mode for older keys."
+        )
 
     def _disable_api_v3_control(self, *, path="", error=""):
         self._api_v3_auth_failed = True
@@ -860,6 +927,7 @@ class HandyController:
         return bool(
             self.firmware_version == "fw4"
             and self.handy_key
+            and self._api_v3_connection_key_format_valid()
             and self._effective_api_v3_key()
             and not self._api_v3_auth_failed
         )
@@ -873,6 +941,8 @@ class HandyController:
             return ""
         if not self.handy_key:
             return "missing_connection_key"
+        if not self._api_v3_connection_key_format_valid():
+            return "invalid_connection_key_format"
         if not self._effective_api_v3_key():
             return "missing_api_v3_key"
         if self._api_v3_auth_failed:
@@ -977,6 +1047,18 @@ class HandyController:
         base_url = self.api_v3_base_url if use_api_v3 else self.base_url
         headers = {"X-Connection-Key": self.handy_key}
         if use_api_v3:
+            format_error = self._api_v3_connection_key_format_error()
+            if format_error:
+                self._record_command_result(path, ok=False, error=format_error)
+                return {
+                    "status": "error",
+                    "connected": False,
+                    "message": (
+                        "Handy API v3 connection check was not sent. "
+                        f"{format_error}"
+                    ),
+                    "last_command": self.last_command_result(),
+                }
             headers["X-Api-Key"] = self._effective_api_v3_key()
         started_at = time.monotonic()
         response = None
@@ -1027,9 +1109,11 @@ class HandyController:
             status_code = getattr(error_response, "status_code", None)
             message = f"Handy connection failed: {e}"
             if use_api_v3 and status_code in {400, 401, 403}:
+                response_detail = self._response_error_detail(response_payload)
+                response_suffix = f" Handy response: {response_detail}." if response_detail else ""
                 message = (
                     "Handy API v3 connection check failed. Check the Device tab "
-                    f"Application ID and Handy connection key. ({e})"
+                    f"Application ID and Handy connection key.{response_suffix} ({e})"
                 )
             return {
                 "status": "error",

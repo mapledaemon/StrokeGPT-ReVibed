@@ -393,6 +393,7 @@ export const state = {
     myHandyKey: '',
     handyFirmwareVersion: 'fw4',
     handyApiV3Key: '',
+    handyApiV3ConnectionKeyValid: true,
     handyTransport: 'rest',
     handyTransportOptions: [],
     handyBluetoothStatus: {connected: false, status: 'disconnected'},

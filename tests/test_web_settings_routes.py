@@ -185,9 +185,9 @@ class WebSettingsRouteTests(WebTestCase):
             "transport": handy.transport_mode,
         }
         try:
-            settings.handy_key = "saved-key"
+            settings.handy_key = "savedkey"
             settings.handy_transport = "rest"
-            handy.set_api_key("saved-key")
+            handy.set_api_key("savedkey")
             handy.set_transport_mode("rest")
             settings.handy_api_v3_key = ""
             handy.set_handy_api_key("")
@@ -241,9 +241,9 @@ class WebSettingsRouteTests(WebTestCase):
             "transport": handy.transport_mode,
         }
         try:
-            settings.handy_key = "saved-key"
+            settings.handy_key = "savedkey"
             settings.handy_transport = "rest"
-            handy.set_api_key("saved-key")
+            handy.set_api_key("savedkey")
             handy.set_transport_mode("rest")
 
             with mock.patch.object(settings, "save") as save:
@@ -261,6 +261,43 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
             self.assertEqual(handy.api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
             save.assert_called_once()
+        finally:
+            settings.apply_dict(original)
+            handy.set_api_key(original_runtime["handy_key"])
+            handy.set_firmware_version(original_runtime["firmware"])
+            handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
+
+    def test_set_handy_device_config_reports_invalid_api_v3_connection_key_format(self):
+        from strokegpt.web import handy, settings
+
+        original = settings.to_dict()
+        original_runtime = {
+            "handy_key": handy.handy_key,
+            "firmware": handy.firmware_version,
+            "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
+        }
+        try:
+            settings.handy_key = "saved-key"
+            settings.handy_transport = "rest"
+            handy.set_api_key("saved-key")
+            handy.set_transport_mode("rest")
+
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_handy_device_config", json={
+                    "handy_firmware_version": "v4",
+                    "handy_api_v3_key": "app-id",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["handy_firmware_version"], "fw4")
+            self.assertFalse(data["handy_api_v3_enabled"])
+            self.assertFalse(data["continuous_streaming_supported"])
+            self.assertFalse(data["handy_api_v3_connection_key_valid"])
+            self.assertEqual(data["handy_api_v3_unavailable_reason"], "invalid_connection_key_format")
+            self.assertIn("not valid for API v3", data["message"])
         finally:
             settings.apply_dict(original)
             handy.set_api_key(original_runtime["handy_key"])

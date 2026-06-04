@@ -113,6 +113,7 @@ export function populateDeviceSettings(data = {}) {
     state.myHandyKey = data.handy_key || state.myHandyKey || '';
     state.handyFirmwareVersion = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
     state.handyApiV3Key = data.handy_api_v3_key ?? state.handyApiV3Key ?? '';
+    state.handyApiV3ConnectionKeyValid = data.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true;
     state.handyTransport = data.handy_transport || state.handyTransport || 'rest';
     state.handyTransportOptions = Array.isArray(data.handy_transport_options) ? data.handy_transport_options : state.handyTransportOptions;
     syncHandyConnectionKey(state.myHandyKey);
@@ -179,7 +180,8 @@ function updateHandyFirmwareStatus(data = {}) {
     if (!el.handyFirmwareStatus) return;
     const firmware = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
     const apiKeyConfigured = Boolean(data.handy_api_v3_key_configured ?? state.handyApiV3Key);
-    const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured));
+    const connectionKeyValid = Boolean(data.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true);
+    const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured && connectionKeyValid));
     if (firmware === 'fw4') {
         if (state.handyTransport === 'browser_bluetooth') {
             el.handyFirmwareStatus.textContent = 'Firmware v4 selected. Local Bluetooth HSP streaming is enabled after the Handy Connection Bluetooth link is active.';
@@ -188,8 +190,10 @@ function updateHandyFirmwareStatus(data = {}) {
         el.handyFirmwareStatus.textContent = v4Ready
             ? 'Firmware v4 selected. API v3 HSP point streaming is enabled.'
             : apiKeyConfigured
-                ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
-                    : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
+                ? connectionKeyValid
+                    ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
+                    : 'Firmware v4 selected. The saved Handy connection key is not valid for API v3; re-copy it without spaces or punctuation.'
+                : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
     } else {
         el.handyFirmwareStatus.textContent = 'Firmware v3 legacy selected. Continuous backend falls back to HDSP direct position commands.';
     }
@@ -330,6 +334,7 @@ async function saveHandyDeviceConfig() {
     if (res && res.status === 'success') {
         state.handyFirmwareVersion = res.handy_firmware_version || handyFirmwareVersion;
         state.handyApiV3Key = res.handy_api_v3_key ?? handyApiV3Key;
+        state.handyApiV3ConnectionKeyValid = res.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true;
         updateHandyFirmwareStatus(res);
         setStatusMessage(el.statusText, res.message || 'Handy firmware settings saved.', 'success');
     } else {

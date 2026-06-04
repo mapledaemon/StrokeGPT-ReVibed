@@ -404,6 +404,25 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(result["last_command"]["path"], "connected")
         self.assertFalse(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 400)
+        self.assertIn("bad app key", result["message"])
+        self.assertEqual(result["last_command"]["response"], {"error": "bad app key"})
+
+    def test_check_connection_rejects_invalid_api_v3_connection_key_format_locally(self):
+        handy = HandyController(handy_key="bad-key", firmware_version="fw4", api_v3_key="app-id")
+
+        with mock.patch("strokegpt.handy.requests.get", create=True) as get:
+            result = handy.check_connection()
+
+        get.assert_not_called()
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("not sent", result["message"])
+        self.assertIn("only letters and numbers", result["message"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertNotIn("status_code", result["last_command"])
+        self.assertEqual(handy.api_v3_unavailable_reason(), "invalid_connection_key_format")
+        self.assertFalse(handy.supports_continuous_streaming())
 
     def test_check_connection_reports_offline_connected_probe(self):
         handy = HandyController(handy_key="secret")

@@ -95,6 +95,7 @@ describe('Device Handy connection controls', () => {
         state.myHandyKey = '';
         state.handyFirmwareVersion = 'fw4';
         state.handyApiV3Key = '';
+        state.handyApiV3ConnectionKeyValid = true;
         state.handyTransport = 'rest';
         state.handyTransportOptions = [];
         state.handyBluetoothStatus = {connected: false, status: 'disconnected'};
@@ -192,6 +193,35 @@ describe('Device Handy connection controls', () => {
         assert.equal(
             getStubElement('status-text').textContent,
             'Handy firmware set to v4; API v3 HSP streaming is enabled.',
+        );
+    });
+
+    it('Save firmware shows invalid API v3 connection-key format guidance', async () => {
+        globalThis.fetch = async () => jsonResponse(200, {
+            status: 'success',
+            handy_firmware_version: 'fw4',
+            handy_api_v3_key: 'app-id',
+            handy_api_v3_enabled: false,
+            handy_api_v3_connection_key_valid: false,
+            handy_api_v3_key_configured: true,
+            continuous_streaming_supported: false,
+            message: 'Handy firmware set to v4; the saved Handy connection key is not valid for API v3.',
+        });
+
+        state.myHandyKey = 'saved-key';
+        getStubElement('handy-firmware-select').value = 'fw4';
+        getStubElement('handy-api-v3-key-input').value = 'app-id';
+        getStubElement('save-handy-device-config-btn').click();
+        await flushAsyncHandlers();
+
+        assert.equal(state.handyApiV3ConnectionKeyValid, false);
+        assert.equal(
+            getStubElement('handy-firmware-status').textContent,
+            'Firmware v4 selected. The saved Handy connection key is not valid for API v3; re-copy it without spaces or punctuation.',
+        );
+        assert.equal(
+            getStubElement('status-text').textContent,
+            'Handy firmware set to v4; the saved Handy connection key is not valid for API v3.',
         );
     });
 

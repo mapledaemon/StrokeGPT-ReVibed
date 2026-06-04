@@ -1,3 +1,5 @@
+import re
+
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .motion_tags import motion_tag_suggestions
 from .settings import (
@@ -14,6 +16,13 @@ from .settings import (
     default_user_profile,
     normalize_ollama_model,
 )
+
+
+HANDY_API_V3_CONNECTION_KEY_RE = re.compile(r"^[A-Za-z0-9]{1,128}$")
+
+
+def _handy_connection_key_valid_for_api_v3(value):
+    return bool(HANDY_API_V3_CONNECTION_KEY_RE.fullmatch(str(value or "").strip()))
 
 
 def format_bytes(value):
@@ -1014,8 +1023,17 @@ def settings_payload(
             settings.handy_firmware_version == "fw4"
             and (
                 settings.handy_transport == "browser_bluetooth"
-                or (settings.handy_key and settings.handy_api_v3_key)
+                or (
+                    settings.handy_key
+                    and _handy_connection_key_valid_for_api_v3(settings.handy_key)
+                    and settings.handy_api_v3_key
+                )
             )
+        ),
+        "handy_api_v3_connection_key_valid": (
+            True
+            if settings.handy_transport == "browser_bluetooth" or not settings.handy_key
+            else _handy_connection_key_valid_for_api_v3(settings.handy_key)
         ),
         "handy_api_v3_key_configured": bool(settings.handy_api_v3_key),
         "ai_name": settings.ai_name,
