@@ -51,15 +51,23 @@ class ThresholdFailingV3HandyController(RecordingV3HandyController):
 
 
 class RecordingBluetoothBridge:
-    def __init__(self):
+    def __init__(self, *, ok=True, error="", response=None):
         self.commands = []
+        self.ok = ok
+        self.error = error
+        self.response = response or {}
 
     def is_ready(self):
         return True
 
     def send_command(self, path, body=None):
         self.commands.append((path, body or {}))
-        return {"ok": True, "elapsed_ms": 2.0}
+        result = {"ok": self.ok, "elapsed_ms": 2.0}
+        if self.error:
+            result["error"] = self.error
+        if self.response:
+            result["response"] = self.response
+        return result
 
     def snapshot(self):
         return {
@@ -335,6 +343,48 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
         self.assertFalse(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 503)
+
+    def test_check_connection_probes_bluetooth_hsp_state(self):
+        bridge = RecordingBluetoothBridge(response={
+            "hsp_state": {
+                "play_state": "stopped",
+                "current_time_ms": 0,
+                "stream_id": 12,
+            }
+        })
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        result = handy.check_connection()
+
+        self.assertEqual(bridge.commands, [("hsp/state", {})])
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["transport"], "browser_bluetooth")
+        self.assertEqual(result["last_command"]["path"], "hsp/state")
+        self.assertTrue(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["response"]["hsp_state"]["stream_id"], 12)
+        self.assertEqual(handy.diagnostics()["hsp_state"]["stream_id"], 12)
+
+    def test_check_connection_reports_bluetooth_hsp_state_failure(self):
+        bridge = RecordingBluetoothBridge(ok=False, error="HSP state timed out")
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        result = handy.check_connection()
+
+        self.assertEqual(bridge.commands, [("hsp/state", {})])
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("HSP state timed out", result["message"])
+        self.assertEqual(result["last_command"]["path"], "hsp/state")
+        self.assertFalse(result["last_command"]["ok"])
 
     def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
         handy = RecordingHandyController()

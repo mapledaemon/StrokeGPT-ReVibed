@@ -926,21 +926,40 @@ class HandyController:
                 if self.bluetooth_bridge is not None
                 else {"connected": False, "message": "Bluetooth bridge is unavailable."}
             )
-            connected = bool(snapshot.get("connected"))
-            self._record_command_result(
-                "bluetooth/status",
-                ok=connected,
-                error="" if connected else snapshot.get("message", "Bluetooth is not connected."),
+            if not snapshot.get("connected"):
+                self._record_command_result(
+                    "bluetooth/status",
+                    ok=False,
+                    error=snapshot.get("message", "Bluetooth is not connected."),
+                )
+                return {
+                    "status": "error",
+                    "connected": False,
+                    "message": snapshot.get("message") or "Bluetooth is not connected.",
+                    "transport": "browser_bluetooth",
+                    "bluetooth": snapshot,
+                    "last_command": self.last_command_result(),
+                }
+            connected = self._send_bluetooth_command("hsp/state", {})
+            snapshot = (
+                self.bluetooth_bridge.snapshot()
+                if self.bluetooth_bridge is not None
+                else snapshot
+            )
+            last_command = self.last_command_result()
+            error = (last_command or {}).get("error") or snapshot.get("last_error") or ""
+            message = (
+                "Handy Bluetooth device answered HSP state check."
+                if connected
+                else f"Handy Bluetooth device check failed: {error or 'no HSP state response'}"
             )
             return {
                 "status": "connected" if connected else "error",
                 "connected": connected,
-                "message": snapshot.get("message") or (
-                    "Handy Bluetooth connected." if connected else "Bluetooth is not connected."
-                ),
+                "message": message,
                 "transport": "browser_bluetooth",
                 "bluetooth": snapshot,
-                "last_command": self.last_command_result(),
+                "last_command": last_command,
             }
         if not self.handy_key:
             self._record_command_result(path, ok=False, error="missing Handy key")

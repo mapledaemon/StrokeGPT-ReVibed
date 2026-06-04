@@ -30,6 +30,10 @@ Branch: codex/experimental-bluetooth-hsp
 - Moved the Bluetooth trigger to an icon-only top-bar control similar to
   Syncopathy, keeping state available through color, tooltip, ARIA label, and
   the dropdown details without hiding connection behind the sidebar.
+- Made Bluetooth readiness checks closer to the cloud path: Diagnostics now
+  reports selected Local Bluetooth bridge state instead of a missing Handy key,
+  and explicit Bluetooth connection checks wait for an HSP state response
+  rather than only checking that the browser bridge is present.
 - Added an explicit experimental warning to the Bluetooth menu so users do not
   mistake the local browser Bluetooth transport for the proven Cloud REST path.
 - Changed the Bluetooth status menu to a viewport-positioned flyout that flips

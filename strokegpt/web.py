@@ -857,8 +857,13 @@ def voice_input_status_payload(status="success"):
 
 def setup_check_payload():
     return payloads.setup_check_payload(
-        configured=bool(settings.handy_key and settings.min_depth < settings.max_depth),
+        configured=bool(
+            (settings.handy_key or settings.handy_transport == "browser_bluetooth")
+            and settings.min_depth < settings.max_depth
+        ),
         handy_key=settings.handy_key,
+        handy_transport=settings.handy_transport,
+        bluetooth_status=handy_bluetooth_bridge.snapshot(),
         ollama_status=_ollama_status_payload(),
         voice_input_setup=voice_input.setup_status(),
         local_tts_status=audio.local_status(),

@@ -114,6 +114,75 @@ class SetupCheckRouteTests(WebTestCase):
         finally:
             settings.audio_provider, settings.audio_enabled = original
 
+    def test_setup_check_reports_selected_local_bluetooth_instead_of_missing_key(self):
+        from strokegpt.web import audio, handy_bluetooth_bridge, settings, voice_input
+
+        original = (
+            settings.handy_key,
+            settings.handy_transport,
+            settings.audio_provider,
+            settings.audio_enabled,
+        )
+        fake_ollama_status = {
+            "available": True,
+            "current_model": "local/test-model:latest",
+            "current_model_installed": True,
+            "message": "Current model is installed: local/test-model:latest",
+            "gpu_status": {"state": "not_loaded"},
+        }
+        fake_voice_input_setup = {
+            "selected": {
+                "provider": "disabled",
+                "status_code": "disabled",
+                "message": "Voice input is disabled.",
+            },
+            "faster_whisper_available": True,
+            "ctranslate2_available": True,
+            "ctranslate2_cuda_devices": 0,
+            "nemo_available": False,
+            "torch": {"cuda_available": False},
+        }
+        fake_local_tts_status = {
+            "engine": "chatterbox_turbo",
+            "engine_label": "Chatterbox Turbo",
+            "message": "Chatterbox Turbo is disabled.",
+            "engines": [{"id": "chatterbox_turbo", "label": "Chatterbox Turbo", "available": True}],
+            "cuda_available": False,
+            "torch": {"device": "cpu", "device_name": ""},
+        }
+        try:
+            settings.handy_key = ""
+            settings.handy_transport = "browser_bluetooth"
+            settings.audio_provider = "elevenlabs"
+            settings.audio_enabled = False
+            with mock.patch("strokegpt.web._ollama_status_payload", return_value=fake_ollama_status), \
+                    mock.patch.object(voice_input, "setup_status", return_value=fake_voice_input_setup), \
+                    mock.patch.object(audio, "local_status", return_value=fake_local_tts_status), \
+                    mock.patch.object(handy_bluetooth_bridge, "snapshot", return_value={
+                        "transport": "browser_bluetooth",
+                        "connected": False,
+                        "status": "disconnected",
+                        "message": "Bluetooth not connected.",
+                    }):
+                response = self.client.get("/setup_check")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            sections = {section["id"]: section for section in payload["sections"]}
+            core_items = {item["id"]: item for item in sections["core"]["items"]}
+            self.assertEqual(core_items["handy-transport"]["detail"], "Local Bluetooth selected.")
+            self.assertEqual(core_items["handy-bluetooth"]["status"], "warning")
+            self.assertIn("Bluetooth not connected", core_items["handy-bluetooth"]["detail"])
+            self.assertEqual(core_items["configured"]["status"], "ok")
+            self.assertNotIn("handy-key", core_items)
+        finally:
+            (
+                settings.handy_key,
+                settings.handy_transport,
+                settings.audio_provider,
+                settings.audio_enabled,
+            ) = original
+
     def test_setup_check_reports_parakeet_cuda_kernel_incompatibility(self):
         from strokegpt.payloads import setup_check_payload
 

@@ -26,6 +26,7 @@ const POPOVER_MARGIN_PX = 8;
 const POPOVER_MIN_HEIGHT_PX = 120;
 const POPOVER_SCROLL_TOLERANCE_PX = 4;
 const POPOVER_WIDTH_PX = 240;
+const BRIDGE_RESPONSE_REQUIRED_PATHS = new Set(['hsp/state']);
 
 function bluetoothSupported() {
     return Boolean(globalThis.navigator?.bluetooth?.requestDevice);
@@ -465,7 +466,9 @@ async function executeBridgeCommand(command) {
         const body = bodyWithLocalServerTime(command.path, command.body || {});
         const response = command.path === 'hsp/add'
             ? await executeHspAdd(body)
-            : await sendBleRequest(command.path, body, {waitForResponse: false});
+            : await sendBleRequest(command.path, body, {
+                waitForResponse: BRIDGE_RESPONSE_REQUIRED_PATHS.has(command.path),
+            });
         const elapsedMs = performance.now() - started;
         await apiCall('/handy_bluetooth/ack', {
             method: 'POST',

@@ -107,6 +107,50 @@ describe('Handy Bluetooth command transport', () => {
         assert.equal(acknowledgements[0].body.ok, true);
     });
 
+    it('waits for HSP state responses before acking backend device checks', async () => {
+        const writes = [];
+        const acknowledgements = [];
+        state.handyBluetoothTx = {
+            properties: {write: true, writeWithoutResponse: true},
+            async writeValueWithResponse(bytes) {
+                writes.push(new Uint8Array(bytes));
+                const [id, pending] = Array.from(state.handyBluetoothPendingResponses.entries())[0] || [];
+                assert.ok(pending, 'hsp/state should wait for a response');
+                state.handyBluetoothPendingResponses.delete(id);
+                pending.resolve({
+                    ok: true,
+                    hsp_state: {
+                        play_state: 'stopped',
+                        stream_id: 9,
+                        current_time_ms: 0,
+                    },
+                });
+            },
+        };
+        globalThis.fetch = async (endpoint, options = {}) => {
+            acknowledgements.push({
+                endpoint,
+                body: JSON.parse(options.body || '{}'),
+            });
+            return jsonResponse(200, {
+                status: 'success',
+                bluetooth: {connected: true, status: 'connected'},
+            });
+        };
+
+        await executeBridgeCommandForTests({id: 45, path: 'hsp/state', body: {}});
+
+        assert.equal(writes.length, 1);
+        assert.equal(state.handyBluetoothPendingResponses.size, 0);
+        assert.equal(acknowledgements.length, 1);
+        assert.equal(acknowledgements[0].body.id, 45);
+        assert.equal(acknowledgements[0].body.ok, true);
+        assert.deepEqual(
+            acknowledgements[0].body.response,
+            {hsp_state: {play_state: 'stopped', stream_id: 9, current_time_ms: 0}},
+        );
+    });
+
     it('splits HSP add payloads into conservative BLE-sized writes', async () => {
         const writes = [];
         const acknowledgements = [];

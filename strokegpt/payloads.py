@@ -660,10 +660,62 @@ def _setup_summary(sections):
     }
 
 
+def _handy_connection_setup_items(*, handy_key, handy_transport="rest", bluetooth_status=None):
+    transport = str(handy_transport or "rest")
+    if transport == "browser_bluetooth":
+        bluetooth = bluetooth_status if isinstance(bluetooth_status, dict) else {}
+        connected = bool(bluetooth.get("connected"))
+        status = str(bluetooth.get("status") or "").lower()
+        device = str(bluetooth.get("device_name") or "").strip()
+        message = str(bluetooth.get("message") or bluetooth.get("last_error") or "").strip()
+        if connected:
+            detail = message or (
+                f"Local Bluetooth bridge is connected to {device}."
+                if device
+                else "Local Bluetooth bridge is connected."
+            )
+        elif status == "stale":
+            detail = message or "Local Bluetooth browser bridge is stale. Reopen this tab or reconnect the Handy."
+        elif message:
+            detail = message
+        else:
+            detail = "Local Bluetooth is selected. Use the top-bar Bluetooth button to connect before controlling hardware."
+        return [
+            _setup_check_item(
+                "handy-transport",
+                "Handy transport",
+                "ok",
+                "Local Bluetooth selected.",
+            ),
+            _setup_check_item(
+                "handy-bluetooth",
+                "Local Bluetooth device",
+                "ok" if connected else "warning",
+                detail,
+            ),
+        ]
+    return [
+        _setup_check_item(
+            "handy-transport",
+            "Handy transport",
+            "ok",
+            "Cloud REST selected.",
+        ),
+        _setup_check_item(
+            "handy-key",
+            "Handy connection key",
+            "ok" if handy_key else "warning",
+            "Connection key is saved." if handy_key else "Add a Handy connection key before controlling hardware.",
+        ),
+    ]
+
+
 def setup_check_payload(
     *,
     configured,
     handy_key,
+    handy_transport="rest",
+    bluetooth_status=None,
     ollama_status,
     voice_input_setup,
     local_tts_status,
@@ -844,26 +896,29 @@ def setup_check_payload(
     ]
 
     sections = [
-        _setup_check_section("core", "Core App", [
-            _setup_check_item(
-                "backend",
-                "Backend process",
-                "ok",
-                "Flask backend is running and serving setup checks.",
-            ),
-            _setup_check_item(
-                "handy-key",
-                "Handy connection key",
-                "ok" if handy_key else "warning",
-                "Connection key is saved." if handy_key else "Add a Handy connection key before controlling hardware.",
-            ),
-            _setup_check_item(
-                "configured",
-                "First-run setup",
-                "ok" if configured else "warning",
-                "Required first-run settings are present." if configured else "Finish the setup wizard before normal use.",
-            ),
-        ]),
+        _setup_check_section(
+            "core",
+            "Core App",
+            [
+                _setup_check_item(
+                    "backend",
+                    "Backend process",
+                    "ok",
+                    "Flask backend is running and serving setup checks.",
+                ),
+                *_handy_connection_setup_items(
+                    handy_key=handy_key,
+                    handy_transport=handy_transport,
+                    bluetooth_status=bluetooth_status,
+                ),
+                _setup_check_item(
+                    "configured",
+                    "First-run setup",
+                    "ok" if configured else "warning",
+                    "Required first-run settings are present." if configured else "Finish the setup wizard before normal use.",
+                ),
+            ],
+        ),
         _setup_check_section("ollama", "Ollama", ollama_items),
         _setup_check_section("voice-input", "Voice Input", voice_input_items),
         _setup_check_section("voice-output", "Voice Output", voice_output_items),
