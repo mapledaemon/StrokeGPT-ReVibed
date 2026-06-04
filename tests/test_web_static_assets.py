@@ -89,8 +89,12 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="top-bar-intensity-guide-btn" class="my-button top-bar-toggle-button top-bar-intensity-guide" type="button" title="Cycle LLM intensity arc guide" aria-label="Intensity arc steady" aria-pressed="false" data-requires-backend>Arc Steady</button>', page)
             self.assertIn('id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>', page)
             self.assertIn('id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>', page)
-            self.assertIn('id="handy-bluetooth-menu" class="handy-bluetooth-menu"', page)
+            self.assertIn('id="handy-bluetooth-menu" class="handy-bluetooth-menu top-bar-bluetooth-menu"', page)
             self.assertIn('class="sidebar-handy-header"', page)
+            self.assertRegex(
+                page,
+                r'<div class="top-bar-actions">[\s\S]*id="handy-bluetooth-menu" class="handy-bluetooth-menu top-bar-bluetooth-menu"[\s\S]*id="profile-menu"',
+            )
             self.assertIn('id="handy-bluetooth-btn" class="my-button handy-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="handy-bluetooth-popover" aria-expanded="false"', page)
             self.assertIn('class="bluetooth-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"', page)
             self.assertIn('d="M12 2v20"', page)
@@ -563,7 +567,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72);", css)
             self.assertIn(".sidebar-handy-header { position: relative; display: flex;", css)
             self.assertIn(".handy-bluetooth-menu { position: relative; flex: 0 0 auto;", css)
-            self.assertIn(".my-button.handy-bluetooth-toggle { flex: 0 0 2rem; width: 2rem;", css)
+            self.assertIn(".top-bar-bluetooth-menu { flex-basis: var(--top-bar-button-size); }", css)
+            self.assertIn(".my-button.handy-bluetooth-toggle { flex: 0 0 var(--top-bar-button-size); width: var(--top-bar-button-size);", css)
             self.assertIn(".bluetooth-button-icon { width: 1.25rem; min-width: 1.25rem; height: 1.25rem;", css)
             self.assertIn(".handy-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72);", css)
             self.assertIn(".handy-bluetooth-popover { position: fixed; top: 0; left: 0;", css)

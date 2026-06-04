@@ -38,6 +38,46 @@
                 <button id="top-bar-intensity-guide-btn" class="my-button top-bar-toggle-button top-bar-intensity-guide" type="button" title="Cycle LLM intensity arc guide" aria-label="Intensity arc steady" aria-pressed="false" data-requires-backend>Arc Steady</button>
                 <button id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>
                 <button id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>
+                <div id="handy-bluetooth-menu" class="handy-bluetooth-menu top-bar-bluetooth-menu">
+                    <button id="handy-bluetooth-btn" class="my-button handy-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="handy-bluetooth-popover" aria-expanded="false">
+                        <svg class="bluetooth-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M12 2v20" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round"></path>
+                            <path d="M12 12l5-5-5-5" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M12 12l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M7 7l10 10M7 17l10-10" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
+                    <div id="handy-bluetooth-popover" class="handy-bluetooth-popover" role="dialog" aria-label="Handy Bluetooth status" hidden>
+                        <div class="bluetooth-popover-header">
+                            <strong>Local Bluetooth</strong>
+                            <span id="bluetooth-menu-state" class="bluetooth-state-pill">Disconnected</span>
+                        </div>
+                        <p class="bluetooth-menu-warning">Experimental: local Bluetooth control is still being validated. Keep STOP available; use Cloud REST if motion is unreliable.</p>
+                        <dl class="bluetooth-status-grid">
+                            <div>
+                                <dt>Transport</dt>
+                                <dd id="bluetooth-menu-transport">Cloud REST</dd>
+                            </div>
+                            <div>
+                                <dt>Browser</dt>
+                                <dd id="bluetooth-menu-support">Checking...</dd>
+                            </div>
+                            <div>
+                                <dt>Device</dt>
+                                <dd id="bluetooth-menu-device">None</dd>
+                            </div>
+                            <div>
+                                <dt>Bridge</dt>
+                                <dd id="bluetooth-menu-queue">Idle</dd>
+                            </div>
+                        </dl>
+                        <p id="bluetooth-menu-message" class="bluetooth-menu-message">Open this menu to connect a firmware v4 Handy over browser Bluetooth.</p>
+                        <div class="bluetooth-menu-actions">
+                            <button id="bluetooth-menu-action-btn" class="my-button bluetooth-menu-action" type="button" data-requires-backend>Connect</button>
+                            <button id="bluetooth-menu-settings-btn" class="my-button bluetooth-menu-secondary" type="button">Device Settings</button>
+                        </div>
+                    </div>
+                </div>
                 <div id="profile-menu" class="profile-menu">
                     <button id="profile-menu-btn" class="profile-menu-button" type="button" title="Open profile menu" aria-label="Open profile menu" aria-haspopup="menu" aria-expanded="false">
                         <img id="profile-menu-pfp" src="/static/default-pfp.png" alt="">
@@ -165,46 +205,6 @@
         <div id="sidebar-handy-panel" class="setting-section sidebar-handy-panel">
             <div class="sidebar-handy-header">
                 <h3>Handy Connection</h3>
-                <div id="handy-bluetooth-menu" class="handy-bluetooth-menu">
-                    <button id="handy-bluetooth-btn" class="my-button handy-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="handy-bluetooth-popover" aria-expanded="false">
-                        <svg class="bluetooth-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <path d="M12 2v20" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round"></path>
-                            <path d="M12 12l5-5-5-5" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
-                            <path d="M12 12l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
-                            <path d="M7 7l10 10M7 17l10-10" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
-                        </svg>
-                    </button>
-                    <div id="handy-bluetooth-popover" class="handy-bluetooth-popover" role="dialog" aria-label="Handy Bluetooth status" hidden>
-                        <div class="bluetooth-popover-header">
-                            <strong>Local Bluetooth</strong>
-                            <span id="bluetooth-menu-state" class="bluetooth-state-pill">Disconnected</span>
-                        </div>
-                        <p class="bluetooth-menu-warning">Experimental: local Bluetooth control is still being validated. Keep STOP available; use Cloud REST if motion is unreliable.</p>
-                        <dl class="bluetooth-status-grid">
-                            <div>
-                                <dt>Transport</dt>
-                                <dd id="bluetooth-menu-transport">Cloud REST</dd>
-                            </div>
-                            <div>
-                                <dt>Browser</dt>
-                                <dd id="bluetooth-menu-support">Checking...</dd>
-                            </div>
-                            <div>
-                                <dt>Device</dt>
-                                <dd id="bluetooth-menu-device">None</dd>
-                            </div>
-                            <div>
-                                <dt>Bridge</dt>
-                                <dd id="bluetooth-menu-queue">Idle</dd>
-                            </div>
-                        </dl>
-                        <p id="bluetooth-menu-message" class="bluetooth-menu-message">Open this menu to connect a firmware v4 Handy over browser Bluetooth.</p>
-                        <div class="bluetooth-menu-actions">
-                            <button id="bluetooth-menu-action-btn" class="my-button bluetooth-menu-action" type="button" data-requires-backend>Connect</button>
-                            <button id="bluetooth-menu-settings-btn" class="my-button bluetooth-menu-secondary" type="button">Device Settings</button>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div id="sidebar-handy-key-status" class="sidebar-handy-status" aria-live="polite">Disconnected</div>
             <div id="sidebar-handy-rest-controls">

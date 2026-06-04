@@ -15,8 +15,8 @@ Branch: codex/experimental-bluetooth-hsp
 - Added an experimental browser-owned local Bluetooth transport for Handy
   firmware v4 HSP commands, using the same server-side motion planner but
   dispatching timed-point setup/add/play/stop commands through Web Bluetooth.
-- Added a Handy Connection Bluetooth control, a Device-tab transport selector,
-  and diagnostics/status plumbing so local Bluetooth can be selected without
+- Added a top-bar Bluetooth control, a Device-tab transport selector, and
+  diagnostics/status plumbing so local Bluetooth can be selected without
   requiring a cloud Handy connection key.
 - Added a synchronous backend bridge for browser Bluetooth command
   acknowledgements, including HSP response-state propagation into existing
@@ -24,17 +24,16 @@ Branch: codex/experimental-bluetooth-hsp
 - Hardened the browser bridge so active long-polling clients do not go stale
   while idle and queued commands fail instead of crossing to a newly connected
   browser/device.
-- Replaced the bare Bluetooth toggle with a compact sidebar status dropdown
-  showing transport, browser support, device, bridge queue/ack state, last
-  message, and explicit Connect/Disconnect plus Device Settings actions.
-- Tightened the Bluetooth trigger to an icon-only control in the Handy
-  Connection panel header, keeping state available through color, tooltip,
-  ARIA label, and the dropdown details without adding top-bar clutter.
+- Replaced the bare Bluetooth toggle with a compact status dropdown showing
+  transport, browser support, device, bridge queue/ack state, last message, and
+  explicit Connect/Disconnect plus Device Settings actions.
+- Moved the Bluetooth trigger to an icon-only top-bar control similar to
+  Syncopathy, keeping state available through color, tooltip, ARIA label, and
+  the dropdown details without hiding connection behind the sidebar.
 - Added an explicit experimental warning to the Bluetooth menu so users do not
   mistake the local browser Bluetooth transport for the proven Cloud REST path.
-- Made the Handy Connection Bluetooth trigger smaller and changed its status
-  menu to a viewport-positioned flyout that flips above or below the icon
-  instead of extending the sidebar page.
+- Changed the Bluetooth status menu to a viewport-positioned flyout that flips
+  above or below the top-bar icon instead of extending the sidebar page.
 - Kept the sidebar Handy connection-key controls visible even when Local
   Bluetooth is selected, and made that Connect action switch back to Cloud REST
   before saving the key so users have an obvious recovery path at startup.

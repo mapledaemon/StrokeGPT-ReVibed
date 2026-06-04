@@ -182,10 +182,13 @@ class WebSettingsRouteTests(WebTestCase):
             "handy_key": handy.handy_key,
             "firmware": handy.firmware_version,
             "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
         }
         try:
             settings.handy_key = "saved-key"
+            settings.handy_transport = "rest"
             handy.set_api_key("saved-key")
+            handy.set_transport_mode("rest")
             settings.handy_api_v3_key = ""
             handy.set_handy_api_key("")
             with mock.patch.object(settings, "save") as save:
@@ -222,6 +225,7 @@ class WebSettingsRouteTests(WebTestCase):
             handy.set_api_key(original_runtime["handy_key"])
             handy.set_firmware_version(original_runtime["firmware"])
             handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
 
     def test_numeric_routes_fall_back_on_invalid_values(self):
         from strokegpt.web import handy, settings

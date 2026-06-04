@@ -1,4 +1,4 @@
-// Behavioral coverage for the sidebar Handy Bluetooth status menu.
+// Behavioral coverage for the top-bar Handy Bluetooth status menu.
 
 import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,7 +49,7 @@ const MENU_IDS = [
     'status-text',
 ];
 
-describe('Handy Bluetooth sidebar menu', () => {
+describe('Handy Bluetooth top-bar menu', () => {
     let originalFetch;
     let originalBluetooth;
 

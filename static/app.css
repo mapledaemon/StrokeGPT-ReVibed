@@ -105,7 +105,8 @@ body.sidebar-collapsed #sidebar { padding-left: 0; padding-right: 0; border-left
 .sidebar-handy-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--background-lighter); }
 .setting-section .sidebar-handy-header h3 { min-width: 0; margin: 0; padding: 0; border: 0; }
 .handy-bluetooth-menu { position: relative; flex: 0 0 auto; }
-.my-button.handy-bluetooth-toggle { flex: 0 0 2rem; width: 2rem; min-width: 2rem; height: 2rem; min-height: 2rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: #2d333d; box-shadow: none; }
+.top-bar-bluetooth-menu { flex-basis: var(--top-bar-button-size); }
+.my-button.handy-bluetooth-toggle { flex: 0 0 var(--top-bar-button-size); width: var(--top-bar-button-size); min-width: var(--top-bar-button-size); height: var(--top-bar-button-size); min-height: var(--top-bar-button-size); padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: #2d333d; border-radius: 50%; box-shadow: none; }
 .handy-bluetooth-toggle.is-connecting { border-color: rgba(216, 182, 106, 0.72); background: #332d20; color: var(--yellow); }
 .handy-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72); background: #203326; color: var(--green); }
 .handy-bluetooth-toggle.is-error { border-color: rgba(255, 85, 85, 0.72); background: #3b2024; color: var(--red-hover); }
