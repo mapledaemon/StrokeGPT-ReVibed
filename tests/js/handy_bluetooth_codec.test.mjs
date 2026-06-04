@@ -107,11 +107,11 @@ describe('Handy Bluetooth protobuf codec', () => {
         assert.equal(Math.round(floatValue(firstField(body, 2))), 90);
     });
 
-    it('encodes HSP resume pick-up requests for starving Bluetooth streams', () => {
-        const encoded = encodeHandyRequest('hsp/resume', {pick_up: true}, 9);
+    it('encodes HSP resume without live-time pickup for starving Bluetooth streams', () => {
+        const encoded = encodeHandyRequest('hsp/resume', {}, 9);
         const body = requestBody(encoded, 866);
 
-        assert.equal(firstField(body, 1).value, 1);
+        assert.equal(firstField(body, 1).value, 0);
     });
 
     it('rejects commands outside the implemented local Bluetooth subset', () => {

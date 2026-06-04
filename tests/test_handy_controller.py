@@ -1214,7 +1214,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(add["tail_point_stream_index"], 4)
         self.assertEqual(add["tail_point_threshold"], 2)
         self.assertEqual(add["points"], [{"t": 480, "x": 65}])
-        self.assertEqual(bridge.commands[1][1], {"pick_up": True})
+        self.assertEqual(bridge.commands[1][1], {"pick_up": False})
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
 
     def test_append_continuous_stream_throttles_threshold_updates_after_start(self):

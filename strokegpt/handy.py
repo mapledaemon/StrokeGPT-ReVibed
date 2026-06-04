@@ -1486,7 +1486,7 @@ class HandyController:
     def _resume_hsp_after_bluetooth_add(self, add_result):
         if not self._using_browser_bluetooth():
             return True
-        if not self._send_v3_command("hsp/resume", {"pick_up": True}):
+        if not self._send_v3_command("hsp/resume", {"pick_up": False}):
             return False
         if add_result is not None:
             self._last_command_result = add_result

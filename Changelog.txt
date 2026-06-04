@@ -78,6 +78,10 @@ Branch: codex/experimental-bluetooth-hsp
   while Local Bluetooth transport is selected; selecting Local Bluetooth now
   also hides Cloud REST connection-key controls in the Device tab and sidebar,
   and switching back to Cloud REST restores those key controls.
+- Changed local Bluetooth HSP resume-after-add commands to continue from the
+  paused stream position instead of picking up to the current live stream time,
+  matching native Bluetooth reference behavior and reducing jumpy recovery
+  after BLE buffer starvation.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

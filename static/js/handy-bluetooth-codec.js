@@ -179,7 +179,7 @@ function requestBodyForPath(path, body = {}) {
                 floatField(3, body.filter ?? 0.5),
             ]);
         case 'hsp/resume':
-            return boolField(1, Boolean(body.pick_up ?? body.pickUp ?? true));
+            return boolField(1, Boolean(body.pick_up ?? body.pickUp ?? false));
         case 'clock/offset/set':
             return concatBytes([
                 sint64Field(1, body.clock_offset ?? 0),
