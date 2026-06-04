@@ -435,6 +435,7 @@ def set_handy_device_config_route():
     api_v3_key = str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
 
     web.settings.handy_firmware_version = firmware_version
+    web.settings.handy_firmware_version_user_selected = True
     web.settings.handy_api_v3_key = api_v3_key
     web.handy.set_firmware_version(firmware_version)
     web.handy.set_handy_api_key(api_v3_key)

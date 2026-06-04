@@ -79,6 +79,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["user_genitalia"], DEFAULT_USER_GENITALIA)
         self.assertEqual(saved["user_genitalia_custom"], "")
         self.assertEqual(saved["handy_firmware_version"], "fw4")
+        self.assertFalse(saved["handy_firmware_version_user_selected"])
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         self.assertEqual(saved["handy_transport"], "rest")
         self.assertEqual(saved["motion_pattern_enabled"], {})
@@ -543,7 +544,15 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.file_path = FakePath(json.dumps({"handy_firmware_version": "v3"}))
         settings.load()
+        self.assertEqual(settings.handy_firmware_version, "fw4")
+
+        settings.file_path = FakePath(json.dumps({
+            "handy_firmware_version": "v3",
+            "handy_firmware_version_user_selected": True,
+        }))
+        settings.load()
         self.assertEqual(settings.handy_firmware_version, "fw3")
+        self.assertTrue(settings.handy_firmware_version_user_selected)
 
         settings.file_path = FakePath(json.dumps({"handy_firmware_version": "firmware-v4"}))
         settings.load()

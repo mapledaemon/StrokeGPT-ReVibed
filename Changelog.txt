@@ -82,6 +82,9 @@ Branch: codex/experimental-bluetooth-hsp
   paused stream position instead of picking up to the current live stream time,
   matching native Bluetooth reference behavior and reducing jumpy recovery
   after BLE buffer starvation.
+- Restored firmware v4/API v3 as the migrated default unless the user
+  explicitly saves legacy firmware v3, and changed WiFi connection-key checks
+  to use the Handy `/connected` endpoint instead of probing slide position.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------

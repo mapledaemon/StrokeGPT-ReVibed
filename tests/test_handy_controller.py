@@ -309,25 +309,61 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["last_command"]["body"], {"min": 10, "max": 90})
         self.assertIn("device offline", diagnostics["last_command"]["error"])
 
-    def test_check_connection_probes_position_without_motion(self):
+    def test_check_connection_probes_connected_without_motion(self):
         handy = HandyController(handy_key="secret")
 
         with mock.patch(
             "strokegpt.handy.requests.get",
-            return_value=FakeResponse(status_code=200, payload={"position": 42.5}),
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
             result = handy.check_connection()
 
-        _args, kwargs = get.call_args
+        args, kwargs = get.call_args
+        self.assertIn("api/handy/v2/connected", args[0])
         self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
         self.assertEqual(result["status"], "connected")
         self.assertTrue(result["connected"])
-        self.assertEqual(result["position_mm"], 42.5)
-        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertEqual(result["last_command"]["path"], "connected")
         self.assertTrue(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 200)
         self.assertNotIn("secret", str(result))
+
+    def test_check_connection_uses_api_v3_connected_for_fw4_rest(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertTrue(result["last_command"]["ok"])
+
+    def test_check_connection_reports_offline_connected_probe(self):
+        handy = HandyController(handy_key="secret")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": False}),
+            create=True,
+        ):
+            result = handy.check_connection()
+
+        self.assertEqual(result["status"], "offline")
+        self.assertFalse(result["connected"])
+        self.assertIn("offline", result["message"].lower())
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 200)
 
     def test_check_connection_records_failure_without_motion(self):
         handy = HandyController(handy_key="secret")
@@ -340,7 +376,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertFalse(result["connected"])
         self.assertIn("device offline", result["message"])
-        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertEqual(result["last_command"]["path"], "connected")
         self.assertFalse(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 503)
 

@@ -114,7 +114,7 @@ describe('Device Handy connection controls', () => {
                     status: 'connected',
                     connected: true,
                     message: 'Connected to Handy.',
-                    last_command: {path: 'slide/position/absolute', ok: true, status_code: 200},
+                    last_command: {path: 'connected', ok: true, status_code: 200},
                 },
             });
         };
@@ -142,7 +142,7 @@ describe('Device Handy connection controls', () => {
                 status: 'error',
                 connected: false,
                 message: 'Handy connection failed: device offline',
-                last_command: {path: 'slide/position/absolute', ok: false, status_code: 503},
+                last_command: {path: 'connected', ok: false, status_code: 503},
             },
         });
 

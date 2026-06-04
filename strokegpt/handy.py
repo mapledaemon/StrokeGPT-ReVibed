@@ -919,7 +919,6 @@ class HandyController:
 
     def check_connection(self):
         """Probe the current Handy key without starting motion."""
-        path = "slide/position/absolute"
         if self._using_browser_bluetooth():
             snapshot = (
                 self.bluetooth_bridge.snapshot()
@@ -961,6 +960,7 @@ class HandyController:
                 "bluetooth": snapshot,
                 "last_command": last_command,
             }
+        path = "connected"
         if not self.handy_key:
             self._record_command_result(path, ok=False, error="missing Handy key")
             return {
@@ -970,42 +970,56 @@ class HandyController:
                 "last_command": self.last_command_result(),
             }
 
+        use_api_v3 = self.supports_api_v3_control()
+        base_url = self.api_v3_base_url if use_api_v3 else self.base_url
         headers = {"X-Connection-Key": self.handy_key}
+        if use_api_v3:
+            headers["X-Api-Key"] = self._effective_api_v3_key()
         started_at = time.monotonic()
         response = None
         try:
-            response = requests.get(f"{self.base_url}{path}", headers=headers, timeout=10)
+            response = requests.get(f"{base_url}{path}", headers=headers, timeout=10)
             response.raise_for_status()
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            try:
+                response_payload = response.json()
+            except (TypeError, ValueError, AttributeError):
+                response_payload = None
+            connected = True
+            if isinstance(response_payload, dict) and "connected" in response_payload:
+                connected = bool(response_payload.get("connected"))
             self._record_command_result(
                 path,
-                ok=True,
+                ok=connected,
                 status_code=getattr(response, "status_code", None),
                 elapsed_ms=elapsed_ms,
+                response_payload=response_payload,
+                response_headers=getattr(response, "headers", None),
             )
-            result = {
-                "status": "connected",
-                "connected": True,
-                "message": "Connected to Handy.",
+            return {
+                "status": "connected" if connected else "offline",
+                "connected": connected,
+                "message": "Connected to Handy." if connected else "Handy device is offline.",
                 "last_command": self.last_command_result(),
             }
-            try:
-                data = response.json()
-                if isinstance(data, dict) and data.get("position") is not None:
-                    result["position_mm"] = float(data["position"])
-            except (TypeError, ValueError, AttributeError):
-                pass
-            return result
         except requests.exceptions.RequestException as e:
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
             error_response = getattr(e, "response", None) or response
+            try:
+                response_payload = error_response.json() if error_response is not None else None
+            except (TypeError, ValueError, AttributeError):
+                response_payload = None
             self._record_command_result(
                 path,
                 ok=False,
                 status_code=getattr(error_response, "status_code", None),
                 elapsed_ms=elapsed_ms,
                 error=e,
+                response_payload=response_payload,
+                response_headers=getattr(error_response, "headers", None),
             )
+            if use_api_v3 and getattr(error_response, "status_code", None) == 401:
+                self._disable_api_v3_control(path=path, error=str(e))
             print(f"[HANDY ERROR] Connection check failed: {e}", file=sys.stderr)
             return {
                 "status": "error",

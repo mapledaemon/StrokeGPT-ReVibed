@@ -62,6 +62,7 @@ AUTOSPEAK_MOTION_AUTONOMY_LEVELS = {"chat_only", "style", "full"}
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
+DEFAULT_HANDY_FIRMWARE_VERSION_USER_SELECTED = False
 DEFAULT_HANDY_TRANSPORT = "rest"
 HANDY_TRANSPORTS = {"rest", "browser_bluetooth"}
 DEFAULT_MOTION_BACKEND = "continuous"
@@ -168,6 +169,7 @@ def default_settings_dict():
     return {
         "handy_key": "",
         "handy_firmware_version": DEFAULT_HANDY_FIRMWARE_VERSION,
+        "handy_firmware_version_user_selected": DEFAULT_HANDY_FIRMWARE_VERSION_USER_SELECTED,
         "handy_api_v3_key": DEFAULT_HANDY_API_V3_APPLICATION_ID,
         "handy_transport": DEFAULT_HANDY_TRANSPORT,
         "ai_name": "BOT",
@@ -323,9 +325,18 @@ class SettingsManager:
         data = data if isinstance(data, dict) else {}
 
         self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "")
+        self.handy_firmware_version_user_selected = _as_bool(
+            data.get(
+                "handy_firmware_version_user_selected",
+                defaults["handy_firmware_version_user_selected"],
+            ),
+            defaults["handy_firmware_version_user_selected"],
+        )
         self.handy_firmware_version = self._normalize_handy_firmware_version(
             data.get("handy_firmware_version", defaults["handy_firmware_version"])
         )
+        if self.handy_firmware_version == "fw3" and not self.handy_firmware_version_user_selected:
+            self.handy_firmware_version = DEFAULT_HANDY_FIRMWARE_VERSION
         # Existing local settings may contain a blank value from earlier
         # app-key experiments. Blank should migrate to the public Application
         # ID so firmware v4 HSP works after a normal restart.
@@ -601,6 +612,7 @@ class SettingsManager:
         return {
             "handy_key": self.handy_key,
             "handy_firmware_version": self._normalize_handy_firmware_version(self.handy_firmware_version),
+            "handy_firmware_version_user_selected": bool(self.handy_firmware_version_user_selected),
             "handy_api_v3_key": self.handy_api_v3_key,
             "handy_transport": self._normalize_handy_transport(self.handy_transport),
             "ai_name": self.ai_name,

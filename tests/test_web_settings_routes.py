@@ -152,7 +152,7 @@ class WebSettingsRouteTests(WebTestCase):
             "status": "connected",
             "connected": True,
             "message": "Connected to Handy.",
-            "last_command": {"path": "slide/position/absolute", "ok": True, "status_code": 200},
+            "last_command": {"path": "connected", "ok": True, "status_code": 200},
         }
         try:
             with mock.patch.object(settings, "save") as save, \
@@ -205,6 +205,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertTrue(data["handy_api_v3_key_configured"])
             self.assertEqual(data["handy_api_v3_key"], "app-id")
             self.assertEqual(settings.handy_firmware_version, "fw4")
+            self.assertTrue(settings.handy_firmware_version_user_selected)
             self.assertEqual(settings.handy_api_v3_key, "app-id")
             self.assertEqual(handy.firmware_version, "fw4")
             self.assertEqual(handy.api_v3_key, "app-id")
@@ -219,6 +220,7 @@ class WebSettingsRouteTests(WebTestCase):
             data = response.get_json()
             self.assertEqual(data["handy_firmware_version"], "fw3")
             self.assertFalse(data["continuous_streaming_supported"])
+            self.assertTrue(settings.handy_firmware_version_user_selected)
             self.assertEqual(settings.handy_api_v3_key, "legacy-still-saved")
         finally:
             settings.apply_dict(original)
