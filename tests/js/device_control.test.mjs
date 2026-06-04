@@ -43,8 +43,12 @@ describe('Device Handy connection controls', () => {
             'sidebar-handy-key-status',
             'save-handy-key-btn',
             'sidebar-save-handy-key-btn',
+            'handy-bluetooth-menu',
+            'handy-bluetooth-btn',
+            'handy-bluetooth-popover',
             'handy-rest-connection-controls',
             'sidebar-handy-rest-controls',
+            'sidebar-handy-panel',
             'handy-firmware-select',
             'handy-api-v3-key-input',
             'save-handy-device-config-btn',
@@ -75,8 +79,12 @@ describe('Device Handy connection controls', () => {
             'sidebar-handy-key-input',
             'handy-key-status',
             'sidebar-handy-key-status',
+            'handy-bluetooth-menu',
+            'handy-bluetooth-btn',
+            'handy-bluetooth-popover',
             'handy-rest-connection-controls',
             'sidebar-handy-rest-controls',
+            'sidebar-handy-panel',
             'handy-firmware-select',
             'handy-api-v3-key-input',
             'handy-firmware-status',
@@ -89,6 +97,7 @@ describe('Device Handy connection controls', () => {
         state.handyApiV3Key = '';
         state.handyTransport = 'rest';
         state.handyTransportOptions = [];
+        state.handyBluetoothStatus = {connected: false, status: 'disconnected'};
         state.connectionLost = false;
     });
 
@@ -211,8 +220,10 @@ describe('Device Handy connection controls', () => {
             body: {handy_transport: 'browser_bluetooth'},
         }]);
         assert.equal(state.handyTransport, 'browser_bluetooth');
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, false);
         assert.equal(getStubElement('handy-rest-connection-controls').hidden, true);
-        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, true);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, true);
         assert.equal(
             getStubElement('handy-transport-status').textContent,
             'Local Bluetooth selected; connect from Handy Connection before starting motion.',
@@ -223,7 +234,7 @@ describe('Device Handy connection controls', () => {
         );
     });
 
-    it('startup Local Bluetooth state keeps the sidebar key box visible', () => {
+    it('startup Local Bluetooth state hides Cloud REST connection-key sections', () => {
         populateDeviceSettings({
             handy_transport: 'browser_bluetooth',
             handy_transport_options: [
@@ -233,13 +244,45 @@ describe('Device Handy connection controls', () => {
         });
 
         assert.equal(state.handyTransport, 'browser_bluetooth');
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, false);
         assert.equal(getStubElement('handy-rest-connection-controls').hidden, true);
-        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, true);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, true);
         assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Disconnected');
         assert.equal(
             getStubElement('sidebar-handy-key-status').title,
             'Local Bluetooth selected; connect from Handy Connection.',
         );
+    });
+
+    it('transport selector immediately toggles Bluetooth and connection-key visibility', () => {
+        populateDeviceSettings({
+            handy_transport: 'rest',
+            handy_transport_options: [
+                {id: 'rest', label: 'Cloud REST'},
+                {id: 'browser_bluetooth', label: 'Local Bluetooth'},
+            ],
+        });
+
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, true);
+        assert.equal(getStubElement('handy-rest-connection-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, false);
+
+        getStubElement('handy-transport-select').value = 'browser_bluetooth';
+        getStubElement('handy-transport-select').dispatchEvent('change');
+
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, false);
+        assert.equal(getStubElement('handy-rest-connection-controls').hidden, true);
+        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, true);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, true);
+
+        getStubElement('handy-transport-select').value = 'rest';
+        getStubElement('handy-transport-select').dispatchEvent('change');
+
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, true);
+        assert.equal(getStubElement('handy-rest-connection-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, false);
     });
 
     it('sidebar key Connect switches from local Bluetooth back to Cloud REST', async () => {
@@ -278,7 +321,10 @@ describe('Device Handy connection controls', () => {
             {endpoint: '/set_handy_key', body: {key: 'cloud-key'}},
         ]);
         assert.equal(state.handyTransport, 'rest');
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, true);
+        assert.equal(getStubElement('handy-rest-connection-controls').hidden, false);
         assert.equal(getStubElement('sidebar-handy-rest-controls').hidden, false);
+        assert.equal(getStubElement('sidebar-handy-panel').hidden, false);
         assert.equal(getStubElement('handy-transport-select').value, 'rest');
         assert.equal(getStubElement('sidebar-handy-key-status').textContent, 'Device online');
         assert.equal(getStubElement('status-text').textContent, 'Connected to Handy.');

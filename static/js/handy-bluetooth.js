@@ -37,6 +37,10 @@ function bluetoothConnected() {
     return Boolean(state.handyBluetoothDevice?.gatt?.connected && state.handyBluetoothTx && state.handyBluetoothRx);
 }
 
+function bluetoothUiSelected() {
+    return state.handyTransport === 'browser_bluetooth';
+}
+
 function bluetoothStateLabel(status = state.handyBluetoothStatus) {
     const localConnected = bluetoothConnected();
     if (localConnected) return 'Connected';
@@ -170,7 +174,7 @@ function requestBluetoothPopoverPosition() {
 }
 
 function setBluetoothMenuOpen(isOpen) {
-    const open = Boolean(isOpen && el.handyBluetoothPopover && el.handyBluetoothBtn);
+    const open = Boolean(isOpen && bluetoothUiSelected() && el.handyBluetoothPopover && el.handyBluetoothBtn);
     state.handyBluetoothMenuOpen = open;
     if (el.handyBluetoothPopover) el.handyBluetoothPopover.hidden = !open;
     if (el.handyBluetoothBtn) el.handyBluetoothBtn.setAttribute('aria-expanded', String(open));
@@ -179,6 +183,13 @@ function setBluetoothMenuOpen(isOpen) {
     } else {
         clearBluetoothPopoverPosition();
     }
+}
+
+export function syncHandyBluetoothVisibility() {
+    const visible = bluetoothUiSelected();
+    if (el.handyBluetoothMenu) el.handyBluetoothMenu.hidden = !visible;
+    if (!visible) setBluetoothMenuOpen(false);
+    return visible;
 }
 
 function bluetoothMenuContains(target) {
@@ -225,6 +236,7 @@ function updateBluetoothMenu(status = state.handyBluetoothStatus) {
 }
 
 function updateBluetoothButton(status = state.handyBluetoothStatus) {
+    syncHandyBluetoothVisibility();
     const connected = Boolean(status?.connected || bluetoothConnected());
     const connecting = status?.status === 'connecting';
     const error = status?.status === 'error' || status?.status === 'stale';
@@ -673,6 +685,7 @@ export function initHandyBluetoothControls() {
     updateBluetoothButton();
     el.handyBluetoothBtn?.addEventListener('click', event => {
         event.stopPropagation?.();
+        if (!syncHandyBluetoothVisibility()) return;
         setBluetoothMenuOpen(!state.handyBluetoothMenuOpen);
     });
     el.bluetoothMenuActionBtn?.addEventListener('click', event => {

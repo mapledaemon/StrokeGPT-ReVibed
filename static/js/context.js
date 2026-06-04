@@ -189,6 +189,7 @@ export const el = {
     sidebarSaveHandyKeyBtn: D.getElementById('sidebar-save-handy-key-btn'),
     sidebarHandyKeyStatus: D.getElementById('sidebar-handy-key-status'),
     sidebarHandyRestControls: D.getElementById('sidebar-handy-rest-controls'),
+    sidebarHandyPanel: D.getElementById('sidebar-handy-panel'),
     motionDepthMinSlider: D.getElementById('motion-depth-min-slider'),
     motionDepthMaxSlider: D.getElementById('motion-depth-max-slider'),
     motionDepthMinVal: D.getElementById('motion-depth-min-val'),

@@ -1,5 +1,5 @@
 import { apiCall, el, reportSaveFailure, setSliderValue, setStatusMessage, state } from './context.js';
-import { updateHandyBluetoothStatus } from './handy-bluetooth.js';
+import { syncHandyBluetoothVisibility, updateHandyBluetoothStatus } from './handy-bluetooth.js';
 
 function handyKeyInputs() {
     return [el.handyKeyInput, el.sidebarHandyKeyInput].filter(Boolean);
@@ -96,7 +96,8 @@ function hasUnsavedHandyKeyDraft() {
 function updateHandyRestConnectionVisibility() {
     const bluetoothSelected = state.handyTransport === 'browser_bluetooth';
     if (el.handyRestConnectionControls) el.handyRestConnectionControls.hidden = bluetoothSelected;
-    if (el.sidebarHandyRestControls) el.sidebarHandyRestControls.hidden = false;
+    if (el.sidebarHandyRestControls) el.sidebarHandyRestControls.hidden = bluetoothSelected;
+    if (el.sidebarHandyPanel) el.sidebarHandyPanel.hidden = bluetoothSelected;
 }
 
 function normalizeMotionDepthRange() {
@@ -117,6 +118,7 @@ export function populateDeviceSettings(data = {}) {
     syncHandyConnectionKey(state.myHandyKey);
     populateHandyTransportSelect();
     updateHandyRestConnectionVisibility();
+    syncHandyBluetoothVisibility();
     if (el.handyFirmwareSelect) el.handyFirmwareSelect.value = state.handyFirmwareVersion;
     if (el.handyApiV3KeyInput) el.handyApiV3KeyInput.value = state.handyApiV3Key;
     updateHandyFirmwareStatus(data);
@@ -158,6 +160,7 @@ function updateHandyTransportStatus(data = {}) {
     if (!el.handyTransportStatus) return;
     const transport = data.handy_transport || state.handyTransport || 'rest';
     updateHandyRestConnectionVisibility();
+    syncHandyBluetoothVisibility();
     if (transport === 'browser_bluetooth') {
         const bluetooth = data.bluetooth || state.handyBluetoothStatus || {};
         setStatusMessage(
@@ -297,6 +300,7 @@ async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
         state.handyTransport = transportRes.handy_transport || 'rest';
         if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
         if (transportRes.bluetooth) updateHandyBluetoothStatus(transportRes.bluetooth);
+        syncHandyBluetoothVisibility();
         updateHandyRestConnectionVisibility();
         updateHandyTransportStatus(transportRes);
         updateHandyFirmwareStatus(transportRes);
@@ -344,6 +348,7 @@ async function saveHandyTransport() {
         state.handyTransport = res.handy_transport || handyTransport;
         if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
         if (res.bluetooth) updateHandyBluetoothStatus(res.bluetooth);
+        syncHandyBluetoothVisibility();
         updateHandyRestConnectionVisibility();
         updateHandyTransportStatus(res);
         updateHandyFirmwareStatus(res);
@@ -390,6 +395,7 @@ export function initDeviceControls() {
     el.saveHandyDeviceConfigBtn?.addEventListener('click', saveHandyDeviceConfig);
     el.handyTransportSelect?.addEventListener('change', () => {
         state.handyTransport = el.handyTransportSelect.value || 'rest';
+        syncHandyBluetoothVisibility();
         updateHandyRestConnectionVisibility();
         updateHandyTransportStatus();
         updateHandyFirmwareStatus();

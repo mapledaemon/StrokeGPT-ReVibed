@@ -116,7 +116,22 @@ describe('Handy Bluetooth top-bar menu', () => {
         });
     });
 
+    it('hides the top-bar menu while Cloud REST is selected', () => {
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, true);
+
+        getStubElement('handy-bluetooth-btn').click();
+
+        assert.equal(getStubElement('handy-bluetooth-popover').hidden, true);
+        assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-expanded'), 'false');
+    });
+
     it('opens the status menu without launching the Bluetooth chooser', () => {
+        state.handyTransport = 'browser_bluetooth';
+        updateHandyBluetoothStatus({
+            connected: false,
+            status: 'disconnected',
+            message: 'Bluetooth not connected.',
+        });
         let requestDeviceCalls = 0;
         globalThis.navigator.bluetooth = {
             requestDevice: async () => {
@@ -134,12 +149,19 @@ describe('Handy Bluetooth top-bar menu', () => {
         assert.match(getStubElement('handy-bluetooth-popover').style.maxHeight, /px$/);
         assert.equal(getStubElement('handy-bluetooth-popover').style.overflowY, 'visible');
         assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-expanded'), 'true');
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, false);
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Disconnected');
         assert.equal(getStubElement('bluetooth-menu-action-btn').textContent, 'Connect');
         assert.equal(requestDeviceCalls, 0);
     });
 
     it('scrolls the status menu only when viewport space is constrained', () => {
+        state.handyTransport = 'browser_bluetooth';
+        updateHandyBluetoothStatus({
+            connected: false,
+            status: 'disconnected',
+            message: 'Bluetooth not connected.',
+        });
         getStubElement('handy-bluetooth-btn').getBoundingClientRect = () => ({
             top: 220,
             bottom: 252,
@@ -174,6 +196,7 @@ describe('Handy Bluetooth top-bar menu', () => {
             message: 'Connected to Handy Test Unit over local Bluetooth.',
         });
 
+        assert.equal(getStubElement('handy-bluetooth-menu').hidden, false);
         assert.equal(getStubElement('handy-bluetooth-btn').getAttribute('aria-label'), 'Handy Bluetooth connected');
         assert.equal(getStubElement('handy-bluetooth-btn').classList.contains('is-on'), true);
         assert.equal(getStubElement('bluetooth-menu-state').textContent, 'Connected');
@@ -188,6 +211,12 @@ describe('Handy Bluetooth top-bar menu', () => {
     });
 
     it('opens Device settings from the menu', async () => {
+        state.handyTransport = 'browser_bluetooth';
+        updateHandyBluetoothStatus({
+            connected: false,
+            status: 'disconnected',
+            message: 'Bluetooth not connected.',
+        });
         getStubElement('handy-bluetooth-btn').click();
         getStubElement('bluetooth-menu-settings-btn').click();
         await flushAsyncHandlers();

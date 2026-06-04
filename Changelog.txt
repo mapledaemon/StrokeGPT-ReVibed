@@ -74,6 +74,10 @@ Branch: codex/experimental-bluetooth-hsp
 - Translated REST-normalized stroke bounds into Bluetooth percent units in the
   browser codec so local Bluetooth HSP uses the same physical stroke window as
   the internet REST pathway instead of compressing motion into a tiny range.
+- Hid the experimental Bluetooth top-bar control by default and show it only
+  while Local Bluetooth transport is selected; selecting Local Bluetooth now
+  also hides Cloud REST connection-key controls in the Device tab and sidebar,
+  and switching back to Cloud REST restores those key controls.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
