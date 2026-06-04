@@ -163,6 +163,10 @@ def _motion_style_instruction(style):
     )
 
 
+def _motion_activity_text(context):
+    return "active" if context.get("motion_playback_active") else "stopped"
+
+
 def _normalize_user_genitalia(value):
     cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if cleaned in {"vagina", "vulva", "pussy", "cunt", "female"}:
@@ -443,6 +447,7 @@ Valid moods: {mood_options}.
 ### MOTION RULES
 - Movement is a control request, not prose. Use numeric `sp`/`dp`/`rng`, named `zone`/`pattern`, or `motion:"anchor_loop"` with 2-6 soft anchors. The app enforces speed limits and stop behavior.
 - For physical requests, return `move`. Do not claim that you changed motion unless `move` is non-null and changes speed, depth, range, zone, pattern, or motion program.
+- If the Current State says Motion is stopped, a non-null `move` starts motion; do not treat the listed Handy target as already moving.
 - `dp`: 0 tip/out, 50 shaft/middle, 100 base/in. `rng`: 10 tiny, 25 short, 50 half-length, 75 long, 95 full.
 - TIP / SHAFT / BASE ARE REGIONS: treat them as emphasis areas, not fixed points. Unless I ask for tiny, short, tight, flicking, fluttering, holding, or edging, prefer `rng` 70-95 with a center inside the region so travel does not clip at 0 or 100.
 - Use broad `motion:"anchor_loop"`, `stroke`, `sway`, or `milk` for ordinary regional movement. Reserve `flick`, `flutter`, `hold`, `pulse`, and `tease` for explicit tight, tiny, edge, or hold wording.
@@ -482,6 +487,7 @@ Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
 ### MOTION CONTRACT
 - The `move` object is the only place to request device motion. Do not narrate the motion JSON inside `chat`.
 - Motion requests need a non-null `move` that changes speed, depth, range, zone, pattern, or motion program. The app handles limits and stop behavior.
+- If the Current State says Motion is stopped, a non-null `move` starts motion; do not treat the listed Handy target as already moving.
 - Use numeric `sp`/`dp`/`rng`, named `zone`/`pattern`, or `motion:"anchor_loop"` with 2-6 soft anchors.
 - `dp`: 0 tip/out, 50 shaft/middle, 100 base/in. `rng`: 10 tiny, 25 short, 50 half-length, 75 long, 95 full.
 - TIP / SHAFT / BASE ARE REGIONS: treat them as emphasis areas, not fixed points. Unless I ask for tiny, short, tight, flicking, fluttering, holding, or edging, prefer `rng` 70-95 with a center inside the region so travel does not clip at 0 or 100.
@@ -577,7 +583,7 @@ Session time: {context.get('edging_elapsed_time')}. Mention it only occasionally
 
         prompt_text += f"""
 ### CURRENT STATE
-Mood: {context.get('current_mood')}. Handy: {context.get('last_stroke_speed')}% speed, {context.get('last_depth_pos')}% depth, {context.get('last_stroke_range', 50)}% range.
+Mood: {context.get('current_mood')}. Motion: {_motion_activity_text(context)}. Handy target: {context.get('last_stroke_speed')}% speed, {context.get('last_depth_pos')}% depth, {context.get('last_stroke_range', 50)}% range.
 """
         if rules := context.get('rules'):
             prompt_text += "\n### EXTRA RULES FROM ME:\n" + "\n".join(f"- {r}" for r in rules)

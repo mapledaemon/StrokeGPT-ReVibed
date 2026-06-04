@@ -1345,6 +1345,60 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_first_inactive_chat_move_matching_default_state_still_starts_motion(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = None
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            current = MotionTarget(50, 50, 50, "semantic current")
+            with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
+                    mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                    mock.patch.object(llm, "get_chat_response", return_value={
+                        "chat": "I'll start slow and steady.",
+                        "move": {"sp": 50, "dp": 50, "rng": 50},
+                        "new_mood": None,
+                    }), mock.patch.object(llm, "repair_motion_response") as repair_motion_response, \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target, \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
+                response = self.client.post("/send_message", json={
+                    "message": "start moving",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "ok")
+            self.assertTrue(data["motion_applied"])
+            self.assertFalse(data["motion_repaired"])
+            repair_motion_response.assert_not_called()
+            apply_generated_target.assert_called_once()
+            applied_target = apply_generated_target.call_args.args[0]
+            self.assertEqual(applied_target.speed, 50)
+            self.assertEqual(applied_target.depth, 50)
+            self.assertEqual(applied_target.stroke_range, 50)
+            self.assertEqual(app_state.chat_motion_keepalive_target, applied_target.clamped())
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_send_message_does_not_repair_non_action_question(self):
         from strokegpt.web import app_state, audio, handy, llm, motion, settings
 

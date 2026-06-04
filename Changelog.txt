@@ -7,6 +7,16 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-04 - PR #307 - Inactive Chat Motion Starts
+---------------------------------------------------
+
+Branch: codex/chat-inactive-motion-start
+
+- Fixed normal chat startup so a non-null LLM motion target can start motion
+  even when it matches the default Handy target values and playback is still
+  inactive, and clarified the chat prompt's current state as stopped/active
+  separately from the last Handy target.
+
 2026-05-27 - PR #305 - Experimental Local Bluetooth HSP
 -------------------------------------------------------
 
