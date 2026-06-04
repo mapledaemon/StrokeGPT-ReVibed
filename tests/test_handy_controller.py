@@ -51,6 +51,21 @@ class ThresholdFailingV3HandyController(RecordingV3HandyController):
         return True
 
 
+class StarvingAddV3HandyController(RecordingV3HandyController):
+    def _send_v3_command(self, path, body=None):
+        self.v3_commands.append((path, body or {}))
+        payload = None
+        if path == "hsp/add":
+            payload = {
+                "hsp_state": {
+                    "play_state": "hsp_paused_on_starving",
+                    "current_time_ms": 480,
+                }
+            }
+        self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0, response_payload=payload)
+        return True
+
+
 class RecordingBluetoothBridge:
     def __init__(self, *, ok=True, error="", response=None):
         self.commands = []
@@ -684,7 +699,7 @@ class HandyControllerTests(unittest.TestCase):
         body = handy.v3_commands[-1][1]
         self.assertEqual(body["start_time"], 0)
         self.assertEqual(body["server_time"], 123456)
-        self.assertFalse(body["pause_on_starving"])
+        self.assertTrue(body["pause_on_starving"])
         self.assertFalse(body["loop"])
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
@@ -791,7 +806,7 @@ class HandyControllerTests(unittest.TestCase):
             "start_time": 0,
             "server_time": 1234567,
             "playback_rate": 1.0,
-            "pause_on_starving": False,
+            "pause_on_starving": True,
             "loop": False,
         })])
 
@@ -1359,6 +1374,52 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(paths_before[-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
         self.assertEqual([path for path, _body in handy.v3_commands][len(paths_before):], ["hsp/add"])
 
+    def test_cloud_append_continuous_stream_resumes_only_after_starvation(self):
+        handy = RecordingV3HandyController()
+        handy._last_hsp_state_sse_event_type = "hsp_paused_on_starving"
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold", "hsp/resume"])
+        self.assertEqual(handy.v3_commands[-1][1], {"pick_up": False})
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
+
+    def test_cloud_append_continuous_stream_resumes_after_starved_add_response(self):
+        handy = StarvingAddV3HandyController()
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold", "hsp/resume"])
+        self.assertEqual(handy.v3_commands[-1][1], {"pick_up": False})
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
+
+    def test_cloud_append_continuous_stream_ignores_stale_starvation_event_when_state_playing(self):
+        handy = RecordingV3HandyController()
+        handy._last_hsp_state_sse_event_type = "hsp_paused_on_starving"
+        handy._update_hsp_state_cache({"play_state": "playing", "current_time_ms": 480}, source="command")
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold"])
+
     def test_start_continuous_stream_keeps_playing_when_threshold_update_fails(self):
         handy = ThresholdFailingV3HandyController()
 
@@ -1406,7 +1467,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold", "hsp/play"])
         play_body = handy.v3_commands[-1][1]
         self.assertEqual(play_body["start_time"], 29500)
-        self.assertFalse(play_body["pause_on_starving"])
+        self.assertTrue(play_body["pause_on_starving"])
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/play")
 
     def test_start_continuous_stream_reuses_hsp_setup_for_replacement(self):
