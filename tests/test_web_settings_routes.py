@@ -157,7 +157,7 @@ class WebSettingsRouteTests(WebTestCase):
         try:
             with mock.patch.object(settings, "save") as save, \
                     mock.patch.object(handy, "check_connection", return_value=connection_payload) as check:
-                response = self.client.post("/set_handy_key", json={"key": "probe-key"})
+                response = self.client.post("/set_handy_key", json={"key": " probeKey "})
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
@@ -166,8 +166,8 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["connection_status"], "connected")
             self.assertEqual(data["message"], "Connected to Handy.")
             self.assertEqual(data["connection"], connection_payload)
-            self.assertEqual(settings.handy_key, "probe-key")
-            self.assertEqual(handy.handy_key, "probe-key")
+            self.assertEqual(settings.handy_key, "probeKey")
+            self.assertEqual(handy.handy_key, "probeKey")
             save.assert_called_once()
             check.assert_called_once()
         finally:
@@ -297,7 +297,8 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertFalse(data["continuous_streaming_supported"])
             self.assertFalse(data["handy_api_v3_connection_key_valid"])
             self.assertEqual(data["handy_api_v3_unavailable_reason"], "invalid_connection_key_format")
-            self.assertIn("not valid for API v3", data["message"])
+            self.assertIn("malformed for API v3", data["message"])
+            self.assertIn("separate from the API v3 Application ID", data["message"])
         finally:
             settings.apply_dict(original)
             handy.set_api_key(original_runtime["handy_key"])

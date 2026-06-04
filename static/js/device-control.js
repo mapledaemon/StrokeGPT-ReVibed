@@ -192,7 +192,7 @@ function updateHandyFirmwareStatus(data = {}) {
             : apiKeyConfigured
                 ? connectionKeyValid
                     ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
-                    : 'Firmware v4 selected. The saved Handy connection key is not valid for API v3; re-copy it without spaces or punctuation.'
+                    : 'Firmware v4 selected. The saved WiFi/Cloud REST Handy connection key is malformed for API v3; re-copy the device connection key from Handy setup.'
                 : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
     } else {
         el.handyFirmwareStatus.textContent = 'Firmware v3 legacy selected. Continuous backend falls back to HDSP direct position commands.';

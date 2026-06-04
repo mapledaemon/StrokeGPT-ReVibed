@@ -205,7 +205,7 @@ describe('Device Handy connection controls', () => {
             handy_api_v3_connection_key_valid: false,
             handy_api_v3_key_configured: true,
             continuous_streaming_supported: false,
-            message: 'Handy firmware set to v4; the saved Handy connection key is not valid for API v3.',
+            message: 'Handy firmware set to v4; the saved WiFi/Cloud REST Handy connection key is malformed for API v3.',
         });
 
         state.myHandyKey = 'saved-key';
@@ -217,11 +217,11 @@ describe('Device Handy connection controls', () => {
         assert.equal(state.handyApiV3ConnectionKeyValid, false);
         assert.equal(
             getStubElement('handy-firmware-status').textContent,
-            'Firmware v4 selected. The saved Handy connection key is not valid for API v3; re-copy it without spaces or punctuation.',
+            'Firmware v4 selected. The saved WiFi/Cloud REST Handy connection key is malformed for API v3; re-copy the device connection key from Handy setup.',
         );
         assert.equal(
             getStubElement('status-text').textContent,
-            'Handy firmware set to v4; the saved Handy connection key is not valid for API v3.',
+            'Handy firmware set to v4; the saved WiFi/Cloud REST Handy connection key is malformed for API v3.',
         );
     });
 

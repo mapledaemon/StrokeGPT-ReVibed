@@ -227,7 +227,8 @@ class HandyController:
         return "missing Handy key"
 
     def set_api_key(self, key):
-        if key != self.handy_key or self._api_v3_auth_failed:
+        cleaned = str(key or "").strip()
+        if cleaned != self.handy_key or self._api_v3_auth_failed:
             self._current_mode = None
             self._hamp_started = False
             self._hsp_streaming = False
@@ -239,7 +240,7 @@ class HandyController:
             self._server_time_offset_ms = None
             self._server_time_synced_at = 0.0
             self._reset_motion_cache()
-        self.handy_key = key
+        self.handy_key = cleaned
 
     def set_handy_api_key(self, key):
         # Compatibility shim - do not extend. The persisted setting name says
@@ -663,9 +664,10 @@ class HandyController:
         if self._api_v3_connection_key_format_valid():
             return ""
         return (
-            "Handy API v3 requires a connection key with only letters and numbers "
-            "(1-128 characters). Re-copy the connection key from Handy setup without "
-            "spaces or punctuation, or use firmware v3 legacy mode for older keys."
+            "The saved WiFi/Cloud REST Handy connection key is malformed for API v3. "
+            "This is separate from the Device tab API v3 Application ID. "
+            "Re-copy the device connection key from Handy setup and save it in the "
+            "WiFi connection-key field."
         )
 
     def _disable_api_v3_control(self, *, path="", error=""):

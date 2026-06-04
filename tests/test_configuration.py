@@ -147,12 +147,13 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(defaults["voice_input_model"], DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL)
         self.assertFalse(defaults["voice_input_enabled"])
 
-    def test_old_settings_load_default_model(self):
-        fake_path = FakePath(json.dumps({"handy_key": "abc"}))
+    def test_old_settings_load_defaults_and_trims_handy_connection_key(self):
+        fake_path = FakePath(json.dumps({"handy_key": "  abc  "}))
         settings = SettingsManager("settings.json")
         settings.file_path = fake_path
         settings.load()
 
+        self.assertEqual(settings.handy_key, "abc")
         self.assertEqual(settings.ollama_model, DEFAULT_OLLAMA_MODEL)
         self.assertIn("huihui_ai/granite4.1-abliterated:3b", settings.ollama_models)
         self.assertIn("huihui_ai/granite4.1-abliterated:8b", settings.ollama_models)

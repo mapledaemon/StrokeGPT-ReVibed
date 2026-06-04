@@ -324,7 +324,7 @@ class SettingsManager:
         defaults = default_settings_dict()
         data = data if isinstance(data, dict) else {}
 
-        self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "")
+        self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "").strip()
         self.handy_firmware_version_user_selected = _as_bool(
             data.get(
                 "handy_firmware_version_user_selected",

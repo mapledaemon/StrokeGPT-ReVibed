@@ -413,7 +413,7 @@ def system_prompts_route():
 @settings_blueprint.route('/set_handy_key', methods=['POST'])
 def set_handy_key_route():
     web = _web()
-    key = web._request_json().get('key')
+    key = str(web._request_json().get('key') or "").strip()
     if not key:
         return jsonify({"status": "error", "message": "Key is missing"}), 400
     web.handy.set_api_key(key)
@@ -466,7 +466,7 @@ def set_handy_device_config_route():
             if v4_ready
             else "Handy firmware set to v4; connect local Bluetooth from Handy Connection to enable HSP streaming."
             if bluetooth_transport and firmware_version == "fw4"
-            else "Handy firmware set to v4; the saved Handy connection key is not valid for API v3. Re-copy the key without spaces or punctuation."
+            else "Handy firmware set to v4; the saved WiFi/Cloud REST Handy connection key is malformed for API v3. This is separate from the API v3 Application ID; re-copy the device connection key from Handy setup."
             if invalid_v3_key
             else "Handy firmware set to v4; add a Handy API v3 Application ID to enable HSP streaming."
             if missing_v3_key

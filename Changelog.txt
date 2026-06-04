@@ -88,9 +88,10 @@ Branch: codex/experimental-bluetooth-hsp
 - Prevented blank Device-tab Application ID saves from disabling API v3, and
   made firmware v4 WiFi connection checks retry API v3 `/connected` even after
   a stale app-key auth failure instead of falling back to API v2.
-- Rejected Handy connection keys that are not valid for API v3 before sending
-  firmware v4 WiFi connection checks, and surfaced sanitized Handy API v3
-  response details when `/connected` still returns a credential error.
+- Trimmed saved Handy connection keys, flagged malformed WiFi/Cloud REST
+  connection keys separately from the API v3 Application ID, and surfaced
+  sanitized Handy API v3 response details when `/connected` returns a
+  credential error.
 
 2026-05-27 - PR #304 - HSP Command Pressure Guards
 --------------------------------------------------
