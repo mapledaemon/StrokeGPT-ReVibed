@@ -21,6 +21,7 @@ const COMMAND_WAIT_SECONDS = 6;
 const HSP_ADD_CHUNK_POINTS = 20;
 const WRITE_WITHOUT_RESPONSE_SETTLE_MS = 20;
 const RESPONSE_TIMEOUT_MS = 5000;
+const NO_COMPLETION_ID = 2147483647;
 const POPOVER_GAP_PX = 8;
 const POPOVER_MARGIN_PX = 8;
 const POPOVER_MIN_HEIGHT_PX = 120;
@@ -309,7 +310,7 @@ async function writeBluetoothValue(bytes) {
 
 async function sendBleRequest(path, body = {}, options = {}) {
     const waitForResponse = options.waitForResponse !== false;
-    const id = nextMessageId();
+    const id = waitForResponse ? nextMessageId() : NO_COMPLETION_ID;
     const bytes = encodeHandyRequest(path, body, id);
     if (!waitForResponse) {
         const write_mode = await writeBluetoothValue(bytes);
@@ -426,11 +427,31 @@ async function syncBluetoothClock() {
         }
         await new Promise(resolve => setTimeout(resolve, 60));
     }
-    if (!samples.length) return;
+    if (!samples.length) {
+        throw new Error('Handy Bluetooth clock sync did not return usable samples.');
+    }
     const offset = Math.round(samples.reduce((sum, sample) => sum + sample.offset, 0) / samples.length);
     const rtd = Math.round(samples.reduce((sum, sample) => sum + sample.rtd, 0) / samples.length);
     state.handyBluetoothClockOffsetMs = offset;
     await sendBleRequest('clock/offset/set', {clock_offset: offset, rtd});
+}
+
+function rejectPendingBluetoothResponses(message) {
+    state.handyBluetoothPendingResponses.forEach(pending => {
+        clearTimeout(pending.timer);
+        pending.reject?.(new Error(message));
+    });
+    state.handyBluetoothPendingResponses.clear();
+}
+
+function clearLocalBluetoothSession({disconnect = false, message = 'Bluetooth disconnected.'} = {}) {
+    rejectPendingBluetoothResponses(message);
+    if (disconnect && state.handyBluetoothDevice?.gatt?.connected) {
+        state.handyBluetoothDevice.gatt.disconnect();
+    }
+    state.handyBluetoothTx = null;
+    state.handyBluetoothRx = null;
+    state.handyBluetoothServer = null;
 }
 
 function bodyWithLocalServerTime(path, body = {}) {
@@ -498,6 +519,7 @@ async function executeBridgeCommand(command) {
 }
 
 export const executeBridgeCommandForTests = executeBridgeCommand;
+export const connectHandyBluetoothForTests = connectHandyBluetooth;
 
 async function commandLoop() {
     if (state.handyBluetoothCommandLoopActive) return;
@@ -554,18 +576,17 @@ async function connectHandyBluetooth() {
         state.handyBluetoothRx.addEventListener('characteristicvaluechanged', handleBleMessage);
         await state.handyBluetoothRx.startNotifications();
         updateHandyBluetoothStatus({connected: true, status: 'connecting', message: 'Syncing Handy Bluetooth clock...'});
-        try {
-            await syncBluetoothClock();
-        } catch (clockError) {
-            console.warn('Handy Bluetooth clock sync failed:', clockError);
-        }
+        await syncBluetoothClock();
+        updateHandyBluetoothStatus({connected: true, status: 'connecting', message: 'Checking Handy Bluetooth HSP state...'});
+        const stateResponse = await sendBleRequest('hsp/state');
         const data = await apiCall('/handy_bluetooth/connect', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 client_id: getUiClientId(),
                 device_name: device.name || 'Handy',
-                message: `Connected to ${device.name || 'Handy'} over local Bluetooth.`,
+                message: `Connected to ${device.name || 'Handy'} over local Bluetooth. HSP state check passed.`,
+                hsp_state: stateResponse?.hsp_state || null,
             }),
         });
         state.handyTransport = 'browser_bluetooth';
@@ -578,6 +599,10 @@ async function connectHandyBluetooth() {
         setStatusMessage(el.statusText, 'Handy Bluetooth connected.', 'success');
         commandLoop();
     } catch (error) {
+        clearLocalBluetoothSession({
+            disconnect: true,
+            message: error?.message || 'Bluetooth connection failed.',
+        });
         updateHandyBluetoothStatus({
             connected: false,
             status: 'error',
@@ -602,11 +627,7 @@ async function disconnectHandyBluetooth() {
                 // Disconnect still needs to proceed if the device is already gone.
             }
         }
-        state.handyBluetoothPendingResponses.forEach(pending => {
-            clearTimeout(pending.timer);
-            pending.reject?.(new Error('Bluetooth disconnected.'));
-        });
-        state.handyBluetoothPendingResponses.clear();
+        rejectPendingBluetoothResponses('Bluetooth disconnected.');
         if (state.handyBluetoothDevice?.gatt?.connected) {
             state.handyBluetoothDevice.gatt.disconnect();
         } else {

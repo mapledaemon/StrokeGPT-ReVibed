@@ -34,6 +34,12 @@ Branch: codex/experimental-bluetooth-hsp
   reports selected Local Bluetooth bridge state instead of a missing Handy key,
   and explicit Bluetooth connection checks wait for an HSP state response
   rather than only checking that the browser bridge is present.
+- Tightened the top-bar Bluetooth connect path so it must complete clock sync
+  and receive an HSP state response before registering the backend bridge as
+  connected, and clears partial GATT sessions when that readiness check fails.
+- Prevented stale Bluetooth motion commands from replaying after the same
+  browser reconnects, and switched no-wait runtime BLE writes to the Handy
+  no-completion request ID used by reference HSP implementations.
 - Added an explicit experimental warning to the Bluetooth menu so users do not
   mistake the local browser Bluetooth transport for the proven Cloud REST path.
 - Changed the Bluetooth status menu to a viewport-positioned flyout that flips

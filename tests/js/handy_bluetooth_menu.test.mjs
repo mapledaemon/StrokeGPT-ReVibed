@@ -5,7 +5,11 @@ import assert from 'node:assert/strict';
 
 import { getStubElement, resetStubElement } from './_harness.mjs';
 import { state } from '../../static/js/context.js';
-import { initHandyBluetoothControls, updateHandyBluetoothStatus } from '../../static/js/handy-bluetooth.js';
+import {
+    connectHandyBluetoothForTests,
+    initHandyBluetoothControls,
+    updateHandyBluetoothStatus,
+} from '../../static/js/handy-bluetooth.js';
 
 
 function jsonResponse(httpStatus, body) {
@@ -192,5 +196,83 @@ describe('Handy Bluetooth top-bar menu', () => {
         assert.equal(getStubElement('handy-bluetooth-popover').dataset.placement, undefined);
         assert.equal(getStubElement('handy-bluetooth-popover').style.top, '');
         assert.equal(getStubElement('settings-dialog').classList.contains('open'), true);
+    });
+
+    it('clears a partial GATT connection when the HSP state readiness check fails', async () => {
+        const endpoints = [];
+        let disconnectCalls = 0;
+        const device = {
+            name: 'Handy Test Unit',
+            addEventListener() {},
+            gatt: {
+                connected: true,
+                async connect() {
+                    return {
+                        async getPrimaryService() {
+                            return {
+                                async getCharacteristic() {
+                                    return {
+                                        properties: {write: true, writeWithoutResponse: true},
+                                        addEventListener() {},
+                                        async startNotifications() {},
+                                        async writeValueWithResponse() {
+                                            const [id, pending] = Array.from(state.handyBluetoothPendingResponses.entries())[0] || [];
+                                            if (!pending) return;
+                                            state.handyBluetoothPendingResponses.delete(id);
+                                            if (pending.path === 'clock/offset/get') {
+                                                pending.resolve({
+                                                    ok: true,
+                                                    clock_offset_get: {
+                                                        time: Date.now(),
+                                                        clock_offset: 0,
+                                                        rtd: 1,
+                                                    },
+                                                });
+                                                return;
+                                            }
+                                            if (pending.path === 'clock/offset/set') {
+                                                pending.resolve({ok: true});
+                                                return;
+                                            }
+                                            pending.reject(new Error('HSP state timed out'));
+                                        },
+                                    };
+                                },
+                            };
+                        },
+                    };
+                },
+                disconnect() {
+                    disconnectCalls += 1;
+                    this.connected = false;
+                },
+            },
+        };
+        globalThis.navigator.bluetooth = {
+            requestDevice: async () => device,
+        };
+        globalThis.fetch = async (endpoint, options = {}) => {
+            endpoints.push({
+                endpoint,
+                body: JSON.parse(options.body || '{}'),
+            });
+            return jsonResponse(200, {
+                status: 'success',
+                handy_transport: 'browser_bluetooth',
+                bluetooth: {connected: false, status: 'error', message: 'Bluetooth connection failed.'},
+            });
+        };
+
+        await connectHandyBluetoothForTests();
+
+        assert.equal(disconnectCalls, 1);
+        assert.equal(state.handyBluetoothTx, null);
+        assert.equal(state.handyBluetoothRx, null);
+        assert.equal(state.handyBluetoothServer, null);
+        assert.equal(state.handyBluetoothStatus.connected, false);
+        assert.equal(state.handyBluetoothStatus.status, 'error');
+        assert.equal(getStubElement('handy-bluetooth-btn').classList.contains('is-on'), false);
+        assert.ok(endpoints.some(call => call.endpoint === '/handy_bluetooth/status'));
+        assert.ok(!endpoints.some(call => call.endpoint === '/handy_bluetooth/connect'));
     });
 });

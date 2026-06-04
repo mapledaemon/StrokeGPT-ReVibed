@@ -69,6 +69,7 @@ describe('Handy Bluetooth command transport', () => {
 
         assert.equal(writes.length, 1);
         assert.equal(state.handyBluetoothPendingResponses.size, 0);
+        assert.equal(state.handyBluetoothMessageId, 1);
         assert.equal(acknowledgements.length, 1);
         assert.equal(acknowledgements[0].endpoint, '/handy_bluetooth/ack');
         assert.equal(acknowledgements[0].body.id, 42);
@@ -102,6 +103,7 @@ describe('Handy Bluetooth command transport', () => {
 
         assert.equal(writes.length, 1);
         assert.equal(state.handyBluetoothPendingResponses.size, 0);
+        assert.equal(state.handyBluetoothMessageId, 1);
         assert.equal(acknowledgements.length, 1);
         assert.equal(acknowledgements[0].body.id, 43);
         assert.equal(acknowledgements[0].body.ok, true);
@@ -142,6 +144,7 @@ describe('Handy Bluetooth command transport', () => {
 
         assert.equal(writes.length, 1);
         assert.equal(state.handyBluetoothPendingResponses.size, 0);
+        assert.equal(state.handyBluetoothMessageId, 2);
         assert.equal(acknowledgements.length, 1);
         assert.equal(acknowledgements[0].body.id, 45);
         assert.equal(acknowledgements[0].body.ok, true);

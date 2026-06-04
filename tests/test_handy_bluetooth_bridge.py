@@ -120,6 +120,27 @@ class HandyBluetoothBridgeTests(unittest.TestCase):
         self.assertFalse(result_holder["result"]["ok"])
         self.assertEqual(result_holder["result"]["error"], "Bluetooth client changed.")
 
+    def test_same_client_reconnect_fails_stale_pending_command(self):
+        bridge = HandyBluetoothBridge()
+        bridge.connect_client("client-1", device_name="Handy")
+        result_holder = {}
+
+        def send_command():
+            result_holder["result"] = bridge.send_command("hsp/play", {"start_time": 0}, timeout=1.0)
+
+        thread = threading.Thread(target=send_command)
+        thread.start()
+        self.wait_for_pending(bridge)
+
+        bridge.connect_client("client-1", device_name="Handy")
+        commands = bridge.next_commands("client-1", wait_seconds=0)
+        thread.join(timeout=1.0)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(commands, [])
+        self.assertFalse(result_holder["result"]["ok"])
+        self.assertEqual(result_holder["result"]["error"], "Bluetooth client reconnected.")
+
 
 if __name__ == "__main__":
     unittest.main()

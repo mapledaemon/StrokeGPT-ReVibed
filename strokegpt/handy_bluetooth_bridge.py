@@ -59,6 +59,8 @@ class HandyBluetoothBridge:
             now = self._now()
             if self._active_client_id and client_id != self._active_client_id:
                 self._fail_all_locked("Bluetooth client changed.")
+            elif self._pending or self._inflight:
+                self._fail_all_locked("Bluetooth client reconnected.")
             self._active_client_id = client_id
             self._connected = True
             self._device_name = str(device_name or "")[:80]
