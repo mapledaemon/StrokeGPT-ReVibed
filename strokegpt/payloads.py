@@ -1,3 +1,5 @@
+import re
+
 from .motion_preferences import build_motion_preference_payload, enrich_catalog
 from .motion_tags import motion_tag_suggestions
 from .settings import (
@@ -14,6 +16,13 @@ from .settings import (
     default_user_profile,
     normalize_ollama_model,
 )
+
+
+HANDY_API_V3_CONNECTION_KEY_RE = re.compile(r"^[A-Za-z0-9]{1,128}$")
+
+
+def _handy_connection_key_valid_for_api_v3(value):
+    return bool(HANDY_API_V3_CONNECTION_KEY_RE.fullmatch(str(value or "").strip()))
 
 
 def format_bytes(value):
@@ -660,10 +669,62 @@ def _setup_summary(sections):
     }
 
 
+def _handy_connection_setup_items(*, handy_key, handy_transport="rest", bluetooth_status=None):
+    transport = str(handy_transport or "rest")
+    if transport == "browser_bluetooth":
+        bluetooth = bluetooth_status if isinstance(bluetooth_status, dict) else {}
+        connected = bool(bluetooth.get("connected"))
+        status = str(bluetooth.get("status") or "").lower()
+        device = str(bluetooth.get("device_name") or "").strip()
+        message = str(bluetooth.get("message") or bluetooth.get("last_error") or "").strip()
+        if connected:
+            detail = message or (
+                f"Local Bluetooth bridge is connected to {device}."
+                if device
+                else "Local Bluetooth bridge is connected."
+            )
+        elif status == "stale":
+            detail = message or "Local Bluetooth browser bridge is stale. Reopen this tab or reconnect the Handy."
+        elif message:
+            detail = message
+        else:
+            detail = "Local Bluetooth is selected. Use the top-bar Bluetooth button to connect before controlling hardware."
+        return [
+            _setup_check_item(
+                "handy-transport",
+                "Handy transport",
+                "ok",
+                "Local Bluetooth selected.",
+            ),
+            _setup_check_item(
+                "handy-bluetooth",
+                "Local Bluetooth device",
+                "ok" if connected else "warning",
+                detail,
+            ),
+        ]
+    return [
+        _setup_check_item(
+            "handy-transport",
+            "Handy transport",
+            "ok",
+            "Cloud REST selected.",
+        ),
+        _setup_check_item(
+            "handy-key",
+            "Handy connection key",
+            "ok" if handy_key else "warning",
+            "Connection key is saved." if handy_key else "Add a Handy connection key before controlling hardware.",
+        ),
+    ]
+
+
 def setup_check_payload(
     *,
     configured,
     handy_key,
+    handy_transport="rest",
+    bluetooth_status=None,
     ollama_status,
     voice_input_setup,
     local_tts_status,
@@ -844,26 +905,29 @@ def setup_check_payload(
     ]
 
     sections = [
-        _setup_check_section("core", "Core App", [
-            _setup_check_item(
-                "backend",
-                "Backend process",
-                "ok",
-                "Flask backend is running and serving setup checks.",
-            ),
-            _setup_check_item(
-                "handy-key",
-                "Handy connection key",
-                "ok" if handy_key else "warning",
-                "Connection key is saved." if handy_key else "Add a Handy connection key before controlling hardware.",
-            ),
-            _setup_check_item(
-                "configured",
-                "First-run setup",
-                "ok" if configured else "warning",
-                "Required first-run settings are present." if configured else "Finish the setup wizard before normal use.",
-            ),
-        ]),
+        _setup_check_section(
+            "core",
+            "Core App",
+            [
+                _setup_check_item(
+                    "backend",
+                    "Backend process",
+                    "ok",
+                    "Flask backend is running and serving setup checks.",
+                ),
+                *_handy_connection_setup_items(
+                    handy_key=handy_key,
+                    handy_transport=handy_transport,
+                    bluetooth_status=bluetooth_status,
+                ),
+                _setup_check_item(
+                    "configured",
+                    "First-run setup",
+                    "ok" if configured else "warning",
+                    "Required first-run settings are present." if configured else "Finish the setup wizard before normal use.",
+                ),
+            ],
+        ),
         _setup_check_section("ollama", "Ollama", ollama_items),
         _setup_check_section("voice-input", "Voice Input", voice_input_items),
         _setup_check_section("voice-output", "Voice Output", voice_output_items),
@@ -916,7 +980,10 @@ def settings_payload(
 ):
     local_tts_status = local_tts_status or audio.local_status()
     payload = {
-        "configured": bool(settings.handy_key and settings.min_depth < settings.max_depth),
+        "configured": bool(
+            (settings.handy_key or settings.handy_transport == "browser_bluetooth")
+            and settings.min_depth < settings.max_depth
+        ),
         "persona": settings.persona_desc,
         "persona_prompts": persona_prompts,
         "llm_prompt_mode": settings.llm_prompt_mode,
@@ -927,6 +994,19 @@ def settings_payload(
         "handy_key": settings.handy_key,
         "handy_firmware_version": settings.handy_firmware_version,
         "handy_api_v3_key": settings.handy_api_v3_key,
+        "handy_transport": settings.handy_transport,
+        "handy_transport_options": [
+            {
+                "id": "rest",
+                "label": "Cloud REST",
+                "description": "Use Handy cloud REST API with the saved connection key.",
+            },
+            {
+                "id": "browser_bluetooth",
+                "label": "Local Bluetooth",
+                "description": "Experimental browser Web Bluetooth HSP transport for local timed-point streaming.",
+            },
+        ],
         "handy_firmware_options": [
             {
                 "id": "fw4",
@@ -941,8 +1021,19 @@ def settings_payload(
         ],
         "handy_api_v3_enabled": bool(
             settings.handy_firmware_version == "fw4"
-            and settings.handy_key
-            and settings.handy_api_v3_key
+            and (
+                settings.handy_transport == "browser_bluetooth"
+                or (
+                    settings.handy_key
+                    and _handy_connection_key_valid_for_api_v3(settings.handy_key)
+                    and settings.handy_api_v3_key
+                )
+            )
+        ),
+        "handy_api_v3_connection_key_valid": (
+            True
+            if settings.handy_transport == "browser_bluetooth" or not settings.handy_key
+            else _handy_connection_key_valid_for_api_v3(settings.handy_key)
         ),
         "handy_api_v3_key_configured": bool(settings.handy_api_v3_key),
         "ai_name": settings.ai_name,

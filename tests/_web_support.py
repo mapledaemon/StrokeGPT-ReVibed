@@ -41,6 +41,8 @@ FRONTEND_SCRIPT_PATHS = (
     "/static/js/voice-input.js",
     "/static/js/responsive-layout.js",
     "/static/js/device-control.js",
+    "/static/js/handy-bluetooth.js",
+    "/static/js/handy-bluetooth-codec.js",
     "/static/js/motion-control.js",
     "/static/js/motion/feedback-controls.js",
     "/static/js/motion/pause-controls.js",

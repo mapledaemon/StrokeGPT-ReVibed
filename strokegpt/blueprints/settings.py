@@ -1,6 +1,10 @@
 from flask import Blueprint, jsonify
 
-from ..settings import default_user_profile, normalize_ollama_model
+from ..settings import (
+    DEFAULT_HANDY_API_V3_APPLICATION_ID,
+    default_user_profile,
+    normalize_ollama_model,
+)
 
 
 settings_blueprint = Blueprint("settings", __name__)
@@ -409,7 +413,7 @@ def system_prompts_route():
 @settings_blueprint.route('/set_handy_key', methods=['POST'])
 def set_handy_key_route():
     web = _web()
-    key = web._request_json().get('key')
+    key = str(web._request_json().get('key') or "").strip()
     if not key:
         return jsonify({"status": "error", "message": "Key is missing"}), 400
     web.handy.set_api_key(key)
@@ -432,9 +436,13 @@ def set_handy_device_config_route():
     firmware_version = web.settings._normalize_handy_firmware_version(
         data.get("handy_firmware_version", web.settings.handy_firmware_version)
     )
-    api_v3_key = str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
+    api_v3_key = (
+        str(data.get("handy_api_v3_key", web.settings.handy_api_v3_key) or "").strip()
+        or DEFAULT_HANDY_API_V3_APPLICATION_ID
+    )
 
     web.settings.handy_firmware_version = firmware_version
+    web.settings.handy_firmware_version_user_selected = True
     web.settings.handy_api_v3_key = api_v3_key
     web.handy.set_firmware_version(firmware_version)
     web.handy.set_handy_api_key(api_v3_key)
@@ -442,21 +450,56 @@ def set_handy_device_config_route():
 
     v4_ready = bool(web.handy.supports_api_v3_control())
     missing_v3_key = firmware_version == "fw4" and bool(web.settings.handy_key) and not api_v3_key
+    invalid_v3_key = web.handy.api_v3_unavailable_reason() == "invalid_connection_key_format"
+    bluetooth_transport = web.settings.handy_transport == "browser_bluetooth"
     return jsonify({
         "status": "success",
         "handy_firmware_version": firmware_version,
         "handy_api_v3_key": api_v3_key,
         "handy_api_v3_enabled": v4_ready,
+        "handy_api_v3_connection_key_valid": not invalid_v3_key,
         "handy_api_v3_key_configured": bool(api_v3_key),
         "handy_api_v3_unavailable_reason": web.handy.api_v3_unavailable_reason(),
         "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
         "message": (
             "Handy firmware set to v4; API v3 HSP streaming is enabled."
             if v4_ready
+            else "Handy firmware set to v4; connect local Bluetooth from Handy Connection to enable HSP streaming."
+            if bluetooth_transport and firmware_version == "fw4"
+            else "Handy firmware set to v4; the saved WiFi/Cloud REST Handy connection key is malformed for API v3. This is separate from the API v3 Application ID; re-copy the device connection key from Handy setup."
+            if invalid_v3_key
             else "Handy firmware set to v4; add a Handy API v3 Application ID to enable HSP streaming."
             if missing_v3_key
             else "Handy firmware set to v4; connect a Handy key to use API v3 HSP streaming."
             if firmware_version == "fw4"
             else "Handy firmware set to v3 legacy mode."
         ),
+    })
+
+
+@settings_blueprint.route('/set_handy_transport', methods=['POST'])
+def set_handy_transport_route():
+    web = _web()
+    data = web._request_json()
+    transport = web.settings._normalize_handy_transport(
+        data.get("handy_transport", web.settings.handy_transport)
+    )
+    web.settings.handy_transport = transport
+    web.handy.set_transport_mode(transport)
+    web.settings.save()
+    bluetooth = web.handy_bluetooth_bridge.snapshot()
+    if transport == "browser_bluetooth":
+        message = (
+            "Local Bluetooth selected. Connect from Handy Connection before starting motion."
+            if not bluetooth.get("connected")
+            else "Local Bluetooth selected and connected."
+        )
+    else:
+        message = "Cloud REST transport selected."
+    return jsonify({
+        "status": "success",
+        "handy_transport": transport,
+        "bluetooth": bluetooth,
+        "continuous_streaming_supported": bool(web.handy.supports_continuous_streaming()),
+        "message": message,
     })

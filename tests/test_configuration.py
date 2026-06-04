@@ -79,7 +79,9 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["user_genitalia"], DEFAULT_USER_GENITALIA)
         self.assertEqual(saved["user_genitalia_custom"], "")
         self.assertEqual(saved["handy_firmware_version"], "fw4")
+        self.assertFalse(saved["handy_firmware_version_user_selected"])
         self.assertEqual(saved["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(saved["handy_transport"], "rest")
         self.assertEqual(saved["motion_pattern_enabled"], {})
         self.assertEqual(saved["motion_pattern_feedback"], {})
         self.assertEqual(saved["motion_pattern_feedback_history"], [])
@@ -145,12 +147,13 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(defaults["voice_input_model"], DEFAULT_VOICE_INPUT_NVIDIA_PARAKEET_MODEL)
         self.assertFalse(defaults["voice_input_enabled"])
 
-    def test_old_settings_load_default_model(self):
-        fake_path = FakePath(json.dumps({"handy_key": "abc"}))
+    def test_old_settings_load_defaults_and_trims_handy_connection_key(self):
+        fake_path = FakePath(json.dumps({"handy_key": "  abc  "}))
         settings = SettingsManager("settings.json")
         settings.file_path = fake_path
         settings.load()
 
+        self.assertEqual(settings.handy_key, "abc")
         self.assertEqual(settings.ollama_model, DEFAULT_OLLAMA_MODEL)
         self.assertIn("huihui_ai/granite4.1-abliterated:3b", settings.ollama_models)
         self.assertIn("huihui_ai/granite4.1-abliterated:8b", settings.ollama_models)
@@ -542,7 +545,15 @@ class ModelConfigurationTests(unittest.TestCase):
 
         settings.file_path = FakePath(json.dumps({"handy_firmware_version": "v3"}))
         settings.load()
+        self.assertEqual(settings.handy_firmware_version, "fw4")
+
+        settings.file_path = FakePath(json.dumps({
+            "handy_firmware_version": "v3",
+            "handy_firmware_version_user_selected": True,
+        }))
+        settings.load()
         self.assertEqual(settings.handy_firmware_version, "fw3")
+        self.assertTrue(settings.handy_firmware_version_user_selected)
 
         settings.file_path = FakePath(json.dumps({"handy_firmware_version": "firmware-v4"}))
         settings.load()
@@ -575,6 +586,21 @@ class ModelConfigurationTests(unittest.TestCase):
         settings.load()
 
         self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+
+    def test_handy_transport_is_normalized(self):
+        settings = SettingsManager("settings.json")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "bluetooth"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "browser_bluetooth")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "web-bluetooth"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "browser_bluetooth")
+
+        settings.file_path = FakePath(json.dumps({"handy_transport": "unknown"}))
+        settings.load()
+        self.assertEqual(settings.handy_transport, "rest")
 
     def test_diagnostics_levels_are_normalized(self):
         fake_path = FakePath(json.dumps({

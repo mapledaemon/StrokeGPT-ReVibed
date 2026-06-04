@@ -1,4 +1,5 @@
 import { apiCall, el, reportSaveFailure, setSliderValue, setStatusMessage, state } from './context.js';
+import { syncHandyBluetoothVisibility, updateHandyBluetoothStatus } from './handy-bluetooth.js';
 
 function handyKeyInputs() {
     return [el.handyKeyInput, el.sidebarHandyKeyInput].filter(Boolean);
@@ -92,6 +93,13 @@ function hasUnsavedHandyKeyDraft() {
     });
 }
 
+function updateHandyRestConnectionVisibility() {
+    const bluetoothSelected = state.handyTransport === 'browser_bluetooth';
+    if (el.handyRestConnectionControls) el.handyRestConnectionControls.hidden = bluetoothSelected;
+    if (el.sidebarHandyRestControls) el.sidebarHandyRestControls.hidden = bluetoothSelected;
+    if (el.sidebarHandyPanel) el.sidebarHandyPanel.hidden = bluetoothSelected;
+}
+
 function normalizeMotionDepthRange() {
     const a = parseInt(el.motionDepthMinSlider.value, 10);
     const b = parseInt(el.motionDepthMaxSlider.value, 10);
@@ -105,32 +113,87 @@ export function populateDeviceSettings(data = {}) {
     state.myHandyKey = data.handy_key || state.myHandyKey || '';
     state.handyFirmwareVersion = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
     state.handyApiV3Key = data.handy_api_v3_key ?? state.handyApiV3Key ?? '';
+    state.handyApiV3ConnectionKeyValid = data.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true;
+    state.handyTransport = data.handy_transport || state.handyTransport || 'rest';
+    state.handyTransportOptions = Array.isArray(data.handy_transport_options) ? data.handy_transport_options : state.handyTransportOptions;
     syncHandyConnectionKey(state.myHandyKey);
+    populateHandyTransportSelect();
+    updateHandyRestConnectionVisibility();
+    syncHandyBluetoothVisibility();
     if (el.handyFirmwareSelect) el.handyFirmwareSelect.value = state.handyFirmwareVersion;
     if (el.handyApiV3KeyInput) el.handyApiV3KeyInput.value = state.handyApiV3Key;
     updateHandyFirmwareStatus(data);
+    updateHandyTransportStatus();
+    const bluetoothSelected = state.handyTransport === 'browser_bluetooth';
     setHandyConnectionStatus(
-        state.myHandyKey ? 'saved' : 'disconnected',
-        state.myHandyKey
-            ? 'Handy key saved; waiting for a device status or command result.'
-            : 'No Handy connection key saved.',
+        bluetoothSelected ? 'disconnected' : state.myHandyKey ? 'saved' : 'disconnected',
+        bluetoothSelected
+            ? 'Local Bluetooth selected; connect from Handy Connection.'
+            : state.myHandyKey
+                ? 'Handy key saved; waiting for a device status or command result.'
+                : 'No Handy connection key saved.',
     );
     setSliderValue(el.motionDepthMinSlider, el.motionDepthMinVal, data.min_depth ?? 5);
     setSliderValue(el.motionDepthMaxSlider, el.motionDepthMaxVal, data.max_depth ?? 100);
     normalizeMotionDepthRange();
 }
 
+function populateHandyTransportSelect() {
+    if (!el.handyTransportSelect) return;
+    const options = state.handyTransportOptions.length
+        ? state.handyTransportOptions
+        : [
+            {id: 'rest', label: 'Cloud REST'},
+            {id: 'browser_bluetooth', label: 'Local Bluetooth'},
+        ];
+    el.handyTransportSelect.innerHTML = '';
+    options.forEach(option => {
+        const item = document.createElement('option');
+        item.value = option.id;
+        item.textContent = option.label || option.id;
+        if (option.description) item.title = option.description;
+        el.handyTransportSelect.appendChild(item);
+    });
+    el.handyTransportSelect.value = state.handyTransport;
+}
+
+function updateHandyTransportStatus(data = {}) {
+    if (!el.handyTransportStatus) return;
+    const transport = data.handy_transport || state.handyTransport || 'rest';
+    updateHandyRestConnectionVisibility();
+    syncHandyBluetoothVisibility();
+    if (transport === 'browser_bluetooth') {
+        const bluetooth = data.bluetooth || state.handyBluetoothStatus || {};
+        setStatusMessage(
+            el.handyTransportStatus,
+            bluetooth.connected
+                ? (bluetooth.message || 'Local Bluetooth connected.')
+                : 'Local Bluetooth selected; connect from Handy Connection before starting motion.',
+            bluetooth.connected ? 'success' : 'info',
+        );
+        return;
+    }
+    setStatusMessage(el.handyTransportStatus, 'Cloud REST selected. Uses the saved Handy connection key.', 'neutral');
+}
+
 function updateHandyFirmwareStatus(data = {}) {
     if (!el.handyFirmwareStatus) return;
     const firmware = data.handy_firmware_version || state.handyFirmwareVersion || 'fw4';
     const apiKeyConfigured = Boolean(data.handy_api_v3_key_configured ?? state.handyApiV3Key);
-    const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured));
+    const connectionKeyValid = Boolean(data.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true);
+    const v4Ready = Boolean(data.handy_api_v3_enabled ?? (state.myHandyKey && apiKeyConfigured && connectionKeyValid));
     if (firmware === 'fw4') {
+        if (state.handyTransport === 'browser_bluetooth') {
+            el.handyFirmwareStatus.textContent = 'Firmware v4 selected. Local Bluetooth HSP streaming is enabled after the Handy Connection Bluetooth link is active.';
+            return;
+        }
         el.handyFirmwareStatus.textContent = v4Ready
             ? 'Firmware v4 selected. API v3 HSP point streaming is enabled.'
             : apiKeyConfigured
-                ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
-                    : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
+                ? connectionKeyValid
+                    ? 'Firmware v4 selected. Connect a Handy key to enable API v3 HSP point streaming.'
+                    : 'Firmware v4 selected. The saved WiFi/Cloud REST Handy connection key is malformed for API v3; re-copy the device connection key from Handy setup.'
+                : 'Firmware v4 selected. Add a Handy API v3 Application ID to enable HSP point streaming.';
     } else {
         el.handyFirmwareStatus.textContent = 'Firmware v3 legacy selected. Continuous backend falls back to HDSP direct position commands.';
     }
@@ -138,11 +201,21 @@ function updateHandyFirmwareStatus(data = {}) {
 
 export function updateHandyConnectionStatusFromMotion(payload = {}) {
     if (hasUnsavedHandyKeyDraft()) return;
+    const diagnostics = payload?.diagnostics || {};
+    if (diagnostics.transport_mode === 'browser_bluetooth' || state.handyTransport === 'browser_bluetooth') {
+        const bluetooth = diagnostics.bluetooth || state.handyBluetoothStatus || {};
+        updateHandyBluetoothStatus(bluetooth);
+        if (bluetooth.connected) {
+            setHandyConnectionStatus('connected', bluetooth.message || 'Handy Bluetooth connected.');
+        } else {
+            setHandyConnectionStatus('disconnected', bluetooth.message || 'Local Bluetooth selected; connect from Handy Connection.');
+        }
+        return;
+    }
     if (!state.myHandyKey) {
         setHandyConnectionStatus('disconnected', 'No Handy connection key saved.');
         return;
     }
-    const diagnostics = payload?.diagnostics || {};
     const deviceStatus = normalizeHandyStatus(
         diagnostics.device_connection_status || 'unknown',
         diagnostics.device_connection_message || '',
@@ -217,6 +290,25 @@ async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
         setHandyConnectionStatus('disconnected', 'Enter a Handy connection key first.');
         return;
     }
+    if (state.handyTransport === 'browser_bluetooth') {
+        setStatusMessage(el.statusText, 'Switching to Cloud REST before connecting...', 'neutral');
+        const transportRes = await apiCall('/set_handy_transport', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({handy_transport: 'rest'}),
+        });
+        if (!transportRes || transportRes.status !== 'success') {
+            reportSaveFailure(el.handyTransportStatus || el.statusText, transportRes, 'Could not switch to Cloud REST before connecting.');
+            return;
+        }
+        state.handyTransport = transportRes.handy_transport || 'rest';
+        if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
+        if (transportRes.bluetooth) updateHandyBluetoothStatus(transportRes.bluetooth);
+        syncHandyBluetoothVisibility();
+        updateHandyRestConnectionVisibility();
+        updateHandyTransportStatus(transportRes);
+        updateHandyFirmwareStatus(transportRes);
+    }
     setStatusMessage(el.statusText, 'Connecting to Handy...', 'neutral');
     const res = await apiCall('/set_handy_key', {
         method: 'POST',
@@ -242,10 +334,32 @@ async function saveHandyDeviceConfig() {
     if (res && res.status === 'success') {
         state.handyFirmwareVersion = res.handy_firmware_version || handyFirmwareVersion;
         state.handyApiV3Key = res.handy_api_v3_key ?? handyApiV3Key;
+        state.handyApiV3ConnectionKeyValid = res.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true;
         updateHandyFirmwareStatus(res);
         setStatusMessage(el.statusText, res.message || 'Handy firmware settings saved.', 'success');
     } else {
         reportSaveFailure(el.handyFirmwareStatus || el.statusText, res, 'Could not save Handy firmware settings.');
+    }
+}
+
+async function saveHandyTransport() {
+    const handyTransport = el.handyTransportSelect?.value || state.handyTransport || 'rest';
+    const res = await apiCall('/set_handy_transport', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({handy_transport: handyTransport}),
+    });
+    if (res && res.status === 'success') {
+        state.handyTransport = res.handy_transport || handyTransport;
+        if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
+        if (res.bluetooth) updateHandyBluetoothStatus(res.bluetooth);
+        syncHandyBluetoothVisibility();
+        updateHandyRestConnectionVisibility();
+        updateHandyTransportStatus(res);
+        updateHandyFirmwareStatus(res);
+        setStatusMessage(el.statusText, res.message || 'Handy transport saved.', 'success');
+    } else {
+        reportSaveFailure(el.handyTransportStatus || el.statusText, res, 'Could not save Handy transport.');
     }
 }
 
@@ -284,4 +398,12 @@ export function initDeviceControls() {
         updateHandyFirmwareStatus();
     });
     el.saveHandyDeviceConfigBtn?.addEventListener('click', saveHandyDeviceConfig);
+    el.handyTransportSelect?.addEventListener('change', () => {
+        state.handyTransport = el.handyTransportSelect.value || 'rest';
+        syncHandyBluetoothVisibility();
+        updateHandyRestConnectionVisibility();
+        updateHandyTransportStatus();
+        updateHandyFirmwareStatus();
+    });
+    el.saveHandyTransportBtn?.addEventListener('click', saveHandyTransport);
 }

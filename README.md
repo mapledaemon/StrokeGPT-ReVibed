@@ -31,7 +31,8 @@ macOS and Linux work with equivalent Python steps.
 
 ## What you need
 
-- A Handy connection key (the device API requires internet).
+- A Handy connection key for the cloud REST path, or Chrome/Edge Web
+  Bluetooth for the experimental local Bluetooth path.
 - **Windows:** PowerShell and an internet connection. The installer can
   install Git, Python 3.11, Ollama, and optional voice dependencies when
   `winget` is available.
@@ -114,7 +115,9 @@ If port 5000 is busy, the app picks the next free local port.
 
 ## First run
 
-1. Paste your Handy connection key in **Profile menu > Settings > Device**.
+1. In **Profile menu > Settings > Device**, use Cloud REST with your Handy
+   connection key, or select Local Bluetooth and connect from **Handy
+   Connection** in the sidebar.
 2. Pick a model in **Settings > Model**. Click **Download Model** if it
    isn't installed yet (can pull several GB through Ollama).
 3. Optional: **Settings > Diagnostics > Run Setup Checks** verifies Ollama,
@@ -156,8 +159,8 @@ Everything is in **Profile menu > Settings**. Tabs:
 - **Voice** - TTS provider, voice samples, Torch/CUDA status, microphone
   selection, and ASR provider. See [docs/voice_input.md](docs/voice_input.md)
   for Parakeet/faster-whisper setup and mode-action toggles.
-- **Device** - Handy key, firmware v3/v4 path, stroke range, and range
-  test.
+- **Device** - Handy transport, connection key, firmware v3/v4 path, stroke
+  range, and range test.
 - **Motion** - speed limits, backend, preset timing, pattern weights,
   pattern/program import/export/rename/playback, Program section clipping, and
   thumbs feedback.

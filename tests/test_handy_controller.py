@@ -11,6 +11,7 @@ sys.modules.setdefault("requests", requests_module)
 
 import strokegpt.handy as handy_module
 from strokegpt.handy import HandyController
+from strokegpt.settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
 
 
 class RecordingHandyController(HandyController):
@@ -48,6 +49,35 @@ class ThresholdFailingV3HandyController(RecordingV3HandyController):
             return False
         self._record_command_result(path, body, ok=True, status_code=200, elapsed_ms=0)
         return True
+
+
+class RecordingBluetoothBridge:
+    def __init__(self, *, ok=True, error="", response=None):
+        self.commands = []
+        self.ok = ok
+        self.error = error
+        self.response = response or {}
+
+    def is_ready(self):
+        return True
+
+    def send_command(self, path, body=None):
+        self.commands.append((path, body or {}))
+        result = {"ok": self.ok, "elapsed_ms": 2.0}
+        if self.error:
+            result["error"] = self.error
+        if self.response:
+            result["response"] = self.response
+        return result
+
+    def snapshot(self):
+        return {
+            "transport": "browser_bluetooth",
+            "connected": True,
+            "status": "connected",
+            "pending": 0,
+            "inflight": 0,
+        }
 
 
 class StaleClockV3HandyController(RecordingV3HandyController):
@@ -254,16 +284,22 @@ class HandyControllerTests(unittest.TestCase):
             {"limit": 240, "remaining": 17, "reset_seconds": 12},
         )
 
-    def test_send_v3_command_requires_app_key(self):
-        handy = HandyController(handy_key="secret")
+    def test_blank_v3_app_key_uses_default_application_id(self):
+        handy = HandyController(handy_key="secret", api_v3_key="")
 
-        self.assertFalse(handy._send_v3_command("mode2", {"mode": 0}))
+        with mock.patch(
+            "strokegpt.handy.requests.put",
+            return_value=FakeResponse(status_code=200),
+            create=True,
+        ) as put:
+            self.assertTrue(handy._send_v3_command("mode2", {"mode": 0}))
 
+        _args, kwargs = put.call_args
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
         diagnostics = handy.diagnostics()
-        self.assertFalse(diagnostics["api_v3_enabled"])
-        self.assertFalse(diagnostics["api_v3_key_configured"])
-        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "missing_api_v3_key")
-        self.assertEqual(diagnostics["last_command"]["error"], "missing Handy API v3 Application ID")
+        self.assertTrue(diagnostics["api_v3_enabled"])
+        self.assertTrue(diagnostics["api_v3_key_configured"])
+        self.assertEqual(diagnostics["api_v3_unavailable_reason"], "")
 
     def test_send_command_records_failure_instead_of_raising_name_error(self):
         handy = HandyController(handy_key="secret")
@@ -280,25 +316,131 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(diagnostics["last_command"]["body"], {"min": 10, "max": 90})
         self.assertIn("device offline", diagnostics["last_command"]["error"])
 
-    def test_check_connection_probes_position_without_motion(self):
-        handy = HandyController(handy_key="secret")
+    def test_check_connection_probes_connected_without_motion(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw3")
 
         with mock.patch(
             "strokegpt.handy.requests.get",
-            return_value=FakeResponse(status_code=200, payload={"position": 42.5}),
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
             result = handy.check_connection()
 
-        _args, kwargs = get.call_args
+        args, kwargs = get.call_args
+        self.assertIn("api/handy/v2/connected", args[0])
         self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
         self.assertEqual(result["status"], "connected")
         self.assertTrue(result["connected"])
-        self.assertEqual(result["position_mm"], 42.5)
-        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertEqual(result["last_command"]["path"], "connected")
         self.assertTrue(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 200)
         self.assertNotIn("secret", str(result))
+
+    def test_check_connection_blank_app_key_uses_api_v3_default(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+
+    def test_check_connection_uses_api_v3_connected_for_fw4_rest(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Connection-Key"], "secret")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertTrue(result["last_command"]["ok"])
+
+    def test_check_connection_retries_api_v3_after_prior_auth_failure(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
+        handy._disable_api_v3_control(path="hsp/add", error="old auth failure")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": True}),
+            create=True,
+        ) as get:
+            result = handy.check_connection()
+
+        args, kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "app-id")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+
+    def test_check_connection_reports_api_v3_app_key_failure(self):
+        handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="bad-app-id")
+        error = handy_module.requests.exceptions.RequestException("400 Client Error: Bad Request")
+        error.response = FakeResponse(status_code=400, payload={"error": {"message": "bad app key"}})
+
+        with mock.patch("strokegpt.handy.requests.get", side_effect=error, create=True) as get:
+            result = handy.check_connection()
+
+        args, _kwargs = get.call_args
+        self.assertIn("api/handy-rest/v3/connected", args[0])
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("Application ID", result["message"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 400)
+        self.assertIn("bad app key", result["message"])
+        self.assertEqual(result["last_command"]["response"], {"error": "bad app key"})
+
+    def test_check_connection_rejects_invalid_api_v3_connection_key_format_locally(self):
+        handy = HandyController(handy_key="bad-key", firmware_version="fw4", api_v3_key="app-id")
+
+        with mock.patch("strokegpt.handy.requests.get", create=True) as get:
+            result = handy.check_connection()
+
+        get.assert_not_called()
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("not sent", result["message"])
+        self.assertIn("WiFi/Cloud REST Handy connection key", result["message"])
+        self.assertIn("separate from the Device tab API v3 Application ID", result["message"])
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertNotIn("status_code", result["last_command"])
+        self.assertEqual(handy.api_v3_unavailable_reason(), "invalid_connection_key_format")
+        self.assertFalse(handy.supports_continuous_streaming())
+
+    def test_check_connection_reports_offline_connected_probe(self):
+        handy = HandyController(handy_key="secret")
+
+        with mock.patch(
+            "strokegpt.handy.requests.get",
+            return_value=FakeResponse(status_code=200, payload={"connected": False}),
+            create=True,
+        ):
+            result = handy.check_connection()
+
+        self.assertEqual(result["status"], "offline")
+        self.assertFalse(result["connected"])
+        self.assertIn("offline", result["message"].lower())
+        self.assertEqual(result["last_command"]["path"], "connected")
+        self.assertFalse(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["status_code"], 200)
 
     def test_check_connection_records_failure_without_motion(self):
         handy = HandyController(handy_key="secret")
@@ -311,9 +453,51 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertFalse(result["connected"])
         self.assertIn("device offline", result["message"])
-        self.assertEqual(result["last_command"]["path"], "slide/position/absolute")
+        self.assertEqual(result["last_command"]["path"], "connected")
         self.assertFalse(result["last_command"]["ok"])
         self.assertEqual(result["last_command"]["status_code"], 503)
+
+    def test_check_connection_probes_bluetooth_hsp_state(self):
+        bridge = RecordingBluetoothBridge(response={
+            "hsp_state": {
+                "play_state": "stopped",
+                "current_time_ms": 0,
+                "stream_id": 12,
+            }
+        })
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        result = handy.check_connection()
+
+        self.assertEqual(bridge.commands, [("hsp/state", {})])
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["transport"], "browser_bluetooth")
+        self.assertEqual(result["last_command"]["path"], "hsp/state")
+        self.assertTrue(result["last_command"]["ok"])
+        self.assertEqual(result["last_command"]["response"]["hsp_state"]["stream_id"], 12)
+        self.assertEqual(handy.diagnostics()["hsp_state"]["stream_id"], 12)
+
+    def test_check_connection_reports_bluetooth_hsp_state_failure(self):
+        bridge = RecordingBluetoothBridge(ok=False, error="HSP state timed out")
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        result = handy.check_connection()
+
+        self.assertEqual(bridge.commands, [("hsp/state", {})])
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(result["connected"])
+        self.assertIn("HSP state timed out", result["message"])
+        self.assertEqual(result["last_command"]["path"], "hsp/state")
+        self.assertFalse(result["last_command"]["ok"])
 
     def test_slide_bounds_remain_ordered_when_calibration_range_is_zero(self):
         handy = RecordingHandyController()
@@ -384,14 +568,18 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava", "hdsp/xava"])
 
-    def test_supports_continuous_streaming_requires_connection_and_app_key(self):
+    def test_supports_continuous_streaming_uses_default_app_key_for_fw4(self):
         handy = RecordingHandyController()
 
         self.assertFalse(handy.supports_continuous_streaming())
         handy.set_firmware_version("fw4")
 
+        self.assertTrue(handy.supports_continuous_streaming())
+        self.assertEqual(handy.api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+        self.assertEqual(handy.api_v3_unavailable_reason(), "")
+        handy._disable_api_v3_control(path="hsp/add", error="Unauthorized")
         self.assertFalse(handy.supports_continuous_streaming())
-        self.assertEqual(handy.api_v3_unavailable_reason(), "missing_api_v3_key")
+        self.assertEqual(handy.api_v3_unavailable_reason(), "api_v3_auth_failed")
         handy.set_handy_api_key("app-id")
         self.assertTrue(handy.supports_continuous_streaming())
         handy.set_firmware_version("v3")
@@ -501,6 +689,42 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(handy.diagnostics()["mode"], 4)
         self.assertEqual(handy.diagnostics()["relative_speed"], 30)
         self.assertEqual(handy.diagnostics()["depth"], 0)
+
+    def test_browser_bluetooth_continuous_stream_uses_hsp_bridge_commands(self):
+        bridge = RecordingBluetoothBridge()
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+        handy.update_settings(10, 70, 10, 90)
+
+        result = handy.start_continuous_stream(
+            [
+                {"t": 0, "x": 0, "intent_speed": 30, "range": 80},
+                {"t": 160, "x": 50, "intent_speed": 30, "range": 80},
+                {"t": 320, "x": 100, "intent_speed": 30, "range": 80},
+            ],
+            tail_point_stream_index=3,
+            tail_point_threshold=1,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [path for path, _body in bridge.commands],
+            ["mode2", "slider/stroke", "hsp/setup", "hsp/add", "hsp/play"],
+        )
+        self.assertEqual(bridge.commands[0][1], {"mode": 4})
+        self.assertEqual(bridge.commands[1][1], {"min": 0.1, "max": 0.9})
+        self.assertEqual(bridge.commands[2][1], {"stream_id": 1})
+        add = bridge.commands[3][1]
+        self.assertTrue(add["flush"])
+        self.assertEqual(add["tail_point_stream_index"], 3)
+        self.assertEqual(add["tail_point_threshold"], 1)
+        self.assertEqual(add["points"][-1], {"t": 320, "x": 100})
+        self.assertEqual(bridge.commands[4][0], "hsp/play")
+        self.assertTrue(bridge.commands[4][1]["pause_on_starving"])
+        self.assertEqual(handy.diagnostics()["transport_mode"], "browser_bluetooth")
 
     def test_start_continuous_stream_rounds_hsp_points_to_api_integer_schema(self):
         handy = RecordingV3HandyController()
@@ -1084,6 +1308,31 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(body["points"], [{"t": 480, "x": 65}])
         self.assertEqual(handy.v3_commands[-1][1], {"tail_point_threshold": 2})
         self.assertEqual(handy.diagnostics()["relative_speed"], 50)
+
+    def test_browser_bluetooth_append_continuous_stream_inlines_threshold_and_resumes(self):
+        bridge = RecordingBluetoothBridge()
+        handy = HandyController(
+            firmware_version="fw4",
+            transport_mode="browser_bluetooth",
+            bluetooth_bridge=bridge,
+        )
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+            )
+        )
+
+        self.assertEqual([path for path, _body in bridge.commands], ["hsp/add", "hsp/resume"])
+        add = bridge.commands[0][1]
+        self.assertFalse(add["flush"])
+        self.assertEqual(add["tail_point_stream_index"], 4)
+        self.assertEqual(add["tail_point_threshold"], 2)
+        self.assertEqual(add["points"], [{"t": 480, "x": 65}])
+        self.assertEqual(bridge.commands[1][1], {"pick_up": False})
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
 
     def test_append_continuous_stream_throttles_threshold_updates_after_start(self):
         handy = RecordingV3HandyController()

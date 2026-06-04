@@ -62,6 +62,9 @@ AUTOSPEAK_MOTION_AUTONOMY_LEVELS = {"chat_only", "style", "full"}
 DEFAULT_HANDY_FIRMWARE_VERSION = "fw4"
 DEFAULT_HANDY_API_V3_APPLICATION_ID = "rQoTWeMPrklUYcfdSXYYhS_9z.jAVNwy"
 HANDY_FIRMWARE_VERSIONS = {"fw3", "fw4"}
+DEFAULT_HANDY_FIRMWARE_VERSION_USER_SELECTED = False
+DEFAULT_HANDY_TRANSPORT = "rest"
+HANDY_TRANSPORTS = {"rest", "browser_bluetooth"}
 DEFAULT_MOTION_BACKEND = "continuous"
 MOTION_BACKENDS = {"continuous", "position", "hamp"}
 DEFAULT_MOTION_STYLE = "balanced"
@@ -166,7 +169,9 @@ def default_settings_dict():
     return {
         "handy_key": "",
         "handy_firmware_version": DEFAULT_HANDY_FIRMWARE_VERSION,
+        "handy_firmware_version_user_selected": DEFAULT_HANDY_FIRMWARE_VERSION_USER_SELECTED,
         "handy_api_v3_key": DEFAULT_HANDY_API_V3_APPLICATION_ID,
+        "handy_transport": DEFAULT_HANDY_TRANSPORT,
         "ai_name": "BOT",
         "ollama_model": DEFAULT_OLLAMA_MODEL,
         "ollama_models": list(DEFAULT_OLLAMA_MODELS),
@@ -319,16 +324,28 @@ class SettingsManager:
         defaults = default_settings_dict()
         data = data if isinstance(data, dict) else {}
 
-        self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "")
+        self.handy_key = str(data.get("handy_key", defaults["handy_key"]) or "").strip()
+        self.handy_firmware_version_user_selected = _as_bool(
+            data.get(
+                "handy_firmware_version_user_selected",
+                defaults["handy_firmware_version_user_selected"],
+            ),
+            defaults["handy_firmware_version_user_selected"],
+        )
         self.handy_firmware_version = self._normalize_handy_firmware_version(
             data.get("handy_firmware_version", defaults["handy_firmware_version"])
         )
+        if self.handy_firmware_version == "fw3" and not self.handy_firmware_version_user_selected:
+            self.handy_firmware_version = DEFAULT_HANDY_FIRMWARE_VERSION
         # Existing local settings may contain a blank value from earlier
         # app-key experiments. Blank should migrate to the public Application
         # ID so firmware v4 HSP works after a normal restart.
         self.handy_api_v3_key = (
             str(data.get("handy_api_v3_key", defaults["handy_api_v3_key"]) or "").strip()
             or defaults["handy_api_v3_key"]
+        )
+        self.handy_transport = self._normalize_handy_transport(
+            data.get("handy_transport", defaults["handy_transport"])
         )
         self.ai_name = str(data.get("ai_name", defaults["ai_name"]) or defaults["ai_name"])
 
@@ -595,7 +612,9 @@ class SettingsManager:
         return {
             "handy_key": self.handy_key,
             "handy_firmware_version": self._normalize_handy_firmware_version(self.handy_firmware_version),
+            "handy_firmware_version_user_selected": bool(self.handy_firmware_version_user_selected),
             "handy_api_v3_key": self.handy_api_v3_key,
+            "handy_transport": self._normalize_handy_transport(self.handy_transport),
             "ai_name": self.ai_name,
             "ollama_model": self.ollama_model,
             "ollama_models": self._normalize_model_list(self.ollama_models, include_current=True),
@@ -943,6 +962,14 @@ class SettingsManager:
         if cleaned in {"4", "v4", "fw4", "firmware4", "firmwarev4"}:
             return "fw4"
         return DEFAULT_HANDY_FIRMWARE_VERSION
+
+    def _normalize_handy_transport(self, value):
+        cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if cleaned in {"bluetooth", "ble", "browser_ble", "web_bluetooth", "local_bluetooth"}:
+            return "browser_bluetooth"
+        if cleaned in HANDY_TRANSPORTS:
+            return cleaned
+        return DEFAULT_HANDY_TRANSPORT
 
     def _normalize_motion_style_optional(self, value):
         cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")

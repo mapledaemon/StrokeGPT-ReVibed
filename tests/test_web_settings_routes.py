@@ -152,12 +152,12 @@ class WebSettingsRouteTests(WebTestCase):
             "status": "connected",
             "connected": True,
             "message": "Connected to Handy.",
-            "last_command": {"path": "slide/position/absolute", "ok": True, "status_code": 200},
+            "last_command": {"path": "connected", "ok": True, "status_code": 200},
         }
         try:
             with mock.patch.object(settings, "save") as save, \
                     mock.patch.object(handy, "check_connection", return_value=connection_payload) as check:
-                response = self.client.post("/set_handy_key", json={"key": "probe-key"})
+                response = self.client.post("/set_handy_key", json={"key": " probeKey "})
 
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
@@ -166,8 +166,8 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["connection_status"], "connected")
             self.assertEqual(data["message"], "Connected to Handy.")
             self.assertEqual(data["connection"], connection_payload)
-            self.assertEqual(settings.handy_key, "probe-key")
-            self.assertEqual(handy.handy_key, "probe-key")
+            self.assertEqual(settings.handy_key, "probeKey")
+            self.assertEqual(handy.handy_key, "probeKey")
             save.assert_called_once()
             check.assert_called_once()
         finally:
@@ -182,10 +182,13 @@ class WebSettingsRouteTests(WebTestCase):
             "handy_key": handy.handy_key,
             "firmware": handy.firmware_version,
             "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
         }
         try:
-            settings.handy_key = "saved-key"
-            handy.set_api_key("saved-key")
+            settings.handy_key = "savedkey"
+            settings.handy_transport = "rest"
+            handy.set_api_key("savedkey")
+            handy.set_transport_mode("rest")
             settings.handy_api_v3_key = ""
             handy.set_handy_api_key("")
             with mock.patch.object(settings, "save") as save:
@@ -202,6 +205,7 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertTrue(data["handy_api_v3_key_configured"])
             self.assertEqual(data["handy_api_v3_key"], "app-id")
             self.assertEqual(settings.handy_firmware_version, "fw4")
+            self.assertTrue(settings.handy_firmware_version_user_selected)
             self.assertEqual(settings.handy_api_v3_key, "app-id")
             self.assertEqual(handy.firmware_version, "fw4")
             self.assertEqual(handy.api_v3_key, "app-id")
@@ -216,12 +220,91 @@ class WebSettingsRouteTests(WebTestCase):
             data = response.get_json()
             self.assertEqual(data["handy_firmware_version"], "fw3")
             self.assertFalse(data["continuous_streaming_supported"])
+            self.assertTrue(settings.handy_firmware_version_user_selected)
             self.assertEqual(settings.handy_api_v3_key, "legacy-still-saved")
         finally:
             settings.apply_dict(original)
             handy.set_api_key(original_runtime["handy_key"])
             handy.set_firmware_version(original_runtime["firmware"])
             handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
+
+    def test_set_handy_device_config_blank_v3_key_restores_default_application_id(self):
+        from strokegpt.settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
+        from strokegpt.web import handy, settings
+
+        original = settings.to_dict()
+        original_runtime = {
+            "handy_key": handy.handy_key,
+            "firmware": handy.firmware_version,
+            "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
+        }
+        try:
+            settings.handy_key = "savedkey"
+            settings.handy_transport = "rest"
+            handy.set_api_key("savedkey")
+            handy.set_transport_mode("rest")
+
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/set_handy_device_config", json={
+                    "handy_firmware_version": "v4",
+                    "handy_api_v3_key": "",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["handy_firmware_version"], "fw4")
+            self.assertEqual(data["handy_api_v3_key"], DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            self.assertTrue(data["handy_api_v3_key_configured"])
+            self.assertTrue(data["handy_api_v3_enabled"])
+            self.assertEqual(settings.handy_api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            self.assertEqual(handy.api_v3_key, DEFAULT_HANDY_API_V3_APPLICATION_ID)
+            save.assert_called_once()
+        finally:
+            settings.apply_dict(original)
+            handy.set_api_key(original_runtime["handy_key"])
+            handy.set_firmware_version(original_runtime["firmware"])
+            handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
+
+    def test_set_handy_device_config_reports_invalid_api_v3_connection_key_format(self):
+        from strokegpt.web import handy, settings
+
+        original = settings.to_dict()
+        original_runtime = {
+            "handy_key": handy.handy_key,
+            "firmware": handy.firmware_version,
+            "api_v3_key": handy.api_v3_key,
+            "transport": handy.transport_mode,
+        }
+        try:
+            settings.handy_key = "saved-key"
+            settings.handy_transport = "rest"
+            handy.set_api_key("saved-key")
+            handy.set_transport_mode("rest")
+
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_handy_device_config", json={
+                    "handy_firmware_version": "v4",
+                    "handy_api_v3_key": "app-id",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["handy_firmware_version"], "fw4")
+            self.assertFalse(data["handy_api_v3_enabled"])
+            self.assertFalse(data["continuous_streaming_supported"])
+            self.assertFalse(data["handy_api_v3_connection_key_valid"])
+            self.assertEqual(data["handy_api_v3_unavailable_reason"], "invalid_connection_key_format")
+            self.assertIn("malformed for API v3", data["message"])
+            self.assertIn("separate from the API v3 Application ID", data["message"])
+        finally:
+            settings.apply_dict(original)
+            handy.set_api_key(original_runtime["handy_key"])
+            handy.set_firmware_version(original_runtime["firmware"])
+            handy.set_handy_api_key(original_runtime["api_v3_key"])
+            handy.set_transport_mode(original_runtime["transport"])
 
     def test_numeric_routes_fall_back_on_invalid_values(self):
         from strokegpt.web import handy, settings
@@ -439,6 +522,34 @@ class WebSettingsRouteTests(WebTestCase):
         finally:
             settings.motion_backend = original_setting
             motion.set_backend(original_controller)
+
+    def test_handy_transport_can_be_selected_and_reported(self):
+        from strokegpt.web import handy, settings
+
+        original_setting = settings.handy_transport
+        original_runtime = handy.transport_mode
+        try:
+            with mock.patch.object(settings, "save"):
+                response = self.client.post("/set_handy_transport", json={"handy_transport": "bluetooth"})
+                self.assertEqual(response.status_code, 200)
+                data = response.get_json()
+                self.assertEqual(data["handy_transport"], "browser_bluetooth")
+                self.assertEqual(settings.handy_transport, "browser_bluetooth")
+                self.assertEqual(handy.transport_mode, "browser_bluetooth")
+                self.assertIn("bluetooth", data)
+
+                response = self.client.get("/check_settings")
+                payload = response.get_json()
+                self.assertEqual(payload["handy_transport"], "browser_bluetooth")
+                self.assertTrue(any(item["id"] == "browser_bluetooth" for item in payload["handy_transport_options"]))
+
+                response = self.client.post("/set_handy_transport", json={"handy_transport": "rest"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["handy_transport"], "rest")
+                self.assertEqual(handy.transport_mode, "rest")
+        finally:
+            settings.handy_transport = original_setting
+            handy.set_transport_mode(original_runtime)
 
     def test_motion_style_can_be_selected_and_reported(self):
         from strokegpt.web import get_current_context, settings

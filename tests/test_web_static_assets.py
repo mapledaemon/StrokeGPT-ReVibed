@@ -19,6 +19,8 @@ class WebStaticAssetTests(WebTestCase):
             "/static/js/voice-input.js": "text/javascript",
             "/static/js/responsive-layout.js": "text/javascript",
             "/static/js/device-control.js": "text/javascript",
+            "/static/js/handy-bluetooth.js": "text/javascript",
+            "/static/js/handy-bluetooth-codec.js": "text/javascript",
             "/static/js/motion-control.js": "text/javascript",
             "/static/js/setup-check.js": "text/javascript",
             "/static/js/motion/feedback-controls.js": "text/javascript",
@@ -87,6 +89,21 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="top-bar-intensity-guide-btn" class="my-button top-bar-toggle-button top-bar-intensity-guide" type="button" title="Cycle LLM intensity arc guide" aria-label="Intensity arc steady" aria-pressed="false" data-requires-backend>Arc Steady</button>', page)
             self.assertIn('id="top-bar-voice-toggle-btn" class="my-button top-bar-toggle-button top-bar-voice-toggle" type="button" title="Turn voice output on" aria-label="Voice output off" aria-pressed="false" data-requires-backend>Voice Off</button>', page)
             self.assertIn('id="top-bar-autospeak-toggle-btn" class="my-button top-bar-toggle-button top-bar-autospeak-toggle" type="button" title="Turn Autospeak on" aria-label="Autospeak off" aria-pressed="false" data-requires-backend>Auto Off</button>', page)
+            self.assertIn('id="handy-bluetooth-menu" class="handy-bluetooth-menu top-bar-bluetooth-menu" hidden', page)
+            self.assertIn('class="sidebar-handy-header"', page)
+            self.assertRegex(
+                page,
+                r'<div class="top-bar-actions">[\s\S]*id="handy-bluetooth-menu" class="handy-bluetooth-menu top-bar-bluetooth-menu" hidden[\s\S]*id="profile-menu"',
+            )
+            self.assertIn('id="handy-bluetooth-btn" class="my-button handy-bluetooth-toggle" type="button" title="Show local Handy Bluetooth status" aria-label="Handy Bluetooth disconnected" aria-pressed="false" aria-haspopup="dialog" aria-controls="handy-bluetooth-popover" aria-expanded="false"', page)
+            self.assertIn('class="bluetooth-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"', page)
+            self.assertIn('d="M12 2v20"', page)
+            self.assertIn('d="M7 7l10 10M7 17l10-10"', page)
+            self.assertIn('id="handy-bluetooth-popover" class="handy-bluetooth-popover" role="dialog" aria-label="Handy Bluetooth status" hidden', page)
+            self.assertIn('class="bluetooth-menu-warning">Experimental: local Bluetooth control is still being validated.', page)
+            self.assertIn('id="bluetooth-menu-state" class="bluetooth-state-pill">Disconnected</span>', page)
+            self.assertIn('id="bluetooth-menu-action-btn" class="my-button bluetooth-menu-action" type="button" data-requires-backend>Connect</button>', page)
+            self.assertIn('id="bluetooth-menu-settings-btn" class="my-button bluetooth-menu-secondary" type="button">Device Settings</button>', page)
             self.assertIn('id="profile-menu-btn" class="profile-menu-button"', page)
             self.assertIn('id="profile-menu-pfp" src="/static/default-pfp.png"', page)
             self.assertIn('id="profile-menu-popover" class="profile-menu-popover" role="menu" hidden', page)
@@ -137,6 +154,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="handy-cylinder-indicator"', page)
             self.assertIn('id="sidebar-handy-panel" class="setting-section sidebar-handy-panel"', page)
             self.assertIn('id="sidebar-handy-key-status" class="sidebar-handy-status" aria-live="polite">Disconnected</div>', page)
+            self.assertIn('<label class="settings-field-label sidebar-handy-connection-label" for="sidebar-handy-key-input">WiFi</label>', page)
             self.assertIn('id="sidebar-handy-key-input" class="input-text" placeholder="Connection key" autocomplete="off" data-requires-backend', page)
             self.assertIn('id="sidebar-save-handy-key-btn" class="my-button" type="button" data-requires-backend>Connect</button>', page)
             self.assertLess(page.index('id="handy-cylinder-indicator"'), page.index('id="sidebar-handy-panel"'))
@@ -255,6 +273,9 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="save-persona-prompt-btn"', page)
             self.assertIn('data-settings-tab="device"', page)
             self.assertIn('id="settings-tab-device"', page)
+            self.assertIn('id="handy-transport-select"', page)
+            self.assertIn('id="save-handy-transport-btn"', page)
+            self.assertIn('id="handy-transport-status"', page)
             self.assertIn('id="handy-key-input"', page)
             self.assertIn('id="handy-firmware-select"', page)
             self.assertIn('id="handy-api-v3-key-input"', page)
@@ -544,6 +565,19 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".top-bar-actions .top-bar-intensity-guide.is-ramp-down", css)
             self.assertIn(".top-bar-actions .top-bar-intensity-guide.is-variable", css)
             self.assertIn(".top-bar-actions .top-bar-autospeak-toggle.is-on { border-color: rgba(169, 154, 239, 0.72);", css)
+            self.assertIn(".sidebar-handy-header { position: relative; display: flex;", css)
+            self.assertIn(".handy-bluetooth-menu { position: relative; flex: 0 0 auto;", css)
+            self.assertIn(".handy-bluetooth-menu[hidden] { display: none; }", css)
+            self.assertIn(".top-bar-bluetooth-menu { flex-basis: var(--top-bar-button-size); }", css)
+            self.assertIn(".my-button.handy-bluetooth-toggle { flex: 0 0 var(--top-bar-button-size); width: var(--top-bar-button-size);", css)
+            self.assertIn(".bluetooth-button-icon { width: 1.25rem; min-width: 1.25rem; height: 1.25rem;", css)
+            self.assertIn(".handy-bluetooth-toggle.is-on { border-color: rgba(127, 183, 163, 0.72);", css)
+            self.assertIn(".handy-bluetooth-popover { position: fixed; top: 0; left: 0;", css)
+            self.assertIn("max-height: min(28rem, calc(100vh - 1rem)); overflow-y: visible;", css)
+            self.assertIn('.handy-bluetooth-popover[data-placement="top"] { transform-origin: bottom right;', css)
+            self.assertIn(".bluetooth-status-grid { margin: 0; display: grid;", css)
+            self.assertIn(".bluetooth-menu-warning { margin: 0; padding: 0.42rem 0.5rem;", css)
+            self.assertIn('.bluetooth-menu-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);', css)
             self.assertIn('#toggle-sidebar-btn { flex: 0 0 var(--top-bar-button-size);', css)
             self.assertIn("body.sidebar-collapsed #toggle-sidebar-btn { transform: rotate(180deg); }", css)
             self.assertIn("#top-bar h1 { grid-area: title; min-width: 0;", css)
@@ -672,8 +706,11 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn("#handy-cylinder-indicator", css)
             self.assertIn("#handy-cylinder-range { position: absolute; left: 7px; right: 7px; top: 8%; height: 84%;", css)
             self.assertIn(".sidebar-handy-panel { display: grid; gap: var(--space-2); }", css)
+            self.assertIn(".sidebar-handy-panel[hidden] { display: none; }", css)
             self.assertIn(".sidebar-handy-status { min-height: 2.1rem;", css)
             self.assertIn("color: var(--red-hover); font-size: 0.78rem; font-weight: 700;", css)
+            self.assertIn(".settings-field-label.sidebar-handy-connection-label { display: flex; align-items: center; width: fit-content; margin: 0 0 var(--space-1);", css)
+            self.assertIn("text-transform: none;", css)
             self.assertIn(".sidebar-handy-key-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(4rem, auto);", css)
             self.assertIn(".sidebar-handy-key-row .input-text { min-width: 0; min-height: var(--sidebar-control-min-height);", css)
             self.assertIn("#visualizer-box { width: 100%;", css)
@@ -1505,6 +1542,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("./js/chat.js", app_script)
         self.assertIn("./js/audio.js", app_script)
         self.assertIn("./js/device-control.js", app_script)
+        self.assertIn("./js/handy-bluetooth.js", app_script)
         self.assertIn("./js/motion-control.js", app_script)
         self.assertIn("./js/responsive-layout.js", app_script)
         self.assertIn("./js/setup.js", app_script)
@@ -1512,6 +1550,7 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("initSingleActiveTabWarning()", app_script)
         self.assertIn("initCompactMotionPanels()", app_script)
         self.assertIn("initDiagnosticsControls()", app_script)
+        self.assertIn("initHandyBluetoothControls()", app_script)
 
 
 if __name__ == "__main__":
