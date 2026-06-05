@@ -62,6 +62,7 @@ class FrameStyle:
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
     duration_scale: float = 1.0
+    turn_ease_cycle_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
 
@@ -126,11 +127,13 @@ CONTINUOUS_MIN_CYCLE_SECONDS = 1.5
 CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS = 1.0
 CONTINUOUS_TURN_EASE_MIN_CYCLE_SECONDS = 1.2
 CONTINUOUS_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 1.35
-CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE = 6.0
+CONTINUOUS_HIGH_SPEED_TEMPO_BOOST_START_SPEED = 80.0
+CONTINUOUS_HIGH_SPEED_TEMPO_BOOST_SCALE = 4.0
+CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE = 12.0
 CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT = 1.05
 CONTINUOUS_HIGH_SPEED_TURN_EASE_START_SPEED = 70.0
-CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS = 0.8
-CONTINUOUS_HIGH_SPEED_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 0.92
+CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS = 0.55
+CONTINUOUS_HIGH_SPEED_MULTI_TURN_EASE_MIN_CYCLE_SECONDS = 0.65
 CONTINUOUS_MAX_CYCLE_SECONDS = 12.0
 CONTINUOUS_CLOSED_WRAP_POSITION_EPSILON = 0.5
 
@@ -937,11 +940,22 @@ def _continuous_intent_tempo_scale(speed: float) -> float:
     if speed_pct <= 50.0:
         return _clamp(0.5 + speed_pct / 100.0, 0.5, 1.0)
 
-    high_ratio = (speed_pct - 50.0) / 50.0
-    high_span = CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE - 1.0
+    boost_start = CONTINUOUS_HIGH_SPEED_TEMPO_BOOST_START_SPEED
+    boost_scale = CONTINUOUS_HIGH_SPEED_TEMPO_BOOST_SCALE
+    if speed_pct <= boost_start:
+        high_ratio = (speed_pct - 50.0) / max(1.0, boost_start - 50.0)
+        high_span = boost_scale - 1.0
+        return _clamp(
+            1.0 + (high_ratio**CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT) * high_span,
+            1.0,
+            boost_scale,
+        )
+
+    high_ratio = (speed_pct - boost_start) / max(1.0, 100.0 - boost_start)
+    high_span = CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE - boost_scale
     return _clamp(
-        1.0 + (high_ratio**CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT) * high_span,
-        1.0,
+        boost_scale + (high_ratio**CONTINUOUS_HIGH_SPEED_TEMPO_EXPONENT) * high_span,
+        boost_scale,
         CONTINUOUS_HIGH_SPEED_TEMPO_MAX_SCALE,
     )
 
@@ -1044,8 +1058,13 @@ def sample_continuous_motion(
     target = target.clamped()
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
+    turn_ease_scale = _clamp(
+        float(getattr(plan.style, "turn_ease_cycle_scale", 1.0) or 1.0),
+        0.25,
+        2.0,
+    )
     effective_duration_seconds = max(
-        _turn_ease_min_cycle_seconds(plan.actions, target.speed),
+        _turn_ease_min_cycle_seconds(plan.actions, target.speed) * turn_ease_scale,
         duration_seconds / tempo_scale,
     )
     raw_phase = (elapsed / effective_duration_seconds) % 1.0

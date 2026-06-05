@@ -1280,7 +1280,7 @@ class MotionController:
                 PatternAction(500, 100.0),
                 PatternAction(1000, 0.0),
             ),
-            style=FrameStyle(name="area_focus", window_scale=0.45),
+            style=FrameStyle(name="area_focus", window_scale=0.45, turn_ease_cycle_scale=0.42),
             duration_seconds=cycle_seconds,
             normalized_range=(0.0, 100.0),
             phase_key=("area_focus_zone", focus_zone or "general"),
