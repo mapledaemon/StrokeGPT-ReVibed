@@ -1,4 +1,4 @@
-import { D, apiCall, clampNumber, el, fetchWithConnectionState, markRequiresBackend, reportSaveFailure, setSliderValue, state } from './context.js';
+import { D, apiCall, clampNumber, el, fetchWithConnectionState, markRequiresBackend, reportSaveFailure, setSliderValue, setStatusMessage, state } from './context.js';
 import {
     formatBackendName,
     formatClockElapsed,
@@ -403,8 +403,10 @@ async function saveMotionBackend() {
     if (data && data.status === 'success') {
         updateMotionBackendUi(data.motion_backend);
         el.statusText.textContent = `Motion backend saved: ${motionBackendDetails(data.motion_backend).label}.`;
+        return true;
     } else {
         reportSaveFailure(el.motionBackendStatus, data, 'Could not save motion backend.');
+        return false;
     }
 }
 
@@ -418,8 +420,10 @@ async function saveMotionStyle() {
     if (data && data.status === 'success') {
         renderMotionStyleOptions(data.motion_style_options || state.motionStyleOptions, data.motion_style);
         el.statusText.textContent = `Motion style saved: ${motionStyleDetails(data.motion_style).label}.`;
+        return true;
     } else {
         reportSaveFailure(el.motionStyleStatus || el.statusText, data, 'Could not save motion style.');
+        return false;
     }
 }
 
@@ -433,8 +437,10 @@ async function saveMotionReverseDirection() {
     if (data && data.status === 'success') {
         updateMotionReverseDirectionUi(data.motion_reverse_direction);
         el.statusText.textContent = `Motion direction saved: ${state.motionReverseDirection ? 'reverse' : 'normal'}.`;
+        return true;
     } else {
         reportSaveFailure(el.motionReverseDirectionStatus || el.statusText, data, 'Could not save motion direction.');
+        return false;
     }
 }
 
@@ -448,8 +454,10 @@ async function saveMotionSpeedLimits() {
     if (res && res.status === 'success') {
         populateMotionSettings({min_speed: res.min_speed, max_speed: res.max_speed});
         el.statusText.textContent = `Speed limits saved: ${state.motionMinSpeed}-${state.motionMaxSpeed}%.`;
+        return true;
     } else {
         reportSaveFailure(el.statusText, res, 'Could not save speed limits.');
+        return false;
     }
 }
 
@@ -500,8 +508,10 @@ async function saveModeTimings() {
     if (data && data.status === 'success') {
         populateMotionSettings({timings: data.timings});
         el.statusText.textContent = 'Mode timings saved.';
+        return true;
     } else {
         reportSaveFailure(el.statusText, data, 'Could not save mode timings.');
+        return false;
     }
 }
 
@@ -1537,9 +1547,30 @@ async function saveLlmEdgePermissions() {
         populateMotionSettings(data);
         if (el.llmEdgePermissionsStatus) el.llmEdgePermissionsStatus.textContent = 'LLM permissions saved.';
         el.statusText.textContent = 'LLM permissions saved.';
+        return true;
     } else {
         reportSaveFailure(el.llmEdgePermissionsStatus || el.statusText, data, 'Could not save LLM permissions.');
+        return false;
     }
+}
+
+async function saveMotionTabSettings() {
+    setStatusMessage(el.statusText, 'Saving motion settings...', 'neutral');
+    const steps = [
+        saveMotionBackend,
+        saveMotionStyle,
+        saveMotionReverseDirection,
+        saveMotionSpeedLimits,
+        saveModeTimings,
+        saveLlmEdgePermissions,
+        saveMotionFeedbackOptions,
+    ];
+    for (const step of steps) {
+        const saved = await step();
+        if (saved !== true) return false;
+    }
+    setStatusMessage(el.statusText, 'Motion settings saved.', 'success');
+    return true;
 }
 
 async function saveAutospeakToggle(enabled) {
@@ -1608,6 +1639,7 @@ export function initMotionControls({sendUserMessage}) {
     el.toggleMemoryBtn?.addEventListener('click', toggleLongTermMemory);
     el.motionSpeedMinSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
+    el.saveMotionTabBtn?.addEventListener('click', saveMotionTabSettings);
     el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);

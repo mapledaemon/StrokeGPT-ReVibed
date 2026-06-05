@@ -241,8 +241,10 @@
                     <img id="ai-pfp-preview" class="profile-picture-preview" src="/static/default-pfp.png" alt="AI profile picture">
                 </label>
                 <input type="file" id="pfp-upload" accept="image/*" style="display: none;" data-requires-backend>
-                <input type="text" id="ai-name-input" class="input-text" placeholder="AI's Name...">
-                <button id="set-ai-name-btn" class="my-button" data-requires-backend>Set Name</button>
+                <div class="settings-inline-action">
+                    <input type="text" id="ai-name-input" class="input-text" placeholder="AI's Name...">
+                    <button id="set-ai-name-btn" class="my-button" data-requires-backend>Set Name</button>
+                </div>
                 <select id="persona-prompt-select" class="select-box"></select>
                 <input type="text" id="persona-input" class="input-text" placeholder="Describe the AI's persona...">
                 <div class="voice-actions">
@@ -273,8 +275,8 @@
                     <div class="settings-help">Thinking-capable models may answer more deliberately when this is on, but chat can be much slower.</div>
                     <div class="model-actions model-actions-wide">
                         <button id="save-ollama-thinking-btn" class="my-button" data-requires-backend>Save Thinking</button>
-                        <span id="ollama-thinking-status" class="settings-status-line">Thinking is off for faster chat.</span>
                     </div>
+                    <div id="ollama-thinking-status" class="settings-status-line">Thinking is off for faster chat.</div>
                     <div class="settings-subsection memory-settings-panel">
                         <h4>Model Memory</h4>
                         <label class="settings-checkbox-line">
@@ -284,8 +286,8 @@
                         <div class="settings-help">Saved profile memory persists across restarts. The active chat window context is temporary.</div>
                         <div class="model-actions model-actions-wide">
                             <button id="clear-long-term-memory-btn" class="my-button" data-requires-backend>Clear Memories</button>
-                            <span id="long-term-memory-status" class="settings-status-line">Memory status not loaded yet.</span>
                         </div>
+                        <div id="long-term-memory-status" class="settings-status-line">Memory status not loaded yet.</div>
                         <div id="long-term-memory-items" class="memory-item-list" aria-live="polite"></div>
                         <pre id="long-term-memory-preview" class="diagnostics-output memory-preview-output">No memory loaded.</pre>
                     </div>
@@ -394,7 +396,7 @@
                         <option value="elevenlabs">ElevenLabs API</option>
                         <option value="local">Local Chatterbox</option>
                     </select>
-                    <div class="audio-toggle-line"><input type="checkbox" id="enable-audio-checkbox" data-requires-backend><label for="enable-audio-checkbox">Enable Audio</label></div>
+                    <label class="settings-checkbox-line"><input type="checkbox" id="enable-audio-checkbox" data-requires-backend> Enable Audio</label>
                     <div id="local-tts-status" style="font-size: 0.85em; color: var(--comment);">Local voice dependencies not checked.</div>
                     <div id="elevenlabs-settings-panel" class="voice-panel">
                         <input type="password" id="elevenlabs-key-input" class="input-text" placeholder="ElevenLabs API Key">
@@ -491,7 +493,7 @@
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-mode-actions-chat-checkbox" data-requires-backend> Allow typed chat to request mode actions</label>
                     <div class="timing-row autospeak-timing-row" aria-label="Autospeak seconds range"><label for="autospeak-min-seconds">Autospeak</label><input type="number" id="autospeak-min-seconds" min="0" max="300" step="1" value="12" aria-label="Minimum Autospeak seconds" data-requires-backend><span>to</span><input type="number" id="autospeak-max-seconds" min="0" max="300" step="1" value="45" aria-label="Maximum Autospeak seconds" data-requires-backend><span>s</span></div>
-                    <label for="autospeak-motion-autonomy-select">Autospeak autonomy</label>
+                    <label class="settings-field-label" for="autospeak-motion-autonomy-select">Autospeak autonomy</label>
                     <select id="autospeak-motion-autonomy-select" data-requires-backend>
                         <option value="chat_only">Talk only</option>
                         <option value="style">Style only</option>
@@ -529,6 +531,9 @@
                     <div id="motion-program-status" class="settings-help">Program list not loaded yet.</div>
                     <div id="motion-program-list" class="motion-pattern-list motion-program-list"></div>
                 </div>
+                <div class="settings-tab-actions">
+                    <button id="save-motion-tab-btn" class="my-button" data-requires-backend>Save Motion Settings</button>
+                </div>
             </div>
             <div id="settings-tab-device" class="settings-panel">
                 <div class="settings-subsection device-panel">
@@ -541,9 +546,11 @@
                     <button id="save-handy-transport-btn" class="my-button" data-requires-backend>Save Transport</button>
                     <div id="handy-transport-status" class="settings-help">Cloud REST selected.</div>
                     <div id="handy-rest-connection-controls">
-                        <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key" data-requires-backend>
-                        <button id="save-handy-key-btn" class="my-button" data-requires-backend>Connect</button>
-                        <div id="handy-key-status" style="font-size: 0.85em; color: var(--red-hover);">Disconnected</div>
+                        <div class="settings-handy-key-row">
+                            <input type="password" id="handy-key-input" class="input-text" placeholder="Handy connection key" data-requires-backend>
+                            <button id="save-handy-key-btn" class="my-button" data-requires-backend>Connect</button>
+                        </div>
+                        <div id="handy-key-status" class="settings-help settings-warning-line">Disconnected</div>
                     </div>
                 </div>
                 <div class="settings-subsection device-panel">
@@ -566,6 +573,9 @@
                         <button id="test-motion-depth-range" class="my-button" data-requires-backend>Test Range</button>
                         <button id="save-motion-depth-range" class="my-button" data-requires-backend>Save Range</button>
                     </div>
+                </div>
+                <div class="settings-tab-actions">
+                    <button id="save-device-tab-btn" class="my-button" data-requires-backend>Save Device Settings</button>
                 </div>
             </div>
             <div id="settings-tab-prompts" class="settings-panel">

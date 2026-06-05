@@ -306,7 +306,6 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .voice-transcript-actions { display: flex; align-items: center; gap: var(--space-1); }
 .voice-transcript-actions .my-button { width: auto; min-width: 4.25rem; }
 
-.audio-toggle-line { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
 .profile-picture-field { cursor: pointer; display: block; }
 .profile-picture-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 10px auto; display: block; border: 2px solid var(--comment); }
 
@@ -365,10 +364,10 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .setup-slider { grid-template-columns: minmax(0, 1fr) minmax(54px, auto); }
 .setup-slider label { grid-column: 1 / -1; }
 
-.timing-row { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
-.timing-row label { flex-basis: 50px; font-size: 0.9em; }
-.timing-row input { flex-grow: 1; width: 40px; }
-.timing-row span { padding: 0 5px; }
+.timing-row { display: flex; align-items: center; gap: 6px; max-width: 18rem; margin-bottom: 8px; }
+.timing-row label { flex: 0 0 auto; min-width: 5.3rem; color: var(--foreground); font-size: 0.9em; }
+.timing-row input { flex: 0 1 4.6rem; min-width: 0; width: 4.6rem; }
+.timing-row span { color: var(--comment); padding: 0 2px; }
 .autospeak-timing-row { max-width: 18rem; }
 .autospeak-timing-row label { flex: 0 0 auto; min-width: 5.3rem; color: var(--foreground); }
 .autospeak-timing-row input { flex: 0 1 4.6rem; min-width: 0; }
@@ -398,6 +397,11 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-tab:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .settings-panel { display: none; flex-direction: column; gap: 12px; }
 .settings-panel.active { display: flex; }
+.settings-inline-action { display: grid; grid-template-columns: minmax(12rem, 24rem) auto; gap: 10px; align-items: stretch; max-width: 34rem; min-width: 0; }
+.settings-inline-action .input-text { min-width: 0; }
+.settings-inline-action .my-button { width: auto; min-width: 7rem; white-space: nowrap; }
+.settings-tab-actions { display: grid; grid-template-columns: minmax(12rem, 18rem); justify-content: end; padding-top: 2px; }
+.settings-tab-actions .my-button { width: auto; min-width: 0; }
 .voice-panel, .motion-panel, .device-panel { display: flex; flex-direction: column; gap: 12px; }
 .voice-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .motion-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -427,12 +431,27 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .ollama-model-action:hover, .ollama-model-action:active, .ollama-model-action:disabled:hover { transform: none; box-shadow: none; }
 .voice-actions .my-button, .motion-actions .my-button, .motion-pattern-actions .my-button, .motion-program-actions .my-button, .model-actions .my-button { width: auto; min-width: 0; }
 .settings-status-line { min-height: 2rem; display: flex; align-items: center; padding: 7px 9px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.85em; line-height: 1.35; overflow-wrap: anywhere; }
-.browse-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.browse-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }
 .browse-line .my-button { width: auto; white-space: nowrap; }
+#handy-rest-connection-controls { display: flex; flex-direction: column; gap: 8px; }
+.settings-handy-key-row { display: grid; grid-template-columns: minmax(12rem, 24rem); gap: 10px; align-items: stretch; max-width: 34rem; }
+.settings-handy-key-row .input-text { min-width: 0; }
+.settings-handy-key-row .my-button { width: auto; min-width: 0; white-space: nowrap; }
+.settings-warning-line { color: var(--red-hover); }
 .settings-subsection { display: flex; flex-direction: column; gap: 12px; border: 1px solid #2d333d; border-radius: 8px; padding: 12px; background: var(--background-darker); }
 .settings-subsection h4 { margin: 0; color: var(--cyan); font-size: 0.95rem; }
 .settings-help { color: var(--comment); font-size: 0.85rem; line-height: 1.35; overflow-wrap: anywhere; }
 .settings-field-label, .voice-input-choice-group legend, .voice-input-tuning-group legend { color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
+#settings-dialog #save-motion-backend-btn,
+#settings-dialog #save-motion-style-btn,
+#settings-dialog #save-motion-reverse-direction-btn,
+#settings-dialog #save-motion-speed-limits,
+#settings-dialog #save-timings-btn,
+#settings-dialog #save-llm-edge-permissions-btn,
+#settings-dialog #save-handy-transport-btn,
+#settings-dialog #save-handy-key-btn,
+#settings-dialog #save-handy-device-config-btn,
+#settings-dialog #save-motion-depth-range { display: none; }
 .prompt-mode-panel { display: grid; gap: 7px; min-width: 0; }
 .prompt-anatomy-controls { display: grid; grid-template-columns: minmax(8rem, 0.7fr) minmax(12rem, 1fr) auto; gap: 8px; align-items: stretch; min-width: 0; }
 .prompt-anatomy-controls select, .prompt-anatomy-controls input { min-width: 0; }
@@ -700,11 +719,11 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .settings-tabs { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .prompt-anatomy-controls, .prompt-mode-controls, .prompt-refresh-row { grid-template-columns: 1fr; }
     .prompt-anatomy-controls .my-button, .prompt-mode-controls .my-button, .prompt-refresh-row .my-button { width: 100%; }
-    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .motion-program-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }
+    .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .motion-program-actions, .settings-tab-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }
     .latency-test-row { grid-template-columns: 1fr; }
     .latency-test-elapsed { white-space: normal; }
-    .browse-line { grid-template-columns: 1fr; }
-    .browse-line .my-button { width: 100%; }
+    .browse-line, .settings-inline-action, .settings-handy-key-row { grid-template-columns: 1fr; max-width: none; }
+    .browse-line .my-button, .settings-inline-action .my-button, .settings-handy-key-row .my-button, .settings-tab-actions .my-button { width: 100%; }
     .motion-pattern-row { grid-template-columns: 1fr; }
     .motion-pattern-play, .motion-pattern-export { width: 100%; }
     #motion-training-dialog.modal-overlay { padding: 8px; overflow: hidden; }

@@ -7,6 +7,17 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-05 - PR #311 - Settings UX Consolidation
+-------------------------------------------------
+
+Branch: codex/settings-ux-alignment
+
+- Cleaned up Settings modal layout issues, including over-wide timing inputs,
+  misaligned browse rows, inconsistent checkbox styling, and model status text
+  inside button grids.
+- Added one visible save action for the Motion and Device settings tabs while
+  preserving the existing focused backend save routes internally.
+
 2026-06-05 - PR #310 - Continuous Tempo Mapping
 ------------------------------------------------
 

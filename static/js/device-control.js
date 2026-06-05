@@ -281,14 +281,17 @@ async function saveMotionDepthRange() {
     });
     if (res && res.status === 'success') {
         el.statusText.textContent = `Stroke range saved: ${state.motionMinDepth}-${state.motionMaxDepth}%.`;
+        return true;
     }
+    reportSaveFailure(el.statusText, res, 'Could not save stroke range.');
+    return false;
 }
 
 async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
     const key = (sourceInput?.value || '').trim();
     if (!key) {
         setHandyConnectionStatus('disconnected', 'Enter a Handy connection key first.');
-        return;
+        return false;
     }
     if (state.handyTransport === 'browser_bluetooth') {
         setStatusMessage(el.statusText, 'Switching to Cloud REST before connecting...', 'neutral');
@@ -299,7 +302,7 @@ async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
         });
         if (!transportRes || transportRes.status !== 'success') {
             reportSaveFailure(el.handyTransportStatus || el.statusText, transportRes, 'Could not switch to Cloud REST before connecting.');
-            return;
+            return false;
         }
         state.handyTransport = transportRes.handy_transport || 'rest';
         if (el.handyTransportSelect) el.handyTransportSelect.value = state.handyTransport;
@@ -317,7 +320,10 @@ async function saveHandyConnectionKey(sourceInput = el.handyKeyInput) {
     });
     if (res && res.status === 'success') {
         applyHandyConnectionResult(key, res);
+        return true;
     }
+    reportSaveFailure(el.handyKeyStatus || el.statusText, res, 'Could not save Handy connection key.');
+    return false;
 }
 
 async function saveHandyDeviceConfig() {
@@ -337,8 +343,10 @@ async function saveHandyDeviceConfig() {
         state.handyApiV3ConnectionKeyValid = res.handy_api_v3_connection_key_valid ?? state.handyApiV3ConnectionKeyValid ?? true;
         updateHandyFirmwareStatus(res);
         setStatusMessage(el.statusText, res.message || 'Handy firmware settings saved.', 'success');
+        return true;
     } else {
         reportSaveFailure(el.handyFirmwareStatus || el.statusText, res, 'Could not save Handy firmware settings.');
+        return false;
     }
 }
 
@@ -358,9 +366,26 @@ async function saveHandyTransport() {
         updateHandyTransportStatus(res);
         updateHandyFirmwareStatus(res);
         setStatusMessage(el.statusText, res.message || 'Handy transport saved.', 'success');
+        return true;
     } else {
         reportSaveFailure(el.handyTransportStatus || el.statusText, res, 'Could not save Handy transport.');
+        return false;
     }
+}
+
+async function saveDeviceTabSettings() {
+    setStatusMessage(el.statusText, 'Saving device settings...', 'neutral');
+    if (await saveHandyTransport() !== true) return false;
+    if (state.handyTransport !== 'browser_bluetooth') {
+        const keyDraft = (el.handyKeyInput?.value || '').trim();
+        if (keyDraft && keyDraft !== state.myHandyKey) {
+            if (await saveHandyConnectionKey(el.handyKeyInput) !== true) return false;
+        }
+    }
+    if (await saveHandyDeviceConfig() !== true) return false;
+    if (await saveMotionDepthRange() !== true) return false;
+    setStatusMessage(el.statusText, 'Device settings saved.', 'success');
+    return true;
 }
 
 export function initDeviceControls() {
@@ -389,6 +414,7 @@ export function initDeviceControls() {
     el.motionDepthMaxSlider.addEventListener('change', testMotionDepthRange);
     document.getElementById('test-motion-depth-range').addEventListener('click', testMotionDepthRange);
     document.getElementById('save-motion-depth-range').addEventListener('click', saveMotionDepthRange);
+    el.saveDeviceTabBtn?.addEventListener('click', saveDeviceTabSettings);
     el.handyFirmwareSelect?.addEventListener('change', () => {
         state.handyFirmwareVersion = el.handyFirmwareSelect.value || 'fw4';
         updateHandyFirmwareStatus();
