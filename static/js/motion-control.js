@@ -1005,38 +1005,6 @@ function setHandyCylinderPosition(depth) {
     }
 }
 
-function latestProgramRange(payload = {}, diagnostics = {}) {
-    const trace = Array.isArray(payload.trace) ? payload.trace : [];
-    for (let index = trace.length - 1; index >= 0; index -= 1) {
-        const range = trace[index]?.program_range;
-        if (!range || range.min === undefined || range.max === undefined) continue;
-        const physical = normalizedPercentRange(
-            physicalDepthPercent(range.min, diagnostics),
-            physicalDepthPercent(range.max, diagnostics),
-            0,
-            100,
-        );
-        return {...physical, width: Math.max(0, physical.max - physical.min)};
-    }
-    return null;
-}
-
-function cylinderActiveRange(payload = {}, diagnostics = {}) {
-    const programRange = latestProgramRange(payload, diagnostics);
-    if (programRange) return programRange;
-    return activeStrokeZone(diagnostics);
-}
-
-function setHandyCylinderRange(range) {
-    if (!el.handyCylinderRange) return;
-    const min = clampPercent(range?.min, 0);
-    const max = clampPercent(range?.max, 100);
-    const top = Math.min(min, max);
-    const height = Math.max(0, Math.max(min, max) - top);
-    el.handyCylinderRange.style.top = `${Math.round(top * 1000) / 1000}%`;
-    el.handyCylinderRange.style.height = `${Math.round(height * 1000) / 1000}%`;
-}
-
 function setCylinderDebug(details = {}) {
     lastCylinderDebug = {
         source: details.source || 'unknown',
@@ -1181,18 +1149,37 @@ function hspPlaybackClockMs(payload = {}, diagnostics = {}, nowSeconds = Date.no
     return Math.max(0, currentTimeMs + ((nowSeconds - observedAt) * 1000 * playbackRate));
 }
 
+function hspStateCurrentPointDepth(diagnostics = {}) {
+    const hspState = diagnostics.hsp_state || {};
+    const currentPoint = finiteObservation(hspState.current_point ?? hspState.currentPoint);
+    if (currentPoint === null || currentPoint < 0 || currentPoint > 100) return null;
+    return physicalDepthPercent(currentPoint, diagnostics);
+}
+
 function hspBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Date.now() / 1000) {
     if (!diagnostics.hsp_streaming) return null;
     const ageMs = finiteObservation(diagnostics.hsp_state_age_ms);
+    const hspState = diagnostics.hsp_state || {};
     if (ageMs !== null && ageMs > HSP_STATE_MAX_EXTRAPOLATION_AGE_MS) {
         setCylinderDebug({
             source: 'hsp-state-stale',
             hsp_state_age_ms: ageMs,
-            play_state: (diagnostics.hsp_state || {}).play_state,
+            play_state: hspState.play_state,
         });
         return null;
     }
     const clockMs = hspPlaybackClockMs(payload, diagnostics, nowSeconds);
+    const currentPointDepth = hspStateCurrentPointDepth(diagnostics);
+    if (currentPointDepth !== null) {
+        setCylinderDebug({
+            source: 'hsp-current-point',
+            depth: currentPointDepth,
+            clock_ms: clockMs,
+            hsp_state_age_ms: diagnostics.hsp_state_age_ms,
+            play_state: hspState.play_state,
+        });
+        return currentPointDepth;
+    }
     if (clockMs === null) return null;
     const points = hspTracePoints(payload);
     if (!points.length) return null;
@@ -1208,7 +1195,7 @@ function hspBackendAnimatedDepth(payload = {}, diagnostics = {}, nowSeconds = Da
         first_point_ms: firstPointTime,
         latest_point_ms: latestPointTime,
         hsp_state_age_ms: diagnostics.hsp_state_age_ms,
-        play_state: (diagnostics.hsp_state || {}).play_state,
+        play_state: hspState.play_state,
     });
     return depth;
 }
@@ -1300,8 +1287,6 @@ function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
 }
 
 function updateHandyCylinder(payload = {}, nowSeconds = Date.now() / 1000) {
-    const diagnostics = payload.diagnostics || {};
-    setHandyCylinderRange(cylinderActiveRange(payload, diagnostics));
     setHandyCylinderPosition(cylinderAnimatedDepth(payload, nowSeconds));
 }
 

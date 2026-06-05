@@ -8,14 +8,15 @@ the current branch. Move fixed items into `Changelog.txt` when they are resolved
 Status: Partial / Needs Real-Device Verification
 
 The sidebar Handy cylinder is a commanded-motion estimate, not a confirmed
-live device-position readout. The green range band now maps to the active
-program's observed min/max depth window when the backend emits one, and the
-purple position line estimates the current commanded position from the active
-backend: continuous sampled output replay for Continuous position, trace
-interpolation for finite position playback, and phase estimation inside the
-active slide window for HAMP legacy. It can still show latency or misalignment
-compared with the physical Handy when browser polling, network timing, Handy
-firmware behavior, or local velocity assumptions diverge from the device.
+live device-position readout. The green device body/range band is fixed
+artwork for the Handy drawing instead of the active travel window. The purple
+position line estimates the current commanded/device-reported position from
+the active backend: fresh HSP `current_point` state when available, continuous
+sampled output replay for Continuous position, trace interpolation for finite
+position playback, and phase estimation inside the active slide window for
+HAMP legacy. It can still show latency or misalignment compared with the
+physical Handy when browser polling, network timing, Handy firmware behavior,
+or local velocity assumptions diverge from the device.
 
 Follow-up work:
 
@@ -25,9 +26,9 @@ Follow-up work:
   fast speeds, then tune the local estimate against calibrated stroke range,
   physical position, and status polling cadence without adding excessive Handy
   API traffic.
-- Re-check finite position/script playback and HAMP legacy on hardware; their
-  visual range now follows program/slide min/max, but the position line is
-  still an estimate rather than a live device readout.
+- Re-check finite position/script playback and HAMP legacy on hardware; the
+  fixed device drawing is stable, but the position line is still an estimate
+  rather than a live device readout.
 
 ## Continuous Position Backend Real-Device Readiness
 
