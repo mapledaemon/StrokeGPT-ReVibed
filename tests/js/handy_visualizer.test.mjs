@@ -1,6 +1,6 @@
-// Behavioral coverage for the sidebar Handy visualizer. The cylinder's lighter
-// oval is a static track; only the purple horizontal slider line should move
-// from the active backend's commanded motion output.
+// Behavioral coverage for the sidebar Handy visualizer. The cylinder range
+// band should reflect the active travel window while the purple horizontal
+// slider line tracks the active backend's commanded motion output.
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -403,7 +403,7 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-position').style.top, '80%');
     });
 
-    it('keeps the static track fixed during finite position playback', () => {
+    it('tracks the authored range during finite position playback', () => {
         Date.now = () => 3_000_000;
 
         const payload = {
@@ -427,19 +427,19 @@ describe('Handy visualizer tracking', () => {
         updateMotionObservability(payload);
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '8%');
-        assert.equal(range.style.height, '84%');
+        assert.equal(range.style.top, '20%');
+        assert.equal(range.style.height, '50%');
         assert.equal(getStubElement('handy-cylinder-position').style.top, '20%');
 
         Date.now = () => 3_001_000;
         updateMotionObservability(payload);
 
-        assert.equal(range.style.top, '8%');
-        assert.equal(range.style.height, '84%');
+        assert.equal(range.style.top, '20%');
+        assert.equal(range.style.height, '50%');
         assert.equal(getStubElement('handy-cylinder-position').style.top, '70%');
     });
 
-    it('maps HAMP legacy motion to a phase estimate without moving the static track', () => {
+    it('maps HAMP legacy motion to a phase estimate inside the active stroke zone', () => {
         Date.now = () => 4_000_500;
 
         updateMotionObservability({
@@ -461,8 +461,8 @@ describe('Handy visualizer tracking', () => {
         });
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '8%');
-        assert.equal(range.style.height, '84%');
+        assert.equal(range.style.top, '25%');
+        assert.equal(range.style.height, '50%');
         assert.notEqual(getStubElement('handy-cylinder-position').style.top, '50%');
     });
 

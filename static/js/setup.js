@@ -15,6 +15,7 @@ import {
     populateUserGenitaliaSetting,
     refreshOllamaStatus,
     setPersonaPrompt,
+    syncSidebarToggleButton,
     updateOllamaStatus,
 } from './settings.js';
 
@@ -74,6 +75,7 @@ export function applyInitialSidebarState() {
     const shouldCollapse = stored === 'true' || (stored === null && isCompactSidebarViewport());
     if (shouldCollapse) D.body.classList.add('sidebar-collapsed');
     else D.body.classList.remove('sidebar-collapsed');
+    syncSidebarToggleButton(shouldCollapse);
 }
 
 export function setSplashLoadingStatus(progress, message) {

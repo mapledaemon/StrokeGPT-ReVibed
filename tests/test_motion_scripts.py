@@ -254,6 +254,19 @@ class MotionScriptPlannerTests(unittest.TestCase):
             self.assertGreaterEqual(value, 0.0)
             self.assertLessEqual(value, 100.0)
 
+    def test_sample_action_position_bounds_overshoot_to_segment(self):
+        # A flat middle segment with higher neighbors used to dip below the
+        # segment endpoints before the final global clamp. That creates a small
+        # artificial turn/stall inside what should be a steady transition.
+        actions = (
+            PatternAction(0, 50),
+            PatternAction(100, 20),
+            PatternAction(200, 20),
+            PatternAction(300, 50),
+        )
+        for phase in (0.4, 0.5, 0.6):
+            self.assertEqual(_sample_action_position(actions, phase), 20.0)
+
     def test_smooth_jitter_is_bounded_and_zero_when_amount_zero(self):
         self.assertEqual(_smooth_jitter(0.0, 0.0), 0.0)
         self.assertEqual(_smooth_jitter(0.5, 0.0), 0.0)

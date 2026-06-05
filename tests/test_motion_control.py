@@ -12,6 +12,7 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS,
+    CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON,
     CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS,
     CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS,
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
@@ -694,6 +695,16 @@ class MotionControllerTests(unittest.TestCase):
                 rapid.append((current_x, interval_ms))
         return rapid
 
+    def hsp_rapid_near_duplicate_intervals(self, points):
+        rapid = []
+        keepalive_ms = int(round(CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS * 1000.0))
+        for previous, current in zip(points, points[1:]):
+            interval_ms = int(current["t"]) - int(previous["t"])
+            delta = abs(float(current["x"]) - float(previous["x"]))
+            if delta < CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON and interval_ms < keepalive_ms:
+                rapid.append((round(delta, 3), interval_ms))
+        return rapid
+
     def test_controller_routes_motion_through_smooth_path(self):
         handy = FakeHandy()
         controller = MotionController(handy, step_delay=0)
@@ -1356,7 +1367,7 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(len(phase_points), 18)
         self.assertLessEqual(max(depth_steps), 28.0)
 
-    def test_continuous_hsp_generated_stream_coalesces_duplicate_integer_points(self):
+    def test_continuous_hsp_generated_stream_preserves_fractional_integer_bucket_points(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
 
@@ -1373,12 +1384,13 @@ class MotionControllerTests(unittest.TestCase):
 
             trace = controller.observability_snapshot()["trace"]
             self.assertTrue(any(point.get("hsp_duplicate_suppressed_points") for point in trace))
-            self.assertFalse(rapid_duplicates)
+            self.assertTrue(rapid_duplicates)
+            self.assertFalse(self.hsp_rapid_near_duplicate_intervals(points))
             self.assertLessEqual(max(intervals), 150)
         finally:
             controller.stop()
 
-    def test_continuous_hsp_area_focus_coalesces_duplicate_integer_points(self):
+    def test_continuous_hsp_area_focus_preserves_fractional_integer_bucket_points(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
         intent = IntentMatcher().parse("focus on the tip", controller.semantic_target())
@@ -1399,7 +1411,8 @@ class MotionControllerTests(unittest.TestCase):
             )
 
             self.assertTrue(any(point.get("hsp_duplicate_suppressed_points") for point in trace))
-            self.assertFalse(self.hsp_rapid_duplicate_integer_intervals(points))
+            self.assertTrue(self.hsp_rapid_duplicate_integer_intervals(points))
+            self.assertFalse(self.hsp_rapid_near_duplicate_intervals(points))
             self.assertLessEqual(max(intervals), 150)
         finally:
             controller.stop()

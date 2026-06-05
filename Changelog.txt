@@ -7,6 +7,23 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-05 - PR #312 - UI And Motion Smoothness Polish
+------------------------------------------------------
+
+Branch: codex/ui-motion-review-polish
+
+- Tightened the main chat shell layout by moving the global status line below
+  the composer input and wrapping mobile top-bar actions while preserving the
+  wider desktop chat feed and sidebar stop-button alignment.
+- Fixed the sidebar collapse chevron and accessibility state so the control
+  points in the actual collapse/expand direction.
+- Updated the Handy visualizer range band to follow the active stroke window or
+  authored playback range instead of staying on a static decorative track.
+- Reduced pattern-sampling vibration by bounding Catmull-Rom overshoot to the
+  current segment and by only suppressing generated HSP points that are nearly
+  identical, preserving meaningful fractional movement inside the same rounded
+  position bucket.
+
 2026-06-05 - PR #311 - Settings UX Consolidation
 -------------------------------------------------
 
