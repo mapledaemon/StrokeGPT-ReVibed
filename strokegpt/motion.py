@@ -42,6 +42,7 @@ CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.85
+CONTINUOUS_HSP_SPEED_REPLACEMENT_SPEED_DELTA = 3.0
 CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS = 0.28
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
@@ -2233,8 +2234,32 @@ class MotionController:
                 return str(value)
         return "hsp_streaming_not_supported"
 
+    def _continuous_replacement_kind(
+        self,
+        *,
+        preserve_replacement_phase: bool,
+        replacement_phase_state: Optional[ContinuousPhaseState],
+        target: MotionTarget,
+    ) -> str:
+        if not preserve_replacement_phase:
+            return "intent"
+
+        previous_target = getattr(replacement_phase_state, "target", None)
+        if isinstance(previous_target, MotionTarget):
+            try:
+                previous = previous_target.rounded()
+                next_target = target.rounded()
+                if (
+                    abs(previous.speed - next_target.speed)
+                    > CONTINUOUS_HSP_SPEED_REPLACEMENT_SPEED_DELTA
+                ):
+                    return "speed"
+            except Exception:
+                pass
+        return "drift"
+
     def _continuous_replacement_lead_seconds(self, *, replacement_kind: str = "drift") -> float:
-        is_intent = str(replacement_kind or "").lower() == "intent"
+        is_intent = str(replacement_kind or "").lower() in {"intent", "speed"}
         minimum_lead = (
             CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS
             if is_intent
@@ -2639,7 +2664,11 @@ class MotionController:
 
         base_interval = self._continuous_sample_interval()
         phase_offset_seconds = max(0.0, float(phase_offset_seconds or 0.0))
-        replacement_kind = "drift" if preserve_replacement_phase else "intent"
+        replacement_kind = self._continuous_replacement_kind(
+            preserve_replacement_phase=preserve_replacement_phase,
+            replacement_phase_state=replacement_phase_state,
+            target=target,
+        )
         replacement_lead_seconds = (
             self._continuous_replacement_lead_seconds(replacement_kind=replacement_kind)
             if replacing_active_stream
