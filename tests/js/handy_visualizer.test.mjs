@@ -1,6 +1,6 @@
 // Behavioral coverage for the sidebar Handy visualizer. The cylinder range
-// band should reflect the active travel window while the purple horizontal
-// slider line tracks the active backend's commanded motion output.
+// The cylinder band is fixed device artwork while the purple horizontal
+// slider line tracks the active backend's commanded or device-reported output.
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -194,6 +194,76 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-position').style.top, '15%');
 
         Date.now = () => 10_050;
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '30%');
+    });
+
+    it('prefers fresh HSP current_point for live line position', () => {
+        Date.now = () => 10_050;
+        const payload = continuousPayload({
+            received_at: 10,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hamp_started: false,
+                hsp_streaming: true,
+                hsp_state_observed_at: 10,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 1000,
+                    current_point: 72,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 9990, hsp_point_time_ms: 1000, output_depth: 15, continuous: true, continuous_schema: 'hsp'},
+                {t: 9991, hsp_point_time_ms: 1100, output_depth: 45, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
+        updateMotionObservability(payload);
+
+        assert.equal(getStubElement('handy-cylinder-position').style.top, '72%');
+        assert.equal(getStubElement('handy-cylinder-range').style.top, '8%');
+        assert.equal(getStubElement('handy-cylinder-range').style.height, '84%');
+    });
+
+    it('falls back to HSP trace timing when current_point is not a valid position', () => {
+        Date.now = () => 10_050;
+        const payload = continuousPayload({
+            received_at: 10,
+            diagnostics: {
+                relative_speed: 50,
+                physical_speed: 60,
+                depth: 50,
+                physical_depth: 50,
+                range: 60,
+                calibrated_range: {min: 0, max: 100},
+                full_travel_mm: 110,
+                hamp_started: false,
+                hsp_streaming: true,
+                hsp_state_observed_at: 10,
+                hsp_state_age_ms: 0,
+                hsp_state: {
+                    play_state: 'playing',
+                    current_time_ms: 1000,
+                    current_point: 420,
+                    playback_rate: 1,
+                },
+            },
+            trace: [
+                {t: 9990, hsp_point_time_ms: 1000, output_depth: 15, continuous: true, continuous_schema: 'hsp'},
+                {t: 9991, hsp_point_time_ms: 1100, output_depth: 45, continuous: true, continuous_schema: 'hsp'},
+            ],
+        });
+
         updateMotionObservability(payload);
 
         assert.equal(getStubElement('handy-cylinder-position').style.top, '30%');
@@ -403,7 +473,7 @@ describe('Handy visualizer tracking', () => {
         assert.equal(getStubElement('handy-cylinder-position').style.top, '80%');
     });
 
-    it('tracks the authored range during finite position playback', () => {
+    it('keeps the fixed device track during finite position playback', () => {
         Date.now = () => 3_000_000;
 
         const payload = {
@@ -427,19 +497,19 @@ describe('Handy visualizer tracking', () => {
         updateMotionObservability(payload);
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '20%');
-        assert.equal(range.style.height, '50%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
         assert.equal(getStubElement('handy-cylinder-position').style.top, '20%');
 
         Date.now = () => 3_001_000;
         updateMotionObservability(payload);
 
-        assert.equal(range.style.top, '20%');
-        assert.equal(range.style.height, '50%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
         assert.equal(getStubElement('handy-cylinder-position').style.top, '70%');
     });
 
-    it('maps HAMP legacy motion to a phase estimate inside the active stroke zone', () => {
+    it('keeps the fixed device track while HAMP estimates motion inside the active stroke zone', () => {
         Date.now = () => 4_000_500;
 
         updateMotionObservability({
@@ -461,8 +531,8 @@ describe('Handy visualizer tracking', () => {
         });
 
         const range = getStubElement('handy-cylinder-range');
-        assert.equal(range.style.top, '25%');
-        assert.equal(range.style.height, '50%');
+        assert.equal(range.style.top, '8%');
+        assert.equal(range.style.height, '84%');
         assert.notEqual(getStubElement('handy-cylinder-position').style.top, '50%');
     });
 

@@ -7,6 +7,20 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
+-------------------------------------------------------
+
+Branch: codex/fixed-visualizer-live-line
+
+- Restored the Handy visualizer's fixed cylinder artwork so the background
+  range band no longer resizes with active stroke windows or authored pattern
+  ranges.
+- Made the continuous HSP visualizer line prefer fresh firmware
+  `current_point` state when available, falling back to planned trace timing
+  when the live state is missing or outside the valid 0-100 position range.
+- Updated the known-problems note to distinguish the fixed device drawing from
+  the live position estimate that still needs real-device verification.
+
 2026-06-05 - PR #312 - UI And Motion Smoothness Polish
 ------------------------------------------------------
 
