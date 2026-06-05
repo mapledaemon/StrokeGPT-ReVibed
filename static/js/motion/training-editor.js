@@ -692,7 +692,8 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
     if (canvas.width !== width || canvas.height !== height) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
 
-    const previewCtx = canvas.getContext('2d');
+    const previewCtx = canvas.getContext?.('2d');
+    if (!previewCtx) return;
     const pad = 34;
     previewCtx.clearRect(0, 0, width, height);
     previewCtx.fillStyle = '#101217';

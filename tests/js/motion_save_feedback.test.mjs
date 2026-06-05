@@ -90,6 +90,7 @@ describe('motion/audio save feedback', () => {
         resetStubElement('autospeak-max-seconds');
         resetStubElement('autospeak-motion-autonomy-select');
         resetStubElement('autospeak-motion-autonomy-status');
+        resetStubElement('save-motion-tab-btn');
         resetStubElement('active-mode-status');
         resetStubElement('active-mode-label');
         resetStubElement('edging-timer');
@@ -201,6 +202,95 @@ describe('motion/audio save feedback', () => {
         const status = getStubElement('status-text');
         assert.strictEqual(status.textContent, 'Mode timing range is invalid.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
+    });
+
+    it('saveMotionTabSettings saves each Motion section through existing routes', async () => {
+        const calls = [];
+        globalThis.fetch = async (endpoint, options = {}) => {
+            calls.push({endpoint, body: JSON.parse(options.body || '{}')});
+            if (endpoint === '/set_motion_backend') {
+                return jsonResponse(200, {status: 'success', motion_backend: 'continuous'});
+            }
+            if (endpoint === '/set_motion_style') {
+                return jsonResponse(200, {
+                    status: 'success',
+                    motion_style: 'balanced',
+                    motion_style_options: state.motionStyleOptions,
+                });
+            }
+            if (endpoint === '/set_motion_reverse_direction') {
+                return jsonResponse(200, {status: 'success', motion_reverse_direction: false});
+            }
+            if (endpoint === '/set_speed_limits') {
+                return jsonResponse(200, {status: 'success', min_speed: 20, max_speed: 80});
+            }
+            if (endpoint === '/set_mode_timings') {
+                return jsonResponse(200, {
+                    status: 'success',
+                    timings: {
+                        auto_min: 4,
+                        auto_max: 7,
+                        edging_min: 5,
+                        edging_max: 8,
+                        milking_min: 2,
+                        milking_max: 5,
+                    },
+                });
+            }
+            if (endpoint === '/set_llm_edge_permissions') {
+                return jsonResponse(200, {
+                    status: 'success',
+                    allow_llm_edge_in_freestyle: true,
+                    allow_llm_edge_in_chat: true,
+                    allow_llm_mode_actions_in_chat: true,
+                    autospeak_min_seconds: 12,
+                    autospeak_max_seconds: 45,
+                    autospeak_motion_autonomy: 'full',
+                });
+            }
+            if (endpoint === '/motion_feedback_options') {
+                return jsonResponse(200, {
+                    status: 'success',
+                    motion_feedback_auto_disable: false,
+                    motion_pattern_library_enabled_in_freestyle: true,
+                    motion_pattern_library_enabled_in_chat: true,
+                    motion_patterns: [],
+                });
+            }
+            throw new Error(`unexpected endpoint ${endpoint}`);
+        };
+
+        getStubElement('motion-backend-select').value = 'continuous';
+        getStubElement('motion-style-select').value = 'balanced';
+        getStubElement('motion-direction-normal').checked = true;
+        getStubElement('motion-direction-reverse').checked = false;
+        getStubElement('motion-speed-min-slider').value = '20';
+        getStubElement('motion-speed-max-slider').value = '80';
+        getStubElement('auto-min-time').value = '4';
+        getStubElement('auto-max-time').value = '7';
+        getStubElement('edging-min-time').value = '5';
+        getStubElement('edging-max-time').value = '8';
+        getStubElement('milking-min-time').value = '2';
+        getStubElement('milking-max-time').value = '5';
+        getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
+        getStubElement('allow-llm-edge-chat-checkbox').checked = true;
+        getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
+        getStubElement('motion-pattern-library-freestyle-checkbox').checked = true;
+        getStubElement('motion-pattern-library-chat-checkbox').checked = true;
+
+        getStubElement('save-motion-tab-btn').click();
+        await flushAsyncHandlers();
+
+        assert.deepStrictEqual(calls.map(call => call.endpoint), [
+            '/set_motion_backend',
+            '/set_motion_style',
+            '/set_motion_reverse_direction',
+            '/set_speed_limits',
+            '/set_mode_timings',
+            '/set_llm_edge_permissions',
+            '/motion_feedback_options',
+        ]);
+        assert.strictEqual(getStubElement('status-text').textContent, 'Motion settings saved.');
     });
 
     it('setMotionPatternEnabled surfaces the backend message on pattern status', async () => {
