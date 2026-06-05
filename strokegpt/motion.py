@@ -51,6 +51,7 @@ CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
+CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON = 0.2
 CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS = {"area_focus", "milk"}
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
@@ -2897,7 +2898,6 @@ class MotionController:
             )
             semantic_depth = _clamp(float(sample.target.depth))
             output_depth = self._output_depth(semantic_depth)
-            output_depth_int = int(round(_clamp(float(output_depth))))
             duplicate_coalesce_enabled = (
                 str(plan_name or "").strip().lower()
                 in CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS
@@ -2906,7 +2906,9 @@ class MotionController:
                 duplicate_coalesce_enabled
                 and previous_stream_point is not None
                 and not bool(previous_stream_point.get("hsp_replacement_bridge"))
-                and int(round(float(previous_stream_point["x"]))) == output_depth_int
+                and not authored_point
+                and abs(float(previous_stream_point["x"]) - float(output_depth))
+                < CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON
                 and (
                     point_stream_seconds
                     - (float(previous_stream_point["t"]) / 1000.0)

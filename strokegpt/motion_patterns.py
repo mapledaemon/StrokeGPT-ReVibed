@@ -680,10 +680,10 @@ def _sample_action_position(
     velocity at a boundary, but not the commanded position itself.
 
     Catmull-Rom can overshoot by ~12.5% of a segment range when control
-    points are extreme; the returned value is clamped to [0, 100]. The
-    clamp can flatten a brief overshoot at the very top/bottom of a
-    stroke, but never adds discontinuity, and is preferable to the
-    cosine sampler's per-cycle step.
+    points are extreme. The returned value is first bounded to the current
+    segment's endpoints, then clamped to [0, 100]. That preserves the smooth
+    cyclic curve without letting a brief overshoot flatten against the hard
+    top/bottom safety rails.
     """
     if not actions:
         return 50.0
@@ -724,13 +724,16 @@ def _sample_action_position(
     p0_idx = (p1_idx - 1) % n
     p3_idx = (p2_idx + 1) % n
 
-    return _clamp(_catmull_rom(
+    sample = _catmull_rom(
         actions[p0_idx].pos,
         actions[p1_idx].pos,
         actions[p2_idx].pos,
         actions[p3_idx].pos,
         amount,
-    ))
+    )
+    segment_min = min(actions[p1_idx].pos, actions[p2_idx].pos)
+    segment_max = max(actions[p1_idx].pos, actions[p2_idx].pos)
+    return _clamp(min(segment_max, max(segment_min, sample)))
 
 
 def _continuous_normalized_range(

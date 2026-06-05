@@ -250,6 +250,16 @@ function profileMenuContains(target) {
     return false;
 }
 
+export function syncSidebarToggleButton(isCollapsed = D.body.classList.contains('sidebar-collapsed')) {
+    if (!el.toggleSidebarBtn) return;
+    const collapsed = Boolean(isCollapsed);
+    const label = collapsed ? 'Expand settings panel' : 'Collapse settings panel';
+    el.toggleSidebarBtn.textContent = collapsed ? '\u00ab' : '\u00bb';
+    el.toggleSidebarBtn.title = label;
+    el.toggleSidebarBtn.setAttribute('aria-label', label);
+    el.toggleSidebarBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
 export function openSettings(tabName = 'voice') {
     closeProfileMenu();
     setSettingsTab(tabName);
@@ -1268,6 +1278,7 @@ export function initSettingsControls({addChatMessage}) {
     el.toggleSidebarBtn.addEventListener('click', () => {
         const isCollapsed = D.body.classList.toggle('sidebar-collapsed');
         localStorage.setItem('sidebar_collapsed', isCollapsed);
+        syncSidebarToggleButton(isCollapsed);
         setTimeout(() => window.dispatchEvent(new Event('resize')), 350);
     });
     el.closeSettingsBtn.addEventListener('click', () => el.settingsDialog.classList.remove('open'));

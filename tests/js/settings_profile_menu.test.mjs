@@ -6,11 +6,23 @@ import { describe, it, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { getStubElement } from './_harness.mjs';
-import { initSettingsControls, openSettings } from '../../static/js/settings.js';
+import { D } from '../../static/js/context.js';
+import { initSettingsControls, openSettings, syncSidebarToggleButton } from '../../static/js/settings.js';
 
 
 describe('settings profile menu', () => {
+    let sidebarPreference = null;
+
     before(() => {
+        globalThis.localStorage = {
+            setItem(key, value) {
+                if (key === 'sidebar_collapsed') sidebarPreference = String(value);
+            },
+            getItem(key) {
+                return key === 'sidebar_collapsed' ? sidebarPreference : null;
+            },
+        };
+        globalThis.window.dispatchEvent = () => true;
         initSettingsControls({ addChatMessage: () => {} });
     });
 
@@ -23,6 +35,9 @@ describe('settings profile menu', () => {
         popover.hidden = true;
         settingsDialog.className = '';
         aboutDialog.className = '';
+        sidebarPreference = null;
+        D.body.classList.remove('sidebar-collapsed');
+        syncSidebarToggleButton(false);
     });
 
     it('toggles the profile menu from the top-bar image button', () => {
@@ -75,5 +90,28 @@ describe('settings profile menu', () => {
         closeAboutButton.click();
 
         assert.strictEqual(aboutDialog.classList.contains('open'), false);
+    });
+
+    it('keeps the sidebar chevron and expanded state aligned with collapse state', () => {
+        const button = getStubElement('toggle-sidebar-btn');
+
+        assert.strictEqual(button.textContent, '\u00bb');
+        assert.strictEqual(button.getAttribute('aria-expanded'), 'true');
+        assert.strictEqual(button.getAttribute('aria-label'), 'Collapse settings panel');
+
+        button.click();
+
+        assert.strictEqual(D.body.classList.contains('sidebar-collapsed'), true);
+        assert.strictEqual(sidebarPreference, 'true');
+        assert.strictEqual(button.textContent, '\u00ab');
+        assert.strictEqual(button.getAttribute('aria-expanded'), 'false');
+        assert.strictEqual(button.getAttribute('aria-label'), 'Expand settings panel');
+
+        button.click();
+
+        assert.strictEqual(D.body.classList.contains('sidebar-collapsed'), false);
+        assert.strictEqual(sidebarPreference, 'false');
+        assert.strictEqual(button.textContent, '\u00bb');
+        assert.strictEqual(button.getAttribute('aria-expanded'), 'true');
     });
 });

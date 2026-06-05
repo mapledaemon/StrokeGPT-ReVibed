@@ -1005,6 +1005,38 @@ function setHandyCylinderPosition(depth) {
     }
 }
 
+function latestProgramRange(payload = {}, diagnostics = {}) {
+    const trace = Array.isArray(payload.trace) ? payload.trace : [];
+    for (let index = trace.length - 1; index >= 0; index -= 1) {
+        const range = trace[index]?.program_range;
+        if (!range || range.min === undefined || range.max === undefined) continue;
+        const physical = normalizedPercentRange(
+            physicalDepthPercent(range.min, diagnostics),
+            physicalDepthPercent(range.max, diagnostics),
+            0,
+            100,
+        );
+        return {...physical, width: Math.max(0, physical.max - physical.min)};
+    }
+    return null;
+}
+
+function cylinderActiveRange(payload = {}, diagnostics = {}) {
+    const programRange = latestProgramRange(payload, diagnostics);
+    if (programRange) return programRange;
+    return activeStrokeZone(diagnostics);
+}
+
+function setHandyCylinderRange(range) {
+    if (!el.handyCylinderRange) return;
+    const min = clampPercent(range?.min, 0);
+    const max = clampPercent(range?.max, 100);
+    const top = Math.min(min, max);
+    const height = Math.max(0, Math.max(min, max) - top);
+    el.handyCylinderRange.style.top = `${Math.round(top * 1000) / 1000}%`;
+    el.handyCylinderRange.style.height = `${Math.round(height * 1000) / 1000}%`;
+}
+
 function setCylinderDebug(details = {}) {
     lastCylinderDebug = {
         source: details.source || 'unknown',
@@ -1267,8 +1299,10 @@ function cylinderAnimatedDepth(payload = {}, nowSeconds = Date.now() / 1000) {
     return depth;
 }
 
-function updateHandyCylinder(payload = {}) {
-    setHandyCylinderPosition(cylinderAnimatedDepth(payload));
+function updateHandyCylinder(payload = {}, nowSeconds = Date.now() / 1000) {
+    const diagnostics = payload.diagnostics || {};
+    setHandyCylinderRange(cylinderActiveRange(payload, diagnostics));
+    setHandyCylinderPosition(cylinderAnimatedDepth(payload, nowSeconds));
 }
 
 export function updateMotionObservability(payload = {}) {
@@ -1286,7 +1320,7 @@ function startHandyCylinderAnimation() {
     state.motionCylinderAnimationStarted = true;
     const tick = () => {
         if (state.motionObservability) {
-            setHandyCylinderPosition(cylinderAnimatedDepth(state.motionObservability, Date.now() / 1000));
+            updateHandyCylinder(state.motionObservability, Date.now() / 1000);
         }
         window.requestAnimationFrame(tick);
     };
