@@ -50,6 +50,17 @@ Branch: codex/chat-inactive-motion-start
   inactive, and clarified the chat prompt's current state as stopped/active
   separately from the last Handy target.
 
+2026-06-04 - PR #306 - Cloud HSP Starvation Recovery
+----------------------------------------------------
+
+Branch: codex/cloud-hsp-starvation-recovery
+
+- Applied the local Bluetooth HSP starvation recovery behavior to Cloud REST
+  playback by enabling pause-on-starving and resuming only when cached HSP
+  state or SSE events report a starved/paused stream, while leaving healthy
+  Cloud REST refills as a single `hsp/add` without Bluetooth-style chunking or
+  unconditional resume pressure.
+
 2026-05-27 - PR #305 - Experimental Local Bluetooth HSP
 -------------------------------------------------------
 

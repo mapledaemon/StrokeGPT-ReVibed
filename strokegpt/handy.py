@@ -67,6 +67,7 @@ HSP_STATE_SSE_STATE_EVENTS = frozenset(
         "hsp_resumed_on_non_starving",
     )
 )
+HSP_STATE_STARVING_EVENTS = frozenset(("hsp_starving", "hsp_paused_on_starving"))
 HANDY_SSE_RECENT_EVENTS_LIMIT = 20
 HANDY_SSE_SECRET_KEYS = frozenset(
     (
@@ -1593,8 +1594,20 @@ class HandyController:
             return True
         return self._send_hsp_threshold(tail_point_threshold, force=force)
 
-    def _resume_hsp_after_bluetooth_add(self, add_result):
-        if not self._using_browser_bluetooth():
+    def _hsp_state_indicates_starved_or_paused(self):
+        snapshot = self._hsp_state_cache_snapshot()
+        state = snapshot["state"] if isinstance(snapshot, dict) else None
+        if isinstance(state, dict):
+            play_state = str(state.get("play_state") or "").strip().lower()
+            if "starv" in play_state or "pause" in play_state:
+                return True
+            if play_state:
+                return False
+        event_type = str(self._last_hsp_state_sse_event_type or "").strip().lower()
+        return event_type in HSP_STATE_STARVING_EVENTS
+
+    def _resume_hsp_after_add(self, add_result):
+        if not self._using_browser_bluetooth() and not self._hsp_state_indicates_starved_or_paused():
             return True
         if not self._send_v3_command("hsp/resume", {"pick_up": False}):
             return False
@@ -1640,7 +1653,7 @@ class HandyController:
             "start_time": max(0, int(round(start_time_ms))),
             "server_time": self._estimated_server_time_ms(allow_refresh=False),
             "playback_rate": 1.0,
-            "pause_on_starving": self._using_browser_bluetooth(),
+            "pause_on_starving": True,
             "loop": False,
         }
         return self._send_v3_command("hsp/play", body)
@@ -1690,7 +1703,7 @@ class HandyController:
             restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
             if restarted is False:
                 return False
-            if restarted is not True and not self._resume_hsp_after_bluetooth_add(add_result):
+            if restarted is not True and not self._resume_hsp_after_add(add_result):
                 return False
             if add_result is not None and restarted is not True:
                 self._last_command_result = add_result
@@ -1729,7 +1742,7 @@ class HandyController:
         restarted = self._restart_hsp_if_clock_is_stale(stream_points)
         if restarted is False:
             return False
-        if restarted is not True and not self._resume_hsp_after_bluetooth_add(add_result):
+        if restarted is not True and not self._resume_hsp_after_add(add_result):
             return False
         if add_result is not None and restarted is not True:
             self._last_command_result = add_result
