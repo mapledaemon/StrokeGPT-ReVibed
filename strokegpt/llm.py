@@ -403,13 +403,13 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
 
         slow_speed = _speed_in_range(speed_min, speed_max, 0.20)
         steady_speed = _speed_in_range(speed_min, speed_max, 0.46)
-        moderate_speed = _speed_in_range(speed_min, speed_max, 0.55)
-        fast_speed = _speed_in_range(speed_min, speed_max, 0.74)
+        moderate_speed = _speed_in_range(speed_min, speed_max, 0.62)
+        fast_speed = _speed_in_range(speed_min, speed_max, 0.88)
         max_word_speed = speed_max
         slow_range_high = _speed_in_range(speed_min, speed_max, 0.32)
-        fast_range_low = _speed_in_range(speed_min, speed_max, 0.62)
-        fast_range_high = _speed_in_range(speed_min, speed_max, 0.84)
-        max_range_low = _speed_in_range(speed_min, speed_max, 0.88)
+        fast_range_low = _speed_in_range(speed_min, speed_max, 0.74)
+        fast_range_high = _speed_in_range(speed_min, speed_max, 0.96)
+        max_range_low = _speed_in_range(speed_min, speed_max, 0.94)
         mode_actions_enabled = bool(
             context.get("mode_actions_enabled")
             or context.get("handsfree_mode_actions_enabled")

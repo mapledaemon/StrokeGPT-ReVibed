@@ -7,6 +7,18 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-05 - PR #309 - Area-Focus Tempo Mapping
+------------------------------------------------
+
+Branch: codex/area-focus-tempo-floor
+
+- Fixed generated area-focus continuous motion so mid-range speed changes
+  affect HSP cycle timing instead of being flattened by the generic
+  turn-smoothing floor, improving LLM chat and Freestyle flow speed variation.
+- Raised the LLM prompt's fast-motion examples closer to the configured speed
+  ceiling so "fast" and "quickly" requests do not undershoot before they reach
+  the motion planner.
+
 2026-06-04 - PR #308 - Continuous Same-Pattern Speed Updates
 -------------------------------------------------------------
 

@@ -662,7 +662,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn('"slowly focus on the tip"', prompt)
         self.assertIn('"slowly focus on the tip": `{"sp": 24, "dp": 34, "rng": 82', prompt)
         self.assertIn('"quickly use the shaft"', prompt)
-        self.assertIn('"quickly use the shaft": `{"sp": 62', prompt)
+        self.assertIn('"quickly use the shaft": `{"sp": 72', prompt)
         self.assertIn('"as fast as you can on the base"', prompt)
         self.assertIn('"as fast as you can on the base": `{"sp": 80, "dp": 66, "rng": 82', prompt)
         self.assertIn("touch, pace, pressure", prompt)

@@ -2655,6 +2655,24 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_hsp_area_focus_mid_speed_changes_affect_effective_cycle(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        slow = MotionTarget(30, 50, 82, "freestyle flow")
+        mid = MotionTarget(60, 50, 82, "freestyle flow")
+        fast = MotionTarget(70, 50, 82, "freestyle flow")
+        slow_plan = controller._hsp_area_focus_plan(slow)
+        mid_plan = controller._hsp_area_focus_plan(mid)
+        fast_plan = controller._hsp_area_focus_plan(fast)
+
+        slow_sample = sample_continuous_motion(slow_plan, slow, 0.0)
+        mid_sample = sample_continuous_motion(mid_plan, mid, 0.0)
+        fast_sample = sample_continuous_motion(fast_plan, fast, 0.0)
+
+        self.assertGreater(slow_sample.effective_duration_seconds, mid_sample.effective_duration_seconds)
+        self.assertGreater(mid_sample.effective_duration_seconds, fast_sample.effective_duration_seconds)
+        self.assertGreater(slow_sample.effective_duration_seconds, fast_sample.effective_duration_seconds)
+        self.assertLess(fast_sample.effective_duration_seconds, 0.6)
+
     def test_generated_area_focus_trace_includes_supplied_mode_metadata(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)

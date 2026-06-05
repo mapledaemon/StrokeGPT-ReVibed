@@ -62,6 +62,7 @@ class FrameStyle:
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
     duration_scale: float = 1.0
+    turn_ease_cycle_scale: float = 1.0
     depth_jitter: float = 0.0
     range_jitter: float = 0.0
 
@@ -1044,8 +1045,13 @@ def sample_continuous_motion(
     target = target.clamped()
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
     tempo_scale = _continuous_intent_tempo_scale(target.speed)
+    turn_ease_scale = _clamp(
+        float(getattr(plan.style, "turn_ease_cycle_scale", 1.0) or 1.0),
+        0.25,
+        2.0,
+    )
     effective_duration_seconds = max(
-        _turn_ease_min_cycle_seconds(plan.actions, target.speed),
+        _turn_ease_min_cycle_seconds(plan.actions, target.speed) * turn_ease_scale,
         duration_seconds / tempo_scale,
     )
     raw_phase = (elapsed / effective_duration_seconds) % 1.0
