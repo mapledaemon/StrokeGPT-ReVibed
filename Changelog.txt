@@ -7,6 +7,16 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-04 - PR #308 - Continuous Same-Pattern Speed Updates
+-------------------------------------------------------------
+
+Branch: codex/continuous-same-pattern-speed
+
+- Fixed continuous HSP replacements so meaningful speed changes on the same
+  pattern are prioritized as speed-intent updates while still preserving phase,
+  preventing the motion log from showing large speed changes that remain
+  physically delayed behind the old HSP cadence.
+
 2026-06-04 - PR #307 - Inactive Chat Motion Starts
 ---------------------------------------------------
 
