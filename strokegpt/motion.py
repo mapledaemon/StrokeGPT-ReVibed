@@ -72,6 +72,10 @@ CONTINUOUS_HSP_STARVING_EVENT_TYPES = {"hsp_starving", "hsp_paused_on_starving"}
 CONTINUOUS_DUPLICATE_TARGET_SPEED_EPSILON = 1.0
 CONTINUOUS_DUPLICATE_TARGET_DEPTH_EPSILON = 1.0
 CONTINUOUS_DUPLICATE_TARGET_RANGE_EPSILON = 1.0
+CONTINUOUS_HSP_AREA_FOCUS_MORPH_HOLD_SLOPE_PER_SECOND = 20.0
+CONTINUOUS_HSP_AREA_FOCUS_MORPH_MAX_POINT_DELTA = 16.0
+CONTINUOUS_HSP_AREA_FOCUS_MORPH_SCORE_SECONDS = 1.25
+CONTINUOUS_HSP_AREA_FOCUS_HANDOFF_MAX_DELAY_SECONDS = 1.2
 CONTINUOUS_MORPH_SECONDS = 0.95
 CONTINUOUS_MIN_MORPH_SECONDS = 0.45
 CONTINUOUS_MAX_MORPH_SECONDS = 1.8
@@ -1189,23 +1193,28 @@ class MotionController:
             self.apply_target(target, source=source)
 
     def _should_use_live_stroke_for_generated_target(self, target: MotionTarget) -> bool:
-        if self._supports_continuous_streaming():
-            return False
         program = target.motion_program
         if not isinstance(program, dict):
             return False
+        if bool(program.get("generated_area_focus")) and self._is_frame_playback_active():
+            return True
         return (
             _is_anchor_loop_program(program)
             and not bool(program.get("generated_area_focus"))
-            and self._anchor_program_local_focus_zone(target) is None
         )
 
     def _should_use_hsp_area_focus_for_generated_target(self, target: MotionTarget) -> bool:
         if not self._supports_continuous_streaming():
             return False
         program = target.motion_program
+        if (
+            isinstance(program, dict)
+            and bool(program.get("generated_area_focus"))
+            and self._is_frame_playback_active()
+        ):
+            return False
         if _is_anchor_loop_program(program):
-            return True
+            return bool(program.get("generated_area_focus"))
         if self._pattern_from_label(target.label):
             return False
         if program is None:
@@ -1260,6 +1269,8 @@ class MotionController:
     def _localized_area_focus_range(self, target: MotionTarget, zone: str) -> float:
         requested_range = float(target.stroke_range)
         if zone in {"tip", "base"}:
+            if requested_range <= 36.0:
+                return requested_range
             return min(requested_range, max(22.0, min(36.0, requested_range * 0.42)))
         if zone == "upper":
             return min(requested_range, max(26.0, min(42.0, requested_range * 0.48)))
@@ -1372,6 +1383,14 @@ class MotionController:
         source: str,
         trace_metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
+        requested_target = target.clamped()
+        program = requested_target.motion_program
+        generated_area_focus = isinstance(program, dict) and bool(program.get("generated_area_focus"))
+        focus_zone = None
+        if generated_area_focus:
+            target, focus_zone = self._area_focus_transport_target(requested_target)
+        else:
+            target = requested_target
         target = target.clamped()
         if target.speed <= 0:
             self.stop()
@@ -1387,11 +1406,29 @@ class MotionController:
             "continuous": True,
             "continuous_schema": "hamp_live_anchor",
             "continuous_hsp_bypassed": True,
-            "continuous_hsp_bypass_reason": "generated_anchor_loop_hsp_microstutter",
+            "continuous_hsp_bypass_reason": (
+                "generated_area_focus_hsp_morph_bypass"
+                if generated_area_focus
+                else "generated_anchor_loop_hsp_microstutter"
+            ),
             "morph_start_depth": round(float(start_target.depth), 1),
             "morph_start_range": round(float(start_target.stroke_range), 1),
             "morph_start_source": "live_stroke_current_target",
         }
+        if generated_area_focus:
+            extras.update(
+                {
+                    "continuous_plan_kind": "area_focus",
+                    "continuous_area_focus": True,
+                    "continuous_area_focus_localized": focus_zone is not None,
+                    "continuous_area_focus_zone": focus_zone or "",
+                    "continuous_area_focus_requested_depth": round(float(requested_target.depth), 3),
+                    "continuous_area_focus_requested_range": round(float(requested_target.stroke_range), 3),
+                    "continuous_area_focus_transport_depth": round(float(target.depth), 3),
+                    "continuous_area_focus_transport_range": round(float(target.stroke_range), 3),
+                    "requested_motion_program": "generated_area_focus",
+                }
+            )
         if trace_metadata:
             for key, value in trace_metadata.items():
                 extras.setdefault(str(key), value)
@@ -2863,6 +2900,135 @@ class MotionController:
                 best_seconds = seconds
         return best_seconds
 
+    def _continuous_area_focus_morph_phase_seconds(
+        self,
+        plan,
+        target: MotionTarget,
+        start_target: MotionTarget,
+        effective_duration_seconds: float,
+        sample_continuous_motion,
+        *,
+        plan_range: Optional[dict[str, Any]] = None,
+    ) -> float:
+        duration = max(0.1, float(effective_duration_seconds or 0.1))
+        count = max(8, int(CONTINUOUS_TRANSITION_PHASE_CANDIDATES))
+        interval = max(
+            CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+            self._continuous_hsp_point_interval_seconds(plan),
+        )
+        max_score_seconds = max(interval * 3.0, CONTINUOUS_HSP_AREA_FOCUS_MORPH_SCORE_SECONDS)
+        hold_slope = max(0.0, CONTINUOUS_HSP_AREA_FOCUS_MORPH_HOLD_SLOPE_PER_SECOND)
+        max_delta = max(1.0, CONTINUOUS_HSP_AREA_FOCUS_MORPH_MAX_POINT_DELTA)
+        best_seconds = 0.0
+        best_score = float("inf")
+
+        for index in range(count):
+            seconds = (duration * index) / count
+            initial_sample = self._sample_continuous_motion(
+                plan,
+                target,
+                seconds,
+                sample_continuous_motion,
+            )
+            base_morph_seconds = self._continuous_morph_seconds(
+                start_target,
+                initial_sample.target,
+            )
+            speed_cap_morph_seconds = self._continuous_speed_cap_morph_seconds(
+                start_target,
+                initial_sample.target,
+                plan_range=plan_range,
+            )
+            morph_seconds = max(base_morph_seconds, speed_cap_morph_seconds)
+            score_window = min(max(morph_seconds, CONTINUOUS_MIN_MORPH_SECONDS), max_score_seconds)
+            steps = max(4, int(math.ceil(score_window / interval)) + 2)
+            previous_depth = float(start_target.depth)
+            hold_penalty = 0.0
+            jump_penalty = 0.0
+            for step in range(1, steps + 1):
+                elapsed = step * interval
+                sample = self._sample_continuous_motion(
+                    plan,
+                    target,
+                    seconds + elapsed,
+                    sample_continuous_motion,
+                )
+                depth = float(sample.target.depth)
+                if elapsed < morph_seconds:
+                    amount = self._continuous_morph_amount(elapsed / morph_seconds)
+                    depth = _lerp(float(start_target.depth), depth, amount)
+                delta = abs(depth - previous_depth)
+                slope = delta / max(0.001, interval)
+                if slope < hold_slope:
+                    hold_penalty += (hold_slope - slope) ** 2
+                if delta > max_delta:
+                    jump_penalty += (delta - max_delta) ** 2
+                previous_depth = depth
+
+            closeness_penalty = (
+                (float(initial_sample.target.depth) - float(start_target.depth)) ** 2 * 0.001
+                + (float(initial_sample.target.stroke_range) - float(start_target.stroke_range)) ** 2 * 0.001
+            )
+            score = hold_penalty * 10.0 + jump_penalty * 4.0 + closeness_penalty
+            if score < best_score:
+                best_score = score
+                best_seconds = seconds
+        return best_seconds
+
+    def _continuous_area_focus_handoff_stream_seconds(
+        self,
+        minimum_stream_seconds: float,
+        replacement_phase_state: Optional[ContinuousPhaseState],
+        target: MotionTarget,
+        sample_continuous_motion,
+        interval_seconds: float,
+    ) -> tuple[float, str]:
+        if replacement_phase_state is None:
+            return minimum_stream_seconds, ""
+        interval = max(CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS, float(interval_seconds or 0.0))
+        max_delay = max(0.0, CONTINUOUS_HSP_AREA_FOCUS_HANDOFF_MAX_DELAY_SECONDS)
+        candidates = max(1, int(math.ceil(max_delay / interval)))
+        best_seconds = minimum_stream_seconds
+        best_score = float("inf")
+        best_reason = "area_focus_handoff_best_effort"
+        hold_slope = max(0.0, CONTINUOUS_HSP_AREA_FOCUS_MORPH_HOLD_SLOPE_PER_SECOND)
+
+        for index in range(candidates + 1):
+            candidate_seconds = minimum_stream_seconds + (index * interval)
+            previous = self._estimated_continuous_target_at_stream_time(
+                replacement_phase_state,
+                max(0.0, candidate_seconds - interval),
+                sample_continuous_motion,
+            )
+            current = self._estimated_continuous_target_at_stream_time(
+                replacement_phase_state,
+                candidate_seconds,
+                sample_continuous_motion,
+            )
+            if previous is None or current is None:
+                continue
+            desired_delta = float(target.depth) - float(current.depth)
+            old_delta = float(current.depth) - float(previous.depth)
+            if abs(desired_delta) < 2.0:
+                return candidate_seconds, "area_focus_handoff_already_near_target"
+            old_slope = abs(old_delta) / max(0.001, interval)
+            opposing_direction = old_delta * desired_delta < 0.0
+            hold_penalty = max(0.0, hold_slope - old_slope) ** 2
+            direction_penalty = 10000.0 if opposing_direction else 0.0
+            delay_penalty = index * 0.05
+            score = direction_penalty + hold_penalty + delay_penalty
+            if score < best_score:
+                best_score = score
+                best_seconds = candidate_seconds
+                best_reason = (
+                    "area_focus_handoff_aligned"
+                    if not opposing_direction and old_slope >= hold_slope
+                    else "area_focus_handoff_best_effort"
+                )
+            if not opposing_direction and old_slope >= hold_slope:
+                return candidate_seconds, "area_focus_handoff_aligned"
+        return best_seconds, best_reason
+
     def _run_continuous_stream_plan(
         self,
         plan,
@@ -2942,6 +3108,25 @@ class MotionController:
         # from the active plan, so clipping the lead to the remaining old
         # buffer reintroduces stale, jittery morph starts during long sessions.
         play_start_stream_seconds = hsp_clock_start_seconds + replacement_lead_seconds if replacing_active_stream else 0.0
+        handoff_delay_seconds = 0.0
+        handoff_reason = ""
+        if (
+            replacing_active_stream
+            and not preserve_replacement_phase
+            and self._continuous_plan_is_area_focus(plan)
+            and replacement_phase_state is not None
+        ):
+            adjusted_stream_seconds, handoff_reason = self._continuous_area_focus_handoff_stream_seconds(
+                play_start_stream_seconds,
+                replacement_phase_state,
+                target,
+                sample_continuous_motion,
+                self._continuous_hsp_point_interval_seconds(plan),
+            )
+            adjusted_stream_seconds = max(play_start_stream_seconds, adjusted_stream_seconds)
+            handoff_delay_seconds = adjusted_stream_seconds - play_start_stream_seconds
+            play_start_stream_seconds = adjusted_stream_seconds
+            replacement_lead_seconds = play_start_stream_seconds - hsp_clock_start_seconds
         morph_start_target = start_target.clamped()
         morph_start_source = "apply_current_target"
         if replacing_active_stream:
@@ -2953,14 +3138,26 @@ class MotionController:
             if predicted_start is not None:
                 morph_start_target = predicted_start
                 morph_start_source = "predicted_active_stream"
+        plan_name = str(getattr(plan, "name", "") or "continuous")
+        program_range = continuous_plan_depth_range(plan, target)
         if replacing_active_stream and not preserve_replacement_phase:
-            phase_offset_seconds = self._continuous_transition_phase_seconds(
-                plan,
-                target,
-                morph_start_target,
-                effective_duration_seconds,
-                sample_continuous_motion,
-            )
+            if self._continuous_plan_is_area_focus(plan):
+                phase_offset_seconds = self._continuous_area_focus_morph_phase_seconds(
+                    plan,
+                    target,
+                    morph_start_target,
+                    effective_duration_seconds,
+                    sample_continuous_motion,
+                    plan_range=program_range,
+                )
+            else:
+                phase_offset_seconds = self._continuous_transition_phase_seconds(
+                    plan,
+                    target,
+                    morph_start_target,
+                    effective_duration_seconds,
+                    sample_continuous_motion,
+                )
         if preserved_play_start_phase_seconds is not None:
             logical_start_seconds = preserved_play_start_phase_seconds
         else:
@@ -2986,8 +3183,6 @@ class MotionController:
                 finite_stop_stream_seconds = play_start_stream_seconds + (
                     effective_duration_seconds * finite_cycles
                 )
-        plan_name = str(getattr(plan, "name", "") or "continuous")
-        program_range = continuous_plan_depth_range(plan, target)
         base_morph_seconds = self._continuous_morph_seconds(morph_start_target, initial_sample.target)
         speed_cap_morph_seconds = (
             self._continuous_speed_cap_morph_seconds(
@@ -2999,7 +3194,9 @@ class MotionController:
             else 0.0
         )
         morph_seconds = max(base_morph_seconds, speed_cap_morph_seconds)
-        freeze_phase_during_morph = speed_cap_morph_seconds > base_morph_seconds + 0.001
+        # HSP morphs may lengthen the spatial blend, but the timed pattern
+        # phase must keep moving; freezing phase feels like a complete stop.
+        freeze_phase_during_morph = False
         stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
@@ -3070,11 +3267,15 @@ class MotionController:
             bool(point.get("authored")) and abs(float(point["phase"]) - start_phase) <= phase_epsilon
             for point in hsp_phase_points
         )
+        min_start_phase_gap = CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS / effective_duration_seconds
         start_point_pending = True
         next_cycle_index = 0
         next_phase_index = 0
         for index, point in enumerate(hsp_phase_points):
-            if float(point["phase"]) > start_phase + phase_epsilon:
+            phase = float(point["phase"])
+            if phase > start_phase + phase_epsilon:
+                if not start_point_authored and phase - start_phase < min_start_phase_gap:
+                    continue
                 next_phase_index = index
                 break
         else:
@@ -3445,6 +3646,8 @@ class MotionController:
                     "hsp_selected_phase_ms": phase_offset_ms,
                     "hsp_play_start_ms": play_start_ms,
                     "hsp_replacement_lead_ms": round(replacement_lead_seconds * 1000.0, 1),
+                    "hsp_area_focus_handoff_delay_ms": round(handoff_delay_seconds * 1000.0, 1),
+                    "hsp_area_focus_handoff_reason": handoff_reason,
                     "hsp_replacing_active_stream": bool(replacing_active_stream),
                     "hsp_preserve_replacement_phase": bool(preserve_replacement_phase),
                     "hsp_replacement_kind": replacement_kind if replacing_active_stream else "start",
@@ -4283,6 +4486,11 @@ class MotionController:
                 trace_limit = None
             if trace_limit is not None and len(trace) > trace_limit:
                 trace = trace[-trace_limit:]
+        active_continuous_schema = ""
+        if trace:
+            last_trace = trace[-1]
+            if isinstance(last_trace, dict):
+                active_continuous_schema = str(last_trace.get("continuous_schema") or "")
         return {
             "backend": self.backend,
             "source": source,
@@ -4290,6 +4498,7 @@ class MotionController:
             "snapshot_time": time.time(),
             "last_command_time": last_command_time,
             "playback_active": playback_active,
+            "active_continuous_schema": active_continuous_schema,
             "diagnostics": handy_diagnostics,
             "trace": trace,
         }

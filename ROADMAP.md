@@ -703,6 +703,11 @@ commitment.
   existing ``motion_program``/chat/mood fields). Version the schema and keep
   the legacy free-form ``move`` shape parseable behind a settings flag so the
   switch is reversible.
+- Design a bounded "motion arrangement" contract for combining multiple styles
+  or focus regions into a repeating sequence. See
+  `docs/motion_control_modes.md` before implementing this: style variation
+  should compile through deterministic planner code with clear transition
+  rules, not through repeated low-level HSP morph replacements.
 - Verify on real hardware that the model produces meaningful curation choices
   and that the library is large enough that "the LLM keeps picking the same
   two scripts" does not become the dominant failure mode. If it does, the

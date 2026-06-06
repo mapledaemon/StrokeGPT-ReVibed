@@ -7,6 +7,32 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-06 - PR #317 - Area Focus Morph Continuity
+---------------------------------------------------
+
+- Kept area-focus HSP morph transitions cycling through pattern phase while
+  they spatially blend into the new target, avoiding the complete stop caused
+  by freezing phase during the morph safety window.
+- Restored explicit LLM anchor-loop programs and active generated regional
+  focus retargets to the live-stroke bypass that earlier real-device testing
+  found smoother than HSP morph replacements, while still allowing idle
+  generated area-focus starts to use HSP.
+- Localized active generated focus retargets before live-stroke handoff so
+  `tip`, `shaft`, and `base` requests do not leak the raw broad LLM target into
+  full-range HAMP motion after bypassing HSP morphs.
+- Made endpoint focus localization idempotent and compared generated
+  area-focus targets by their localized transport target, avoiding repeated
+  raw-versus-localized handoffs on later chat turns.
+- Taught chat motion keepalive that `hamp_live_anchor` is an active non-HSP
+  transport, so stale HSP diagnostics do not repeatedly restart the same
+  live-stroke focus motion.
+- Changed remaining HSP area-focus intent morphs to choose a handoff time and
+  replacement phase that avoid opposing-direction and near-hold segments during
+  the first morph window.
+- Added motion-control mode notes documenting the area-focus morph regression,
+  current generated-motion route policy, and future LLM arrangement-mode
+  constraints.
+
 2026-06-06 - PR #316 - HSP Replacement Playback Restart
 -------------------------------------------------------
 
