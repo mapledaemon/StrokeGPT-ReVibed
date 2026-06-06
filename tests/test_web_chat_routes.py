@@ -63,6 +63,72 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 36)
 
+    def test_llm_motion_apply_uses_current_semantic_target_at_apply_time(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import motion
+
+        current_before_llm = MotionTarget(30, 20, 40, "before llm")
+        current_at_apply = MotionTarget(30, 62, 40, "current at apply")
+
+        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current_at_apply), \
+                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+            target = web._apply_llm_response_move(
+                {"chat": "I'll adjust speed and range.", "move": {"sp": 45, "rng": 70}},
+                current_before_llm,
+                user_input="change the motion",
+            )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.depth, current_at_apply.depth)
+        self.assertEqual(target.speed, 45)
+        self.assertEqual(target.stroke_range, 70)
+        apply_generated_target.assert_called_once_with(target, source="llm")
+
+    def test_explicit_duplicate_llm_motion_refreshes_active_target(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import motion
+
+        current = MotionTarget(40, 50, 80, "active")
+
+        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
+                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+            target = web._apply_llm_response_move(
+                {"chat": "I'll keep moving there.", "move": {"sp": 40, "dp": 50, "rng": 80}},
+                current,
+                user_input="keep moving",
+            )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.speed, current.speed)
+        self.assertEqual(target.depth, current.depth)
+        self.assertEqual(target.stroke_range, current.stroke_range)
+        apply_generated_target.assert_called_once_with(target, source="llm")
+
+    def test_explicit_duplicate_llm_motion_does_not_trigger_repair_when_active(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import llm, motion
+
+        current = MotionTarget(40, 50, 80, "active")
+        response = {"chat": "I'll keep moving there.", "move": {"sp": 40, "dp": 50, "rng": 80}}
+
+        with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                mock.patch.object(llm, "repair_motion_response") as repair_motion_response:
+            repaired, was_repaired = web._repair_llm_motion_response_if_needed(
+                "keep moving",
+                response,
+                {},
+                current,
+            )
+
+        self.assertIs(repaired, response)
+        self.assertFalse(was_repaired)
+        repair_motion_response.assert_not_called()
+
     def test_disabled_chat_pattern_library_strips_llm_exact_pattern(self):
         from strokegpt.motion import MotionTarget
         from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings

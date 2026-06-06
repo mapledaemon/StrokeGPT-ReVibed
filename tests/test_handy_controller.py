@@ -1420,6 +1420,23 @@ class HandyControllerTests(unittest.TestCase):
 
         self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold"])
 
+    def test_cloud_append_continuous_stream_can_force_resume_when_late_risk(self):
+        handy = RecordingV3HandyController()
+        handy._update_hsp_state_cache({"play_state": "playing", "current_time_ms": 480}, source="command")
+
+        self.assertTrue(
+            handy.append_continuous_stream(
+                [{"t": 480, "x": 65, "intent_speed": 44, "range": 60}],
+                tail_point_stream_index=4,
+                tail_point_threshold=2,
+                force_resume=True,
+            )
+        )
+
+        self.assertEqual([path for path, _body in handy.v3_commands], ["hsp/add", "hsp/threshold", "hsp/resume"])
+        self.assertEqual(handy.v3_commands[-1][1], {"pick_up": False})
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
+
     def test_start_continuous_stream_keeps_playing_when_threshold_update_fails(self):
         handy = ThresholdFailingV3HandyController()
 
@@ -1493,7 +1510,8 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(paths.count("hsp/play"), 1)
         setup_bodies = [body for path, body in handy.v3_commands if path == "hsp/setup"]
         self.assertEqual(setup_bodies, [{"stream_id": 1}])
-        self.assertEqual(paths[-2:], ["hsp/add", "hsp/threshold"])
+        self.assertEqual(paths[-3:], ["hsp/add", "hsp/threshold", "hsp/resume"])
+        self.assertEqual(handy.v3_commands[-1][1], {"pick_up": False})
         replacement_adds = [body for path, body in handy.v3_commands if path == "hsp/add"]
         self.assertEqual(replacement_adds[-1]["flush"], True)
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
@@ -1527,6 +1545,18 @@ class HandyControllerTests(unittest.TestCase):
         body = handy.commands[-1][1]
         self.assertEqual(body["velocity"], 120)
 
+    def test_nudge_velocity_never_exceeds_current_max_speed(self):
+        handy = RecordingHandyController()
+        handy.update_settings(0, 2, 0, 100)
+
+        target = handy.nudge("up", 0, 100, 10.0)
+
+        self.assertEqual(target, 12.0)
+        self.assertEqual([path for path, _body in handy.commands], ["mode", "hdsp/xava"])
+        body = handy.commands[-1][1]
+        self.assertEqual(body["velocity"], 8)
+        self.assertEqual(body["position"], 12.0)
+
     def test_move_to_depth_stops_hamp_before_position_preview(self):
         handy = RecordingHandyController()
         handy.move(50, 50, 50)
@@ -1541,7 +1571,8 @@ class HandyControllerTests(unittest.TestCase):
     def test_depth_range_runs_low_high_low_once(self):
         handy = RecordingHandyController()
 
-        result = handy.test_depth_range(80, 20, velocity_mm_per_sec=1000, pause_seconds=0)
+        with mock.patch("strokegpt.handy.time.sleep"):
+            result = handy.test_depth_range(80, 20, velocity_mm_per_sec=1000, pause_seconds=0)
 
         self.assertEqual(result, {"min_depth": 20, "max_depth": 80})
         self.assertEqual(handy.commands[0], ("mode", {"mode": 2}))
@@ -1550,6 +1581,18 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(positions[0], handy.FULL_TRAVEL_MM * 0.2)
         self.assertEqual(positions[1], handy.FULL_TRAVEL_MM * 0.8)
         self.assertEqual(positions[2], handy.FULL_TRAVEL_MM * 0.2)
+        velocities = [body["velocity"] for path, body in handy.commands if path == "hdsp/xava"]
+        self.assertEqual(velocities, [320, 320, 320])
+
+    def test_depth_range_velocity_never_exceeds_current_max_speed(self):
+        handy = RecordingHandyController()
+        handy.update_settings(0, 10, 0, 100)
+
+        with mock.patch("strokegpt.handy.time.sleep"):
+            handy.test_depth_range(20, 80, velocity_mm_per_sec=1000, pause_seconds=0)
+
+        velocities = [body["velocity"] for path, body in handy.commands if path == "hdsp/xava"]
+        self.assertEqual(velocities, [40, 40, 40])
 
 
 if __name__ == "__main__":

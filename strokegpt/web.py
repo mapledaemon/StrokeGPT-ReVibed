@@ -1713,7 +1713,7 @@ def _target_has_motion_effect(current, target):
     )
 
 
-def _target_should_apply_motion(current, target):
+def _target_should_apply_motion(current, target, *, refresh_duplicate_active=False):
     if _target_has_motion_effect(current, target):
         return True
     if not target:
@@ -1723,7 +1723,10 @@ def _target_should_apply_motion(current, target):
             return False
     except (TypeError, ValueError):
         return False
-    return not _chat_motion_playback_active()
+    playback_active = _chat_motion_playback_active()
+    if refresh_duplicate_active and playback_active:
+        return True
+    return not playback_active
 
 
 def _user_requested_specific_focus(text):
@@ -1817,9 +1820,14 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
     target = _target_from_llm_response_move(response, current, user_input=user_input)
     if context.get("autospeak_event") and not _chat_claims_motion_change(response.get("chat")):
         return response, False
+    target_applies = _target_should_apply_motion(
+        current,
+        target,
+        refresh_duplicate_active=_chat_turn_requested_motion(user_input, response, context),
+    )
     needs_repair = (
         (_looks_like_motion_request(user_input) or _chat_claims_motion_change(response.get("chat")))
-        and not _target_should_apply_motion(current, target)
+        and not target_applies
     )
     if not needs_repair:
         return response, False
@@ -1836,8 +1844,14 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
 def _apply_llm_response_move(response, current, source="llm", user_input="", context=None):
     if _autospeak_chat_only_motion_context(context):
         return None
-    target = _target_from_llm_response_move(response, current, user_input=user_input)
-    if not _target_should_apply_motion(current, target):
+    current_at_apply = _motion_semantic_target()
+    target = _target_from_llm_response_move(response, current_at_apply, user_input=user_input)
+    refresh_duplicate_active = _chat_turn_requested_motion(user_input, response, context)
+    if not _target_should_apply_motion(
+        current_at_apply,
+        target,
+        refresh_duplicate_active=refresh_duplicate_active,
+    ):
         return None
     motion.apply_generated_target(target, source=source)
     return target

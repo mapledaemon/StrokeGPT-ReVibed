@@ -1293,6 +1293,20 @@ class HandyController:
     def max_absolute_velocity_for_relative_speed(self, speed):
         return min(self.max_absolute_user_speed, self.absolute_velocity_for_relative_speed(speed))
 
+    def _clamp_absolute_velocity(self, velocity, relative_speed=None):
+        if relative_speed is None:
+            max_velocity = self.max_absolute_user_speed
+        else:
+            max_velocity = self.max_absolute_velocity_for_relative_speed(relative_speed)
+        try:
+            requested_velocity = float(velocity)
+        except (TypeError, ValueError):
+            requested_velocity = max_velocity
+        if max_velocity <= 0:
+            return 0
+        min_velocity = min(self.min_absolute_user_speed, max_velocity)
+        return int(round(max(min_velocity, min(max_velocity, requested_velocity))))
+
     def _velocity_to_v3_ratio(self, velocity):
         try:
             velocity = float(velocity)
@@ -1431,10 +1445,7 @@ class HandyController:
         if velocity is None:
             velocity = self.max_absolute_velocity_for_relative_speed(relative_speed_pct)
         else:
-            velocity = max(
-                self.min_absolute_user_speed,
-                min(self.max_absolute_velocity_for_relative_speed(relative_speed_pct), int(round(velocity))),
-            )
+            velocity = self._clamp_absolute_velocity(velocity, relative_speed_pct)
         velocity = int(round(velocity))
 
         if self.supports_api_v3_control():
@@ -1606,8 +1617,12 @@ class HandyController:
         event_type = str(self._last_hsp_state_sse_event_type or "").strip().lower()
         return event_type in HSP_STATE_STARVING_EVENTS
 
-    def _resume_hsp_after_add(self, add_result):
-        if not self._using_browser_bluetooth() and not self._hsp_state_indicates_starved_or_paused():
+    def _resume_hsp_after_add(self, add_result, *, force=False):
+        if (
+            not force
+            and not self._using_browser_bluetooth()
+            and not self._hsp_state_indicates_starved_or_paused()
+        ):
             return True
         if not self._send_v3_command("hsp/resume", {"pick_up": False}):
             return False
@@ -1703,7 +1718,7 @@ class HandyController:
             restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
             if restarted is False:
                 return False
-            if restarted is not True and not self._resume_hsp_after_add(add_result):
+            if restarted is not True and not self._resume_hsp_after_add(add_result, force=True):
                 return False
             if add_result is not None and restarted is not True:
                 self._last_command_result = add_result
@@ -1724,6 +1739,7 @@ class HandyController:
         *,
         tail_point_stream_index,
         tail_point_threshold=None,
+        force_resume=False,
     ):
         stream_points = self._stream_points_body(points)
         if not stream_points:
@@ -1742,7 +1758,7 @@ class HandyController:
         restarted = self._restart_hsp_if_clock_is_stale(stream_points)
         if restarted is False:
             return False
-        if restarted is not True and not self._resume_hsp_after_add(add_result):
+        if restarted is not True and not self._resume_hsp_after_add(add_result, force=force_resume):
             return False
         if add_result is not None and restarted is not True:
             self._last_command_result = add_result
@@ -2326,9 +2342,10 @@ class HandyController:
 
         if not self._ensure_hdsp():
             return current_pos_mm
+        velocity = self._clamp_absolute_velocity(JOG_VELOCITY_MM_PER_SEC)
         self._send_command(
             "hdsp/xava",
-            {"position": target_mm, "velocity": JOG_VELOCITY_MM_PER_SEC, "stopOnTarget": True},
+            {"position": target_mm, "velocity": velocity, "stopOnTarget": True},
         )
         return target_mm
 
@@ -2338,7 +2355,7 @@ class HandyController:
         low_pct, high_pct = sorted((min_depth_pct, max_depth_pct))
         low_mm = self.FULL_TRAVEL_MM * low_pct / 100.0
         high_mm = self.FULL_TRAVEL_MM * high_pct / 100.0
-        velocity = max(5.0, float(velocity_mm_per_sec))
+        velocity = self._clamp_absolute_velocity(velocity_mm_per_sec)
 
         if not self._ensure_hdsp():
             return {"min_depth": int(round(low_pct)), "max_depth": int(round(high_pct))}
@@ -2348,7 +2365,7 @@ class HandyController:
                 "hdsp/xava",
                 {"position": position, "velocity": velocity, "stopOnTarget": True},
             )
-            travel_seconds = abs(high_mm - low_mm) / velocity if position in (high_mm, low_mm) else 0
+            travel_seconds = abs(high_mm - low_mm) / max(1.0, velocity) if position in (high_mm, low_mm) else 0
             time.sleep(max(pause_seconds, travel_seconds + pause_seconds))
 
         return {"min_depth": int(round(low_pct)), "max_depth": int(round(high_pct))}

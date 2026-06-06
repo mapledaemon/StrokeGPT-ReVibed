@@ -34,6 +34,27 @@ Branch: codex/pattern-library-jitter-guardrails
 - Scheduled area-focus HSP replacements with a conservative, peak-latency-aware
   bridge lead so the old pattern keeps playing while a slow flushed replacement
   batch loads, avoiding stale first points and visible retarget pauses.
+- Kept LLM anchor-loop motion on smooth area-focus HSP when streaming is
+  available so follow-up area-focus commands can use bridged HSP replacements
+  instead of cold HAMP-to-HSP transport switches or exact anchor-plan jitter.
+- Refreshed the semantic motion target at final LLM apply time, let explicit
+  duplicate motion requests refresh active playback instead of clearing chat
+  keepalive, forced a resume after flushed active HSP replacements, and made
+  area-focus replacement bridge points sparser so the first batch retains
+  post-morph buffer instead of draining at the morph-to-normal boundary.
+- Increased generated area-focus HSP reserve by slightly widening point spacing
+  and target buffer length, so multi-second Cloud HSP commands leave enough
+  old-stream buffer for the next append/replacement instead of starving first.
+- Made routine HSP append scheduling use recent peak REST latency, and request a
+  one-shot resume only for late-risk Cloud appends, addressing regular pauses
+  caused by PR #301's shorter startup buffer plus PR #306's conditional resume
+  policy under variable Cloud command latency.
+- Kept chat keepalive duplicate targets from being skipped when cached HSP state
+  reports paused/starved/past-tail playback, and gave flushed morph replacement
+  batches an immediate bridge handoff point so Cloud timing estimates cannot
+  leave the firmware with only future points after a replacement flush.
+- Clamped manual nudge and depth-range test HDSP moves to the saved speed limit
+  so calibration/new-position helpers cannot exceed the user's configured cap.
 
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------
