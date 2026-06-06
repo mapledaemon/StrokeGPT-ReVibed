@@ -33,6 +33,9 @@ behavior, and route motion changes through the shared controller path.
   hardware paths and VRAM detection caveats.
 - `docs/motion_training_prompts.md`: archived staged prompts for the motion
   training workstream. Keep these pointing at `AGENTS.md`.
+- `docs/motion_control_modes.md`: notes on the area-focus morph regression,
+  current generated-motion routing policy, and future LLM motion-control mode
+  design constraints.
 
 ## Current Architecture
 
@@ -228,13 +231,15 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   visible in settings but hidden from the LLM prompt to avoid confusing smaller
   local models.
 - Motion backend selection is persisted as `motion_backend`. `continuous` is
-  the recommended app-motion default: fixed patterns and anchor programs are
-  phase-sampled as live position control until the next command or stop.
-  Plain generated targets that do not resolve to a fixed pattern or explicit
-  anchor program should use the HSP area-focus stroke path when HSP streaming
-  is available, so LLM/direct zone commands still apply velocity and
-  stroke-window changes as continuous motion without falling back to legacy
-  HAMP. If HSP is unavailable, HAMP remains the selectable legacy backend.
+  the recommended app-motion default: fixed patterns are phase-sampled as live
+  position control until the next command or stop. Explicit LLM anchor-loop /
+  bounce programs should stay on the live-stroke bypass because real-device
+  HSP anchor-loop/morph replacements have repeatedly felt micro-stepped or
+  stop-like. Plain generated targets that do not resolve to a fixed pattern or
+  explicit anchor program may start on the HSP area-focus stroke path when HSP
+  streaming is available, but active generated regional focus retargets should
+  use the live-stroke bypass rather than flushed HSP morph replacements. If HSP
+  is unavailable, HAMP remains the selectable legacy backend.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
   Motion Direction is a physical orientation setting, not a pattern phase
@@ -287,8 +292,13 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   target. HSP timed-point streams must preserve authored phase timing and
   point-to-point depth deltas; do not stretch HSP timestamps through a
   point-to-point velocity budget because that flattens fast segments into a
-  fixed-slope feel. Flexible Position `xpt.t` durations may still be stretched
-  when an authored timed move exceeds the configured Handy speed cap.
+  fixed-slope feel. Morph safety windows may lengthen the spatial blend, but
+  they must not freeze continuous HSP phase because that feels like a stop in
+  chat/focus-area playback. Remaining HSP area-focus intent morphs should
+  select a handoff time and replacement phase that avoid opposing-direction and
+  near-hold segments during the first morph window, not only the phase closest
+  to the current depth. Flexible Position `xpt.t` durations may still be
+  stretched when an authored timed move exceeds the configured Handy speed cap.
   Pattern swaps should not repeat HSP setup. Rebuffer the replacement plan
   through a flushed `/hsp/add` scheduled against the active HSP stream clock,
   update `/hsp/threshold`, and let healthy active firmware continue playback

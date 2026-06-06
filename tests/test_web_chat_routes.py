@@ -1013,6 +1013,93 @@ class WebChatRouteTests(WebTestCase):
                 app_state.chat_motion_keepalive_target = original_target
                 app_state.chat_motion_keepalive_last_attempt_at = original_attempt
 
+    def test_chat_motion_keepalive_skips_hsp_starving_for_hamp_live_anchor(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(
+            42,
+            82.78,
+            34.44,
+            "llm+base",
+            motion_program={"generated_area_focus": True},
+        )
+        snapshot = {
+            "playback_active": True,
+            "active_continuous_schema": "hamp_live_anchor",
+            "diagnostics": {
+                "hsp_state_sse_event_type": "hsp_starving",
+                "hsp_state": {"play_state": "paused_on_starving"},
+            },
+            "trace": [{"continuous_schema": "hamp_live_anchor"}],
+        }
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            self.assertFalse(web._chat_motion_hsp_state_inactive(snapshot))
+            with mock.patch.object(motion, "observability_snapshot", return_value=snapshot), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_playback_active())
+                self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_uses_trace_schema_for_hamp_live_anchor(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 82.78, 34.44, "llm+base")
+        snapshot = {
+            "playback_active": True,
+            "diagnostics": {
+                "hsp_state": {
+                    "play_state": "playing",
+                    "current_time_ms": 181000,
+                    "last_point_time_ms": 180000,
+                },
+            },
+            "trace": [{"continuous_schema": "hamp_live_anchor"}],
+        }
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            self.assertFalse(web._chat_motion_hsp_state_inactive(snapshot))
+            with mock.patch.object(motion, "observability_snapshot", return_value=snapshot), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
     def test_chat_motion_keepalive_restarts_when_hsp_clock_is_past_buffer(self):
         import strokegpt.web as web
         from strokegpt.motion import MotionTarget
@@ -2591,6 +2678,27 @@ class WebChatRouteTests(WebTestCase):
             82,
             "llm+middle",
             motion_program={"generated_area_focus": True},
+        )
+
+        self.assertFalse(_target_has_motion_effect(current, target))
+
+    def test_generated_area_focus_raw_target_matches_localized_current(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(
+            42,
+            82.78,
+            34.44,
+            "llm+base",
+            motion_program={"generated_area_focus": True},
+        )
+        target = MotionTarget(
+            42,
+            66,
+            82,
+            "llm+base",
+            motion_program={"generated_area_focus": True, "type": "anchor_loop"},
         )
 
         self.assertFalse(_target_has_motion_effect(current, target))

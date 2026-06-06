@@ -560,8 +560,29 @@ def _numeric_hsp_state_value(state, key):
         return None
 
 
+def _chat_motion_active_continuous_schema(snapshot):
+    if not isinstance(snapshot, dict):
+        return ""
+    schema = str(snapshot.get("active_continuous_schema") or "").strip().lower()
+    if schema:
+        return schema
+    trace = snapshot.get("trace")
+    if not isinstance(trace, list):
+        return ""
+    for point in reversed(trace):
+        if not isinstance(point, dict):
+            continue
+        schema = str(point.get("continuous_schema") or "").strip().lower()
+        if schema:
+            return schema
+    return ""
+
+
 def _chat_motion_hsp_state_inactive(snapshot):
     if not isinstance(snapshot, dict):
+        return False
+    active_schema = _chat_motion_active_continuous_schema(snapshot)
+    if bool(snapshot.get("playback_active")) and active_schema and not active_schema.startswith("hsp"):
         return False
     diagnostics = snapshot.get("diagnostics")
     if not isinstance(diagnostics, dict):
@@ -1699,6 +1720,18 @@ def _target_has_generated_area_focus_program(target):
     program = getattr(target, "motion_program", None)
     return isinstance(program, dict) and bool(program.get("generated_area_focus"))
 
+def _target_area_focus_equivalence(target):
+    if not _target_has_generated_area_focus_program(target):
+        return target
+    localizer = getattr(motion, "_area_focus_transport_target", None)
+    if not callable(localizer):
+        return target
+    try:
+        clean_target, _focus_zone = localizer(target)
+    except Exception:
+        return target
+    return clean_target or target
+
 def _target_has_motion_effect(current, target):
     if not target:
         return False
@@ -1707,7 +1740,10 @@ def _target_has_motion_effect(current, target):
             _target_has_generated_area_focus_program(current)
             and _target_has_generated_area_focus_program(target)
         ):
-            return _target_numeric_delta_exceeds_noise(current, target)
+            return _target_numeric_delta_exceeds_noise(
+                _target_area_focus_equivalence(current),
+                _target_area_focus_equivalence(target),
+            )
         return True
     target_pattern = _fixed_pattern_id_from_target(target)
     if target_pattern:
