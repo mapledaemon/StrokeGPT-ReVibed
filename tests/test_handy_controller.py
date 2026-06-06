@@ -1487,7 +1487,7 @@ class HandyControllerTests(unittest.TestCase):
         self.assertTrue(play_body["pause_on_starving"])
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/play")
 
-    def test_start_continuous_stream_reuses_hsp_setup_for_replacement(self):
+    def test_start_continuous_stream_reuses_hsp_setup_for_healthy_replacement(self):
         handy = RecordingV3HandyController()
 
         self.assertTrue(
@@ -1499,8 +1499,12 @@ class HandyControllerTests(unittest.TestCase):
         )
         self.assertTrue(
             handy.start_continuous_stream(
-                [{"t": 0, "x": 80, "intent_speed": 60, "range": 80}],
-                tail_point_stream_index=1,
+                [
+                    {"t": 1200, "x": 80, "intent_speed": 60, "range": 80},
+                    {"t": 1800, "x": 20, "intent_speed": 60, "range": 80},
+                ],
+                start_time_ms=1800,
+                tail_point_stream_index=2,
                 tail_point_threshold=0,
             )
         )
@@ -1510,11 +1514,32 @@ class HandyControllerTests(unittest.TestCase):
         self.assertEqual(paths.count("hsp/play"), 1)
         setup_bodies = [body for path, body in handy.v3_commands if path == "hsp/setup"]
         self.assertEqual(setup_bodies, [{"stream_id": 1}])
-        self.assertEqual(paths[-3:], ["hsp/add", "hsp/threshold", "hsp/resume"])
-        self.assertEqual(handy.v3_commands[-1][1], {"pick_up": False})
+        self.assertEqual(paths[-2:], ["hsp/add", "hsp/threshold"])
         replacement_adds = [body for path, body in handy.v3_commands if path == "hsp/add"]
         self.assertEqual(replacement_adds[-1]["flush"], True)
         self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/add")
+
+    def test_start_continuous_stream_restarts_replacement_when_clock_is_stale(self):
+        handy = StaleClockV3HandyController()
+        handy._hsp_streaming = True
+        handy._current_mode = handy_module.MODE_HSP
+
+        self.assertTrue(
+            handy.start_continuous_stream(
+                [
+                    {"t": 1200, "x": 80, "intent_speed": 60, "range": 80},
+                    {"t": 1800, "x": 20, "intent_speed": 60, "range": 80},
+                ],
+                start_time_ms=1800,
+                tail_point_stream_index=2,
+                tail_point_threshold=0,
+            )
+        )
+
+        paths = [path for path, _body in handy.v3_commands]
+        self.assertEqual(paths[-3:], ["hsp/add", "hsp/threshold", "hsp/play"])
+        self.assertEqual(handy.v3_commands[-1][1]["start_time"], 1200)
+        self.assertEqual(handy.diagnostics()["last_command"]["path"], "hsp/play")
 
     def test_velocity_for_depth_interval_is_capped_by_user_speed(self):
         handy = RecordingHandyController()

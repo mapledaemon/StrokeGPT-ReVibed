@@ -289,27 +289,30 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   point-to-point velocity budget because that flattens fast segments into a
   fixed-slope feel. Flexible Position `xpt.t` durations may still be stretched
   when an authored timed move exceeds the configured Handy speed cap.
-  Pattern swaps should not repeat HSP setup or resend `/hsp/play` while an HSP
-  stream is already active. Rebuffer the replacement plan through a flushed
-  `/hsp/add` scheduled against the active HSP stream clock, update
-  `/hsp/threshold`, and keep playback running so pattern changes do not pause
-  during setup or play-start latency. Replacement points need enough future
-  lead time to survive observed REST command latency; use recent HSP command
-  timing plus padding rather than scheduling the first replacement point only a
-  few milliseconds ahead of the estimated clock. Active HSP streams should only correct
-  firmware playback time through soft, delayed `/hsp/synctime` updates and
-  preserve sanitized response state in diagnostics so planned point timing can
-  be compared with device-reported playback. If the response state reports
-  `current_time_ms` already past the buffered point range, restart `/hsp/play`
-  at the first newly-added point instead of sending more expired points or
-  trying to pull the firmware clock back through `/hsp/synctime`.
+  Pattern swaps should not repeat HSP setup. Rebuffer the replacement plan
+  through a flushed `/hsp/add` scheduled against the active HSP stream clock,
+  update `/hsp/threshold`, and let healthy active firmware continue playback
+  from the new buffer without replaying `/hsp/play`. Treat each flushed
+  replacement as a fresh device point-buffer index space: replacement point
+  indexes, tail index, and threshold should be local to that newly-added buffer,
+  while non-flushed appends stay monotonic within the active buffer.
+  Replacement points need enough future lead time to survive observed REST
+  command latency; use recent HSP command timing plus padding rather than
+  scheduling the first replacement point only a few milliseconds ahead of the
+  estimated clock. Active HSP streams should only correct firmware playback time
+  through soft, delayed `/hsp/synctime` updates and preserve sanitized response
+  state in diagnostics so planned point timing can be compared with
+  device-reported playback. If the response state reports `current_time_ms`
+  already past the buffered point range, or the state reports paused/starved,
+  recover with `/hsp/play` or `/hsp/resume` instead of sending more expired
+  points or trying to pull the firmware clock back through `/hsp/synctime`.
   Sparse built-in HSP streams should keep
   authored endpoints but insert Catmull-Rom intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
   keyframes, while filtering sub-frame prepared points that create transport
   chatter without materially changing the curve. Replacement HSP streams should
-  include an exact point at the replacement stream time and no pre-start points
-  so mid-cycle swaps do not snap toward a stale endpoint. During active continuous playback,
+  include bridge points plus an exact point at the replacement stream time so
+  mid-cycle swaps do not snap toward a stale endpoint. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
   from the active plan clock; do not use the tail of the future HSP buffer as
   the current device state. If an active HSP append fails, treat the stream as

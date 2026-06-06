@@ -84,19 +84,20 @@ Follow-up work:
   `hsp_state_current_time_ms`, `hsp_state_current_point`,
   `hsp_state_play_state`, and `hsp_clock_sync` rows to confirm whether firmware
   is actually advancing through the streamed points at the planned time.
-  Pattern swaps should reuse an already-active HSP setup, start with an exact
+  Pattern swaps should reuse an already-active HSP setup, bridge into an exact
   point at the active stream's replacement time, flush the replacement buffer
-  through `/hsp/add`, update the tail threshold via `/hsp/threshold`, and avoid
-  resending `/hsp/play` while playback is already active;
-  if swaps still pause, inspect whether command history shows a repeated
-  `hsp/setup`, unnecessary `hsp/play`, threshold failure, starvation behavior,
-  or firmware `current_time_ms` already beyond `last_point_time_ms` before
-  changing sampler math again. The controller should recover a stale HSP clock
-  by restarting `/hsp/play` at the first newly-added point rather than
-  appending more points the firmware treats as expired. The first replacement
-  point should also be scheduled far enough ahead to cover recent HSP command
-  latency; too-small lead times make a healthy firmware clock skip the bridge
-  points before they arrive. Sparse
+  through `/hsp/add`, update the tail threshold via `/hsp/threshold`, and
+  avoid replaying `/hsp/play` while firmware reports a healthy active stream.
+  Flushed replacement indexes and thresholds should be local to the newly-added
+  buffer; carrying old stream indexes into a flushed replacement is suspicious
+  because real Cloud HSP sessions have reported stop/go playback after morphs.
+  If swaps still pause, inspect whether command history shows a repeated
+  `hsp/setup`, unnecessary replacement `hsp/play`, threshold failure,
+  starvation behavior, or firmware `current_time_ms` already beyond
+  `last_point_time_ms` before changing sampler math again. The first
+  replacement point should also be scheduled far enough ahead to cover recent
+  HSP command latency; too-small lead times make a healthy firmware clock skip
+  the bridge points before they arrive. Sparse
   built-in patterns now share one timed point projection for HSP and Flexible
   Position, including inserted intermediate points between authored endpoints
   and filtering sub-frame prepared points that add transport chatter; verify

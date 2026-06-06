@@ -1643,6 +1643,15 @@ class HandyController:
             return None
         return min(times), max(times)
 
+    def _hsp_first_point_time_ms(self, points, fallback=0):
+        bounds = self._hsp_point_time_bounds(points)
+        if bounds:
+            return bounds[0]
+        try:
+            return max(0, int(round(fallback)))
+        except (TypeError, ValueError):
+            return 0
+
     def _hsp_state_clock_is_past_points(self, points):
         snapshot = self._hsp_state_cache_snapshot()
         state = snapshot["state"]
@@ -1715,10 +1724,13 @@ class HandyController:
         if not self._send_hsp_threshold_after_add(tail_point_threshold, force=True) and self._api_v3_auth_failed:
             return False
         if replace_active_stream:
-            restarted = self._restart_hsp_if_clock_is_stale(stream_points, start_time_ms)
+            restarted = self._restart_hsp_if_clock_is_stale(
+                stream_points,
+                self._hsp_first_point_time_ms(stream_points, fallback=start_time_ms),
+            )
             if restarted is False:
                 return False
-            if restarted is not True and not self._resume_hsp_after_add(add_result, force=True):
+            if restarted is not True and not self._resume_hsp_after_add(add_result):
                 return False
             if add_result is not None and restarted is not True:
                 self._last_command_result = add_result

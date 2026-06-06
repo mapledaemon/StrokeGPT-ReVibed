@@ -108,6 +108,31 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual(target.stroke_range, current.stroke_range)
         apply_generated_target.assert_called_once_with(target, source="llm")
 
+    def test_ordinary_duplicate_generated_area_focus_does_not_refresh_active_target(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import motion
+
+        current = MotionTarget(
+            17,
+            50,
+            86,
+            "llm+middle",
+            motion_program={"generated_area_focus": True},
+        )
+
+        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
+                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+            target = web._apply_llm_response_move(
+                {"chat": "Mmm.", "move": {"zone": "middle", "sp": 17, "dp": 56, "rng": 50}},
+                current,
+                user_input="that feels good",
+            )
+
+        self.assertIsNone(target)
+        apply_generated_target.assert_not_called()
+
     def test_explicit_duplicate_llm_motion_does_not_trigger_repair_when_active(self):
         import strokegpt.web as web
         from strokegpt.motion import MotionTarget
@@ -2548,6 +2573,56 @@ class WebChatRouteTests(WebTestCase):
         target = MotionTarget(26, 50, 90, "llm+wave")
 
         self.assertTrue(_target_has_motion_effect(current, target))
+
+    def test_same_generated_area_focus_target_ignores_noise(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(
+            17,
+            50,
+            86,
+            "llm+middle",
+            motion_program={"generated_area_focus": True},
+        )
+        target = MotionTarget(
+            17,
+            56,
+            82,
+            "llm+middle",
+            motion_program={"generated_area_focus": True},
+        )
+
+        self.assertFalse(_target_has_motion_effect(current, target))
+
+    def test_generated_area_focus_meaningful_delta_applies(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_has_motion_effect
+
+        current = MotionTarget(
+            17,
+            50,
+            86,
+            "llm+middle",
+            motion_program={"generated_area_focus": True},
+        )
+        faster = MotionTarget(
+            18,
+            50,
+            86,
+            "llm+middle",
+            motion_program={"generated_area_focus": True},
+        )
+        deeper = MotionTarget(
+            17,
+            69,
+            86,
+            "llm+base",
+            motion_program={"generated_area_focus": True},
+        )
+
+        self.assertTrue(_target_has_motion_effect(current, faster))
+        self.assertTrue(_target_has_motion_effect(current, deeper))
 
     def test_llm_context_includes_configured_speed_limits(self):
         from strokegpt.web import get_current_context, settings

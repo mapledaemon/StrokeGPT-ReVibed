@@ -38,22 +38,25 @@ CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
+# Area-focus keeps slightly wider point spacing to avoid same-integer HSP
+# chatter, but shares the normal continuous buffer and replacement timing so
+# chat morphs do not spend seconds in bridge playback.
 CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS = 0.12
-CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS = 11.4
+CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.85
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS = 5.0
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS = CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS
 CONTINUOUS_HSP_SPEED_REPLACEMENT_SPEED_DELTA = 3.0
 CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS = 0.28
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS = CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS = CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS = 2.0
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS = CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
@@ -1265,6 +1268,8 @@ class MotionController:
     def _area_focus_transport_target(self, target: MotionTarget) -> tuple[MotionTarget, Optional[str]]:
         target = target.clamped()
         zone = self._area_focus_zone(target)
+        program = target.motion_program
+        generated_area_focus = isinstance(program, dict) and bool(program.get("generated_area_focus"))
         if zone is None:
             return (
                 MotionTarget(
@@ -1284,6 +1289,8 @@ class MotionController:
             depth = 100.0 - (stroke_range / 2.0)
         elif zone == "upper":
             depth = _clamp(max(stroke_range / 2.0, min(target.depth, 38.0)))
+        elif zone == "middle" and generated_area_focus:
+            depth = 50.0
         else:
             depth = _clamp(target.depth, stroke_range / 2.0, 100.0 - (stroke_range / 2.0))
 
@@ -2159,11 +2166,7 @@ class MotionController:
                 offset_seconds=phase_offset_seconds,
                 stream_offset_seconds=stream_offset_seconds,
                 stream_tail_seconds=stream_offset_seconds,
-                stream_tail_index=(
-                    int(getattr(replacement_phase_state, "stream_tail_index", 0) or 0)
-                    if replacement_phase_state is not None
-                    else 0
-                ),
+                stream_tail_index=0,
                 plan=plan,
                 target=clamped_target,
             )
@@ -2440,18 +2443,11 @@ class MotionController:
             if is_intent
             else CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS
         )
-        max_lead = CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS
-        if self._continuous_plan_is_area_focus(plan):
-            minimum_lead = max(minimum_lead, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS)
-            latency_padding = max(latency_padding, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS)
-            max_lead = max(max_lead, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS)
         lead = minimum_lead
         observed_seconds = self._recent_hsp_command_latency_seconds()
-        if self._continuous_plan_is_area_focus(plan):
-            observed_seconds = max(observed_seconds, self._recent_hsp_peak_command_latency_seconds())
         if observed_seconds > 0:
             lead = max(lead, observed_seconds + latency_padding)
-        return _clamp(lead, minimum_lead, max_lead)
+        return _clamp(lead, minimum_lead, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
 
     def _recent_hsp_command_latency_seconds(self) -> float:
         observed_seconds = 0.0
@@ -2524,10 +2520,7 @@ class MotionController:
         )
 
     def _continuous_target_buffer_seconds(self, plan=None) -> float:
-        if self._continuous_plan_is_area_focus(plan):
-            buffer_seconds = CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS
-        else:
-            buffer_seconds = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
+        buffer_seconds = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
         observed_seconds = max(
             self._recent_hsp_command_latency_seconds(),
             self._recent_hsp_peak_command_latency_seconds(),
@@ -2558,11 +2551,6 @@ class MotionController:
         return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
 
     def _continuous_replacement_bridge_interval_seconds(self, plan=None, base_interval: Optional[float] = None) -> float:
-        if self._continuous_plan_is_area_focus(plan):
-            return max(
-                CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
-                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS,
-            )
         interval = max(
             base_interval if base_interval is not None else self._continuous_sample_interval(),
             CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
@@ -3015,11 +3003,9 @@ class MotionController:
         stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
-        if replacing_active_stream and replacement_phase_state is not None:
-            try:
-                stream_index = max(0, int(getattr(replacement_phase_state, "stream_tail_index", 0) or 0))
-            except (TypeError, ValueError):
-                stream_index = 0
+        # Flushed replacements send a fresh HSP point buffer. Keeping the old
+        # stream index space made real firmware stop after the retarget on some
+        # Cloud sessions, even though appends within one buffer stay monotonic.
         batch_index = 0
         previous_command_ended_at = None
         previous_recorded_point = None
