@@ -7,8 +7,8 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-2026-06-06 - Unreleased - Pattern Library Jitter Guardrails
------------------------------------------------------------
+2026-06-06 - PR #314 - Pattern Library Jitter Guardrails
+---------------------------------------------------------
 
 Branch: codex/pattern-library-jitter-guardrails
 
