@@ -17,8 +17,13 @@ from strokegpt.motion_patterns import (
     PATTERNS,
     MotionPattern,
     PatternAction,
+    continuous_motion_plan,
+    continuous_plan_phase_points,
+    continuous_plan_timed_phase_points,
+    sample_continuous_motion,
     _load_builtin_patterns,
 )
+from strokegpt.motion import MotionTarget
 
 
 EXPECTED_PATTERN_IDS = frozenset({
@@ -169,6 +174,56 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
             raw = json.load(handle)
 
         self.assertEqual(set(raw.keys()), set(PATTERNS.keys()))
+
+    def test_continuous_builtin_loops_have_no_visible_sample_seam(self):
+        target = MotionTarget(50, 50, 80, "catalog guard")
+        for pattern_id in PATTERNS:
+            with self.subTest(pattern_id=pattern_id):
+                plan = continuous_motion_plan(pattern_id)
+                self.assertIsNotNone(plan)
+                first = sample_continuous_motion(plan, target, 0.0).target.depth
+                last = sample_continuous_motion(
+                    plan,
+                    target,
+                    max(0.0, plan.duration_seconds - 0.001),
+                ).target.depth
+                self.assertLess(abs(first - last), 1.0)
+
+    def test_continuous_builtin_samples_do_not_have_abrupt_depth_steps(self):
+        target = MotionTarget(50, 50, 80, "catalog guard")
+        sample_count = 240
+        for pattern_id in PATTERNS:
+            with self.subTest(pattern_id=pattern_id):
+                plan = continuous_motion_plan(pattern_id)
+                depths = [
+                    sample_continuous_motion(
+                        plan,
+                        target,
+                        plan.duration_seconds * index / sample_count,
+                    ).target.depth
+                    for index in range(sample_count + 1)
+                ]
+                largest_step = max(
+                    abs(depths[index + 1] - depths[index])
+                    for index in range(sample_count)
+                )
+                self.assertLess(largest_step, 3.0)
+
+    def test_continuous_timed_phase_points_keep_dense_transport_spacing(self):
+        for pattern_id in PATTERNS:
+            with self.subTest(pattern_id=pattern_id):
+                plan = continuous_motion_plan(pattern_id)
+                phase_points = continuous_plan_phase_points(plan)
+                timed_points = continuous_plan_timed_phase_points(plan, plan.duration_seconds)
+                self.assertGreaterEqual(len(timed_points), len(phase_points))
+                self.assertTrue(timed_points[0]["authored"])
+                self.assertTrue(timed_points[-1]["authored"])
+                largest_gap = max(
+                    (timed_points[index + 1]["phase"] - timed_points[index]["phase"])
+                    * plan.duration_seconds
+                    for index in range(len(timed_points) - 1)
+                )
+                self.assertLessEqual(largest_gap, 0.121)
 
 
 if __name__ == "__main__":

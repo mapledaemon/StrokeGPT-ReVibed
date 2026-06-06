@@ -424,7 +424,7 @@ describe('motion/audio save feedback', () => {
         assert.strictEqual(state.motionPatternLibraryEnabledInChat, false);
         assert.strictEqual(getStubElement('motion-pattern-library-freestyle-checkbox').checked, true);
         assert.strictEqual(getStubElement('motion-pattern-library-chat-checkbox').checked, false);
-        assert.strictEqual(getStubElement('status-text').textContent, 'Pattern library saved. Freestyle: on. Chat: off.');
+        assert.strictEqual(getStubElement('status-text').textContent, 'Pattern library saved. Freestyle/modes: on. Chat: off.');
     });
 
     it('resetMotionPreferences resets style controls and learned pattern feedback', async () => {

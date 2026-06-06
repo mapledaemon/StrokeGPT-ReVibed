@@ -66,7 +66,7 @@ export async function saveMotionFeedbackOptions() {
         if (el.motionPatternLibraryFreestyleCheckbox) el.motionPatternLibraryFreestyleCheckbox.checked = state.motionPatternLibraryEnabledInFreestyle;
         if (el.motionPatternLibraryChatCheckbox) el.motionPatternLibraryChatCheckbox.checked = state.motionPatternLibraryEnabledInChat;
         if (data.motion_patterns) renderMotionPatternsCallback(data.motion_patterns);
-        el.statusText.textContent = `Pattern library saved. Freestyle: ${state.motionPatternLibraryEnabledInFreestyle ? 'on' : 'off'}. Chat: ${state.motionPatternLibraryEnabledInChat ? 'on' : 'off'}.`;
+        el.statusText.textContent = `Pattern library saved. Freestyle/modes: ${state.motionPatternLibraryEnabledInFreestyle ? 'on' : 'off'}. Chat: ${state.motionPatternLibraryEnabledInChat ? 'on' : 'off'}.`;
         return true;
     } else {
         reportSaveFailure(el.motionPatternStatus, data, 'Could not save feedback options.');

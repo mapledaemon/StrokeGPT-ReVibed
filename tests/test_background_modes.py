@@ -18,6 +18,7 @@ class FakeMotionController:
         self.stopped = False
         self.applied = []
         self.generated = []
+        self.generated_metadata = []
         self.hamp_frames = []
         self.position_frames = []
         self.position_sources = []
@@ -36,6 +37,7 @@ class FakeMotionController:
 
     def apply_generated_target(self, target, source="generated", trace_metadata=None):
         self.generated.append((target, source))
+        self.generated_metadata.append(trace_metadata)
         self.applied.append(target)
 
     def apply_frames(self, frames, *, stop_after=False, source="pattern"):
@@ -511,7 +513,7 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertTrue(any("Staying with it" in message for message in messages))
         self.assertFalse(any("Finishing the sequence" in message for message in messages))
         self.assertEqual(len(remembered), len(motion.applied))
-        self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
+        self.assertTrue(any(target.label.startswith("scripted generated ") for target in motion.applied))
 
     def test_milking_close_signal_uses_llm_duration_and_intensity(self):
         motion = FakeMotionController()
@@ -710,7 +712,7 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertIn("milking", mode_names)
         self.assertTrue(any("Switching to milk" in message for message in messages))
         self.assertFalse(any("Holding there" in message for message in messages))
-        self.assertTrue(any(target.label.startswith("Milking ") for target in motion.applied))
+        self.assertTrue(any(target.label.startswith("scripted generated ") for target in motion.applied))
 
     def test_freestyle_mode_plays_enabled_pattern_with_position_frames(self):
         motion = FakeMotionController()
@@ -1108,6 +1110,45 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertTrue(applied)
         self.assertEqual(motion.generated, [(target, "milking mode")])
 
+    def test_scripted_mode_uses_generated_flow_when_pattern_library_disabled(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        target = MotionTarget(64, 58, 70, label="Milking Pressure Build")
+
+        applied = background_modes._apply_mode_motion(
+            motion,
+            target,
+            source="milking mode",
+            use_pattern_library=False,
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(len(motion.generated), 1)
+        applied_target, source = motion.generated[0]
+        self.assertEqual(source, "milking mode")
+        self.assertEqual(applied_target.label, "scripted generated full flow")
+        self.assertNotIn("Milking", applied_target.label)
+        self.assertEqual(motion.generated_metadata[0]["mode_pattern_id"], "milking-pressure-build")
+        self.assertEqual(motion.generated_metadata[0]["mode_pattern_transport"], "generated_flow")
+        self.assertFalse(motion.generated_metadata[0]["mode_pattern_library_enabled"])
+
+    def test_scripted_mode_keeps_exact_pattern_when_pattern_library_enabled(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        target = MotionTarget(64, 58, 70, label="Milking Pressure Build")
+
+        applied = background_modes._apply_mode_motion(
+            motion,
+            target,
+            source="milking mode",
+            use_pattern_library=True,
+        )
+
+        self.assertTrue(applied)
+        self.assertEqual(motion.generated, [(target, "milking mode")])
+        self.assertEqual(motion.generated_metadata[0]["mode_pattern_transport"], "exact_pattern")
+        self.assertTrue(motion.generated_metadata[0]["mode_pattern_library_enabled"])
+
     def test_scripted_continuous_mode_honors_step_hold_floor(self):
         motion = FakeMotionController()
         motion.backend = "continuous"
@@ -1135,7 +1176,35 @@ class AutoModeThreadTests(unittest.TestCase):
                 background_modes._run_scripted_mode(stop_event, {"motion": motion}, callbacks, "milking")
 
         self.assertEqual(sleep_seconds, [5.4])
-        self.assertEqual(motion.generated, [(step.target, "milking mode")])
+        self.assertEqual(len(motion.generated), 1)
+        applied_target, source = motion.generated[0]
+        self.assertEqual(source, "milking mode")
+        self.assertEqual(applied_target.label, "scripted generated full flow")
+
+    def test_scripted_continuous_mode_exact_patterns_are_opt_in(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        stop_event = threading.Event()
+        callbacks = {
+            "get_timings": lambda _mode: (0.0, 0.0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+            "motion_pattern_library_enabled_in_freestyle": lambda: False,
+        }
+
+        def stop_after_iteration(event, _seconds, *_args, **_kwargs):
+            event.set()
+            return 0.0, 0.0
+
+        with mock.patch.object(background_modes, "_sleep_with_autospeak", stop_after_iteration):
+            background_modes._run_scripted_mode(stop_event, {"motion": motion}, callbacks, "milking", max_steps=1)
+
+        self.assertEqual(len(motion.generated), 1)
+        applied_target, _source = motion.generated[0]
+        self.assertTrue(applied_target.label.startswith("scripted generated "))
+        self.assertEqual(motion.generated_metadata[0]["mode_pattern_transport"], "generated_flow")
 
     def test_freestyle_position_uses_timed_position_frames(self):
         motion = FakeMotionController()

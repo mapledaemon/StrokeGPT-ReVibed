@@ -7,6 +7,19 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-06 - Unreleased - Pattern Library Jitter Guardrails
+-----------------------------------------------------------
+
+Branch: codex/pattern-library-jitter-guardrails
+
+- Marked exact pattern-library playback as experimental in Motion settings and
+  kept chat/background-mode exact pattern playback opt-in by default.
+- Routed scripted preset modes through generated flow targets when experimental
+  pattern-library playback is disabled, preserving exact built-in playback only
+  when the existing pattern-library toggle is enabled.
+- Added catalog guardrails for built-in Continuous pattern seam smoothness,
+  adjacent sample steps, and timed-point density.
+
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------
 

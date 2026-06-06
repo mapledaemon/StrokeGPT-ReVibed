@@ -63,6 +63,34 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 36)
 
+    def test_disabled_chat_pattern_library_strips_llm_exact_pattern(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _target_from_llm_response_move, settings
+
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
+        current = MotionTarget(27, 50, 95, "current")
+        response = {
+            "move": {
+                "sp": 21,
+                "dp": 0,
+                "rng": 36,
+                "zone": "tip",
+                "pattern": "flutter",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="flutter at the tip")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
+
+        self.assertEqual(target.label, "llm+tip")
+        self.assertNotIn("flutter", target.label)
+        self.assertEqual(target.speed, 21)
+        self.assertEqual(target.depth, 0)
+        self.assertEqual(target.stroke_range, 36)
+
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 

@@ -31,7 +31,7 @@ from .mode_decisions import (
     ModeDecision,
 )
 from .mode_contracts import ModeCallbacks, ModeLogic, ModeServices
-from .motion import IntentMatcher
+from .motion import IntentMatcher, MotionTarget
 from .motion_patterns import PATTERNS
 from .motion_scripts import MotionScriptPlanner, ScriptStep
 
@@ -390,6 +390,56 @@ def _mode_pattern_id_from_target(target) -> str:
     return ""
 
 
+def _mode_pattern_library_enabled(callbacks: ModeCallbacks) -> bool:
+    enabled = callbacks.get("motion_pattern_library_enabled_in_freestyle")
+    if not enabled:
+        return False
+    try:
+        return bool(enabled())
+    except Exception:
+        return False
+
+
+def _mode_generated_flow_target(target, pattern_id: str):
+    if not pattern_id:
+        return target
+    try:
+        depth = float(getattr(target, "depth", 50.0) or 50.0)
+        stroke_range = float(getattr(target, "stroke_range", 70.0) or 70.0)
+    except (TypeError, ValueError):
+        depth = 50.0
+        stroke_range = 70.0
+    if stroke_range >= 65.0:
+        zone = "full"
+    elif depth <= 38.0:
+        zone = "tip"
+    elif depth >= 62.0:
+        zone = "base"
+    else:
+        zone = "shaft"
+    return MotionTarget(
+        target.speed,
+        target.depth,
+        target.stroke_range,
+        f"scripted generated {zone} flow",
+        motion_program=getattr(target, "motion_program", None),
+    ).clamped()
+
+
+def _mode_pattern_trace_metadata(pattern_id: str, use_pattern_library: bool):
+    if not pattern_id:
+        return None
+    if use_pattern_library:
+        transport = "exact_pattern"
+    else:
+        transport = "generated_flow"
+    return {
+        "mode_pattern_id": pattern_id,
+        "mode_pattern_transport": transport,
+        "mode_pattern_library_enabled": bool(use_pattern_library),
+    }
+
+
 def _mode_target_is_redundant(current, target) -> bool:
     if not current or not target:
         return False
@@ -412,11 +462,15 @@ def _mode_target_is_redundant(current, target) -> bool:
         return False
 
 
-def _apply_mode_motion(motion_controller, target, source):
+def _apply_mode_motion(motion_controller, target, source, *, use_pattern_library=True):
+    pattern_id = _mode_pattern_id_from_target(target)
+    trace_metadata = _mode_pattern_trace_metadata(pattern_id, use_pattern_library)
+    if pattern_id and not use_pattern_library:
+        target = _mode_generated_flow_target(target, pattern_id)
     if _mode_target_is_redundant(_semantic_target(motion_controller), target):
         return False
     if _uses_timed_pattern_motion(motion_controller):
-        motion_controller.apply_generated_target(target, source=source)
+        motion_controller.apply_generated_target(target, source=source, trace_metadata=trace_metadata)
         return True
     else:
         motion_controller.apply_target(target, source=source)
@@ -453,7 +507,11 @@ def _run_scripted_mode(
     send_message = callbacks["send_message"]
     update_mood = callbacks.get("update_mood", lambda mood: None)
     remember_pattern = callbacks.get("remember_pattern", lambda target: None)
-    planner = MotionScriptPlanner(mode, continuous_patterns=_uses_timed_pattern_motion(motion_controller))
+    use_pattern_library = _mode_pattern_library_enabled(callbacks)
+    planner = MotionScriptPlanner(
+        mode,
+        continuous_patterns=_uses_timed_pattern_motion(motion_controller) and use_pattern_library,
+    )
     step_count = 0
     mode_intensity = initial_intensity
     autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
@@ -519,7 +577,12 @@ def _run_scripted_mode(
             send_message(step.message)
         update_mood(step.mood)
         target = mode_decision_helpers._target_with_intensity(step.target, mode_intensity)
-        applied_motion = _apply_mode_motion(motion_controller, target, source=f"{mode} mode")
+        applied_motion = _apply_mode_motion(
+            motion_controller,
+            target,
+            source=f"{mode} mode",
+            use_pattern_library=use_pattern_library,
+        )
         if applied_motion:
             remember_pattern(target)
         step_count += 1
