@@ -768,6 +768,113 @@ class WebChatRouteTests(WebTestCase):
                 app_state.chat_motion_keepalive_target = original_target
                 app_state.chat_motion_keepalive_last_attempt_at = original_attempt
 
+    def test_chat_motion_keepalive_restarts_when_hsp_reports_paused(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {"play_state": "paused_on_starving"},
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_called_once_with(target, source="unit keepalive")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_restarts_when_hsp_clock_is_past_buffer(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {
+                        "play_state": "playing",
+                        "current_time_ms": 181000,
+                        "last_point_time_ms": 180000,
+                    },
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_called_once_with(target, source="unit keepalive")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_skips_when_hsp_reports_buffered_playback(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {
+                        "play_state": "playing",
+                        "current_time_ms": 179000,
+                        "last_point_time_ms": 180000,
+                    },
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
     def test_motion_request_without_effect_clears_stale_chat_keepalive(self):
         from strokegpt.motion import MotionTarget
         from strokegpt.web import app_state, audio, handy, llm, motion, settings

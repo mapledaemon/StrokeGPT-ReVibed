@@ -19,6 +19,9 @@ Branch: codex/pattern-library-jitter-guardrails
   when the existing pattern-library toggle is enabled.
 - Added catalog guardrails for built-in Continuous pattern seam smoothness,
   adjacent sample steps, and timed-point density.
+- Made chat motion keepalive recover when firmware HSP state reports paused,
+  starved, or past the buffered point tail even if the local worker still looks
+  active.
 
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------

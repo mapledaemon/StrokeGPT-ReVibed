@@ -1193,13 +1193,15 @@ class AutoModeThreadTests(unittest.TestCase):
             "update_mood": lambda _mood: None,
             "motion_pattern_library_enabled_in_freestyle": lambda: False,
         }
+        step = ScriptStep(MotionTarget(64, 58, 70, label="Milking Pressure Build"))
 
         def stop_after_iteration(event, _seconds, *_args, **_kwargs):
             event.set()
             return 0.0, 0.0
 
-        with mock.patch.object(background_modes, "_sleep_with_autospeak", stop_after_iteration):
-            background_modes._run_scripted_mode(stop_event, {"motion": motion}, callbacks, "milking", max_steps=1)
+        with mock.patch.object(background_modes.MotionScriptPlanner, "next_step", return_value=step):
+            with mock.patch.object(background_modes, "_sleep_with_autospeak", stop_after_iteration):
+                background_modes._run_scripted_mode(stop_event, {"motion": motion}, callbacks, "milking", max_steps=1)
 
         self.assertEqual(len(motion.generated), 1)
         applied_target, _source = motion.generated[0]

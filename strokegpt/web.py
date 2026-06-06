@@ -80,6 +80,9 @@ MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
 CHAT_MOTION_KEEPALIVE_INTERVAL_SECONDS = 3.0
 CHAT_MOTION_KEEPALIVE_RETRY_FLOOR_SECONDS = 1.0
+CHAT_HSP_STALE_CLOCK_TOLERANCE_MS = 500
+CHAT_HSP_INACTIVE_PLAY_STATE_TOKENS = ("starv", "pause", "stop", "idle")
+CHAT_HSP_STARVING_EVENT_TYPES = {"hsp_starving", "hsp_paused_on_starving"}
 CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
 STATUS_OBSERVABILITY_TRACE_LIMIT = 96
 CHAT_INTENSITY_ARC_SECONDS = 600
@@ -548,14 +551,71 @@ def _chat_motion_keepalive_candidate():
     return target
 
 
+def _numeric_hsp_state_value(state, key):
+    if not isinstance(state, dict):
+        return None
+    try:
+        return int(round(float(state.get(key))))
+    except (TypeError, ValueError):
+        return None
+
+
+def _chat_motion_hsp_state_inactive(snapshot):
+    if not isinstance(snapshot, dict):
+        return False
+    diagnostics = snapshot.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        return False
+    event_type = str(diagnostics.get("hsp_state_sse_event_type") or "").strip().lower()
+    if event_type in CHAT_HSP_STARVING_EVENT_TYPES:
+        return True
+    state = diagnostics.get("hsp_state")
+    if not isinstance(state, dict):
+        return False
+    play_state = str(state.get("play_state") or "").strip().lower()
+    if play_state:
+        if any(token in play_state for token in CHAT_HSP_INACTIVE_PLAY_STATE_TOKENS):
+            return True
+    current_time = _numeric_hsp_state_value(state, "current_time_ms")
+    last_point_time = _numeric_hsp_state_value(state, "last_point_time_ms")
+    if current_time is None or last_point_time is None:
+        return False
+    return current_time > last_point_time + CHAT_HSP_STALE_CLOCK_TOLERANCE_MS
+
+
+def _chat_motion_diagnostics_snapshot():
+    handy_diagnostics = None
+    diagnostics = getattr(handy, "diagnostics", None)
+    if callable(diagnostics):
+        try:
+            handy_diagnostics = diagnostics(
+                refresh_hsp_state=True,
+                include_history=False,
+                include_recent_events=False,
+            )
+        except TypeError:
+            try:
+                handy_diagnostics = diagnostics()
+            except Exception:
+                handy_diagnostics = None
+        except Exception:
+            handy_diagnostics = None
+    try:
+        if handy_diagnostics is not None:
+            return motion.observability_snapshot(handy_diagnostics=handy_diagnostics, trace_limit=1)
+        return motion.observability_snapshot(trace_limit=1)
+    except TypeError:
+        return motion.observability_snapshot()
+
+
 def _chat_motion_playback_active():
     try:
-        snapshot = motion.observability_snapshot(trace_limit=1)
-    except TypeError:
-        snapshot = motion.observability_snapshot()
+        snapshot = _chat_motion_diagnostics_snapshot()
     except Exception as exc:
         print(f"[WARN] Chat motion keepalive could not read motion status: {exc}")
         return True
+    if _chat_motion_hsp_state_inactive(snapshot):
+        return False
     return bool(snapshot.get("playback_active"))
 
 
