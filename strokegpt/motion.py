@@ -159,6 +159,7 @@ class ContinuousPhaseState:
     offset_seconds: float = 0.0
     stream_offset_seconds: float = 0.0
     stream_tail_seconds: float = 0.0
+    stream_tail_index: int = 0
     phase_rate: float = 1.0
     plan: Any = None
     target: Optional[MotionTarget] = None
@@ -2158,6 +2159,11 @@ class MotionController:
                 offset_seconds=phase_offset_seconds,
                 stream_offset_seconds=stream_offset_seconds,
                 stream_tail_seconds=stream_offset_seconds,
+                stream_tail_index=(
+                    int(getattr(replacement_phase_state, "stream_tail_index", 0) or 0)
+                    if replacement_phase_state is not None
+                    else 0
+                ),
                 plan=plan,
                 target=clamped_target,
             )
@@ -2595,6 +2601,7 @@ class MotionController:
         phase_offset_seconds: float,
         stream_offset_seconds: float | None = None,
         stream_tail_seconds: float | None = None,
+        stream_tail_index: int | None = None,
         phase_rate: float = 1.0,
     ) -> None:
         try:
@@ -2611,6 +2618,14 @@ class MotionController:
             if stream_tail_seconds is not None
             else stream_offset_value
         )
+        if stream_tail_index is None:
+            previous_state = self._continuous_phase_state
+            stream_tail_index_value = int(getattr(previous_state, "stream_tail_index", 0) or 0)
+        else:
+            try:
+                stream_tail_index_value = max(0, int(stream_tail_index))
+            except (TypeError, ValueError):
+                stream_tail_index_value = 0
         with self._lock:
             if generation != self._generation:
                 return
@@ -2621,6 +2636,7 @@ class MotionController:
                 offset_seconds=max(0.0, float(phase_offset_seconds or 0.0)),
                 stream_offset_seconds=max(0.0, float(stream_offset_value)),
                 stream_tail_seconds=max(0.0, float(stream_tail_value)),
+                stream_tail_index=stream_tail_index_value,
                 phase_rate=phase_rate,
                 plan=plan,
                 target=target,
@@ -2999,6 +3015,11 @@ class MotionController:
         stream_seconds = play_start_stream_seconds
         sample_index = 0
         stream_index = 0
+        if replacing_active_stream and replacement_phase_state is not None:
+            try:
+                stream_index = max(0, int(getattr(replacement_phase_state, "stream_tail_index", 0) or 0))
+            except (TypeError, ValueError):
+                stream_index = 0
         batch_index = 0
         previous_command_ended_at = None
         previous_recorded_point = None
@@ -3576,6 +3597,18 @@ class MotionController:
                 )
             if started is False:
                 return False
+            current_phase_seconds, phase_rate = phase_at_stream_time(hsp_clock_start_seconds)
+            self._refresh_continuous_phase_state(
+                plan=plan,
+                target=target,
+                plan_key=plan_key,
+                generation=generation,
+                phase_offset_seconds=current_phase_seconds,
+                stream_offset_seconds=hsp_clock_start_seconds,
+                stream_tail_seconds=stream_seconds,
+                stream_tail_index=stream_index,
+                phase_rate=phase_rate,
+            )
 
             while True:
                 with self._lock:
@@ -3606,6 +3639,7 @@ class MotionController:
                     phase_offset_seconds=current_phase_seconds,
                     stream_offset_seconds=hsp_elapsed,
                     stream_tail_seconds=stream_seconds,
+                    stream_tail_index=stream_index,
                     phase_rate=phase_rate,
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
@@ -3663,6 +3697,7 @@ class MotionController:
                             phase_offset_seconds=current_phase_seconds,
                             stream_offset_seconds=hsp_elapsed,
                             stream_tail_seconds=stream_seconds,
+                            stream_tail_index=stream_index,
                             phase_rate=phase_rate,
                         )
 
