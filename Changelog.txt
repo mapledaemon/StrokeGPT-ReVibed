@@ -7,6 +7,30 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-06 - PR #316 - HSP Replacement Playback Restart
+-------------------------------------------------------
+
+- Reviewed PR #314/#315 HSP replacement fixes after real-device reports still
+  showed stop/go morph playback, and narrowed the failure to the active HSP
+  replacement contract rather than the sampled pattern curve itself.
+- Applied the chat meaningful-change guard to repeated generated area-focus
+  targets so ordinary duplicate `middle`/`tip`/`base` LLM moves do not keep
+  flushing the active HSP stream into another morph.
+- Canonicalized generated broad `middle` area-focus targets at the continuous
+  transport boundary so raw LLM depth noise cannot keep rebuilding HSP streams
+  as stop/go replacement bridges.
+- Removed the area-focus-specific long HSP buffer/replacement lead introduced
+  during PR #314 follow-up work, keeping only the anti-chatter point spacing so
+  morph retargets hand off in under a second instead of spending several
+  seconds in bridge playback.
+- Reverted healthy active HSP replacements back to flushed `/hsp/add` plus
+  threshold updates without replaying `/hsp/play`; `/hsp/play` is now reserved
+  for initial starts and stale/paused recovery so morph changes do not restart
+  firmware playback and then starve about a second later.
+- Reset stream indexes, tail indexes, and tail thresholds inside each flushed
+  replacement batch so a new HSP buffer does not inherit old-stream index gaps
+  that can make Cloud firmware stop after moving to the replacement once.
+
 2026-06-06 - PR #314 - Pattern Library Jitter Guardrails
 ---------------------------------------------------------
 

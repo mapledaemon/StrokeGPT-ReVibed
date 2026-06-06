@@ -11,8 +11,7 @@ from strokegpt.motion import (
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
-    CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS,
-    CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
+    CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON,
@@ -2254,13 +2253,13 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_area_focus_uses_longer_lower_density_hsp_buffer(self):
+    def test_continuous_area_focus_uses_normal_buffer_with_chatter_spaced_points(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
         plan = controller._hsp_area_focus_plan(MotionTarget(17, 50, 80, "llm+middle"))
 
-        self.assertGreaterEqual(
+        self.assertEqual(
             controller._continuous_target_buffer_seconds(plan),
-            CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
+            CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS,
         )
         self.assertEqual(
             controller._continuous_hsp_point_interval_seconds(plan),
@@ -2282,7 +2281,7 @@ class MotionControllerTests(unittest.TestCase):
             points = handy.stream_starts[0]["points"]
             intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
             self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
-            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 8500)
+            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 5000)
             self.assertGreaterEqual(min(intervals), 80)
             trace = self.wait_for_hsp_trace(
                 controller,
@@ -2294,8 +2293,8 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(play_points)
             self.assertEqual({point.get("continuous_area_focus_zone") for point in play_points}, {"middle"})
             self.assertEqual({point.get("continuous_area_focus_transport_depth") for point in play_points}, {50.0})
-            self.assertGreaterEqual(play_points[-1]["hsp_target_buffer_ms"], 9000.0)
-            self.assertGreaterEqual(play_points[-1]["hsp_buffer_after_command_ms"], 8400.0)
+            self.assertGreaterEqual(play_points[-1]["hsp_target_buffer_ms"], 5000.0)
+            self.assertGreaterEqual(play_points[-1]["hsp_buffer_after_command_ms"], 4800.0)
         finally:
             controller.stop()
 
@@ -2318,6 +2317,64 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
             controller.apply_generated_target(duplicate, source="duplicate")
+
+            self.assertFalse(
+                self.wait_until(lambda: len(handy.stream_replacements) > 0, timeout=0.25),
+                handy.stream_replacements,
+            )
+            self.assertEqual(len(handy.stream_starts), 1)
+        finally:
+            controller.stop()
+
+    def test_generated_middle_area_focus_transport_ignores_raw_depth_noise(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        first = MotionTarget(
+            17,
+            56,
+            50,
+            "llm+middle area_focus",
+            {"generated_area_focus": True, "type": "anchor_loop"},
+        )
+        noisy = MotionTarget(
+            17,
+            34,
+            50,
+            "llm+middle area_focus",
+            {"generated_area_focus": True, "type": "anchor_loop"},
+        )
+
+        first_clean, first_zone = controller._area_focus_transport_target(first)
+        noisy_clean, noisy_zone = controller._area_focus_transport_target(noisy)
+
+        self.assertEqual(first_zone, "middle")
+        self.assertEqual(noisy_zone, "middle")
+        self.assertEqual(first_clean.depth, 50.0)
+        self.assertEqual(noisy_clean.depth, 50.0)
+        self.assertEqual(first_clean.stroke_range, noisy_clean.stroke_range)
+
+    def test_raw_depth_noise_on_generated_middle_area_focus_keeps_active_stream(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        first = MotionTarget(
+            17,
+            56,
+            50,
+            "llm+middle area_focus",
+            {"generated_area_focus": True, "type": "anchor_loop"},
+        )
+        noisy = MotionTarget(
+            17,
+            34,
+            50,
+            "llm+middle area_focus",
+            {"generated_area_focus": True, "type": "anchor_loop"},
+        )
+
+        try:
+            controller.apply_generated_target(first, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.apply_generated_target(noisy, source="noisy duplicate")
 
             self.assertFalse(
                 self.wait_until(lambda: len(handy.stream_replacements) > 0, timeout=0.25),
@@ -2970,7 +3027,7 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertLessEqual(
                 bridge_points[0]["t"] - hsp_clock_start_ms,
-                (CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+                (CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
             pre_start_bridge_points = [
                 point for point in bridge_points if point["t"] < replacement["start_time_ms"]
@@ -2982,7 +3039,7 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(bridge_intervals)
             self.assertLessEqual(
                 max(bridge_intervals),
-                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+                (CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
             self.assertTrue(
                 any(point["t"] - hsp_clock_start_ms >= 420.0 for point in pre_start_bridge_points),
@@ -3028,7 +3085,7 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertLessEqual(
                 first_replacement["hsp_replacement_bridge_interval_ms"],
-                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+                (CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
             self.assertGreaterEqual(first_replacement["hsp_batch_post_start_buffer_ms"], 5000.0)
             self.assertGreater(first_replacement["hsp_batch_post_morph_buffer_ms"], 3000.0)
@@ -3161,8 +3218,10 @@ class MotionControllerTests(unittest.TestCase):
             bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
             self.assertTrue(bridge_points)
             start_tail_index = handy.stream_starts[0]["points"][-1]["stream_index"]
-            self.assertGreater(replacement["points"][0]["stream_index"], start_tail_index)
-            self.assertGreater(replacement["tail_point_stream_index"], start_tail_index)
+            self.assertGreater(start_tail_index, 1)
+            self.assertEqual(replacement["points"][0]["stream_index"], 1)
+            self.assertEqual(replacement["tail_point_stream_index"], len(replacement["points"]))
+            self.assertLessEqual(replacement["tail_point_threshold"], replacement["tail_point_stream_index"])
             point_times = [point["t"] for point in replacement["points"]]
             self.assertIn(replacement["start_time_ms"], point_times)
 
@@ -3241,9 +3300,9 @@ class MotionControllerTests(unittest.TestCase):
 
             self.assertGreaterEqual(
                 first_retarget["hsp_replacement_lead_ms"],
-                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
+                CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS * 1000.0,
             )
-            self.assertLess(first_retarget["hsp_replacement_lead_ms"], 6501.0)
+            self.assertLess(first_retarget["hsp_replacement_lead_ms"], 2000.0)
             pre_start_bridge_points = [
                 point for point in bridge_points if point["t"] < replacement["start_time_ms"]
             ]
@@ -3254,11 +3313,11 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(bridge_intervals)
             self.assertLessEqual(
                 max(bridge_intervals),
-                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+                (CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
             self.assertTrue(
                 any(
-                    point["t"] - hsp_clock_start_ms >= 4800.0
+                    point["t"] - hsp_clock_start_ms >= 500.0
                     and point["t"] < replacement["start_time_ms"]
                     for point in bridge_points
                 ),
@@ -3522,8 +3581,9 @@ class MotionControllerTests(unittest.TestCase):
             self.assertEqual(middle_points[0]["morph_start_source"], "predicted_active_stream")
             self.assertGreaterEqual(
                 middle_points[0]["hsp_replacement_lead_ms"],
-                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
+                CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS * 1000.0,
             )
+            self.assertLess(middle_points[0]["hsp_replacement_lead_ms"], 2000.0)
         finally:
             controller.stop()
 

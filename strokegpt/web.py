@@ -1695,10 +1695,19 @@ def _target_numeric_delta_exceeds_noise(current, target):
         or abs(current.stroke_range - target.stroke_range) > FIXED_PATTERN_NOISE_RANGE_DELTA
     )
 
+def _target_has_generated_area_focus_program(target):
+    program = getattr(target, "motion_program", None)
+    return isinstance(program, dict) and bool(program.get("generated_area_focus"))
+
 def _target_has_motion_effect(current, target):
     if not target:
         return False
     if target.motion_program:
+        if (
+            _target_has_generated_area_focus_program(current)
+            and _target_has_generated_area_focus_program(target)
+        ):
+            return _target_numeric_delta_exceeds_noise(current, target)
         return True
     target_pattern = _fixed_pattern_id_from_target(target)
     if target_pattern:
