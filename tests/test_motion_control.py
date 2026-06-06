@@ -11,6 +11,7 @@ from strokegpt.motion import (
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS,
     CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS,
@@ -2909,6 +2910,7 @@ class MotionControllerTests(unittest.TestCase):
                 lambda point: point.get("hsp_replacement_bridge")
                 and point.get("source") == "freestyle planner"
                 and point.get("freestyle_pattern_id") == "wave",
+                timeout=2.0,
             )
             first_bridge = next(
                 point
@@ -2968,7 +2970,7 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(any(point.get("hsp_replacement_bridge") for point in second_points))
             first_point = next(point for point in second_points if not point.get("hsp_replacement_bridge"))
-            expected_phase = (first_point["hsp_replacement_lead_ms"] / 1000.0) / old_duration
+            expected_phase = ((first_point["hsp_replacement_lead_ms"] / 1000.0) / old_duration) % 1.0
 
             self.assertEqual(first_point["hsp_replacement_kind"], "speed")
             self.assertAlmostEqual(first_point["sample_phase"], expected_phase, delta=0.08)
@@ -3058,6 +3060,62 @@ class MotionControllerTests(unittest.TestCase):
                 first_retarget["morph_start_depth"],
                 delta=2.0,
             )
+        finally:
+            controller.stop()
+
+    def test_area_focus_replacement_lead_keeps_bridge_points_after_slow_add_latency(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        matcher = IntentMatcher()
+
+        try:
+            tip_intent = matcher.parse("focus on the tip", controller.semantic_target())
+            controller.apply_generated_target(tip_intent.target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            base_intent = matcher.parse("focus on the base", controller.semantic_target())
+            controller.apply_generated_target(base_intent.target, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
+            self.assertTrue(bridge_points)
+
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: (
+                    point.get("continuous_plan_kind") == "area_focus"
+                    and point.get("continuous_area_focus_zone") == "base"
+                    and not point.get("hsp_replacement_bridge")
+                ),
+            )
+            base_points = [
+                point
+                for point in trace
+                if point.get("continuous_plan_kind") == "area_focus"
+                and point.get("continuous_area_focus_zone") == "base"
+            ]
+            first_bridge = next(point for point in base_points if point.get("hsp_replacement_bridge"))
+            first_retarget = next(point for point in base_points if not point.get("hsp_replacement_bridge"))
+            hsp_clock_start_ms = first_retarget["hsp_play_start_ms"] - first_retarget["hsp_replacement_lead_ms"]
+
+            self.assertGreaterEqual(
+                first_retarget["hsp_replacement_lead_ms"],
+                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
+            )
+            self.assertGreaterEqual(
+                first_retarget["hsp_replacement_lead_ms"],
+                8000.0,
+            )
+            self.assertTrue(
+                any(
+                    point["t"] - hsp_clock_start_ms >= 4800.0
+                    and point["t"] < replacement["start_time_ms"]
+                    for point in bridge_points
+                ),
+                bridge_points,
+            )
+            self.assertLess(first_bridge["hsp_point_time_ms"], first_retarget["hsp_point_time_ms"])
         finally:
             controller.stop()
 

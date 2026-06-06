@@ -31,6 +31,9 @@ Branch: codex/pattern-library-jitter-guardrails
 - Tightened the normal-chat pattern-library toggle so disabled chat no longer
   accepts hidden fixed-pattern aliases such as `milking`, `edge`, or
   `edge-hold` from alternate LLM move fields like `motion`, `style`, or `area`.
+- Scheduled area-focus HSP replacements with a conservative, peak-latency-aware
+  bridge lead so the old pattern keeps playing while a slow flushed replacement
+  batch loads, avoiding stale first points and visible retarget pauses.
 
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------

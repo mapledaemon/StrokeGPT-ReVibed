@@ -44,12 +44,15 @@ CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.85
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS = 8.0
 CONTINUOUS_HSP_SPEED_REPLACEMENT_SPEED_DELTA = 3.0
 CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS = 0.28
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS = 2.0
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = 9.5
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
@@ -2340,7 +2343,7 @@ class MotionController:
                 pass
         return "drift"
 
-    def _continuous_replacement_lead_seconds(self, *, replacement_kind: str = "drift") -> float:
+    def _continuous_replacement_lead_seconds(self, *, replacement_kind: str = "drift", plan=None) -> float:
         is_intent = str(replacement_kind or "").lower() in {"intent", "speed"}
         minimum_lead = (
             CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS
@@ -2352,11 +2355,18 @@ class MotionController:
             if is_intent
             else CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS
         )
+        max_lead = CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS
+        if self._continuous_plan_is_area_focus(plan):
+            minimum_lead = max(minimum_lead, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS)
+            latency_padding = max(latency_padding, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS)
+            max_lead = max(max_lead, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS)
         lead = minimum_lead
         observed_seconds = self._recent_hsp_command_latency_seconds()
+        if self._continuous_plan_is_area_focus(plan):
+            observed_seconds = max(observed_seconds, self._recent_hsp_peak_command_latency_seconds())
         if observed_seconds > 0:
             lead = max(lead, observed_seconds + latency_padding)
-        return _clamp(lead, minimum_lead, CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS)
+        return _clamp(lead, minimum_lead, max_lead)
 
     def _recent_hsp_command_latency_seconds(self) -> float:
         observed_seconds = 0.0
@@ -2374,6 +2384,28 @@ class MotionController:
                 pass
         with self._observability_lock:
             observed_seconds = max(observed_seconds, float(self._recent_hsp_command_seconds or 0.0))
+        return observed_seconds
+
+    def _recent_hsp_peak_command_latency_seconds(self) -> float:
+        observed_seconds = 0.0
+        if hasattr(self.handy, "last_command_result"):
+            try:
+                last_command = self.handy.last_command_result()
+            except Exception:
+                last_command = None
+        else:
+            last_command = None
+        if isinstance(last_command, dict) and str(last_command.get("path") or "").startswith("hsp/"):
+            try:
+                observed_seconds = max(observed_seconds, max(0.0, float(last_command.get("elapsed_ms")) / 1000.0))
+            except (TypeError, ValueError):
+                pass
+        with self._observability_lock:
+            if self._recent_hsp_command_samples:
+                observed_seconds = max(
+                    observed_seconds,
+                    max(float(item) for item in self._recent_hsp_command_samples),
+                )
         return observed_seconds
 
     def _observe_hsp_command_seconds(self, seconds: float) -> None:
@@ -2760,7 +2792,7 @@ class MotionController:
             target=target,
         )
         replacement_lead_seconds = (
-            self._continuous_replacement_lead_seconds(replacement_kind=replacement_kind)
+            self._continuous_replacement_lead_seconds(replacement_kind=replacement_kind, plan=plan)
             if replacing_active_stream
             else 0.0
         )
