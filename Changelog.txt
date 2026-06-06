@@ -53,6 +53,9 @@ Branch: codex/pattern-library-jitter-guardrails
   reports paused/starved/past-tail playback, and gave flushed morph replacement
   batches an immediate bridge handoff point so Cloud timing estimates cannot
   leave the firmware with only future points after a replacement flush.
+- Restored dense area-focus bridge cadence during flushed morph replacements and
+  shortened the default future replacement lead, so morph transitions continue
+  streaming instead of behaving like occasional position moves with pauses.
 - Clamped manual nudge and depth-range test HDSP moves to the saved speed limit
   so calibration/new-position helpers cannot exceed the user's configured cap.
 

@@ -44,16 +44,16 @@ CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LEAD_SECONDS = 0.85
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS = 8.0
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS = 5.0
 CONTINUOUS_HSP_SPEED_REPLACEMENT_SPEED_DELTA = 3.0
 CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS = 0.28
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS = 0.40
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS = CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS
 CONTINUOUS_HSP_REPLACEMENT_LATENCY_PADDING_SECONDS = 1.0
 CONTINUOUS_HSP_INTENT_REPLACEMENT_LATENCY_PADDING_SECONDS = 0.35
 CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LATENCY_PADDING_SECONDS = 2.0
 CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
-CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = 9.5
+CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
@@ -2552,12 +2552,15 @@ class MotionController:
         return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
 
     def _continuous_replacement_bridge_interval_seconds(self, plan=None, base_interval: Optional[float] = None) -> float:
+        if self._continuous_plan_is_area_focus(plan):
+            return max(
+                CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
+                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS,
+            )
         interval = max(
             base_interval if base_interval is not None else self._continuous_sample_interval(),
             CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
         )
-        if self._continuous_plan_is_area_focus(plan):
-            interval = max(interval, CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_BRIDGE_INTERVAL_SECONDS)
         return interval
 
     def _continuous_plan_is_area_focus(self, plan) -> bool:
@@ -3037,8 +3040,8 @@ class MotionController:
                 max(hsp_clock_start_seconds, hsp_clock_start_seconds + bridge_start_latency_seconds),
                 latest_bridge_start,
             )
-            bridge_stream_seconds = latency_bridge_start_stream_seconds
             bridge_start_stream_seconds = min(bridge_handoff_stream_seconds, latency_bridge_start_stream_seconds)
+            bridge_stream_seconds = bridge_start_stream_seconds + bridge_interval_seconds
         stream_wall_zero = None
         sync_count = 0
         next_sync_elapsed = CONTINUOUS_HSP_INITIAL_SYNC_SECONDS if callable(sync_stream) else None

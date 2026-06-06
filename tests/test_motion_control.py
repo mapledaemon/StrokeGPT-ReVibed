@@ -2972,10 +2972,24 @@ class MotionControllerTests(unittest.TestCase):
                 bridge_points[0]["t"] - hsp_clock_start_ms,
                 (CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
-            self.assertGreaterEqual(bridge_points[1]["t"] - hsp_clock_start_ms, 420.0)
+            pre_start_bridge_points = [
+                point for point in bridge_points if point["t"] < replacement["start_time_ms"]
+            ]
+            bridge_intervals = [
+                pre_start_bridge_points[index]["t"] - pre_start_bridge_points[index - 1]["t"]
+                for index in range(1, len(pre_start_bridge_points))
+            ]
+            self.assertTrue(bridge_intervals)
+            self.assertLessEqual(
+                max(bridge_intervals),
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertTrue(
+                any(point["t"] - hsp_clock_start_ms >= 420.0 for point in pre_start_bridge_points),
+                pre_start_bridge_points[:8],
+            )
             self.assertLess(bridge_points[0]["t"], replacement["start_time_ms"])
             self.assertAlmostEqual(first_bridge["hsp_replacement_bridge_start_ms"], bridge_points[0]["t"], delta=1.0)
-            self.assertLessEqual(first_bridge["hsp_replacement_latency_bridge_start_ms"], bridge_points[1]["t"])
             self.assertAlmostEqual(
                 first_bridge["hsp_replacement_latency_bridge_start_ms"] - hsp_clock_start_ms,
                 420.0,
@@ -3012,9 +3026,12 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(replacement_points)
             first_replacement = replacement_points[0]
 
-            self.assertGreaterEqual(first_replacement["hsp_replacement_bridge_interval_ms"], 400.0)
-            self.assertGreaterEqual(first_replacement["hsp_batch_post_start_buffer_ms"], 7000.0)
-            self.assertGreater(first_replacement["hsp_batch_post_morph_buffer_ms"], 5000.0)
+            self.assertLessEqual(
+                first_replacement["hsp_replacement_bridge_interval_ms"],
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertGreaterEqual(first_replacement["hsp_batch_post_start_buffer_ms"], 5000.0)
+            self.assertGreater(first_replacement["hsp_batch_post_morph_buffer_ms"], 3000.0)
         finally:
             controller.stop()
 
@@ -3223,9 +3240,18 @@ class MotionControllerTests(unittest.TestCase):
                 first_retarget["hsp_replacement_lead_ms"],
                 CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
             )
-            self.assertGreaterEqual(
-                first_retarget["hsp_replacement_lead_ms"],
-                8000.0,
+            self.assertLess(first_retarget["hsp_replacement_lead_ms"], 6501.0)
+            pre_start_bridge_points = [
+                point for point in bridge_points if point["t"] < replacement["start_time_ms"]
+            ]
+            bridge_intervals = [
+                pre_start_bridge_points[index]["t"] - pre_start_bridge_points[index - 1]["t"]
+                for index in range(1, len(pre_start_bridge_points))
+            ]
+            self.assertTrue(bridge_intervals)
+            self.assertLessEqual(
+                max(bridge_intervals),
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
             )
             self.assertTrue(
                 any(
