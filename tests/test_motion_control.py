@@ -3160,6 +3160,9 @@ class MotionControllerTests(unittest.TestCase):
             replacement = handy.stream_replacements[0]
             bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
             self.assertTrue(bridge_points)
+            start_tail_index = handy.stream_starts[0]["points"][-1]["stream_index"]
+            self.assertGreater(replacement["points"][0]["stream_index"], start_tail_index)
+            self.assertGreater(replacement["tail_point_stream_index"], start_tail_index)
             point_times = [point["t"] for point in replacement["points"]]
             self.assertIn(replacement["start_time_ms"], point_times)
 
