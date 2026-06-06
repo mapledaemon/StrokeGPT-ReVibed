@@ -7,6 +7,58 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-06 - PR #314 - Pattern Library Jitter Guardrails
+---------------------------------------------------------
+
+Branch: codex/pattern-library-jitter-guardrails
+
+- Marked exact pattern-library playback as experimental in Motion settings and
+  kept chat/background-mode exact pattern playback opt-in by default.
+- Routed scripted preset modes through generated flow targets when experimental
+  pattern-library playback is disabled, preserving exact built-in playback only
+  when the existing pattern-library toggle is enabled.
+- Added catalog guardrails for built-in Continuous pattern seam smoothness,
+  adjacent sample steps, and timed-point density.
+- Made chat motion keepalive recover when firmware HSP state reports paused,
+  starved, or past the buffered point tail even if the local worker still looks
+  active.
+- Kept generated middle/shaft focus centered despite noisy LLM `dp` values and
+  gave generated area-focus HSP streams a longer, lower-density startup buffer
+  so slow Cloud HSP commands are less likely to drain the queue.
+- Stabilized repeated generated middle-focus requests by ignoring noisy broad
+  `rng` values and keeping an already-matching Continuous HSP stream running
+  instead of flushing into another morph replacement.
+- Tightened the normal-chat pattern-library toggle so disabled chat no longer
+  accepts hidden fixed-pattern aliases such as `milking`, `edge`, or
+  `edge-hold` from alternate LLM move fields like `motion`, `style`, or `area`.
+- Scheduled area-focus HSP replacements with a conservative, peak-latency-aware
+  bridge lead so the old pattern keeps playing while a slow flushed replacement
+  batch loads, avoiding stale first points and visible retarget pauses.
+- Kept LLM anchor-loop motion on smooth area-focus HSP when streaming is
+  available so follow-up area-focus commands can use bridged HSP replacements
+  instead of cold HAMP-to-HSP transport switches or exact anchor-plan jitter.
+- Refreshed the semantic motion target at final LLM apply time, let explicit
+  duplicate motion requests refresh active playback instead of clearing chat
+  keepalive, forced a resume after flushed active HSP replacements, and made
+  area-focus replacement bridge points sparser so the first batch retains
+  post-morph buffer instead of draining at the morph-to-normal boundary.
+- Increased generated area-focus HSP reserve by slightly widening point spacing
+  and target buffer length, so multi-second Cloud HSP commands leave enough
+  old-stream buffer for the next append/replacement instead of starving first.
+- Made routine HSP append scheduling use recent peak REST latency, and request a
+  one-shot resume only for late-risk Cloud appends, addressing regular pauses
+  caused by PR #301's shorter startup buffer plus PR #306's conditional resume
+  policy under variable Cloud command latency.
+- Kept chat keepalive duplicate targets from being skipped when cached HSP state
+  reports paused/starved/past-tail playback, and gave flushed morph replacement
+  batches an immediate bridge handoff point so Cloud timing estimates cannot
+  leave the firmware with only future points after a replacement flush.
+- Restored dense area-focus bridge cadence during flushed morph replacements and
+  shortened the default future replacement lead, so morph transitions continue
+  streaming instead of behaving like occasional position moves with pauses.
+- Clamped manual nudge and depth-range test HDSP moves to the saved speed limit
+  so calibration/new-position helpers cannot exceed the user's configured cap.
+
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------
 

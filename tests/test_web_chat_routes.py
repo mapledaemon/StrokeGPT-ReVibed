@@ -63,6 +63,166 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 36)
 
+    def test_llm_motion_apply_uses_current_semantic_target_at_apply_time(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import motion
+
+        current_before_llm = MotionTarget(30, 20, 40, "before llm")
+        current_at_apply = MotionTarget(30, 62, 40, "current at apply")
+
+        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current_at_apply), \
+                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": False}), \
+                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+            target = web._apply_llm_response_move(
+                {"chat": "I'll adjust speed and range.", "move": {"sp": 45, "rng": 70}},
+                current_before_llm,
+                user_input="change the motion",
+            )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.depth, current_at_apply.depth)
+        self.assertEqual(target.speed, 45)
+        self.assertEqual(target.stroke_range, 70)
+        apply_generated_target.assert_called_once_with(target, source="llm")
+
+    def test_explicit_duplicate_llm_motion_refreshes_active_target(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import motion
+
+        current = MotionTarget(40, 50, 80, "active")
+
+        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
+                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+            target = web._apply_llm_response_move(
+                {"chat": "I'll keep moving there.", "move": {"sp": 40, "dp": 50, "rng": 80}},
+                current,
+                user_input="keep moving",
+            )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.speed, current.speed)
+        self.assertEqual(target.depth, current.depth)
+        self.assertEqual(target.stroke_range, current.stroke_range)
+        apply_generated_target.assert_called_once_with(target, source="llm")
+
+    def test_explicit_duplicate_llm_motion_does_not_trigger_repair_when_active(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import llm, motion
+
+        current = MotionTarget(40, 50, 80, "active")
+        response = {"chat": "I'll keep moving there.", "move": {"sp": 40, "dp": 50, "rng": 80}}
+
+        with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                mock.patch.object(llm, "repair_motion_response") as repair_motion_response:
+            repaired, was_repaired = web._repair_llm_motion_response_if_needed(
+                "keep moving",
+                response,
+                {},
+                current,
+            )
+
+        self.assertIs(repaired, response)
+        self.assertFalse(was_repaired)
+        repair_motion_response.assert_not_called()
+
+    def test_disabled_chat_pattern_library_strips_llm_exact_pattern(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
+
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
+        current = MotionTarget(27, 50, 95, "current")
+        response = {
+            "move": {
+                "sp": 21,
+                "dp": 0,
+                "rng": 36,
+                "zone": "tip",
+                "pattern": "flutter",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="flutter at the tip")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
+
+        self.assertEqual(target.label, "llm+tip")
+        self.assertNotIn("flutter", target.label)
+        self.assertEqual(target.speed, 21)
+        self.assertEqual(target.depth, 0)
+        self.assertEqual(target.stroke_range, 36)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+
+    def test_disabled_chat_pattern_library_strips_llm_pattern_alias_fields(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
+
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
+        current = MotionTarget(19, 28, 70, "current")
+        response = {
+            "move": {
+                "sp": 19,
+                "dp": 28,
+                "rng": 70,
+                "motion": "milking",
+                "style": "edge",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="keep moving")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
+
+        self.assertIsNotNone(target)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+        self.assertNotIn("milk", target.label.lower())
+        self.assertNotIn("edge", target.label.lower())
+        self.assertEqual(target.speed, 19)
+        self.assertEqual(target.depth, 28)
+        self.assertEqual(target.stroke_range, 70)
+
+    def test_disabled_chat_pattern_library_preserves_zone_while_stripping_edge_alias(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
+
+        original_settings = (
+            settings.motion_pattern_library_enabled_in_chat,
+            settings.allow_llm_edge_in_chat,
+        )
+        current = MotionTarget(19, 50, 70, "current")
+        response = {
+            "move": {
+                "sp": 24,
+                "rng": 70,
+                "area": "base edge",
+                "shape": "edge-hold",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            settings.allow_llm_edge_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="base focus")
+        finally:
+            (
+                settings.motion_pattern_library_enabled_in_chat,
+                settings.allow_llm_edge_in_chat,
+            ) = original_settings
+
+        self.assertIsNotNone(target)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+        self.assertIn("base", target.label)
+        self.assertNotIn("tease", target.label)
+        self.assertEqual(target.depth, 66)
+        self.assertEqual(target.stroke_range, 70)
+
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 
@@ -350,6 +510,61 @@ class WebChatRouteTests(WebTestCase):
                 settings.handy_key,
                 settings.motion_pattern_library_enabled_in_chat,
             ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_send_message_strips_llm_pattern_alias_when_chat_library_disabled(self):
+        from strokegpt.web import _clear_chat_motion_keepalive, app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.motion_pattern_library_enabled_in_chat,
+        )
+        captured_targets = []
+        _clear_chat_motion_keepalive()
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.motion_pattern_library_enabled_in_chat = False
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I'll keep it moving.",
+                "move": {
+                    "sp": 19,
+                    "dp": 28,
+                    "rng": 70,
+                    "motion": "milking",
+                    "style": "edge",
+                },
+                "new_mood": None,
+            }), mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), mock.patch.object(
+                motion,
+                "apply_generated_target",
+                side_effect=lambda target, **_kwargs: captured_targets.append(target),
+            ):
+                response = self.client.post("/send_message", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(captured_targets), 1)
+            applied = captured_targets[0]
+            self.assertNotIn("milk", applied.label.lower())
+            self.assertNotIn("edge", applied.label.lower())
+            self.assertEqual(applied.speed, 19)
+            self.assertEqual(applied.depth, 28)
+            self.assertEqual(applied.stroke_range, 70)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.motion_pattern_library_enabled_in_chat,
+            ) = original_settings
+            _clear_chat_motion_keepalive()
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
@@ -730,6 +945,113 @@ class WebChatRouteTests(WebTestCase):
 
             with mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
                     mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_not_called()
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_restarts_when_hsp_reports_paused(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {"play_state": "paused_on_starving"},
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_called_once_with(target, source="unit keepalive")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_restarts_when_hsp_clock_is_past_buffer(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {
+                        "play_state": "playing",
+                        "current_time_ms": 181000,
+                        "last_point_time_ms": 180000,
+                    },
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                self.assertTrue(web._chat_motion_keepalive_once("unit keepalive"))
+
+            apply_generated_target.assert_called_once_with(target, source="unit keepalive")
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = original_target
+                app_state.chat_motion_keepalive_last_attempt_at = original_attempt
+
+    def test_chat_motion_keepalive_skips_when_hsp_reports_buffered_playback(self):
+        import strokegpt.web as web
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import app_state, handy, motion, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_target = app_state.chat_motion_keepalive_target
+        original_attempt = app_state.chat_motion_keepalive_last_attempt_at
+        target = MotionTarget(42, 55, 70, "llm+wave")
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            with app_state.lock:
+                app_state.chat_motion_keepalive_target = target
+                app_state.chat_motion_keepalive_last_attempt_at = 0.0
+
+            with mock.patch.object(motion, "observability_snapshot", return_value={
+                "playback_active": True,
+                "diagnostics": {
+                    "hsp_state": {
+                        "play_state": "playing",
+                        "current_time_ms": 179000,
+                        "last_point_time_ms": 180000,
+                    },
+                },
+            }), mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
                 self.assertFalse(web._chat_motion_keepalive_once("unit keepalive"))
 
             apply_generated_target.assert_not_called()

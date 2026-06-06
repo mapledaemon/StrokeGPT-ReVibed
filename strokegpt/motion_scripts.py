@@ -32,7 +32,7 @@ class ScriptStep:
 
 CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER = 1.15
 CONTINUOUS_MODE_PATTERN_REPEAT_MODES = {"milking", "edging"}
-CONTINUOUS_MODE_PATTERN_REPEAT_STEPS = 2
+CONTINUOUS_MODE_PATTERN_REPEAT_STEPS = 3
 
 
 def _continuous_hold_floor_for_pattern(pattern_id):

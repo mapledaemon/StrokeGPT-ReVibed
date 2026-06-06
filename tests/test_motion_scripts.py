@@ -30,6 +30,7 @@ from strokegpt.motion_patterns import (
     _smooth_jitter,
 )
 from strokegpt.motion_scripts import (
+    CONTINUOUS_MODE_PATTERN_REPEAT_STEPS,
     EDGING_ARCS,
     MILKING_ARCS,
     MotionScriptPlanner,
@@ -110,7 +111,8 @@ class MotionScriptPlannerTests(unittest.TestCase):
 
         steps = planner._pattern_cluster(current, "milking-full-drive", "Passionate", 66, 52, 88)
 
-        self.assertEqual(len(steps), 2)
+        self.assertEqual(CONTINUOUS_MODE_PATTERN_REPEAT_STEPS, 3)
+        self.assertEqual(len(steps), 3)
         self.assertTrue(all(step.target.label == PATTERNS["milking-full-drive"].name for step in steps))
         self.assertTrue(all(step.delay_factor > 0 for step in steps))
         self.assertTrue(all(step.hold_seconds_floor > 0 for step in steps))

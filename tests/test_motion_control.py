@@ -10,6 +10,9 @@ from strokegpt.motion import (
     CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON,
@@ -159,12 +162,14 @@ class StreamingFakeHandy(FakeHandy):
         *,
         tail_point_stream_index,
         tail_point_threshold=None,
+        force_resume=False,
     ):
         self.stream_appends.append(
             {
                 "points": [dict(point) for point in points],
                 "tail_point_stream_index": tail_point_stream_index,
                 "tail_point_threshold": tail_point_threshold,
+                "force_resume": bool(force_resume),
             }
         )
         self._last_command = {
@@ -192,6 +197,22 @@ class StreamingFakeHandy(FakeHandy):
         self._hsp_streaming = False
 
 
+class PausedHspStreamingFakeHandy(StreamingFakeHandy):
+    def __init__(self):
+        super().__init__()
+        self.hsp_state = None
+        self.hsp_state_sse_event_type = ""
+
+    def diagnostics(self, *args, **kwargs):
+        return {
+            "relative_speed": self.last_relative_speed,
+            "depth": self.last_depth_pos,
+            "range": self.last_stroke_range,
+            "hsp_state": dict(self.hsp_state) if isinstance(self.hsp_state, dict) else None,
+            "hsp_state_sse_event_type": self.hsp_state_sse_event_type,
+        }
+
+
 class AppendFailStreamingFakeHandy(StreamingFakeHandy):
     def append_continuous_stream(
         self,
@@ -199,11 +220,13 @@ class AppendFailStreamingFakeHandy(StreamingFakeHandy):
         *,
         tail_point_stream_index,
         tail_point_threshold=None,
+        force_resume=False,
     ):
         super().append_continuous_stream(
             points,
             tail_point_stream_index=tail_point_stream_index,
             tail_point_threshold=tail_point_threshold,
+            force_resume=force_resume,
         )
         self._last_command = {
             "path": "hsp/add",
@@ -599,6 +622,36 @@ class MotionSanitizerTests(unittest.TestCase):
         target = sanitizer.from_llm_move({"zone": "tip", "sp": 72}, current)
 
         self.assertEqual(target.speed, 72)
+
+    def test_llm_middle_area_focus_ignores_noisy_depth_and_range(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+
+        target = sanitizer.from_llm_move({"zone": "middle", "sp": 17, "dp": 71, "rng": 80}, current)
+        noisy_target = sanitizer.from_llm_move({"zone": "middle", "sp": 17, "dp": 40, "rng": 46}, current)
+
+        self.assertIsNotNone(target)
+        self.assertIn("middle", target.label)
+        self.assertEqual(target.speed, 17)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 86)
+        self.assertTrue(target.motion_program.get("generated_area_focus"))
+        self.assertEqual(noisy_target.depth, target.depth)
+        self.assertEqual(noisy_target.stroke_range, target.stroke_range)
+
+    def test_default_middle_anchor_loop_uses_area_focus_transport(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+
+        target = sanitizer.from_llm_move(
+            {"motion": "anchor_loop", "zone": "middle", "dp": 68, "rng": 80},
+            current,
+        )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 86)
+        self.assertTrue(target.motion_program.get("generated_area_focus"))
 
     def test_llm_move_accepts_anchor_program(self):
         sanitizer = MotionSanitizer()
@@ -1390,7 +1443,7 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_hsp_area_focus_preserves_fractional_integer_bucket_points(self):
+    def test_continuous_hsp_area_focus_coalesces_fractional_chatter(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
         intent = IntentMatcher().parse("focus on the tip", controller.semantic_target())
@@ -1406,14 +1459,13 @@ class MotionControllerTests(unittest.TestCase):
             ]
             trace = self.wait_for_hsp_trace(
                 controller,
-                lambda point: point.get("continuous_plan_kind") == "area_focus"
-                and point.get("hsp_duplicate_suppressed_points"),
+                lambda point: point.get("continuous_plan_kind") == "area_focus",
             )
 
-            self.assertTrue(any(point.get("hsp_duplicate_suppressed_points") for point in trace))
-            self.assertTrue(self.hsp_rapid_duplicate_integer_intervals(points))
+            self.assertFalse(self.hsp_rapid_duplicate_integer_intervals(points))
             self.assertFalse(self.hsp_rapid_near_duplicate_intervals(points))
-            self.assertLessEqual(max(intervals), 150)
+            self.assertGreaterEqual(min(intervals), 80)
+            self.assertLessEqual(max(intervals), 200)
         finally:
             controller.stop()
 
@@ -2160,6 +2212,15 @@ class MotionControllerTests(unittest.TestCase):
         controller._observe_hsp_command_seconds(0.12)
         self.assertLess(controller._recent_hsp_command_latency_seconds(), 1.0)
 
+    def test_continuous_hsp_append_threshold_uses_peak_latency_spike(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+
+        controller._observe_hsp_command_seconds(4.0)
+        controller._observe_hsp_command_seconds(0.12)
+
+        self.assertLess(controller._recent_hsp_command_latency_seconds(), 1.0)
+        self.assertGreaterEqual(controller._continuous_append_threshold_seconds(), 5.0)
+
     def test_continuous_hsp_buffer_expands_without_sparsening_points(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
 
@@ -2172,6 +2233,99 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(target_buffer, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS)
         self.assertGreaterEqual(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
         self.assertEqual(point_interval, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+
+    def test_late_risk_hsp_append_requests_resume(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        controller._observe_hsp_command_seconds(4.0)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "milk"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_appends) == 1), handy.stream_appends)
+
+            self.assertTrue(handy.stream_appends[0]["force_resume"])
+            add_points = [
+                point
+                for point in controller.observability_snapshot()["trace"]
+                if point.get("continuous_schema") == "hsp" and point.get("hsp_batch") == "add"
+            ]
+            self.assertTrue(add_points)
+            self.assertTrue(add_points[-1]["hsp_append_force_resume"])
+        finally:
+            controller.stop()
+
+    def test_continuous_area_focus_uses_longer_lower_density_hsp_buffer(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        plan = controller._hsp_area_focus_plan(MotionTarget(17, 50, 80, "llm+middle"))
+
+        self.assertGreaterEqual(
+            controller._continuous_target_buffer_seconds(plan),
+            CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
+        )
+        self.assertEqual(
+            controller._continuous_hsp_point_interval_seconds(plan),
+            CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
+        )
+
+    def test_continuous_middle_area_focus_initial_play_keeps_hsp_reserve(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        target = MotionSanitizer().from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 71, "rng": 80},
+            MotionTarget(35, 45, 55),
+        )
+
+        try:
+            controller.apply_generated_target(target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
+            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 8500)
+            self.assertGreaterEqual(min(intervals), 80)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "llm"
+                and point.get("hsp_batch") == "play"
+                and point.get("continuous_plan_kind") == "area_focus",
+            )
+            play_points = [point for point in trace if point.get("hsp_batch") == "play"]
+            self.assertTrue(play_points)
+            self.assertEqual({point.get("continuous_area_focus_zone") for point in play_points}, {"middle"})
+            self.assertEqual({point.get("continuous_area_focus_transport_depth") for point in play_points}, {50.0})
+            self.assertGreaterEqual(play_points[-1]["hsp_target_buffer_ms"], 9000.0)
+            self.assertGreaterEqual(play_points[-1]["hsp_buffer_after_command_ms"], 8400.0)
+        finally:
+            controller.stop()
+
+    def test_continuous_duplicate_area_focus_target_keeps_active_stream(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        first = sanitizer.from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 71, "rng": 80},
+            current,
+        )
+        duplicate = sanitizer.from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 40, "rng": 46},
+            current,
+        )
+
+        try:
+            controller.apply_generated_target(first, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.apply_generated_target(duplicate, source="duplicate")
+
+            self.assertFalse(
+                self.wait_until(lambda: len(handy.stream_replacements) > 0, timeout=0.25),
+                handy.stream_replacements,
+            )
+            self.assertEqual(len(handy.stream_starts), 1)
+        finally:
+            controller.stop()
 
     def test_continuous_hsp_replacement_uses_default_latency_reserve(self):
         handy = StreamingFakeHandy()
@@ -2803,6 +2957,7 @@ class MotionControllerTests(unittest.TestCase):
                 lambda point: point.get("hsp_replacement_bridge")
                 and point.get("source") == "freestyle planner"
                 and point.get("freestyle_pattern_id") == "wave",
+                timeout=2.0,
             )
             first_bridge = next(
                 point
@@ -2813,10 +2968,96 @@ class MotionControllerTests(unittest.TestCase):
             )
             hsp_clock_start_ms = first_bridge["hsp_play_start_ms"] - first_bridge["hsp_replacement_lead_ms"]
 
-            self.assertGreaterEqual(bridge_points[0]["t"] - hsp_clock_start_ms, 390.0)
+            self.assertLessEqual(
+                bridge_points[0]["t"] - hsp_clock_start_ms,
+                (CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            pre_start_bridge_points = [
+                point for point in bridge_points if point["t"] < replacement["start_time_ms"]
+            ]
+            bridge_intervals = [
+                pre_start_bridge_points[index]["t"] - pre_start_bridge_points[index - 1]["t"]
+                for index in range(1, len(pre_start_bridge_points))
+            ]
+            self.assertTrue(bridge_intervals)
+            self.assertLessEqual(
+                max(bridge_intervals),
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertTrue(
+                any(point["t"] - hsp_clock_start_ms >= 420.0 for point in pre_start_bridge_points),
+                pre_start_bridge_points[:8],
+            )
             self.assertLess(bridge_points[0]["t"], replacement["start_time_ms"])
             self.assertAlmostEqual(first_bridge["hsp_replacement_bridge_start_ms"], bridge_points[0]["t"], delta=1.0)
+            self.assertAlmostEqual(
+                first_bridge["hsp_replacement_latency_bridge_start_ms"] - hsp_clock_start_ms,
+                420.0,
+                delta=1.0,
+            )
             self.assertGreaterEqual(first_bridge["hsp_replacement_bridge_latency_ms"], 420.0)
+        finally:
+            controller.stop()
+
+    def test_area_focus_replacement_batch_keeps_post_morph_reserve(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(MotionTarget(54, 50, 78, "freestyle flow"), source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.apply_generated_target(MotionTarget(62, 58, 70, "freestyle flow"), source="second")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+                and not point.get("hsp_replacement_bridge"),
+            )
+            replacement_points = [
+                point
+                for point in trace
+                if point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+                and not point.get("hsp_replacement_bridge")
+            ]
+            self.assertTrue(replacement_points)
+            first_replacement = replacement_points[0]
+
+            self.assertLessEqual(
+                first_replacement["hsp_replacement_bridge_interval_ms"],
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertGreaterEqual(first_replacement["hsp_batch_post_start_buffer_ms"], 5000.0)
+            self.assertGreater(first_replacement["hsp_batch_post_morph_buffer_ms"], 3000.0)
+        finally:
+            controller.stop()
+
+    def test_duplicate_area_focus_target_recovers_paused_hsp_stream(self):
+        handy = PausedHspStreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        target = MotionTarget(54, 50, 78, "freestyle flow")
+
+        try:
+            controller.apply_generated_target(target, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            handy.hsp_state = {
+                "play_state": "paused",
+                "current_time_ms": 900,
+                "last_point_time_ms": 4800,
+            }
+            controller.apply_generated_target(target, source="keepalive")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "keepalive"
+                and point.get("hsp_batch") == "replace",
+            )
+            self.assertTrue(any(point.get("hsp_replacing_active_stream") for point in trace))
         finally:
             controller.stop()
 
@@ -2862,7 +3103,7 @@ class MotionControllerTests(unittest.TestCase):
             ]
             self.assertTrue(any(point.get("hsp_replacement_bridge") for point in second_points))
             first_point = next(point for point in second_points if not point.get("hsp_replacement_bridge"))
-            expected_phase = (first_point["hsp_replacement_lead_ms"] / 1000.0) / old_duration
+            expected_phase = ((first_point["hsp_replacement_lead_ms"] / 1000.0) / old_duration) % 1.0
 
             self.assertEqual(first_point["hsp_replacement_kind"], "speed")
             self.assertAlmostEqual(first_point["sample_phase"], expected_phase, delta=0.08)
@@ -2940,8 +3181,12 @@ class MotionControllerTests(unittest.TestCase):
             first_retarget = next(point for point in base_points if not point.get("hsp_replacement_bridge"))
             hsp_clock_start_ms = first_bridge["hsp_play_start_ms"] - first_bridge["hsp_replacement_lead_ms"]
 
-            self.assertGreaterEqual(
+            self.assertLessEqual(
                 first_bridge["hsp_point_time_ms"] - hsp_clock_start_ms,
+                (CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertGreaterEqual(
+                first_bridge["hsp_replacement_latency_bridge_start_ms"] - hsp_clock_start_ms,
                 (CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS * 1000.0) - 5.0,
             )
             self.assertEqual(first_retarget["hsp_replacement_kind"], "intent")
@@ -2952,6 +3197,71 @@ class MotionControllerTests(unittest.TestCase):
                 first_retarget["morph_start_depth"],
                 delta=2.0,
             )
+        finally:
+            controller.stop()
+
+    def test_area_focus_replacement_lead_keeps_bridge_points_after_slow_add_latency(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        matcher = IntentMatcher()
+
+        try:
+            tip_intent = matcher.parse("focus on the tip", controller.semantic_target())
+            controller.apply_generated_target(tip_intent.target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            base_intent = matcher.parse("focus on the base", controller.semantic_target())
+            controller.apply_generated_target(base_intent.target, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
+            self.assertTrue(bridge_points)
+
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: (
+                    point.get("continuous_plan_kind") == "area_focus"
+                    and point.get("continuous_area_focus_zone") == "base"
+                    and not point.get("hsp_replacement_bridge")
+                ),
+            )
+            base_points = [
+                point
+                for point in trace
+                if point.get("continuous_plan_kind") == "area_focus"
+                and point.get("continuous_area_focus_zone") == "base"
+            ]
+            first_bridge = next(point for point in base_points if point.get("hsp_replacement_bridge"))
+            first_retarget = next(point for point in base_points if not point.get("hsp_replacement_bridge"))
+            hsp_clock_start_ms = first_retarget["hsp_play_start_ms"] - first_retarget["hsp_replacement_lead_ms"]
+
+            self.assertGreaterEqual(
+                first_retarget["hsp_replacement_lead_ms"],
+                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
+            )
+            self.assertLess(first_retarget["hsp_replacement_lead_ms"], 6501.0)
+            pre_start_bridge_points = [
+                point for point in bridge_points if point["t"] < replacement["start_time_ms"]
+            ]
+            bridge_intervals = [
+                pre_start_bridge_points[index]["t"] - pre_start_bridge_points[index - 1]["t"]
+                for index in range(1, len(pre_start_bridge_points))
+            ]
+            self.assertTrue(bridge_intervals)
+            self.assertLessEqual(
+                max(bridge_intervals),
+                (CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS * 1000.0) + 5.0,
+            )
+            self.assertTrue(
+                any(
+                    point["t"] - hsp_clock_start_ms >= 4800.0
+                    and point["t"] < replacement["start_time_ms"]
+                    for point in bridge_points
+                ),
+                bridge_points,
+            )
+            self.assertLess(first_bridge["hsp_point_time_ms"], first_retarget["hsp_point_time_ms"])
         finally:
             controller.stop()
 
@@ -3045,8 +3355,56 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(target.depth, 50)
         self.assertEqual(target.stroke_range, 70)
 
-    def test_continuous_anchor_loop_uses_live_stroke_bypass(self):
+    def test_continuous_anchor_loop_prefers_area_focus_hsp_when_available(self):
         handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            target = controller.sanitizer.from_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "shaft", "base", "shaft"],
+                    "dp": 50,
+                    "rng": 70,
+                },
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(target)
+
+            controller.apply_generated_target(target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            semantic = controller.semantic_target()
+            self.assertEqual(semantic.depth, 50)
+            self.assertEqual(semantic.stroke_range, 70)
+            self.assertEqual(semantic.motion_program, target.motion_program)
+            self.assertEqual(handy.moves, [])
+            self.assertEqual(handy.stream_replacements, [])
+            self.assertTrue(controller.observability_snapshot()["playback_active"])
+            hsp_points = self.wait_for_hsp_trace(controller)
+            self.assertTrue(
+                any(
+                    point.get("continuous_plan_kind") == "area_focus"
+                    and point.get("requested_motion_program") == "localized_anchor_loop"
+                    for point in hsp_points
+                ),
+                hsp_points,
+            )
+            self.assertGreater(
+                len({round(point["x"], 1) for point in handy.stream_starts[0]["points"]}),
+                2,
+            )
+            self.assertTrue(
+                all(
+                    point.get("continuous_schema") != "hamp_live_anchor"
+                    for point in controller.observability_snapshot()["trace"]
+                )
+            )
+        finally:
+            controller.stop()
+
+    def test_continuous_anchor_loop_keeps_live_stroke_fallback_without_hsp(self):
+        handy = FakeHandy()
         controller = MotionController(handy, step_delay=0.16)
 
         try:
@@ -3064,13 +3422,6 @@ class MotionControllerTests(unittest.TestCase):
             controller.apply_generated_target(target, source="llm")
             self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
 
-            semantic = controller.semantic_target()
-            self.assertEqual(semantic.depth, 50)
-            self.assertEqual(semantic.stroke_range, 70)
-            self.assertEqual(semantic.motion_program, target.motion_program)
-            self.assertEqual(handy.stream_starts, [])
-            self.assertEqual(handy.stream_replacements, [])
-            self.assertTrue(controller.observability_snapshot()["playback_active"])
             live_points = [
                 point
                 for point in controller.observability_snapshot()["trace"]
@@ -3097,9 +3448,8 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertIsNotNone(first)
             controller.apply_generated_target(first, source="first")
-            self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
-            current_depth = controller.current_target().depth
             second = controller.apply_llm_move(
                 {
                     "motion": "anchor_loop",
@@ -3109,19 +3459,67 @@ class MotionControllerTests(unittest.TestCase):
             )
             self.assertIsNotNone(second)
             self.assertEqual(second.depth, 50)
-            self.assertEqual(round(current_depth), round(second.depth))
-            self.assertEqual(handy.stream_starts, [])
+            self.assertEqual(handy.moves, [])
             self.assertEqual(handy.stream_replacements, [])
-            self.assertTrue(self.wait_until(lambda: len(handy.moves) >= 2), handy.moves)
-            live_points = [
+            hsp_points = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("continuous_plan_kind") == "area_focus",
+            )
+            self.assertTrue(any(point.get("requested_motion_program") == "localized_anchor_loop" for point in hsp_points))
+            self.assertTrue(
+                all(point.get("continuous_schema") != "hamp_live_anchor" for point in hsp_points)
+            )
+        finally:
+            controller.stop()
+
+    def test_anchor_loop_to_middle_area_focus_uses_hsp_replacement(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            anchor_target = controller.sanitizer.from_llm_move(
+                {
+                    "motion": "anchor_loop",
+                    "anchors": ["tip", "shaft", "base", "shaft"],
+                    "sp": 19,
+                    "rng": 70,
+                },
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(anchor_target)
+            controller.apply_generated_target(anchor_target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            middle_target = controller.sanitizer.from_llm_move(
+                {"zone": "middle", "sp": 19},
+                controller.semantic_target(),
+            )
+            self.assertIsNotNone(middle_target)
+            controller.apply_generated_target(middle_target, source="llm")
+
+            self.assertEqual(handy.moves, [])
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            self.assertTrue(any(point.get("hsp_replacement_bridge") for point in replacement["points"]))
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("continuous_plan_kind") == "area_focus"
+                and point.get("continuous_area_focus_zone") == "middle"
+                and not point.get("hsp_replacement_bridge"),
+            )
+            middle_points = [
                 point
-                for point in controller.observability_snapshot()["trace"]
-                if point.get("continuous_schema") == "hamp_live_anchor"
+                for point in trace
+                if point.get("continuous_plan_kind") == "area_focus"
+                and point.get("continuous_area_focus_zone") == "middle"
+                and not point.get("hsp_replacement_bridge")
             ]
-            self.assertTrue(live_points)
-            self.assertEqual(
-                live_points[-1]["continuous_hsp_bypass_reason"],
-                "generated_anchor_loop_hsp_microstutter",
+            self.assertTrue(middle_points)
+            self.assertEqual(middle_points[0]["hsp_replacement_kind"], "intent")
+            self.assertEqual(middle_points[0]["morph_start_source"], "predicted_active_stream")
+            self.assertGreaterEqual(
+                middle_points[0]["hsp_replacement_lead_ms"],
+                CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_LEAD_SECONDS * 1000.0,
             )
         finally:
             controller.stop()

@@ -80,6 +80,9 @@ MOTION_FEEDBACK_HISTORY_LIMIT = 20
 STANDALONE_AUTOSPEAK_WAKE_FLOOR_SECONDS = 8.0
 CHAT_MOTION_KEEPALIVE_INTERVAL_SECONDS = 3.0
 CHAT_MOTION_KEEPALIVE_RETRY_FLOOR_SECONDS = 1.0
+CHAT_HSP_STALE_CLOCK_TOLERANCE_MS = 500
+CHAT_HSP_INACTIVE_PLAY_STATE_TOKENS = ("starv", "pause", "stop", "idle")
+CHAT_HSP_STARVING_EVENT_TYPES = {"hsp_starving", "hsp_paused_on_starving"}
 CHAT_INTENSITY_GUIDES = {"steady", "ramp_up", "ramp_down", "variable"}
 STATUS_OBSERVABILITY_TRACE_LIMIT = 96
 CHAT_INTENSITY_ARC_SECONDS = 600
@@ -548,14 +551,71 @@ def _chat_motion_keepalive_candidate():
     return target
 
 
+def _numeric_hsp_state_value(state, key):
+    if not isinstance(state, dict):
+        return None
+    try:
+        return int(round(float(state.get(key))))
+    except (TypeError, ValueError):
+        return None
+
+
+def _chat_motion_hsp_state_inactive(snapshot):
+    if not isinstance(snapshot, dict):
+        return False
+    diagnostics = snapshot.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        return False
+    event_type = str(diagnostics.get("hsp_state_sse_event_type") or "").strip().lower()
+    if event_type in CHAT_HSP_STARVING_EVENT_TYPES:
+        return True
+    state = diagnostics.get("hsp_state")
+    if not isinstance(state, dict):
+        return False
+    play_state = str(state.get("play_state") or "").strip().lower()
+    if play_state:
+        if any(token in play_state for token in CHAT_HSP_INACTIVE_PLAY_STATE_TOKENS):
+            return True
+    current_time = _numeric_hsp_state_value(state, "current_time_ms")
+    last_point_time = _numeric_hsp_state_value(state, "last_point_time_ms")
+    if current_time is None or last_point_time is None:
+        return False
+    return current_time > last_point_time + CHAT_HSP_STALE_CLOCK_TOLERANCE_MS
+
+
+def _chat_motion_diagnostics_snapshot():
+    handy_diagnostics = None
+    diagnostics = getattr(handy, "diagnostics", None)
+    if callable(diagnostics):
+        try:
+            handy_diagnostics = diagnostics(
+                refresh_hsp_state=True,
+                include_history=False,
+                include_recent_events=False,
+            )
+        except TypeError:
+            try:
+                handy_diagnostics = diagnostics()
+            except Exception:
+                handy_diagnostics = None
+        except Exception:
+            handy_diagnostics = None
+    try:
+        if handy_diagnostics is not None:
+            return motion.observability_snapshot(handy_diagnostics=handy_diagnostics, trace_limit=1)
+        return motion.observability_snapshot(trace_limit=1)
+    except TypeError:
+        return motion.observability_snapshot()
+
+
 def _chat_motion_playback_active():
     try:
-        snapshot = motion.observability_snapshot(trace_limit=1)
-    except TypeError:
-        snapshot = motion.observability_snapshot()
+        snapshot = _chat_motion_diagnostics_snapshot()
     except Exception as exc:
         print(f"[WARN] Chat motion keepalive could not read motion status: {exc}")
         return True
+    if _chat_motion_hsp_state_inactive(snapshot):
+        return False
     return bool(snapshot.get("playback_active"))
 
 
@@ -1417,15 +1477,92 @@ def _llm_visible_fixed_pattern(pattern_id):
         for pattern in catalog.get("patterns", [])
     )
 
+LLM_FIXED_PATTERN_CUE_KEYS = {
+    "zone",
+    "area",
+    "anchor",
+    "position",
+    "pattern",
+    "shape",
+    "style",
+    "motion",
+    "length",
+    "range",
+    "stroke_range",
+    "rng",
+    "speed",
+    "tempo",
+    "pace",
+    "sp",
+}
+LLM_FIXED_PATTERN_ALIAS_IDS = (
+    ("milk", re.compile(r"\bmilk(?:ing)?\b", re.IGNORECASE)),
+    ("flutter", re.compile(r"\b(?:flutter|stutter|quick\s+little\s+pulses?)\b", re.IGNORECASE)),
+    ("flick", re.compile(r"\b(?:flicks?|snap)\b", re.IGNORECASE)),
+    ("pulse", re.compile(r"\b(?:puls(?:e|ing)|pump(?:ing)?)\b", re.IGNORECASE)),
+    ("hold", re.compile(r"\b(?:hold|press|grind)\b", re.IGNORECASE)),
+    ("wave", re.compile(r"\b(?:wave|rolling|oscillat(?:e|ing))\b", re.IGNORECASE)),
+    ("ramp", re.compile(r"\b(?:ramp|climb|build)\b", re.IGNORECASE)),
+    ("ladder", re.compile(r"\b(?:ladder|step(?:ped|s)?)\b", re.IGNORECASE)),
+    ("surge", re.compile(r"\b(?:surge|swell|crescendo)\b", re.IGNORECASE)),
+    ("sway", re.compile(r"\b(?:sway|alternat(?:e|ing)|smooth\s+alternation)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\btease\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:stroke|stroking)\b", re.IGNORECASE)),
+    ("edge", re.compile(r"\b(?:edge|edging)\b", re.IGNORECASE)),
+)
+
+def _llm_fixed_pattern_alias_hidden(value):
+    if value is None or isinstance(value, (int, float, bool)):
+        return False
+    text = str(value or "")
+    if not text.strip():
+        return False
+    pattern_id = slugify_pattern_id(text, fallback="")
+    if pattern_id in PATTERNS:
+        return not _llm_visible_fixed_pattern(pattern_id)
+    normalized = re.sub(r"[_-]+", " ", text)
+    for alias_id, pattern in LLM_FIXED_PATTERN_ALIAS_IDS:
+        if not pattern.search(normalized):
+            continue
+        if alias_id == "edge":
+            return (
+                not settings.motion_pattern_library_enabled_in_chat
+                or not settings.allow_llm_edge_in_chat
+            )
+        return not _llm_visible_fixed_pattern(alias_id)
+    return False
+
+def _strip_hidden_fixed_pattern_words(value):
+    cleaned = re.sub(r"[_-]+", " ", str(value or ""))
+    for alias_id, pattern in LLM_FIXED_PATTERN_ALIAS_IDS:
+        if alias_id == "edge":
+            if settings.motion_pattern_library_enabled_in_chat and settings.allow_llm_edge_in_chat:
+                continue
+        elif _llm_visible_fixed_pattern(alias_id):
+            continue
+        cleaned = pattern.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
 def _sanitize_llm_move_for_disabled_patterns(move):
     if not isinstance(move, dict):
         return move
-    pattern_id = slugify_pattern_id(move.get("pattern") or "")
-    if pattern_id in PATTERNS and not _llm_visible_fixed_pattern(pattern_id):
-        sanitized = dict(move)
-        sanitized.pop("pattern", None)
-        return sanitized
-    return move
+    sanitized = None
+    for key, value in move.items():
+        if key not in LLM_FIXED_PATTERN_CUE_KEYS or not _llm_fixed_pattern_alias_hidden(value):
+            continue
+        if sanitized is None:
+            sanitized = dict(move)
+        replacement = _strip_hidden_fixed_pattern_words(value)
+        if replacement:
+            sanitized[key] = replacement
+        else:
+            sanitized.pop(key, None)
+    return sanitized if sanitized is not None else move
+
+def _patternless_llm_target(target):
+    if not target or settings.motion_pattern_library_enabled_in_chat:
+        return target
+    return _patternless_chat_target(target)
 
 def _patternless_chat_target(target):
     if not target or settings.motion_pattern_library_enabled_in_chat:
@@ -1576,7 +1713,7 @@ def _target_has_motion_effect(current, target):
     )
 
 
-def _target_should_apply_motion(current, target):
+def _target_should_apply_motion(current, target, *, refresh_duplicate_active=False):
     if _target_has_motion_effect(current, target):
         return True
     if not target:
@@ -1586,7 +1723,10 @@ def _target_should_apply_motion(current, target):
             return False
     except (TypeError, ValueError):
         return False
-    return not _chat_motion_playback_active()
+    playback_active = _chat_motion_playback_active()
+    if refresh_duplicate_active and playback_active:
+        return True
+    return not playback_active
 
 
 def _user_requested_specific_focus(text):
@@ -1661,7 +1801,8 @@ def _target_from_llm_response_move(response, current, user_input=""):
         return None
     sanitized = _sanitize_llm_move_for_disabled_patterns(move)
     target = motion.sanitizer.from_llm_move(sanitized, current)
-    return _guard_unrequested_tight_llm_target(user_input, current, target)
+    target = _guard_unrequested_tight_llm_target(user_input, current, target)
+    return _patternless_llm_target(target)
 
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):
@@ -1679,9 +1820,14 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
     target = _target_from_llm_response_move(response, current, user_input=user_input)
     if context.get("autospeak_event") and not _chat_claims_motion_change(response.get("chat")):
         return response, False
+    target_applies = _target_should_apply_motion(
+        current,
+        target,
+        refresh_duplicate_active=_chat_turn_requested_motion(user_input, response, context),
+    )
     needs_repair = (
         (_looks_like_motion_request(user_input) or _chat_claims_motion_change(response.get("chat")))
-        and not _target_should_apply_motion(current, target)
+        and not target_applies
     )
     if not needs_repair:
         return response, False
@@ -1698,8 +1844,14 @@ def _repair_llm_motion_response_if_needed(user_input, response, context, current
 def _apply_llm_response_move(response, current, source="llm", user_input="", context=None):
     if _autospeak_chat_only_motion_context(context):
         return None
-    target = _target_from_llm_response_move(response, current, user_input=user_input)
-    if not _target_should_apply_motion(current, target):
+    current_at_apply = _motion_semantic_target()
+    target = _target_from_llm_response_move(response, current_at_apply, user_input=user_input)
+    refresh_duplicate_active = _chat_turn_requested_motion(user_input, response, context)
+    if not _target_should_apply_motion(
+        current_at_apply,
+        target,
+        refresh_duplicate_active=refresh_duplicate_active,
+    ):
         return None
     motion.apply_generated_target(target, source=source)
     return target
