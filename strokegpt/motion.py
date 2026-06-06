@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional
 
-from .motion_anchors import coerce_anchor_program_dict
+from .motion_anchors import coerce_anchor_program_dict, default_anchor_items
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -38,6 +38,8 @@ CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS = 5.2
 CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS = 2.6
 CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND = 100
 CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS = 0.05
+CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS = 0.10
+CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS = 9.0
 CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS = 0.035
 CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS = 2.0
 CONTINUOUS_HSP_REPLACEMENT_LEAD_SECONDS = 1.0
@@ -57,6 +59,9 @@ CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
 CONTINUOUS_TRANSITION_PHASE_CANDIDATES = 48
+CONTINUOUS_DUPLICATE_TARGET_SPEED_EPSILON = 1.0
+CONTINUOUS_DUPLICATE_TARGET_DEPTH_EPSILON = 1.0
+CONTINUOUS_DUPLICATE_TARGET_RANGE_EPSILON = 1.0
 CONTINUOUS_MORPH_SECONDS = 0.95
 CONTINUOUS_MIN_MORPH_SECONDS = 0.45
 CONTINUOUS_MAX_MORPH_SECONDS = 1.8
@@ -350,6 +355,29 @@ def _regional_motion_program(cues: MotionCues, existing_program: Optional[dict[s
     return program
 
 
+def _is_anchor_loop_program(program: Optional[dict[str, Any]]) -> bool:
+    return isinstance(program, dict) and str(program.get("type") or "").strip().lower() == "anchor_loop"
+
+
+def _uses_default_anchor_program(move: dict[str, Any], cues: MotionCues, program: Optional[dict[str, Any]]) -> bool:
+    if not _is_anchor_loop_program(program) or not cues.zone or cues.zone == "full":
+        return False
+    if _explicit_tight_request(cues):
+        return False
+    anchors = move.get("anchors") if isinstance(move, dict) else None
+    if anchors:
+        return False
+    program_anchors = program.get("anchors") if isinstance(program, dict) else None
+    if not isinstance(program_anchors, (list, tuple)):
+        return False
+    labels = tuple(
+        str(anchor.get("label") or "").strip().lower()
+        for anchor in program_anchors
+        if isinstance(anchor, dict)
+    )
+    return labels == default_anchor_items(cues.zone, cues.length)
+
+
 def _cue_base_speed(current_speed: float, cues: MotionCues, *, preserve_current_speed: bool) -> float:
     next_speed = current_speed if preserve_current_speed else None
     if cues.zone:
@@ -371,6 +399,21 @@ def _explicit_depth_allowed(cues: MotionCues, depth: Optional[float]) -> bool:
     # arbitrary centers.
     if cues.pattern == "milk" and (not cues.zone or cues.zone == "full"):
         return False
+    if cues.zone == "middle" and not _explicit_tight_request(cues):
+        return False
+    return True
+
+
+def _explicit_range_allowed(
+    cues: MotionCues,
+    stroke_range: Optional[float],
+    motion_program: Optional[dict[str, Any]],
+) -> bool:
+    if stroke_range is None:
+        return False
+    if cues.zone == "middle" and not _explicit_tight_request(cues):
+        if not _is_anchor_loop_program(motion_program) or bool(motion_program.get("generated_area_focus")):
+            return False
     return True
 
 
@@ -463,7 +506,7 @@ def _target_from_cues(
         next_speed = speed
     if _explicit_depth_allowed(cues, depth):
         next_depth = depth
-    if stroke_range is not None:
+    if _explicit_range_allowed(cues, stroke_range, motion_program):
         next_range = stroke_range
 
     if stroke_range is None:
@@ -662,6 +705,9 @@ class MotionSanitizer:
             length=cues.length,
             text=cue_text,
         )
+        if _uses_default_anchor_program(move, cues, motion_program):
+            motion_program = dict(motion_program)
+            motion_program["generated_area_focus"] = True
         speed_keys = ("sp", "speed", "intensity") if motion_program else ("sp", "speed", "tempo", "pace", "intensity")
         speed = self._read_field(move, speed_keys)
         depth = self._read_field(move, ("dp", "depth", "position", "center", "centre", "anchor"))
@@ -1136,7 +1182,7 @@ class MotionController:
         if not isinstance(program, dict):
             return False
         return (
-            str(program.get("type") or "").strip().lower() == "anchor_loop"
+            _is_anchor_loop_program(program)
             and not bool(program.get("generated_area_focus"))
             and self._anchor_program_local_focus_zone(target) is None
         )
@@ -1145,7 +1191,7 @@ class MotionController:
         if not self._supports_continuous_streaming():
             return False
         program = target.motion_program
-        if isinstance(program, dict) and str(program.get("type") or "").strip().lower() == "anchor_loop":
+        if _is_anchor_loop_program(program):
             return (
                 bool(program.get("generated_area_focus"))
                 or self._anchor_program_local_focus_zone(target) is not None
@@ -1160,7 +1206,7 @@ class MotionController:
         program = target.motion_program
         if not isinstance(program, dict):
             return None
-        if str(program.get("type") or "").strip().lower() != "anchor_loop":
+        if not _is_anchor_loop_program(program):
             return None
         anchors = program.get("anchors")
         if not isinstance(anchors, (list, tuple)):
@@ -2047,8 +2093,21 @@ class MotionController:
             return False
 
         self._set_semantic_target(clamped_target)
+        playback_active = self._is_frame_playback_active()
         replacement_phase_state = None
         with self._lock:
+            if (
+                playback_active
+                and not stop_after
+                and finite_cycles is None
+                and self._active_continuous_stream_matches(
+                    self._continuous_phase_state,
+                    plan,
+                    plan_key,
+                    clamped_target,
+                )
+            ):
+                return True
             phase_offset_seconds = self._continuous_phase_offset_seconds(plan, plan_key, started_at)
             stream_offset_seconds = self._continuous_stream_offset_seconds(started_at)
             replacing_active_stream = stream_offset_seconds is not None and self._is_frame_playback_active()
@@ -2107,6 +2166,28 @@ class MotionController:
         )
         thread.start()
         return True
+
+    def _active_continuous_stream_matches(
+        self,
+        state: Optional[ContinuousPhaseState],
+        plan,
+        plan_key: tuple[Any, ...],
+        target: MotionTarget,
+    ) -> bool:
+        if state is None or state.generation != self._generation:
+            return False
+        if state.key != plan_key and not self._continuous_plans_phase_compatible(state.plan, plan):
+            return False
+        previous = getattr(state, "target", None)
+        if not isinstance(previous, MotionTarget):
+            return False
+        previous = previous.clamped()
+        target = target.clamped()
+        return (
+            abs(float(previous.speed) - float(target.speed)) <= CONTINUOUS_DUPLICATE_TARGET_SPEED_EPSILON
+            and abs(float(previous.depth) - float(target.depth)) <= CONTINUOUS_DUPLICATE_TARGET_DEPTH_EPSILON
+            and abs(float(previous.stroke_range) - float(target.stroke_range)) <= CONTINUOUS_DUPLICATE_TARGET_RANGE_EPSILON
+        )
 
     def _continuous_plan(self, target: MotionTarget):
         if target.motion_program:
@@ -2310,20 +2391,23 @@ class MotionController:
             else:
                 self._recent_hsp_command_seconds = seconds
 
-    def _continuous_append_threshold_seconds(self) -> float:
+    def _continuous_append_threshold_seconds(self, plan=None) -> float:
         threshold = CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS
         observed_seconds = self._recent_hsp_command_latency_seconds()
         if observed_seconds > 0:
             threshold = max(threshold, observed_seconds + CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS)
-        target_buffer_seconds = self._continuous_target_buffer_seconds()
+        target_buffer_seconds = self._continuous_target_buffer_seconds(plan)
         return _clamp(
             threshold,
             CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
             max(CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS, target_buffer_seconds - 0.25),
         )
 
-    def _continuous_target_buffer_seconds(self) -> float:
-        buffer_seconds = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
+    def _continuous_target_buffer_seconds(self, plan=None) -> float:
+        if self._continuous_plan_is_area_focus(plan):
+            buffer_seconds = CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS
+        else:
+            buffer_seconds = CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS
         observed_seconds = self._recent_hsp_command_latency_seconds()
         if observed_seconds > 0:
             buffer_seconds = max(
@@ -2334,13 +2418,18 @@ class MotionController:
             )
         max_buffer_seconds = (
             max(1, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND - 1)
-            * CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+            * self._continuous_hsp_point_interval_seconds(plan)
         )
-        max_buffer_seconds = max(CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS, max_buffer_seconds)
+        max_buffer_seconds = max(buffer_seconds, max_buffer_seconds)
         return _clamp(buffer_seconds, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS, max_buffer_seconds)
 
-    def _continuous_hsp_point_interval_seconds(self) -> float:
+    def _continuous_hsp_point_interval_seconds(self, plan=None) -> float:
+        if self._continuous_plan_is_area_focus(plan):
+            return CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS
         return CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS
+
+    def _continuous_plan_is_area_focus(self, plan) -> bool:
+        return str(getattr(plan, "name", "") or "").strip().lower() == "area_focus"
 
     def _continuous_sample_interval(self) -> float:
         if self.step_delay <= 0:
@@ -2552,7 +2641,7 @@ class MotionController:
         points = continuous_plan_timed_phase_points(
             plan,
             effective_duration_seconds,
-            target_interval_seconds=self._continuous_hsp_point_interval_seconds(),
+            target_interval_seconds=self._continuous_hsp_point_interval_seconds(plan),
         )
         return self._coalesce_hsp_stream_phase_points(points, effective_duration_seconds)
 
@@ -3142,8 +3231,8 @@ class MotionController:
             command_seconds = max(0.0, send_ended_at - send_started_at)
             self._observe_hsp_command_seconds(command_seconds)
             recent_command_ms = round(self._recent_hsp_command_latency_seconds() * 1000.0, 1)
-            append_threshold_ms = round(self._continuous_append_threshold_seconds() * 1000.0, 1)
-            target_buffer_ms = round(self._continuous_target_buffer_seconds() * 1000.0, 1)
+            append_threshold_ms = round(self._continuous_append_threshold_seconds(plan) * 1000.0, 1)
+            target_buffer_ms = round(self._continuous_target_buffer_seconds(plan) * 1000.0, 1)
             first_point_late_ms = 0.0
             if replacing_active_stream and kind == "replace":
                 first_point_late_ms = round(
@@ -3270,14 +3359,14 @@ class MotionController:
                 previous_recorded_point = point
 
         try:
-            target_buffer_seconds = self._continuous_target_buffer_seconds()
+            target_buffer_seconds = self._continuous_target_buffer_seconds(plan)
             initial_min_points = (
                 1
                 if finite_stop_stream_seconds is not None
                 else min(3, CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
             )
             initial_buffer_seconds = CONTINUOUS_STREAM_INITIAL_BUFFER_SECONDS
-            if replacing_active_stream:
+            if replacing_active_stream or self._continuous_plan_is_area_focus(plan):
                 initial_buffer_seconds = max(initial_buffer_seconds, target_buffer_seconds)
             initial_until = (
                 finite_stop_stream_seconds
@@ -3356,9 +3445,9 @@ class MotionController:
                 )
                 buffer_remaining = stream_seconds - hsp_elapsed
                 can_append = finite_stop_stream_seconds is None or stream_seconds < finite_stop_stream_seconds - 0.001
-                append_threshold_seconds = self._continuous_append_threshold_seconds()
+                append_threshold_seconds = self._continuous_append_threshold_seconds(plan)
                 if buffer_remaining <= append_threshold_seconds and can_append:
-                    until = hsp_elapsed + self._continuous_target_buffer_seconds()
+                    until = hsp_elapsed + self._continuous_target_buffer_seconds(plan)
                     if finite_stop_stream_seconds is not None:
                         until = min(until, finite_stop_stream_seconds)
                     points = build_batch(until) if until > stream_seconds + 0.001 else []

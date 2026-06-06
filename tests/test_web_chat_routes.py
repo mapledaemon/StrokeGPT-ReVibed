@@ -65,7 +65,7 @@ class WebChatRouteTests(WebTestCase):
 
     def test_disabled_chat_pattern_library_strips_llm_exact_pattern(self):
         from strokegpt.motion import MotionTarget
-        from strokegpt.web import _target_from_llm_response_move, settings
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
 
         original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
         current = MotionTarget(27, 50, 95, "current")
@@ -90,6 +90,72 @@ class WebChatRouteTests(WebTestCase):
         self.assertEqual(target.speed, 21)
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 36)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+
+    def test_disabled_chat_pattern_library_strips_llm_pattern_alias_fields(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
+
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
+        current = MotionTarget(19, 28, 70, "current")
+        response = {
+            "move": {
+                "sp": 19,
+                "dp": 28,
+                "rng": 70,
+                "motion": "milking",
+                "style": "edge",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="keep moving")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
+
+        self.assertIsNotNone(target)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+        self.assertNotIn("milk", target.label.lower())
+        self.assertNotIn("edge", target.label.lower())
+        self.assertEqual(target.speed, 19)
+        self.assertEqual(target.depth, 28)
+        self.assertEqual(target.stroke_range, 70)
+
+    def test_disabled_chat_pattern_library_preserves_zone_while_stripping_edge_alias(self):
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fixed_pattern_id_from_target, _target_from_llm_response_move, settings
+
+        original_settings = (
+            settings.motion_pattern_library_enabled_in_chat,
+            settings.allow_llm_edge_in_chat,
+        )
+        current = MotionTarget(19, 50, 70, "current")
+        response = {
+            "move": {
+                "sp": 24,
+                "rng": 70,
+                "area": "base edge",
+                "shape": "edge-hold",
+            }
+        }
+
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            settings.allow_llm_edge_in_chat = False
+            target = _target_from_llm_response_move(response, current, user_input="base focus")
+        finally:
+            (
+                settings.motion_pattern_library_enabled_in_chat,
+                settings.allow_llm_edge_in_chat,
+            ) = original_settings
+
+        self.assertIsNotNone(target)
+        self.assertEqual(_fixed_pattern_id_from_target(target), "")
+        self.assertIn("base", target.label)
+        self.assertNotIn("tease", target.label)
+        self.assertEqual(target.depth, 66)
+        self.assertEqual(target.stroke_range, 70)
 
     def test_send_message_returns_fallback_when_llm_omits_chat(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
@@ -378,6 +444,61 @@ class WebChatRouteTests(WebTestCase):
                 settings.handy_key,
                 settings.motion_pattern_library_enabled_in_chat,
             ) = original_settings
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
+    def test_send_message_strips_llm_pattern_alias_when_chat_library_disabled(self):
+        from strokegpt.web import _clear_chat_motion_keepalive, app_state, audio, handy, llm, motion, settings
+
+        original_key = handy.handy_key
+        original_settings = (
+            settings.handy_key,
+            settings.motion_pattern_library_enabled_in_chat,
+        )
+        captured_targets = []
+        _clear_chat_motion_keepalive()
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            settings.motion_pattern_library_enabled_in_chat = False
+            with mock.patch.object(llm, "get_chat_response", return_value={
+                "chat": "I'll keep it moving.",
+                "move": {
+                    "sp": 19,
+                    "dp": 28,
+                    "rng": 70,
+                    "motion": "milking",
+                    "style": "edge",
+                },
+                "new_mood": None,
+            }), mock.patch.object(audio, "enqueue_text_for_audio", return_value=True), mock.patch.object(
+                motion,
+                "apply_generated_target",
+                side_effect=lambda target, **_kwargs: captured_targets.append(target),
+            ):
+                response = self.client.post("/send_message", json={
+                    "message": "hello",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                })
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(captured_targets), 1)
+            applied = captured_targets[0]
+            self.assertNotIn("milk", applied.label.lower())
+            self.assertNotIn("edge", applied.label.lower())
+            self.assertEqual(applied.speed, 19)
+            self.assertEqual(applied.depth, 28)
+            self.assertEqual(applied.stroke_range, 70)
+        finally:
+            handy.handy_key = original_key
+            (
+                settings.handy_key,
+                settings.motion_pattern_library_enabled_in_chat,
+            ) = original_settings
+            _clear_chat_motion_keepalive()
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 

@@ -22,6 +22,15 @@ Branch: codex/pattern-library-jitter-guardrails
 - Made chat motion keepalive recover when firmware HSP state reports paused,
   starved, or past the buffered point tail even if the local worker still looks
   active.
+- Kept generated middle/shaft focus centered despite noisy LLM `dp` values and
+  gave generated area-focus HSP streams a longer, lower-density startup buffer
+  so slow Cloud HSP commands are less likely to drain the queue.
+- Stabilized repeated generated middle-focus requests by ignoring noisy broad
+  `rng` values and keeping an already-matching Continuous HSP stream running
+  instead of flushing into another morph replacement.
+- Tightened the normal-chat pattern-library toggle so disabled chat no longer
+  accepts hidden fixed-pattern aliases such as `milking`, `edge`, or
+  `edge-hold` from alternate LLM move fields like `motion`, `style`, or `area`.
 
 2026-06-05 - PR #313 - Fixed Handy Visualizer Live Line
 -------------------------------------------------------

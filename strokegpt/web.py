@@ -1477,15 +1477,92 @@ def _llm_visible_fixed_pattern(pattern_id):
         for pattern in catalog.get("patterns", [])
     )
 
+LLM_FIXED_PATTERN_CUE_KEYS = {
+    "zone",
+    "area",
+    "anchor",
+    "position",
+    "pattern",
+    "shape",
+    "style",
+    "motion",
+    "length",
+    "range",
+    "stroke_range",
+    "rng",
+    "speed",
+    "tempo",
+    "pace",
+    "sp",
+}
+LLM_FIXED_PATTERN_ALIAS_IDS = (
+    ("milk", re.compile(r"\bmilk(?:ing)?\b", re.IGNORECASE)),
+    ("flutter", re.compile(r"\b(?:flutter|stutter|quick\s+little\s+pulses?)\b", re.IGNORECASE)),
+    ("flick", re.compile(r"\b(?:flicks?|snap)\b", re.IGNORECASE)),
+    ("pulse", re.compile(r"\b(?:puls(?:e|ing)|pump(?:ing)?)\b", re.IGNORECASE)),
+    ("hold", re.compile(r"\b(?:hold|press|grind)\b", re.IGNORECASE)),
+    ("wave", re.compile(r"\b(?:wave|rolling|oscillat(?:e|ing))\b", re.IGNORECASE)),
+    ("ramp", re.compile(r"\b(?:ramp|climb|build)\b", re.IGNORECASE)),
+    ("ladder", re.compile(r"\b(?:ladder|step(?:ped|s)?)\b", re.IGNORECASE)),
+    ("surge", re.compile(r"\b(?:surge|swell|crescendo)\b", re.IGNORECASE)),
+    ("sway", re.compile(r"\b(?:sway|alternat(?:e|ing)|smooth\s+alternation)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\btease\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:stroke|stroking)\b", re.IGNORECASE)),
+    ("edge", re.compile(r"\b(?:edge|edging)\b", re.IGNORECASE)),
+)
+
+def _llm_fixed_pattern_alias_hidden(value):
+    if value is None or isinstance(value, (int, float, bool)):
+        return False
+    text = str(value or "")
+    if not text.strip():
+        return False
+    pattern_id = slugify_pattern_id(text, fallback="")
+    if pattern_id in PATTERNS:
+        return not _llm_visible_fixed_pattern(pattern_id)
+    normalized = re.sub(r"[_-]+", " ", text)
+    for alias_id, pattern in LLM_FIXED_PATTERN_ALIAS_IDS:
+        if not pattern.search(normalized):
+            continue
+        if alias_id == "edge":
+            return (
+                not settings.motion_pattern_library_enabled_in_chat
+                or not settings.allow_llm_edge_in_chat
+            )
+        return not _llm_visible_fixed_pattern(alias_id)
+    return False
+
+def _strip_hidden_fixed_pattern_words(value):
+    cleaned = re.sub(r"[_-]+", " ", str(value or ""))
+    for alias_id, pattern in LLM_FIXED_PATTERN_ALIAS_IDS:
+        if alias_id == "edge":
+            if settings.motion_pattern_library_enabled_in_chat and settings.allow_llm_edge_in_chat:
+                continue
+        elif _llm_visible_fixed_pattern(alias_id):
+            continue
+        cleaned = pattern.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
 def _sanitize_llm_move_for_disabled_patterns(move):
     if not isinstance(move, dict):
         return move
-    pattern_id = slugify_pattern_id(move.get("pattern") or "")
-    if pattern_id in PATTERNS and not _llm_visible_fixed_pattern(pattern_id):
-        sanitized = dict(move)
-        sanitized.pop("pattern", None)
-        return sanitized
-    return move
+    sanitized = None
+    for key, value in move.items():
+        if key not in LLM_FIXED_PATTERN_CUE_KEYS or not _llm_fixed_pattern_alias_hidden(value):
+            continue
+        if sanitized is None:
+            sanitized = dict(move)
+        replacement = _strip_hidden_fixed_pattern_words(value)
+        if replacement:
+            sanitized[key] = replacement
+        else:
+            sanitized.pop(key, None)
+    return sanitized if sanitized is not None else move
+
+def _patternless_llm_target(target):
+    if not target or settings.motion_pattern_library_enabled_in_chat:
+        return target
+    return _patternless_chat_target(target)
 
 def _patternless_chat_target(target):
     if not target or settings.motion_pattern_library_enabled_in_chat:
@@ -1721,7 +1798,8 @@ def _target_from_llm_response_move(response, current, user_input=""):
         return None
     sanitized = _sanitize_llm_move_for_disabled_patterns(move)
     target = motion.sanitizer.from_llm_move(sanitized, current)
-    return _guard_unrequested_tight_llm_target(user_input, current, target)
+    target = _guard_unrequested_tight_llm_target(user_input, current, target)
+    return _patternless_llm_target(target)
 
 def _repair_llm_motion_response_if_needed(user_input, response, context, current):
     if not isinstance(response, dict):

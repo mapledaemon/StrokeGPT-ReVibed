@@ -10,6 +10,8 @@ from strokegpt.motion import (
     CONTINUOUS_MAX_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_MIN_COMMAND_INTERVAL_SECONDS,
     CONTINUOUS_HSP_MIN_POINT_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
+    CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
     CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS,
     CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON,
@@ -599,6 +601,36 @@ class MotionSanitizerTests(unittest.TestCase):
         target = sanitizer.from_llm_move({"zone": "tip", "sp": 72}, current)
 
         self.assertEqual(target.speed, 72)
+
+    def test_llm_middle_area_focus_ignores_noisy_depth_and_range(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+
+        target = sanitizer.from_llm_move({"zone": "middle", "sp": 17, "dp": 71, "rng": 80}, current)
+        noisy_target = sanitizer.from_llm_move({"zone": "middle", "sp": 17, "dp": 40, "rng": 46}, current)
+
+        self.assertIsNotNone(target)
+        self.assertIn("middle", target.label)
+        self.assertEqual(target.speed, 17)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 86)
+        self.assertTrue(target.motion_program.get("generated_area_focus"))
+        self.assertEqual(noisy_target.depth, target.depth)
+        self.assertEqual(noisy_target.stroke_range, target.stroke_range)
+
+    def test_default_middle_anchor_loop_uses_area_focus_transport(self):
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+
+        target = sanitizer.from_llm_move(
+            {"motion": "anchor_loop", "zone": "middle", "dp": 68, "rng": 80},
+            current,
+        )
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target.depth, 50)
+        self.assertEqual(target.stroke_range, 86)
+        self.assertTrue(target.motion_program.get("generated_area_focus"))
 
     def test_llm_move_accepts_anchor_program(self):
         sanitizer = MotionSanitizer()
@@ -1390,7 +1422,7 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_hsp_area_focus_preserves_fractional_integer_bucket_points(self):
+    def test_continuous_hsp_area_focus_coalesces_fractional_chatter(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
         intent = IntentMatcher().parse("focus on the tip", controller.semantic_target())
@@ -1411,9 +1443,10 @@ class MotionControllerTests(unittest.TestCase):
             )
 
             self.assertTrue(any(point.get("hsp_duplicate_suppressed_points") for point in trace))
-            self.assertTrue(self.hsp_rapid_duplicate_integer_intervals(points))
+            self.assertFalse(self.hsp_rapid_duplicate_integer_intervals(points))
             self.assertFalse(self.hsp_rapid_near_duplicate_intervals(points))
-            self.assertLessEqual(max(intervals), 150)
+            self.assertGreaterEqual(min(intervals), 80)
+            self.assertLessEqual(max(intervals), 200)
         finally:
             controller.stop()
 
@@ -2172,6 +2205,79 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(target_buffer, CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS)
         self.assertGreaterEqual(threshold, CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS)
         self.assertEqual(point_interval, CONTINUOUS_HSP_TARGET_POINT_INTERVAL_SECONDS)
+
+    def test_continuous_area_focus_uses_longer_lower_density_hsp_buffer(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        plan = controller._hsp_area_focus_plan(MotionTarget(17, 50, 80, "llm+middle"))
+
+        self.assertGreaterEqual(
+            controller._continuous_target_buffer_seconds(plan),
+            CONTINUOUS_HSP_AREA_FOCUS_TARGET_BUFFER_SECONDS,
+        )
+        self.assertEqual(
+            controller._continuous_hsp_point_interval_seconds(plan),
+            CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
+        )
+
+    def test_continuous_middle_area_focus_initial_play_keeps_hsp_reserve(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        target = MotionSanitizer().from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 71, "rng": 80},
+            MotionTarget(35, 45, 55),
+        )
+
+        try:
+            controller.apply_generated_target(target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            points = handy.stream_starts[0]["points"]
+            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
+            self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
+            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 8500)
+            self.assertGreaterEqual(min(intervals), 80)
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "llm"
+                and point.get("hsp_batch") == "play"
+                and point.get("continuous_plan_kind") == "area_focus",
+            )
+            play_points = [point for point in trace if point.get("hsp_batch") == "play"]
+            self.assertTrue(play_points)
+            self.assertEqual({point.get("continuous_area_focus_zone") for point in play_points}, {"middle"})
+            self.assertEqual({point.get("continuous_area_focus_transport_depth") for point in play_points}, {50.0})
+            self.assertGreaterEqual(play_points[-1]["hsp_target_buffer_ms"], 9000.0)
+            self.assertGreaterEqual(play_points[-1]["hsp_buffer_after_command_ms"], 8400.0)
+        finally:
+            controller.stop()
+
+    def test_continuous_duplicate_area_focus_target_keeps_active_stream(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        sanitizer = MotionSanitizer()
+        current = MotionTarget(35, 45, 55)
+        first = sanitizer.from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 71, "rng": 80},
+            current,
+        )
+        duplicate = sanitizer.from_llm_move(
+            {"zone": "middle", "sp": 17, "dp": 40, "rng": 46},
+            current,
+        )
+
+        try:
+            controller.apply_generated_target(first, source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.apply_generated_target(duplicate, source="duplicate")
+
+            self.assertFalse(
+                self.wait_until(lambda: len(handy.stream_replacements) > 0, timeout=0.25),
+                handy.stream_replacements,
+            )
+            self.assertEqual(len(handy.stream_starts), 1)
+        finally:
+            controller.stop()
 
     def test_continuous_hsp_replacement_uses_default_latency_reserve(self):
         handy = StreamingFakeHandy()
