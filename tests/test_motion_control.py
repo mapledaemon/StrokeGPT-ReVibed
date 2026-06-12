@@ -2080,10 +2080,16 @@ class MotionControllerTests(unittest.TestCase):
 
             controller.apply_continuous_target(second, source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            # Wait for a NON-bridge replacement point. The worker thread
+            # records the batch point-by-point and bridge points land first,
+            # so a bridge-matching predicate can observe a partially recorded
+            # batch on slow runners and the non-bridge next() below would
+            # raise StopIteration.
             trace = self.wait_for_hsp_trace(
                 controller,
                 lambda point: point.get("source") == "second"
-                and point.get("hsp_batch") == "replace",
+                and point.get("hsp_batch") == "replace"
+                and not point.get("hsp_replacement_bridge"),
             )
 
             replacement_points = [
