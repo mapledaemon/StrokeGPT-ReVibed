@@ -2459,6 +2459,89 @@ class WebChatRouteTests(WebTestCase):
             mode_name='freestyle',
         )
 
+    def test_chat_text_does_not_start_legacy_modes_by_default(self):
+        import strokegpt.web as web
+        from strokegpt.web import settings
+
+        original_toggle = settings.motion_pattern_library_enabled_in_chat
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            for phrase in ("take over", "edge me", "i'm close", "finish me", "start edging"):
+                with self.subTest(phrase=phrase):
+                    with mock.patch.object(web, "start_background_mode") as start_background_mode:
+                        with web.app.app_context():
+                            handled, _response = web._handle_chat_commands(phrase)
+                    start_background_mode.assert_not_called()
+                    self.assertFalse(handled)
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_toggle
+
+    def test_chat_text_starts_legacy_modes_when_pattern_library_chat_enabled(self):
+        import strokegpt.web as web
+        from strokegpt.web import settings
+
+        original_toggle = settings.motion_pattern_library_enabled_in_chat
+        cases = (
+            ("take over", web.auto_mode_logic, "auto"),
+            ("edge me", web.edging_mode_logic, "edging"),
+            ("i'm close", web.milking_mode_logic, "milking"),
+        )
+        try:
+            settings.motion_pattern_library_enabled_in_chat = True
+            for phrase, mode_logic, mode_name in cases:
+                with self.subTest(phrase=phrase):
+                    with mock.patch.object(web, "start_background_mode") as start_background_mode:
+                        with web.app.app_context():
+                            handled, _response = web._handle_chat_commands(phrase)
+                    self.assertTrue(handled)
+                    start_background_mode.assert_called_once()
+                    args, kwargs = start_background_mode.call_args
+                    self.assertIs(args[0], mode_logic)
+                    self.assertEqual(kwargs.get("mode_name"), mode_name)
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_toggle
+
+    def test_chat_freestyle_start_stays_available_without_pattern_library(self):
+        import strokegpt.web as web
+        from strokegpt.web import settings
+
+        original_toggle = settings.motion_pattern_library_enabled_in_chat
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            with mock.patch.object(web, "start_background_mode") as start_background_mode:
+                with web.app.app_context():
+                    handled, _response = web._handle_chat_commands("freestyle")
+            self.assertTrue(handled)
+            start_background_mode.assert_called_once()
+            args, kwargs = start_background_mode.call_args
+            self.assertIs(args[0], web.freestyle_mode_logic)
+            self.assertEqual(kwargs.get("mode_name"), "freestyle")
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_toggle
+
+    def test_chat_close_signal_still_reaches_active_mode_without_pattern_library(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, settings
+
+        original_toggle = settings.motion_pattern_library_enabled_in_chat
+        original_task = app_state.auto_mode_active_task
+        try:
+            settings.motion_pattern_library_enabled_in_chat = False
+            app_state.auto_mode_active_task = SimpleNamespace(name="milking")
+            app_state.user_signal_event.clear()
+            with mock.patch.object(web, "start_background_mode") as start_background_mode:
+                with web.app.app_context():
+                    handled, response = web._handle_chat_commands("i'm close")
+            self.assertTrue(handled)
+            self.assertEqual(response.get_json()["status"], "close_signaled")
+            self.assertTrue(app_state.user_signal_event.is_set())
+            start_background_mode.assert_not_called()
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_toggle
+            app_state.auto_mode_active_task = original_task
+            app_state.user_signal_event.clear()
+            app_state.mode_message_event.clear()
+
     def test_background_mode_narration_stays_out_of_chat_history(self):
         import strokegpt.web as web
         from strokegpt.web import app_state
