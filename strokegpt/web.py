@@ -2789,7 +2789,19 @@ def _handle_chat_commands(text, allow_motion=True):
     if "up up down down left right left right b a" in text:
         _konami_code_action()
         return True, jsonify({"status": "konami_code_activated"})
-    if intent.kind == "auto_on" and not app_state.auto_mode_active_task:
+    # Chat-text starts for the scripted pattern-library modes (Legacy Auto,
+    # Edge, Milk) are gated behind the same opt-in that exposes the pattern
+    # library to normal chat. With the toggle off (the default), phrases like
+    # "take over", "edge me", or "i'm close" fall through to ordinary LLM
+    # chat instead of silently launching a takeover mode; the sidebar
+    # /start_*_mode buttons remain the explicit entry points. Stop commands,
+    # the in-mode close signal, and plain move commands stay ungated.
+    legacy_mode_starts_allowed = bool(settings.motion_pattern_library_enabled_in_chat)
+    if (
+        intent.kind == "auto_on"
+        and legacy_mode_starts_allowed
+        and not app_state.auto_mode_active_task
+    ):
         start_background_mode(auto_mode_logic, "Okay, I'll take over...", mode_name='auto')
         return True, jsonify({"status": "auto_started"})
     if intent.kind == "freestyle" and not app_state.auto_mode_active_task:
@@ -2808,10 +2820,10 @@ def _handle_chat_commands(text, allow_motion=True):
                 "mode": mode_name,
                 "message": message,
             })
-    if intent.kind == "edging":
+    if intent.kind == "edging" and legacy_mode_starts_allowed:
         start_background_mode(edging_mode_logic, "Let's play an edging game...", mode_name='edging')
         return True, jsonify({"status": "edging_started"})
-    if intent.kind == "milking":
+    if intent.kind == "milking" and legacy_mode_starts_allowed:
         start_background_mode(milking_mode_logic, "You're so close... I'm taking over completely now.", mode_name='milking')
         return True, jsonify({"status": "milking_started"})
     if intent.kind == "move" and intent.target:
