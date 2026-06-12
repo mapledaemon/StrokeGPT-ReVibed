@@ -7,6 +7,35 @@ from unittest import mock
 requests_module = types.ModuleType("requests")
 requests_module.__spec__ = importlib.machinery.ModuleSpec("requests", loader=None)
 requests_module.exceptions = types.SimpleNamespace(RequestException=Exception)
+
+
+class _StubHTTPAdapter:
+    def __init__(self, pool_connections=10, pool_maxsize=10):
+        self._pool_maxsize = pool_maxsize
+
+
+class _StubSession:
+    def __init__(self):
+        self._adapters = {}
+
+    def mount(self, prefix, adapter):
+        self._adapters[prefix] = adapter
+
+    def get_adapter(self, url):
+        for prefix, adapter in self._adapters.items():
+            if url.startswith(prefix):
+                return adapter
+        raise KeyError(url)
+
+    def put(self, url, **kwargs):
+        raise RuntimeError("network disabled in handy controller tests")
+
+    def get(self, url, **kwargs):
+        raise RuntimeError("network disabled in handy controller tests")
+
+
+requests_module.Session = _StubSession
+requests_module.adapters = types.SimpleNamespace(HTTPAdapter=_StubHTTPAdapter)
 sys.modules.setdefault("requests", requests_module)
 
 import strokegpt.handy as handy_module
@@ -239,7 +268,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret")
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(status_code=204),
             create=True,
         ) as put:
@@ -264,7 +293,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(status_code=200),
             create=True,
         ) as put:
@@ -281,7 +310,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", api_v3_key="app-id")
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(
                 status_code=200,
                 headers={
@@ -303,7 +332,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", api_v3_key="")
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(status_code=200),
             create=True,
         ) as put:
@@ -321,7 +350,7 @@ class HandyControllerTests(unittest.TestCase):
         error = handy_module.requests.exceptions.RequestException("device offline")
         error.response = FakeResponse(status_code=503)
 
-        with mock.patch("strokegpt.handy.requests.put", side_effect=error, create=True):
+        with mock.patch("strokegpt.handy._session_put", side_effect=error, create=True):
             self.assertFalse(handy._send_command("slide", {"min": 10, "max": 90}))
 
         diagnostics = handy.diagnostics()
@@ -335,7 +364,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", firmware_version="fw3")
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
@@ -355,7 +384,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="")
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
@@ -371,7 +400,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret", firmware_version="fw4", api_v3_key="app-id")
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
@@ -391,7 +420,7 @@ class HandyControllerTests(unittest.TestCase):
         handy._disable_api_v3_control(path="hsp/add", error="old auth failure")
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload={"connected": True}),
             create=True,
         ) as get:
@@ -408,7 +437,7 @@ class HandyControllerTests(unittest.TestCase):
         error = handy_module.requests.exceptions.RequestException("400 Client Error: Bad Request")
         error.response = FakeResponse(status_code=400, payload={"error": {"message": "bad app key"}})
 
-        with mock.patch("strokegpt.handy.requests.get", side_effect=error, create=True) as get:
+        with mock.patch("strokegpt.handy._session_get", side_effect=error, create=True) as get:
             result = handy.check_connection()
 
         args, _kwargs = get.call_args
@@ -425,7 +454,7 @@ class HandyControllerTests(unittest.TestCase):
     def test_check_connection_rejects_invalid_api_v3_connection_key_format_locally(self):
         handy = HandyController(handy_key="bad-key", firmware_version="fw4", api_v3_key="app-id")
 
-        with mock.patch("strokegpt.handy.requests.get", create=True) as get:
+        with mock.patch("strokegpt.handy._session_get", create=True) as get:
             result = handy.check_connection()
 
         get.assert_not_called()
@@ -444,7 +473,7 @@ class HandyControllerTests(unittest.TestCase):
         handy = HandyController(handy_key="secret")
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload={"connected": False}),
             create=True,
         ):
@@ -462,7 +491,7 @@ class HandyControllerTests(unittest.TestCase):
         error = handy_module.requests.exceptions.RequestException("device offline")
         error.response = FakeResponse(status_code=503)
 
-        with mock.patch("strokegpt.handy.requests.get", side_effect=error, create=True):
+        with mock.patch("strokegpt.handy._session_get", side_effect=error, create=True):
             result = handy.check_connection()
 
         self.assertEqual(result["status"], "error")
@@ -765,6 +794,52 @@ class HandyControllerTests(unittest.TestCase):
             ],
         )
 
+    def test_http_session_is_shared_and_pooled(self):
+        # Handy REST traffic must reuse one keep-alive session: per-command
+        # TCP+TLS setup compounded with the HSP state poller and SSE
+        # listener into 1-2+ second real-device command latency that
+        # starved timed HSP streams. The pooling assertion only applies
+        # when a Session implementation is available; import-order in full
+        # discovery can leave a bare dependency-free ``requests`` stub in
+        # place, where the shared-instance contract is still pinned.
+        first = handy_module._http_session()
+        second = handy_module._http_session()
+        self.assertIs(first, second)
+        get_adapter = getattr(first, "get_adapter", None)
+        if callable(get_adapter):
+            adapter = get_adapter("https://www.handyfeeling.com/")
+            self.assertGreaterEqual(adapter._pool_maxsize, 4)
+            max_retries = getattr(adapter, "max_retries", None)
+            if max_retries is not None and hasattr(max_retries, "total"):
+                # Keep-alive sockets can be closed by the server between
+                # commands; without connect retries that one-off failure
+                # kills the continuous stream.
+                self.assertGreaterEqual(int(max_retries.total or 0), 1)
+        else:
+            self.assertTrue(callable(first.put))
+            self.assertTrue(callable(first.get))
+
+    def test_session_seam_resets_pool_on_transport_exception(self):
+        # A poisoned pooled connection must not persist across commands:
+        # transport exceptions drop the cached session so the next command
+        # reconnects from scratch (otherwise every Handy command keeps
+        # failing and motion stops with no recovery).
+        class ExplodingClient:
+            def put(self, url, **kwargs):
+                raise RuntimeError("socket poisoned")
+
+        with handy_module._HTTP_SESSION_LOCK:
+            previous = handy_module._HTTP_SESSION
+            handy_module._HTTP_SESSION = ExplodingClient()
+        try:
+            with self.assertRaises(RuntimeError):
+                handy_module._session_put("https://example.invalid/cmd", json={})
+            with handy_module._HTTP_SESSION_LOCK:
+                self.assertIsNone(handy_module._HTTP_SESSION)
+        finally:
+            with handy_module._HTTP_SESSION_LOCK:
+                handy_module._HTTP_SESSION = previous
+
     def test_hsp_server_time_estimate_uses_servertime_offset(self):
         handy = HandyController(handy_key="test")
 
@@ -774,7 +849,7 @@ class HandyControllerTests(unittest.TestCase):
             return FakeResponse(payload={"server_time": 1000500})
 
         with (
-            mock.patch.object(handy_module.requests, "get", side_effect=fake_get, create=True),
+            mock.patch.object(handy_module, "_session_get", side_effect=fake_get),
             mock.patch.object(handy_module.time, "monotonic", side_effect=[10.0, 10.0]),
             mock.patch.object(handy_module.time, "time", side_effect=[1000.0, 1000.1, 1000.2]),
         ):
@@ -841,7 +916,7 @@ class HandyControllerTests(unittest.TestCase):
         }
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(status_code=200, payload=payload),
             create=True,
         ):
@@ -877,7 +952,7 @@ class HandyControllerTests(unittest.TestCase):
         }
 
         with mock.patch(
-            "strokegpt.handy.requests.put",
+            "strokegpt.handy._session_put",
             return_value=FakeResponse(status_code=200, payload=payload),
             create=True,
         ):
@@ -908,7 +983,7 @@ class HandyControllerTests(unittest.TestCase):
         }
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=FakeResponse(status_code=200, payload=payload),
             create=True,
         ) as get:
@@ -993,7 +1068,7 @@ class HandyControllerTests(unittest.TestCase):
         handy._hsp_streaming = True
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             side_effect=RuntimeError("state endpoint unavailable"),
             create=True,
         ) as get, mock.patch.object(handy, "_send_v3_command", return_value=True) as send:
@@ -1183,7 +1258,7 @@ class HandyControllerTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             return_value=response,
             create=True,
         ) as get:
@@ -1219,7 +1294,7 @@ class HandyControllerTests(unittest.TestCase):
         handy._hsp_streaming = True
 
         with mock.patch(
-            "strokegpt.handy.requests.get",
+            "strokegpt.handy._session_get",
             side_effect=RuntimeError("sse unavailable"),
             create=True,
         ) as get, mock.patch.object(handy, "_send_v3_command", return_value=True) as send:
