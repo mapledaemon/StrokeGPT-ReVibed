@@ -1,6 +1,7 @@
 import json
 import math
 import random
+from bisect import bisect_right
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
@@ -662,78 +663,122 @@ def continuous_plan_timed_phase_points(
     return tuple(dense)
 
 
+@lru_cache(maxsize=256)
+def _cyclic_monotone_curve(
+    actions: tuple[PatternAction, ...],
+) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...], float]:
+    """Precompute the time-parameterized monotone cubic loop for ``actions``.
+
+    Returns ``(knot_times_ms, knot_positions, knot_tangents, total_cycle_ms)``
+    where the knot arrays have one closing entry so segment ``K-1`` ends at
+    ``total_cycle_ms``. Tangents are in pos-per-ms, computed with the
+    Fritsch-Carlson / Brodlie weighted harmonic mean over the *cyclic*
+    neighbor secants, so the loop is C1 in wall-clock time at every knot,
+    including the seam. Same-sign neighbor secants get a duration-weighted
+    harmonic-mean tangent; a sign change or flat neighbor pins the tangent
+    to zero, which puts the zero-velocity instant exactly at each direction
+    reversal instead of letting the curve overshoot past it.
+
+    Memoized like ``prepare_pattern_actions``: the controller samples the
+    same immutable action tuple hundreds of times per playback batch and
+    the knot/tangent setup is the expensive part of each sample.
+    """
+    n = len(actions)
+    wrap_ms = _wrap_segment_ms(actions)
+
+    # Knot times for the authored actions, then a closing knot so segment
+    # K-1 runs back to the start of the next cycle. With a wrap segment the
+    # closing knot mirrors ``actions[0]``; for closed patterns (last pos
+    # within the wrap epsilon of the first) the authored last action *is*
+    # the closing knot and the seam reuses knot 0's tangent.
+    times = [0.0]
+    positions = [float(actions[0].pos)]
+    for index in range(1, n):
+        times.append(times[-1] + max(1.0, float(actions[index].at - actions[index - 1].at)))
+        positions.append(float(actions[index].pos))
+    if wrap_ms > 0:
+        times.append(times[-1] + float(wrap_ms))
+        positions.append(float(actions[0].pos))
+
+    segment_count = len(times) - 1
+    if segment_count <= 0:
+        return (tuple(times), tuple(positions), (0.0,), max(1.0, times[-1]))
+
+    durations = [times[i + 1] - times[i] for i in range(segment_count)]
+    secants = [(positions[i + 1] - positions[i]) / durations[i] for i in range(segment_count)]
+
+    # Cyclic knot tangents: knot k joins segment (k-1) % K to segment k.
+    tangents = []
+    for k in range(segment_count):
+        s_prev = secants[(k - 1) % segment_count]
+        s_next = secants[k]
+        if s_prev == 0.0 or s_next == 0.0 or (s_prev > 0.0) != (s_next > 0.0):
+            tangents.append(0.0)
+            continue
+        d_prev = durations[(k - 1) % segment_count]
+        d_next = durations[k]
+        w1 = 2.0 * d_next + d_prev
+        w2 = d_next + 2.0 * d_prev
+        tangents.append((w1 + w2) / (w1 / s_prev + w2 / s_next))
+
+    return (tuple(times), tuple(positions), tuple(tangents), times[-1])
+
+
 def _sample_action_position(
     actions: tuple[PatternAction, ...],
     phase: float,
 ) -> float:
-    """Phase-cyclic Catmull-Rom sample of an action list.
+    """Time-parameterized monotone cubic sample of an action list.
 
     Treats the action sequence as a closed loop with an implicit wrap
-    segment from ``actions[-1]`` back to ``actions[0]``. The wrap span
-    scales with the position delta so the cycle glides through any open
-    gap instead of snapping. Catmull-Rom across four cyclic neighbors
-    keeps the phase-domain curve smooth at every segment boundary,
-    including the wraparound -- the live controller no longer sees a
-    per-cycle position step at phase=1.0 -> 0.0 that the previous cosine
-    sampler used to leave behind on the 30 of 34 asymmetric built-in
-    patterns. Unequal segment durations can still change wall-clock
-    velocity at a boundary, but not the commanded position itself.
+    segment from ``actions[-1]`` back to ``actions[0]`` (the wrap span
+    scales with the position delta so open patterns glide through the gap
+    instead of snapping). Each knot's tangent comes from the
+    Fritsch-Carlson weighted harmonic mean of the *time-domain* neighbor
+    secants, so unlike the previous index-parameterized Catmull-Rom the
+    curve is C1 in wall-clock time: unequal segment durations no longer
+    produce instantaneous velocity jumps at knots, which real hardware
+    felt as jolts even though the position trace looked continuous.
 
-    Catmull-Rom can overshoot by ~12.5% of a segment range when control
-    points are extreme. The returned value is first bounded to the current
-    segment's endpoints, then clamped to [0, 100]. That preserves the smooth
-    cyclic curve without letting a brief overshoot flatten against the hard
-    top/bottom safety rails.
+    Monotone cubic interpolation cannot overshoot its segment endpoints,
+    so direction reversals get an exact zero-velocity instant at the
+    authored knot instead of a clipped overshoot plateau (the source of
+    the old micro-reversal twitches near dwell points). The global
+    [0, 100] clamp remains only as a safety rail.
     """
     if not actions:
         return 50.0
     if len(actions) == 1:
         return actions[0].pos
 
-    n = len(actions)
-    wrap_ms = _wrap_segment_ms(actions)
-    total_cycle_ms = _continuous_cycle_ms(actions)
+    times, positions, tangents, total_cycle_ms = _cyclic_monotone_curve(actions)
+    segment_count = len(times) - 1
+    if segment_count <= 0 or total_cycle_ms <= 0:
+        return _clamp(positions[0])
 
-    phase = phase % 1.0
-    sample_at = phase * total_cycle_ms
+    sample_at = (phase % 1.0) * total_cycle_ms
+    segment_index = min(segment_count - 1, max(0, bisect_right(times, sample_at) - 1))
 
-    # Cumulative time at each action's index. Segments[i] runs from
-    # ``cumulative[i]`` to ``cumulative[i+1]``. Segment ``n-1`` is the
-    # wrap segment from ``actions[-1]`` to ``actions[0]`` whose length is
-    # ``wrap_ms``. ``cumulative[n] == total_cycle_ms``.
-    cumulative = [0]
-    for index in range(n - 1):
-        cumulative.append(cumulative[-1] + (actions[index + 1].at - actions[index].at))
-    cumulative.append(cumulative[-1] + wrap_ms)
+    duration = times[segment_index + 1] - times[segment_index]
+    if duration <= 0:
+        return _clamp(positions[segment_index])
+    u = (sample_at - times[segment_index]) / duration
+    u2 = u * u
+    u3 = u2 * u
 
-    segment_index = n - 1
-    for i in range(n):
-        if sample_at < cumulative[i + 1]:
-            segment_index = i
-            break
+    p0 = positions[segment_index]
+    p1 = positions[segment_index + 1]
+    m0 = tangents[segment_index]
+    # The closing knot wraps back onto knot 0 so the seam is C1 too.
+    m1 = tangents[(segment_index + 1) % segment_count]
 
-    segment_start = cumulative[segment_index]
-    segment_end = cumulative[segment_index + 1]
-    segment_span = max(1, segment_end - segment_start)
-    amount = (sample_at - segment_start) / segment_span
-
-    # Four cyclic control points for Catmull-Rom across the full closed
-    # cycle (including the wrap segment).
-    p1_idx = segment_index % n
-    p2_idx = (segment_index + 1) % n
-    p0_idx = (p1_idx - 1) % n
-    p3_idx = (p2_idx + 1) % n
-
-    sample = _catmull_rom(
-        actions[p0_idx].pos,
-        actions[p1_idx].pos,
-        actions[p2_idx].pos,
-        actions[p3_idx].pos,
-        amount,
+    value = (
+        (2.0 * u3 - 3.0 * u2 + 1.0) * p0
+        + (u3 - 2.0 * u2 + u) * duration * m0
+        + (-2.0 * u3 + 3.0 * u2) * p1
+        + (u3 - u2) * duration * m1
     )
-    segment_min = min(actions[p1_idx].pos, actions[p2_idx].pos)
-    segment_max = max(actions[p1_idx].pos, actions[p2_idx].pos)
-    return _clamp(min(segment_max, max(segment_min, sample)))
+    return _clamp(value)
 
 
 def _continuous_normalized_range(

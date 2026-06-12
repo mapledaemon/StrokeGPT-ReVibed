@@ -3382,6 +3382,49 @@ class MotionController:
                 previous_phase_time_seconds = point_seconds
                 stream_seconds = point_stream_seconds
                 return
+            if (
+                duplicate_coalesce_enabled
+                and authored_point
+                and points
+                and previous_stream_point is points[-1]
+                and not bool(previous_stream_point.get("authored_point"))
+                and not bool(previous_stream_point.get("hsp_replacement_bridge"))
+                and abs(float(previous_stream_point["x"]) - float(output_depth))
+                < CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON
+                and (
+                    point_stream_seconds
+                    - (float(previous_stream_point["t"]) / 1000.0)
+                ) < CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS
+            ):
+                # The monotone cubic sampler flattens reversal apexes, so an
+                # interpolated point can land within the duplicate window just
+                # before an authored knot. Authored points keep their timing
+                # contract, so instead of emitting a near-duplicate pair the
+                # authored point reclaims the interpolated neighbor's slot:
+                # pop it and fall through to the normal append. Indices stay
+                # contiguous because the pop and re-append cancel out.
+                dropped = points.pop()
+                phase_schedule.pop()
+                stream_index -= 1
+                sample_index -= 1
+                suppressed_duplicate_points += 1 + int(
+                    dropped.get("hsp_duplicate_suppressed_points") or 0
+                )
+                # Rewind the interval bookkeeping to the point that now ends
+                # the batch so the authored point's recorded intervals span
+                # the dropped slot instead of referencing the popped point.
+                previous_stream_point = points[-1] if points else None
+                if points:
+                    previous_point_time_seconds = float(points[-1]["t"]) / 1000.0
+                    previous_phase_time_seconds = float(points[-1]["logical_t"]) / 1000.0
+                else:
+                    previous_point_time_seconds = None
+                    previous_phase_time_seconds = None
+                command_interval = (
+                    base_interval
+                    if previous_point_time_seconds is None
+                    else max(0.001, point_stream_seconds - previous_point_time_seconds)
+                )
 
             stream_index += 1
             point = {

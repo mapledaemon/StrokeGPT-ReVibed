@@ -317,10 +317,18 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   recover with `/hsp/play` or `/hsp/resume` instead of sending more expired
   points or trying to pull the firmware clock back through `/hsp/synctime`.
   Sparse built-in HSP streams should keep
-  authored endpoints but insert Catmull-Rom intermediate points inside long
+  authored endpoints but insert spline intermediate points inside long
   segments so firmware receives the smooth curve rather than long linear
   keyframes, while filtering sub-frame prepared points that create transport
-  chatter without materially changing the curve. Replacement HSP streams should
+  chatter without materially changing the curve. The continuous sampler that
+  produces those intermediate points is a time-parameterized monotone cubic
+  (PCHIP with Fritsch-Carlson cyclic tangents): it is C1 in wall-clock time
+  across unequal authored segment durations and cannot overshoot authored
+  positions, so direction reversals get an exact zero-velocity instant at the
+  authored knot. Do not replace it with an index/phase-parameterized spline
+  (the old Catmull-Rom approach); that reintroduces instantaneous velocity
+  jumps at knots that hardware feels as jolts even though the position trace
+  looks continuous. Replacement HSP streams should
   include bridge points plus an exact point at the replacement stream time so
   mid-cycle swaps do not snap toward a stale endpoint. During active continuous playback,
   `MotionController.current_target()` estimates the current sampled target
