@@ -809,9 +809,36 @@ class HandyControllerTests(unittest.TestCase):
         if callable(get_adapter):
             adapter = get_adapter("https://www.handyfeeling.com/")
             self.assertGreaterEqual(adapter._pool_maxsize, 4)
+            max_retries = getattr(adapter, "max_retries", None)
+            if max_retries is not None and hasattr(max_retries, "total"):
+                # Keep-alive sockets can be closed by the server between
+                # commands; without connect retries that one-off failure
+                # kills the continuous stream.
+                self.assertGreaterEqual(int(max_retries.total or 0), 1)
         else:
             self.assertTrue(callable(first.put))
             self.assertTrue(callable(first.get))
+
+    def test_session_seam_resets_pool_on_transport_exception(self):
+        # A poisoned pooled connection must not persist across commands:
+        # transport exceptions drop the cached session so the next command
+        # reconnects from scratch (otherwise every Handy command keeps
+        # failing and motion stops with no recovery).
+        class ExplodingClient:
+            def put(self, url, **kwargs):
+                raise RuntimeError("socket poisoned")
+
+        with handy_module._HTTP_SESSION_LOCK:
+            previous = handy_module._HTTP_SESSION
+            handy_module._HTTP_SESSION = ExplodingClient()
+        try:
+            with self.assertRaises(RuntimeError):
+                handy_module._session_put("https://example.invalid/cmd", json={})
+            with handy_module._HTTP_SESSION_LOCK:
+                self.assertIsNone(handy_module._HTTP_SESSION)
+        finally:
+            with handy_module._HTTP_SESSION_LOCK:
+                handy_module._HTTP_SESSION = previous
 
     def test_hsp_server_time_estimate_uses_servertime_offset(self):
         handy = HandyController(handy_key="test")

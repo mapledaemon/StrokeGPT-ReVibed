@@ -30,6 +30,34 @@ class _ModuleHTTPFallback:
         return requests.get(url, **kwargs)
 
 
+def _http_retry_config():
+    """Connection-level retry policy for pooled keep-alive sockets.
+
+    A reused socket can be closed by the server or a NAT between commands;
+    without retries that surfaces as a one-off command failure, and a single
+    failed ``hsp/add`` kills the continuous stream by design. Connect errors
+    and one read retry are safe here: the Handy command PUTs are idempotent
+    (re-sending the same point buffer or mode command yields the same device
+    state).
+    """
+    try:
+        from urllib3.util.retry import Retry
+    except Exception:
+        return None
+    try:
+        return Retry(
+            total=2,
+            connect=2,
+            read=1,
+            status=0,
+            backoff_factor=0.15,
+            allowed_methods=None,
+        )
+    except TypeError:
+        # Older urllib3 used method_whitelist instead of allowed_methods.
+        return Retry(total=2, connect=2, read=1, backoff_factor=0.15)
+
+
 def _http_session():
     """Shared pooled HTTP session for Handy REST traffic.
 
@@ -52,23 +80,64 @@ def _http_session():
                 adapters = getattr(requests, "adapters", None)
                 adapter_factory = getattr(adapters, "HTTPAdapter", None) if adapters else None
                 if callable(adapter_factory):
-                    adapter = adapter_factory(pool_connections=4, pool_maxsize=8)
+                    retry_config = _http_retry_config()
+                    adapter_kwargs = {"pool_connections": 4, "pool_maxsize": 8}
+                    if retry_config is not None:
+                        adapter_kwargs["max_retries"] = retry_config
+                    try:
+                        adapter = adapter_factory(**adapter_kwargs)
+                    except TypeError:
+                        adapter = adapter_factory(pool_connections=4, pool_maxsize=8)
                     session.mount("https://", adapter)
                     session.mount("http://", adapter)
                 _HTTP_SESSION = session
     return _HTTP_SESSION
 
 
+def _reset_http_session():
+    """Discard the pooled session so the next command builds a fresh one.
+
+    A shared session means a poisoned connection pool can persist across
+    commands -- the failure mode where every Handy command starts failing
+    and motion stops outright with no recovery, because the chat keepalive's
+    restart attempts fail through the same poisoned pool. Per-command fresh
+    connections never had that persistence, so the pooled variant heals
+    itself: any transport-level exception drops the pool and the next
+    command reconnects from scratch.
+    """
+    global _HTTP_SESSION
+    with _HTTP_SESSION_LOCK:
+        session = _HTTP_SESSION
+        _HTTP_SESSION = None
+    if session is not None:
+        try:
+            close = getattr(session, "close", None)
+            if callable(close):
+                close()
+        except Exception:
+            pass
+
+
 def _session_put(url, **kwargs):
     # Patchable seam for tests; production traffic goes through the pooled
-    # keep-alive session above.
-    return _http_session().put(url, **kwargs)
+    # keep-alive session above. Transport exceptions reset the pool so a
+    # poisoned connection cannot persist across commands.
+    try:
+        return _http_session().put(url, **kwargs)
+    except Exception:
+        _reset_http_session()
+        raise
 
 
 def _session_get(url, **kwargs):
     # Patchable seam for tests; production traffic goes through the pooled
-    # keep-alive session above.
-    return _http_session().get(url, **kwargs)
+    # keep-alive session above. Transport exceptions reset the pool so a
+    # poisoned connection cannot persist across commands.
+    try:
+        return _http_session().get(url, **kwargs)
+    except Exception:
+        _reset_http_session()
+        raise
 
 
 MODE_HAMP = 0
