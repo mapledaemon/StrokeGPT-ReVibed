@@ -10,6 +10,44 @@ import requests
 
 from .settings import DEFAULT_HANDY_API_V3_APPLICATION_ID
 
+_HTTP_SESSION_LOCK = threading.Lock()
+_HTTP_SESSION = None
+
+
+def _http_session():
+    """Shared pooled HTTP session for Handy REST traffic.
+
+    Plain ``requests.put``/``requests.get`` opened a fresh TCP connection and
+    paid a full TLS handshake to the Handy cloud on every command. With the
+    HSP state poller (4 Hz), the SSE listener, and motion-critical
+    ``hsp/add`` appends all issuing commands concurrently, real-device
+    command latency compounded to 1-2+ seconds per command and starved
+    timed HSP streams. A pooled keep-alive session makes a command cost one
+    round trip after the first connection.
+    """
+    global _HTTP_SESSION
+    with _HTTP_SESSION_LOCK:
+        if _HTTP_SESSION is None:
+            session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=8)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            _HTTP_SESSION = session
+    return _HTTP_SESSION
+
+
+def _session_put(url, **kwargs):
+    # Patchable seam for tests; production traffic goes through the pooled
+    # keep-alive session above.
+    return _http_session().put(url, **kwargs)
+
+
+def _session_get(url, **kwargs):
+    # Patchable seam for tests; production traffic goes through the pooled
+    # keep-alive session above.
+    return _http_session().get(url, **kwargs)
+
+
 MODE_HAMP = 0
 MODE_HDSP = 2
 MODE_HSP = 4
@@ -28,6 +66,7 @@ HSP_STALE_CLOCK_TOLERANCE_MS = 500
 HSP_THRESHOLD_UPDATE_MIN_INTERVAL_SECONDS = 8.0
 HSP_STATE_REFRESH_MAX_AGE_SECONDS = 0.25
 HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS = 0.25
+HSP_STATE_REFRESH_SSE_BACKOFF_SECONDS = 1.0
 HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS = 2.0
 HSP_STATE_REFRESH_TIMEOUT_SECONDS = 0.5
 HSP_STATE_SSE_CONNECT_TIMEOUT_SECONDS = 5.0
@@ -956,7 +995,7 @@ class HandyController:
         started_at = time.monotonic()
         response = None
         try:
-            response = requests.put(f"{base_url}{path}", headers=headers, json=body or {}, timeout=10)
+            response = _session_put(f"{base_url}{path}", headers=headers, json=body or {}, timeout=10)
             response.raise_for_status()
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
             try:
@@ -1066,7 +1105,7 @@ class HandyController:
         started_at = time.monotonic()
         response = None
         try:
-            response = requests.get(f"{base_url}{path}", headers=headers, timeout=10)
+            response = _session_get(f"{base_url}{path}", headers=headers, timeout=10)
             response.raise_for_status()
             elapsed_ms = (time.monotonic() - started_at) * 1000.0
             try:
@@ -1209,7 +1248,7 @@ class HandyController:
         started_wall_ms = time.time() * 1000.0
         response = None
         try:
-            response = requests.get(f"{self.api_v3_base_url}servertime", timeout=5)
+            response = _session_get(f"{self.api_v3_base_url}servertime", timeout=5)
             response.raise_for_status()
             ended_wall_ms = time.time() * 1000.0
             try:
@@ -1948,7 +1987,7 @@ class HandyController:
         self._last_hsp_state_sse_attempt_at = time.time()
         response = None
         try:
-            response = requests.get(
+            response = _session_get(
                 self._hsp_state_sse_url(),
                 headers={
                     "Accept": "text/event-stream",
@@ -2054,7 +2093,7 @@ class HandyController:
             "X-Api-Key": api_key,
         }
         try:
-            response = requests.get(
+            response = _session_get(
                 f"{self.api_v3_base_url}hsp/state",
                 headers=headers,
                 timeout=HSP_STATE_REFRESH_TIMEOUT_SECONDS,
@@ -2103,12 +2142,31 @@ class HandyController:
             except Exception as exc:
                 self._record_hsp_state_refresh_failure(exc)
             snapshot = self._hsp_state_cache_snapshot()
-            sleep_seconds = (
-                HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS
-                if snapshot["refresh_failures"]
-                else HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS
-            )
+            if snapshot["refresh_failures"]:
+                sleep_seconds = HSP_STATE_REFRESH_FAILURE_BACKOFF_SECONDS
+            elif self._hsp_state_sse_stream_healthy():
+                # SSE is connected and delivering state pushes; relax the
+                # REST poll so motion-critical hsp/add commands are not
+                # competing with a 4 Hz state poll for the connection pool.
+                sleep_seconds = HSP_STATE_REFRESH_SSE_BACKOFF_SECONDS
+            else:
+                sleep_seconds = HSP_STATE_REFRESH_MIN_INTERVAL_SECONDS
             time.sleep(max(0.05, float(sleep_seconds)))
+
+    def _hsp_state_sse_stream_healthy(self) -> bool:
+        if self._hsp_state_sse_response is None:
+            return False
+        if self._last_hsp_state_sse_failures:
+            return False
+        event_at = self._last_hsp_state_sse_event_at
+        connected_at = self._last_hsp_state_sse_connected_at
+        freshest = max(
+            float(event_at or 0.0),
+            float(connected_at or 0.0),
+        )
+        if freshest <= 0.0:
+            return False
+        return (time.time() - freshest) < HSP_STATE_SSE_READ_TIMEOUT_SECONDS
 
     def _update_stream_state(self, point):
         if not isinstance(point, dict):
@@ -2387,7 +2445,7 @@ class HandyController:
             return None
         headers = {"X-Connection-Key": self.handy_key}
         try:
-            resp = requests.get(f"{self.base_url}slide/position/absolute", headers=headers, timeout=10)
+            resp = _session_get(f"{self.base_url}slide/position/absolute", headers=headers, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             return float(data.get("position", 0))
