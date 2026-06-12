@@ -28,6 +28,10 @@ from strokegpt.motion import MotionTarget
 
 EXPECTED_PATTERN_IDS = frozenset({
     "stroke",
+    "glide",
+    "feather",
+    "plunge",
+    "crest",
     "flick",
     "milk",
     "pulse",
@@ -111,31 +115,38 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
             self.assertEqual(first[pattern_id], pattern)
 
     def test_stroke_pattern_endpoints_match_expected_shape(self):
+        # The regenerated catalog authors patterns at their real timescale
+        # as closed waypoint loops for the monotone cubic sampler: no
+        # duration_scale stretch, no baked interpolation points.
         stroke = PATTERNS["stroke"]
         self.assertEqual(stroke.name, "stroke")
-        self.assertEqual(len(stroke.actions), 3)
-        self.assertEqual((stroke.actions[0].at, stroke.actions[0].pos), (0, 0.0))
-        self.assertEqual((stroke.actions[-1].at, stroke.actions[-1].pos), (900, 0.0))
-        self.assertEqual(stroke.window_scale, 0.35)
-        self.assertEqual(stroke.interpolation_ms, 160)
+        self.assertEqual(stroke.actions[0].at, 0)
+        self.assertEqual(stroke.actions[-1].at, 4500)
+        self.assertEqual(stroke.actions[0].pos, stroke.actions[-1].pos)
+        self.assertEqual(stroke.duration_scale, 1.0)
+        self.assertEqual(stroke.interpolation_ms, 0)
 
     def test_milk_pattern_endpoints_match_expected_shape(self):
+        # Milk is a closed two-lobe base-weighted pull: quick drop deep,
+        # slow draw back up, authored at real timescale with no jitter.
         milk = PATTERNS["milk"]
-        self.assertEqual(len(milk.actions), 5)
         self.assertEqual(milk.actions[0].at, 0)
-        self.assertEqual(milk.actions[-1].at, 1280)
-        self.assertEqual(milk.actions[0].pos, 4.0)
-        self.assertEqual(milk.actions[-1].pos, 6.0)
-        self.assertEqual(milk.window_scale, 0.92)
-        self.assertEqual(milk.tempo_scale, 0.8)
+        self.assertEqual(milk.actions[-1].at, 5500)
+        self.assertEqual(milk.actions[0].pos, milk.actions[-1].pos)
+        self.assertGreaterEqual(max(action.pos for action in milk.actions), 88.0)
+        self.assertEqual(milk.depth_jitter, 0.0)
+        self.assertEqual(milk.range_jitter, 0.0)
 
-    def test_hold_pattern_uses_broader_continuous_window(self):
+    def test_hold_pattern_keeps_deep_pressure_band(self):
+        # The redesigned hold is deep slow rolls -- pressure without a dead
+        # stop -- so all motion stays in the deep band instead of the old
+        # broad sweep with a twitchy dwell.
         hold = PATTERNS["hold"]
         positions = [action.pos for action in hold.actions]
 
-        self.assertLessEqual(min(positions), 52.0)
-        self.assertGreaterEqual(max(positions), 92.0)
-        self.assertGreaterEqual(hold.window_scale, 0.36)
+        self.assertGreaterEqual(min(positions), 55.0)
+        self.assertGreaterEqual(max(positions), 86.0)
+        self.assertEqual(hold.depth_jitter, 0.0)
 
     def test_edge_build_low_pattern_endpoints_match_expected_shape(self):
         pattern = PATTERNS["edge-build-low"]
@@ -149,7 +160,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # so future tweaks to the loader path cannot silently shift
         # pattern duration.
         self.assertEqual(PATTERNS["stroke"].duration_ms, 4500)
-        self.assertEqual(PATTERNS["milk"].duration_ms, 6400)
+        self.assertEqual(PATTERNS["milk"].duration_ms, 5500)
 
     def test_json_data_file_only_uses_known_fields(self):
         # The loader silently skips unknown fields, so this test catches

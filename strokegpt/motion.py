@@ -255,9 +255,13 @@ PATTERN_PATTERNS = _compile_groups(
     ("wave", (r"\bwave\b", r"\brolling\b", r"\boscillat(?:e|ing)\b")),
     ("ramp", (r"\bramp\b", r"\bclimb\b", r"\bbuild\b")),
     ("ladder", (r"\bladder\b", r"\bstep(?:ped|s)?\b")),
-    ("surge", (r"\bsurge\b", r"\bswell\b", r"\bcrescendo\b")),
+    ("surge", (r"\bsurge\b", r"\bswell\b")),
     ("sway", (r"\bsway\b", r"\balternat(?:e|ing)\b", r"\bsmooth\s+alternation\b")),
     ("tease", (r"\btease\b", r"\bedge\b")),
+    ("glide", (r"\bglid(?:e|ing)\b", r"\blong\s+slow\b", r"\bslow\s+and\s+deep\b")),
+    ("feather", (r"\bfeather(?:light|ing)?\b", r"\bbarely\s+touch(?:ing)?\b")),
+    ("plunge", (r"\bplung(?:e|ing)\b", r"\bbottom(?:ing)?\s+out\b", r"\ball\s+the\s+way\s+down\b")),
+    ("crest", (r"\bcrest(?:ing)?\b", r"\bcrescendo\b")),
     ("stroke", (r"\bstroke\b", r"\bstroking\b")),
 )
 
@@ -509,6 +513,18 @@ def _target_from_cues(
             next_range = min(next_range, 34.0)
         else:
             next_range = max(next_range, 65.0)
+    elif cues.pattern == "glide":
+        next_speed = min(max(next_speed, 24.0), 44.0)
+        next_range = max(next_range, 80.0)
+    elif cues.pattern == "feather":
+        next_speed = min(max(next_speed, 18.0), 34.0)
+        next_range = min(next_range, 26.0)
+    elif cues.pattern == "plunge":
+        next_speed = max(next_speed, 38.0)
+        next_range = max(next_range, 85.0)
+    elif cues.pattern == "crest":
+        next_speed = max(next_speed, 36.0)
+        next_range = max(next_range, 65.0)
     elif cues.pattern == "stroke":
         next_speed = max(next_speed, 42.0)
         next_range = max(next_range, 70.0)
