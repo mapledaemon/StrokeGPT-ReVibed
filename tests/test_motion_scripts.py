@@ -267,7 +267,130 @@ class MotionScriptPlannerTests(unittest.TestCase):
             PatternAction(300, 50),
         )
         for phase in (0.4, 0.5, 0.6):
-            self.assertEqual(_sample_action_position(actions, phase), 20.0)
+            # Monotone cubic interpolation holds flat segments flat to within
+            # float rounding; exact equality is not part of the contract.
+            self.assertAlmostEqual(_sample_action_position(actions, phase), 20.0, places=9)
+
+    def test_sample_action_position_velocity_is_continuous_across_knots(self):
+        # The jerky-motion regression: index-parameterized Catmull-Rom was C1
+        # in phase but not in wall-clock time, so a 100ms segment next to an
+        # 800ms segment produced an instantaneous velocity jump at the shared
+        # knot that hardware felt as a jolt. The time-parameterized monotone
+        # cubic must keep finite-difference velocity continuous across every
+        # authored knot, including strongly unequal neighbor durations.
+        actions = (
+            PatternAction(0, 10),
+            PatternAction(100, 30),
+            PatternAction(900, 90),
+            PatternAction(1000, 10),
+        )
+        from strokegpt.motion_patterns import _continuous_cycle_ms
+
+        cycle_ms = _continuous_cycle_ms(actions)
+        epsilon_ms = 1.0
+        # Probe the same-direction knot joining the 100ms and 800ms rising
+        # segments: that duration mismatch is exactly where the old sampler
+        # jumped velocity ~8x. Reversal knots legitimately have high
+        # curvature right after their zero-velocity instant, so they are
+        # covered by the zero-velocity reversal test instead.
+        knot_ms = 100
+        phase_before = (knot_ms - epsilon_ms) / cycle_ms
+        phase_after = (knot_ms + epsilon_ms) / cycle_ms
+        pos_before = _sample_action_position(actions, phase_before)
+        pos_at = _sample_action_position(actions, knot_ms / cycle_ms)
+        pos_after = _sample_action_position(actions, phase_after)
+        velocity_in = (pos_at - pos_before) / epsilon_ms
+        velocity_out = (pos_after - pos_at) / epsilon_ms
+        self.assertLess(
+            abs(velocity_out - velocity_in),
+            0.02,
+            f"velocity jump at knot {knot_ms}ms: {velocity_in:.4f} -> {velocity_out:.4f} pos/ms",
+        )
+
+    def test_sample_action_position_never_overshoots_segment_endpoints(self):
+        # Monotone cubic interpolation must stay within each segment's
+        # endpoint range. The old Catmull-Rom overshot then clamped, leaving
+        # flat plateaus with abrupt recovery; pinned here so overshoot does
+        # not creep back in with a future sampler change.
+        actions = (
+            PatternAction(0, 0),
+            PatternAction(80, 95),
+            PatternAction(400, 100),
+            PatternAction(480, 5),
+            PatternAction(900, 0),
+        )
+        from strokegpt.motion_patterns import _continuous_cycle_ms, _wrap_segment_ms
+
+        cycle_ms = _continuous_cycle_ms(actions)
+        knot_times = [0, 80, 400, 480, 900, cycle_ms]
+        knot_positions = [0, 95, 100, 5, 0, 0]
+        for step in range(1, 2000):
+            sample_at = cycle_ms * step / 2000.0
+            for segment in range(len(knot_times) - 1):
+                if knot_times[segment] <= sample_at <= knot_times[segment + 1]:
+                    low = min(knot_positions[segment], knot_positions[segment + 1])
+                    high = max(knot_positions[segment], knot_positions[segment + 1])
+                    value = _sample_action_position(actions, sample_at / cycle_ms)
+                    self.assertGreaterEqual(value, low - 1e-6)
+                    self.assertLessEqual(value, high + 1e-6)
+                    break
+
+    def test_sample_action_position_zero_velocity_at_direction_reversals(self):
+        # A direction reversal knot must be a true zero-velocity instant.
+        # The old clipped-overshoot behavior created micro double-reversals
+        # (tease had two reversals 30ms apart) because the clamped plateau
+        # ended with a velocity step. Monotone tangents pin the reversal
+        # tangent to zero by construction.
+        actions = (
+            PatternAction(0, 20),
+            PatternAction(350, 80),
+            PatternAction(700, 20),
+        )
+        from strokegpt.motion_patterns import _continuous_cycle_ms
+
+        cycle_ms = _continuous_cycle_ms(actions)
+        epsilon_ms = 2.0
+        peak_phase = 350 / cycle_ms
+        pos_peak = _sample_action_position(actions, peak_phase)
+        pos_before = _sample_action_position(actions, (350 - epsilon_ms) / cycle_ms)
+        pos_after = _sample_action_position(actions, (350 + epsilon_ms) / cycle_ms)
+        self.assertLess(abs(pos_peak - pos_before), 0.1)
+        self.assertLess(abs(pos_after - pos_peak), 0.1)
+
+    def test_builtin_catalog_wall_clock_acceleration_is_bounded(self):
+        # Wall-clock smoothness guard for the whole catalog through the real
+        # sampling path. Before the monotone cubic sampler, index-domain
+        # Catmull-Rom produced acceleration spikes up to ~8900 pos/s^2 (flick)
+        # and ~3000 on the routine wave/stroke patterns; the time-aware
+        # sampler cuts the worst cases dramatically. The bound here is loose
+        # enough for the intentionally sharp burst patterns but would catch a
+        # regression back to velocity-discontinuous sampling.
+        from strokegpt.motion import MotionTarget
+        from strokegpt.motion_patterns import PATTERNS, continuous_motion_plan, sample_continuous_motion
+
+        target = MotionTarget(50, 50, 80, "accel guard")
+        worst = {}
+        for pattern_id in PATTERNS:
+            plan = continuous_motion_plan(pattern_id)
+            self.assertIsNotNone(plan)
+            duration = plan.duration_seconds
+            sample_count = max(240, int(duration * 100))
+            dt = duration / sample_count
+            depths = [
+                sample_continuous_motion(plan, target, duration * index / sample_count).target.depth
+                for index in range(sample_count + 1)
+            ]
+            velocities = [(depths[i + 1] - depths[i]) / dt for i in range(sample_count)]
+            max_accel = max(
+                abs(velocities[i + 1] - velocities[i]) / dt
+                for i in range(sample_count - 1)
+            )
+            worst[pattern_id] = max_accel
+        offenders = {pid: round(accel) for pid, accel in worst.items() if accel > 2600}
+        self.assertFalse(
+            offenders,
+            f"wall-clock acceleration regression: {offenders} (catalog max should stay below ~2600 pos/s^2)",
+        )
 
     def test_smooth_jitter_is_bounded_and_zero_when_amount_zero(self):
         self.assertEqual(_smooth_jitter(0.0, 0.0), 0.0)
