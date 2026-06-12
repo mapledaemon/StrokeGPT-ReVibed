@@ -1162,14 +1162,15 @@ class MotionController:
             return
 
         if self.backend == "continuous":
-            if self._should_use_hsp_area_focus_for_generated_target(target):
+            chat_plain_retarget = self._is_chat_plain_retarget(target, source)
+            if not chat_plain_retarget and self._should_use_hsp_area_focus_for_generated_target(target):
                 if self._apply_hsp_area_focus_target(
                     target,
                     source=source,
                     trace_metadata=trace_metadata,
                 ):
                     return
-            if self._should_use_live_stroke_for_generated_target(target):
+            if chat_plain_retarget or self._should_use_live_stroke_for_generated_target(target):
                 if self._apply_live_stroke_continuous_target(
                     target,
                     source=source,
@@ -1191,6 +1192,28 @@ class MotionController:
             self.apply_position_frames(self._direct_position_frames(target), source=source)
         else:
             self.apply_target(target, source=source)
+
+    def _is_chat_plain_retarget(self, target: MotionTarget, source: str) -> bool:
+        """Plain chat adjustments while playback is active bypass HSP morphs.
+
+        Chat-driven "faster"/"slower"/numeric retargets carry no zone program
+        and no pattern label, but each one used to trigger a flushed HSP
+        area-focus morph replacement -- the stop/go "morph" regression on
+        real firmware (docs/motion_control_modes.md). They take the same
+        live-stroke bypass the routing policy already applies to active
+        regional focus retargets. Scoped to chat sources on purpose:
+        Freestyle and the scripted modes intentionally swap patterns through
+        HSP area-focus replacement streaming and must keep that transport.
+        """
+        if target.motion_program is not None:
+            return False
+        cleaned_source = str(source or "").strip().lower()
+        if not cleaned_source.startswith(("llm", "chat command", "chat motion keepalive")):
+            return False
+        return (
+            self._is_frame_playback_active()
+            and not self._pattern_from_label(target.label)
+        )
 
     def _should_use_live_stroke_for_generated_target(self, target: MotionTarget) -> bool:
         program = target.motion_program
@@ -1409,7 +1432,11 @@ class MotionController:
             "continuous_hsp_bypass_reason": (
                 "generated_area_focus_hsp_morph_bypass"
                 if generated_area_focus
-                else "generated_anchor_loop_hsp_microstutter"
+                else (
+                    "generated_plain_retarget_hsp_morph_bypass"
+                    if program is None
+                    else "generated_anchor_loop_hsp_microstutter"
+                )
             ),
             "morph_start_depth": round(float(start_target.depth), 1),
             "morph_start_range": round(float(start_target.stroke_range), 1),

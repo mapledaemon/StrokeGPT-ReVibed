@@ -37,6 +37,15 @@ remaining HSP area-focus playback:
   They must still pass through the area-focus localization step first, so
   `tip`, `shaft`, and `base` requests become bounded local stroke windows
   instead of raw broad LLM targets.
+- Active *plain* chat retargets (no zone program, no pattern label — e.g.
+  "faster", "slower", numeric speed/depth adjustments) also take the
+  live-stroke bypass (`generated_plain_retarget_hsp_morph_bypass`). Before
+  this, every plain chat adjustment triggered a flushed HSP area-focus morph
+  replacement, which is where the user-visible stop/go "morph" reports in
+  normal chat came from. The bypass is scoped to chat sources (`llm`,
+  `chat command`, `chat motion keepalive`); Freestyle and the scripted modes
+  intentionally keep swapping patterns through HSP area-focus replacement
+  streaming.
 - Idle generated area-focus starts may still use HSP area-focus streaming.
 - Remaining HSP area-focus intent morphs choose a handoff time and replacement
   phase that avoid opposing-direction and near-hold segments during the first

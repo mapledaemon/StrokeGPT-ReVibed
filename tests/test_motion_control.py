@@ -3272,6 +3272,86 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_chat_plain_retarget_bypasses_hsp_morph_replacement(self):
+        # The user-reported "morph" stop in normal chat: a plain LLM
+        # adjustment (no zone program, no pattern label) while an HSP
+        # area-focus stream is active used to trigger a flushed HSP morph
+        # replacement on every chat turn. Plain chat retargets must take the
+        # live-stroke bypass like regional retargets do.
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+        matcher = IntentMatcher()
+
+        try:
+            tip_intent = matcher.parse("focus on the tip", controller.semantic_target())
+            controller.apply_generated_target(tip_intent.target, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            time.sleep(0.12)
+            current = controller.semantic_target()
+            faster = MotionTarget(
+                min(100, current.speed + 25),
+                current.depth,
+                current.stroke_range,
+                "llm faster",
+            )
+            controller.apply_generated_target(faster, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
+            self.assertEqual(handy.stream_replacements, [])
+            trace = controller.observability_snapshot()["trace"]
+            live_points = [
+                point
+                for point in trace
+                if point.get("continuous_schema") == "hamp_live_anchor"
+            ]
+            self.assertTrue(live_points)
+            self.assertEqual(
+                live_points[-1]["continuous_hsp_bypass_reason"],
+                "generated_plain_retarget_hsp_morph_bypass",
+            )
+        finally:
+            controller.stop()
+
+    def test_chat_plain_idle_start_still_uses_hsp_area_focus_stream(self):
+        # Idle chat starts keep HSP area-focus streaming: no replacement is
+        # involved, so the smooth timed-point transport stays preferred.
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(
+                MotionTarget(45, 50, 70, "llm steady"),
+                source="llm",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            self.assertEqual(handy.moves, [])
+        finally:
+            controller.stop()
+
+    def test_freestyle_plain_flow_retarget_keeps_hsp_replacement_transport(self):
+        # Freestyle flow swaps intentionally stay on HSP area-focus
+        # replacement streaming; the chat bypass must not capture planner
+        # sources.
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(
+                MotionTarget(54, 50, 78, "freestyle flow"),
+                source="freestyle planner",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            time.sleep(0.12)
+            controller.apply_generated_target(
+                MotionTarget(62, 58, 70, "freestyle flow"),
+                source="freestyle planner",
+            )
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+        finally:
+            controller.stop()
+
     def test_area_focus_hsp_intent_morph_avoids_near_hold_segments(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -3349,10 +3429,14 @@ class MotionControllerTests(unittest.TestCase):
         controller = MotionController(handy, step_delay=0.16)
 
         try:
-            controller.apply_generated_target(MotionTarget(33, 18, 70, "tip area_focus"), source="llm")
+            # Planner-style source on purpose: chat sources now take the
+            # live-stroke bypass instead of flushed HSP replacements, and
+            # this test pins the replacement bridge transport mechanics that
+            # Freestyle/mode swaps still rely on.
+            controller.apply_generated_target(MotionTarget(33, 18, 70, "tip area_focus"), source="freestyle planner")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
-            controller.apply_generated_target(MotionTarget(33, 82, 70, "base area_focus"), source="llm")
+            controller.apply_generated_target(MotionTarget(33, 82, 70, "base area_focus"), source="freestyle planner")
 
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
             replacement = handy.stream_replacements[0]
