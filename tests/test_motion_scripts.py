@@ -175,11 +175,15 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertIsNotNone(stroke)
         self.assertAlmostEqual(stroke.duration_seconds, 4.5)
 
-    def test_builtin_patterns_use_extended_authored_timings(self):
-        self.assertEqual([action.at for action in PATTERNS["stroke"].actions], [0, 450, 900])
-        self.assertEqual([action.at for action in PATTERNS["flick"].actions], [0, 90, 430])
-        self.assertEqual(PATTERNS["stroke"].duration_scale, 5.0)
-        self.assertEqual(PATTERNS["flick"].duration_scale, 5.0)
+    def test_builtin_patterns_use_real_timescale_authoring(self):
+        # The regenerated catalog authors waypoints at their final playback
+        # timescale; the old 5x duration_scale stretch and its baked cosine
+        # interpolation are gone.
+        self.assertEqual(PATTERNS["stroke"].actions[-1].at, 4500)
+        self.assertEqual(PATTERNS["flick"].actions[-1].at, 4000)
+        self.assertEqual(PATTERNS["stroke"].duration_scale, 1.0)
+        self.assertEqual(PATTERNS["flick"].duration_scale, 1.0)
+        self.assertEqual(PATTERNS["stroke"].interpolation_ms, 0)
 
     def test_continuous_plan_caches_projectable_normalized_range(self):
         plan = continuous_motion_plan("ramp")
@@ -187,7 +191,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
 
         self.assertIsNotNone(plan)
         self.assertLessEqual(plan.normalized_range[0], 20.0)
-        self.assertGreaterEqual(plan.normalized_range[1], 100.0)
+        self.assertGreaterEqual(plan.normalized_range[1], 85.0)
 
         legacy_range = {
             "min": round(min(
@@ -200,7 +204,11 @@ class MotionScriptPlannerTests(unittest.TestCase):
             )),
         }
 
-        self.assertEqual(continuous_plan_depth_range(plan, target), legacy_range)
+        cached_range = continuous_plan_depth_range(plan, target)
+        # The cached range includes authored extremes a sparse legacy probe
+        # can miss, so it must contain the probe within a rounding unit.
+        self.assertLessEqual(cached_range["min"], legacy_range["min"] + 1)
+        self.assertGreaterEqual(cached_range["max"], legacy_range["max"] - 1)
 
     def test_sample_action_position_is_phase_cyclic(self):
         # A closed pattern: positions at the same depth at start and end.
@@ -596,10 +604,12 @@ class MotionScriptPlannerTests(unittest.TestCase):
         range_span = max(sample.stroke_range for sample in samples)
         program_range = continuous_plan_depth_range(plan, target)
 
-        self.assertGreaterEqual(depth_span, 30.0)
-        self.assertGreaterEqual(range_span, 24.0)
-        self.assertLessEqual(program_range["min"], 52)
-        self.assertGreaterEqual(program_range["max"], 83)
+        # Hold is now deep slow rolls: a clear rolling span inside the deep
+        # half of the projected window rather than the old broad sweep.
+        self.assertGreaterEqual(depth_span, 12.0)
+        self.assertGreaterEqual(range_span, 15.0)
+        self.assertGreaterEqual(program_range["min"], 52)
+        self.assertGreaterEqual(program_range["max"], 75)
 
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:
@@ -641,39 +651,22 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertLess(recover_index, hold_index)
 
     def test_edge_patterns_use_expected_regions(self):
-        hold_frames = expand_pattern(
-            "edge-hold",
-            MotionTarget(30, 40, 50),
-            MotionTarget(34, 32, 46, "Edge Hold"),
-            rng=random.Random(17),
-        )
-        recover_frames = expand_pattern(
-            "edge-recover",
-            MotionTarget(30, 40, 50),
-            MotionTarget(18, 68, 48, "Edge Recover"),
-            rng=random.Random(18),
-        )
-        pullback_frames = expand_pattern(
-            "edge-pull-back",
-            MotionTarget(30, 40, 50),
-            MotionTarget(14, 88, 18, "Edge Pull Back"),
-            rng=random.Random(19),
-        )
+        # Normalized action bands for the redesigned edge patterns: hold
+        # rolls stay deep-mid, recover decays around the middle, pull-back
+        # starts deep, retreats to the tip region, and returns deep for the
+        # loop seam.
+        hold_positions = [action.pos for action in PATTERNS["edge-hold"].actions]
+        self.assertGreaterEqual(min(hold_positions), 50)
+        self.assertLessEqual(max(hold_positions), 72)
 
-        self.assertTrue(hold_frames)
-        hold_depths = [frame.target.depth for frame in hold_frames if frame.phase == "pattern"]
-        self.assertTrue(all(depth <= 55 for depth in hold_depths))
-        self.assertGreater(max(hold_depths), 35)
+        recover_positions = [action.pos for action in PATTERNS["edge-recover"].actions]
+        self.assertGreaterEqual(min(recover_positions), 38)
+        self.assertLessEqual(max(recover_positions), 62)
 
-        self.assertTrue(recover_frames)
-        recover_depths = [frame.target.depth for frame in recover_frames if frame.phase == "pattern"]
-        self.assertTrue(all(60 <= depth <= 88 for depth in recover_depths))
-        self.assertGreater(max(recover_depths), 80)
-
-        self.assertTrue(pullback_frames)
-        pullback_depths = [frame.target.depth for frame in pullback_frames if frame.phase == "pattern"]
-        self.assertTrue(all(depth >= 88 for depth in pullback_depths))
-        self.assertGreater(max(pullback_depths), 94)
+        pullback_positions = [action.pos for action in PATTERNS["edge-pull-back"].actions]
+        self.assertGreaterEqual(pullback_positions[0], 80)
+        self.assertLessEqual(min(pullback_positions), 25)
+        self.assertGreaterEqual(pullback_positions[-1], 80)
 
     def test_pattern_palette_uses_funscript_style_actions(self):
         self.assertIn("flick", pattern_names())
@@ -735,15 +728,20 @@ class MotionScriptPlannerTests(unittest.TestCase):
         pattern_depths = [round(frame.target.depth) for frame in frames if frame.phase == "pattern"]
         self.assertEqual(pattern_depths[:3], [32, 69, 31])
 
-    def test_flick_pattern_is_quick_out_then_slower_return(self):
+    def test_flick_pattern_mixes_calm_base_with_quick_accents(self):
+        # The redesigned flick embeds quick eased accents inside a calm
+        # shallow base instead of raw sub-100ms oscillations: at least two
+        # accent peaks rise clearly above the base lobes, and everything
+        # stays in the shallow half.
         actions = PATTERNS["flick"].actions
+        positions = [action.pos for action in actions]
 
-        self.assertGreaterEqual(len(actions), 3)
-        start, outward, returned = actions[:3]
-        self.assertLess(outward.pos, start.pos)
-        self.assertGreater(returned.pos, outward.pos)
-        self.assertLessEqual(outward.at - start.at, 110)
-        self.assertGreater(returned.at - outward.at, outward.at - start.at)
+        self.assertLessEqual(max(positions), 60)
+        accent_peaks = [pos for pos in positions if pos >= 50]
+        base_peaks = [pos for pos in positions if 35 <= pos <= 45]
+        self.assertGreaterEqual(len(accent_peaks), 2)
+        self.assertGreaterEqual(len(base_peaks), 2)
+        self.assertEqual(actions[-1].at, 4000)
 
     def test_milk_pattern_is_available_and_full_range(self):
         self.assertIn("milk", pattern_names())
@@ -752,9 +750,9 @@ class MotionScriptPlannerTests(unittest.TestCase):
         actions = prepare_pattern_actions(pattern)
         positions = [action.pos for action in actions]
 
-        self.assertGreaterEqual(pattern.window_scale, 0.9)
-        self.assertLessEqual(min(positions), 8)
-        self.assertGreaterEqual(max(positions), 94)
+        self.assertGreaterEqual(pattern.window_scale, 0.45)
+        self.assertLessEqual(min(positions), 16)
+        self.assertGreaterEqual(max(positions), 88)
 
     def test_arbitrary_motion_pattern_expands_to_frames(self):
         pattern = MotionPattern(
@@ -963,15 +961,18 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len(actions), 2)
         self.assertTrue(all(delta <= 25 for delta in deltas))
 
-    def test_prepared_patterns_keep_large_step_limiter_points(self):
-        for name in ("flutter", "ladder", "surge"):
+    def test_prepared_patterns_do_not_inject_step_limiter_points(self):
+        # The regenerated catalog relies on the monotone cubic sampler for
+        # smooth travel and the controller-level velocity clamps for HAMP
+        # legacy safety. Data-driven step limiting injected linear points
+        # that straightened the authored curve, so the catalog declares
+        # none; prepared actions stay the authored waypoints.
+        for name in ("flutter", "ladder", "surge", "stroke", "crest"):
             with self.subTest(name=name):
                 pattern = PATTERNS[name]
+                self.assertEqual(pattern.max_step_delta, 0.0)
                 actions = prepare_pattern_actions(pattern)
-                deltas = [abs(end.pos - start.pos) for start, end in zip(actions, actions[1:])]
-
-                self.assertTrue(deltas)
-                self.assertTrue(all(delta <= pattern.max_step_delta for delta in deltas))
+                self.assertGreaterEqual(len(actions), 4)
 
     def test_anchor_program_generates_bounded_soft_targets(self):
         actions = prepare_anchor_actions(

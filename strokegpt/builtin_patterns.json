@@ -4,955 +4,1455 @@
     "actions": [
       {
         "at": 0,
-        "pos": 0
+        "pos": 10
       },
       {
-        "at": 450,
-        "pos": 100
+        "at": 1361,
+        "pos": 58.0
       },
       {
-        "at": 900,
-        "pos": 0
+        "at": 2475,
+        "pos": 90
+      },
+      {
+        "at": 3386,
+        "pos": 42.0
+      },
+      {
+        "at": 4500,
+        "pos": 10
       }
     ],
-    "window_scale": 0.35,
-    "interpolation_ms": 160,
-    "duration_scale": 5.0
+    "window_scale": 0.42,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
   },
-  "flick": {
-    "name": "flick",
+  "glide": {
+    "name": "glide",
     "actions": [
       {
         "at": 0,
-        "pos": 76
-      },
-      {
-        "at": 90,
-        "pos": 6
-      },
-      {
-        "at": 430,
-        "pos": 64
-      }
-    ],
-    "window_scale": 0.18,
-    "speed_scale": 1.1,
-    "depth_jitter": 1.2,
-    "range_jitter": 1.0,
-    "min_interval_ms": 70,
-    "interpolation_ms": 80,
-    "max_step_delta": 26,
-    "duration_scale": 5.0
-  },
-  "milk": {
-    "name": "milk",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 4
-      },
-      {
-        "at": 320,
-        "pos": 94
-      },
-      {
-        "at": 640,
         "pos": 8
       },
       {
-        "at": 960,
-        "pos": 100
+        "at": 1600,
+        "pos": 58.4
       },
       {
-        "at": 1280,
-        "pos": 6
-      }
-    ],
-    "window_scale": 0.92,
-    "speed_scale": 1.02,
-    "tempo_scale": 0.8,
-    "interpolation_ms": 130,
-    "max_step_delta": 34,
-    "duration_scale": 5.0
-  },
-  "pulse": {
-    "name": "pulse",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 55
-      },
-      {
-        "at": 250,
-        "pos": 82
-      },
-      {
-        "at": 500,
-        "pos": 58
-      },
-      {
-        "at": 750,
-        "pos": 88
-      },
-      {
-        "at": 1000,
-        "pos": 55
-      }
-    ],
-    "window_scale": 0.25,
-    "depth_jitter": 3.0,
-    "range_jitter": 2.0,
-    "interpolation_ms": 150,
-    "duration_scale": 5.0
-  },
-  "hold": {
-    "name": "hold",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 52
-      },
-      {
-        "at": 350,
-        "pos": 88
-      },
-      {
-        "at": 700,
-        "pos": 58
-      },
-      {
-        "at": 1050,
+        "at": 4000,
         "pos": 92
       },
       {
-        "at": 1400,
-        "pos": 54
+        "at": 5600,
+        "pos": 41.6
+      },
+      {
+        "at": 8000,
+        "pos": 8
       }
     ],
-    "window_scale": 0.36,
-    "speed_scale": 0.8,
-    "depth_jitter": 1.0,
-    "interpolation_ms": 175,
-    "duration_scale": 5.0
+    "window_scale": 0.46,
+    "speed_scale": 0.9,
+    "min_interval_ms": 0
   },
   "wave": {
     "name": "wave",
     "actions": [
       {
         "at": 0,
-        "pos": 0
+        "pos": 18
       },
       {
-        "at": 250,
-        "pos": 55
+        "at": 1048,
+        "pos": 78
       },
       {
-        "at": 500,
-        "pos": 100
+        "at": 2097,
+        "pos": 8
       },
       {
-        "at": 750,
-        "pos": 45
+        "at": 2726,
+        "pos": 58.4
       },
       {
-        "at": 1000,
-        "pos": 0
-      }
-    ],
-    "window_scale": 0.4,
-    "speed_scale": 0.95,
-    "interpolation_ms": 125,
-    "duration_scale": 5.0
-  },
-  "ramp": {
-    "name": "ramp",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 20
+        "at": 3355,
+        "pos": 92
       },
       {
-        "at": 350,
-        "pos": 45
+        "at": 3984,
+        "pos": 41.6
       },
       {
-        "at": 700,
+        "at": 4613,
+        "pos": 26
+      },
+      {
+        "at": 5556,
         "pos": 70
       },
       {
-        "at": 1000,
-        "pos": 100
+        "at": 6500,
+        "pos": 18
       }
     ],
-    "window_scale": 0.35,
-    "speed_scale": 0.95,
-    "interpolation_ms": 150,
-    "duration_scale": 5.0
-  },
-  "tease": {
-    "name": "tease",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 15
-      },
-      {
-        "at": 350,
-        "pos": 35
-      },
-      {
-        "at": 650,
-        "pos": 10
-      },
-      {
-        "at": 1000,
-        "pos": 30
-      }
-    ],
-    "window_scale": 0.22,
-    "speed_scale": 0.75,
-    "depth_jitter": 3.0,
-    "range_jitter": 2.0,
-    "interpolation_ms": 175,
-    "duration_scale": 5.0
-  },
-  "flutter": {
-    "name": "flutter",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 45
-      },
-      {
-        "at": 80,
-        "pos": 80
-      },
-      {
-        "at": 160,
-        "pos": 52
-      },
-      {
-        "at": 240,
-        "pos": 86
-      },
-      {
-        "at": 320,
-        "pos": 48
-      }
-    ],
-    "window_scale": 0.14,
-    "speed_scale": 1.15,
-    "depth_jitter": 1.5,
-    "range_jitter": 1.0,
-    "repeat": 2,
-    "min_interval_ms": 55,
-    "max_step_delta": 28,
-    "duration_scale": 5.0
-  },
-  "ladder": {
-    "name": "ladder",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 20
-      },
-      {
-        "at": 260,
-        "pos": 42
-      },
-      {
-        "at": 520,
-        "pos": 62
-      },
-      {
-        "at": 780,
-        "pos": 82
-      },
-      {
-        "at": 1040,
-        "pos": 100
-      },
-      {
-        "at": 1320,
-        "pos": 35
-      }
-    ],
-    "window_scale": 0.32,
-    "interpolation_ms": 150,
-    "max_step_delta": 30,
-    "duration_scale": 5.0
+    "window_scale": 0.4,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
   },
   "surge": {
     "name": "surge",
     "actions": [
       {
         "at": 0,
-        "pos": 8
+        "pos": 12
       },
       {
-        "at": 420,
-        "pos": 28
+        "at": 781,
+        "pos": 57.6
       },
       {
-        "at": 880,
-        "pos": 70
+        "at": 2604,
+        "pos": 88
       },
       {
-        "at": 1250,
-        "pos": 100
+        "at": 3562,
+        "pos": 42.4
       },
       {
-        "at": 1600,
-        "pos": 18
+        "at": 4200,
+        "pos": 20
+      },
+      {
+        "at": 5460,
+        "pos": 72
+      },
+      {
+        "at": 7000,
+        "pos": 12
       }
     ],
     "window_scale": 0.38,
     "speed_scale": 1.05,
-    "interpolation_ms": 140,
-    "max_step_delta": 32,
-    "duration_scale": 5.0
+    "min_interval_ms": 0
   },
   "sway": {
     "name": "sway",
     "actions": [
       {
         "at": 0,
-        "pos": 12
+        "pos": 32
       },
       {
-        "at": 380,
-        "pos": 58
+        "at": 1210,
+        "pos": 66
       },
       {
-        "at": 760,
-        "pos": 92
+        "at": 2419,
+        "pos": 36
       },
       {
-        "at": 1140,
-        "pos": 42
+        "at": 3750,
+        "pos": 72
       },
       {
-        "at": 1520,
-        "pos": 12
+        "at": 5081,
+        "pos": 28
+      },
+      {
+        "at": 6290,
+        "pos": 62
+      },
+      {
+        "at": 7500,
+        "pos": 32
       }
     ],
     "window_scale": 0.42,
     "speed_scale": 0.9,
-    "interpolation_ms": 140,
-    "duration_scale": 5.0
+    "min_interval_ms": 0
   },
-  "milking-pressure-build": {
-    "name": "Milking Pressure Build",
+  "milk": {
+    "name": "milk",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 15
+      },
+      {
+        "at": 522,
+        "pos": 58.8
+      },
+      {
+        "at": 1045,
+        "pos": 88
+      },
+      {
+        "at": 1812,
+        "pos": 44.2
+      },
+      {
+        "at": 2750,
+        "pos": 12
+      },
+      {
+        "at": 3272,
+        "pos": 60.0
+      },
+      {
+        "at": 3795,
+        "pos": 92
+      },
+      {
+        "at": 4562,
+        "pos": 44.0
+      },
+      {
+        "at": 5500,
+        "pos": 15
+      }
+    ],
+    "window_scale": 0.5,
+    "speed_scale": 1.02,
+    "min_interval_ms": 0
+  },
+  "tease": {
+    "name": "tease",
     "actions": [
       {
         "at": 0,
         "pos": 12
       },
       {
-        "at": 300,
+        "at": 875,
         "pos": 34
       },
       {
-        "at": 650,
-        "pos": 62
+        "at": 1750,
+        "pos": 15
+      },
+      {
+        "at": 2538,
+        "pos": 38
+      },
+      {
+        "at": 3325,
+        "pos": 10
+      },
+      {
+        "at": 3951,
+        "pos": 46.0
+      },
+      {
+        "at": 4576,
+        "pos": 70
+      },
+      {
+        "at": 5088,
+        "pos": 34.0
+      },
+      {
+        "at": 5600,
+        "pos": 14
+      },
+      {
+        "at": 6300,
+        "pos": 32
+      },
+      {
+        "at": 7000,
+        "pos": 12
+      }
+    ],
+    "window_scale": 0.3,
+    "speed_scale": 0.78,
+    "min_interval_ms": 0
+  },
+  "feather": {
+    "name": "feather",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 8
       },
       {
         "at": 1000,
-        "pos": 92
-      }
-    ],
-    "window_scale": 0.48,
-    "speed_scale": 0.95,
-    "interpolation_ms": 150,
-    "max_step_delta": 28,
-    "duration_scale": 5.0
-  },
-  "milking-wide-pressure": {
-    "name": "Milking Wide Pressure",
-    "actions": [
+        "pos": 26
+      },
       {
-        "at": 0,
+        "at": 2000,
+        "pos": 10
+      },
+      {
+        "at": 3100,
+        "pos": 30
+      },
+      {
+        "at": 4200,
         "pos": 6
       },
       {
-        "at": 340,
-        "pos": 72
+        "at": 5100,
+        "pos": 22
       },
       {
-        "at": 680,
-        "pos": 96
-      },
-      {
-        "at": 1020,
-        "pos": 28
-      },
-      {
-        "at": 1360,
-        "pos": 92
-      }
-    ],
-    "window_scale": 0.55,
-    "interpolation_ms": 140,
-    "max_step_delta": 32,
-    "duration_scale": 5.0
-  },
-  "milking-deep-pulse": {
-    "name": "Milking Deep Pulse",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 62
-      },
-      {
-        "at": 180,
-        "pos": 92
-      },
-      {
-        "at": 360,
-        "pos": 68
-      },
-      {
-        "at": 540,
-        "pos": 96
-      },
-      {
-        "at": 720,
-        "pos": 70
+        "at": 6000,
+        "pos": 8
       }
     ],
     "window_scale": 0.24,
-    "speed_scale": 1.1,
-    "repeat": 2,
-    "interpolation_ms": 90,
-    "max_step_delta": 24,
-    "duration_scale": 5.0
+    "speed_scale": 0.72,
+    "min_interval_ms": 0
   },
-  "milking-fast-middle": {
-    "name": "Milking Fast Middle",
+  "flick": {
+    "name": "flick",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 15
+      },
+      {
+        "at": 703,
+        "pos": 40
+      },
+      {
+        "at": 1405,
+        "pos": 18
+      },
+      {
+        "at": 1697,
+        "pos": 56
+      },
+      {
+        "at": 2054,
+        "pos": 14
+      },
+      {
+        "at": 2703,
+        "pos": 38
+      },
+      {
+        "at": 3351,
+        "pos": 16
+      },
+      {
+        "at": 3643,
+        "pos": 58
+      },
+      {
+        "at": 4000,
+        "pos": 15
+      }
+    ],
+    "window_scale": 0.3,
+    "speed_scale": 1.1,
+    "min_interval_ms": 0
+  },
+  "pulse": {
+    "name": "pulse",
     "actions": [
       {
         "at": 0,
         "pos": 35
       },
       {
-        "at": 120,
-        "pos": 65
-      },
-      {
-        "at": 240,
-        "pos": 42
-      },
-      {
-        "at": 360,
-        "pos": 70
-      },
-      {
-        "at": 480,
-        "pos": 38
-      }
-    ],
-    "window_scale": 0.26,
-    "speed_scale": 1.18,
-    "repeat": 2,
-    "min_interval_ms": 55,
-    "max_step_delta": 24,
-    "duration_scale": 5.0
-  },
-  "milking-deep-finish": {
-    "name": "Milking Deep Finish",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 52
-      },
-      {
-        "at": 260,
-        "pos": 88
-      },
-      {
-        "at": 520,
+        "at": 758,
         "pos": 72
       },
       {
-        "at": 780,
-        "pos": 100
-      },
-      {
-        "at": 1040,
-        "pos": 60
-      }
-    ],
-    "window_scale": 0.28,
-    "speed_scale": 1.05,
-    "interpolation_ms": 120,
-    "max_step_delta": 28,
-    "duration_scale": 5.0
-  },
-  "milking-recover": {
-    "name": "Milking Recover",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 70
-      },
-      {
-        "at": 420,
+        "at": 1515,
         "pos": 38
       },
       {
-        "at": 840,
-        "pos": 18
+        "at": 2273,
+        "pos": 75
       },
       {
-        "at": 1260,
-        "pos": 32
-      }
-    ],
-    "window_scale": 0.2,
-    "speed_scale": 0.72,
-    "interpolation_ms": 180,
-    "max_step_delta": 24,
-    "duration_scale": 5.0
-  },
-  "milking-steady-press": {
-    "name": "Milking Steady Press",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 18
-      },
-      {
-        "at": 380,
-        "pos": 54
-      },
-      {
-        "at": 760,
-        "pos": 78
-      },
-      {
-        "at": 1140,
-        "pos": 48
-      },
-      {
-        "at": 1520,
-        "pos": 82
-      }
-    ],
-    "window_scale": 0.38,
-    "speed_scale": 0.95,
-    "interpolation_ms": 150,
-    "max_step_delta": 28,
-    "duration_scale": 5.0
-  },
-  "milking-short-burst": {
-    "name": "Milking Short Burst",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 42
-      },
-      {
-        "at": 90,
-        "pos": 80
-      },
-      {
-        "at": 180,
-        "pos": 48
-      },
-      {
-        "at": 270,
-        "pos": 86
-      },
-      {
-        "at": 360,
-        "pos": 44
-      }
-    ],
-    "window_scale": 0.18,
-    "speed_scale": 1.2,
-    "repeat": 2,
-    "min_interval_ms": 50,
-    "max_step_delta": 24,
-    "duration_scale": 5.0
-  },
-  "milking-full-drive": {
-    "name": "Milking Full Drive",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 4
-      },
-      {
-        "at": 360,
-        "pos": 94
-      },
-      {
-        "at": 720,
-        "pos": 10
-      },
-      {
-        "at": 1080,
-        "pos": 100
-      },
-      {
-        "at": 1440,
-        "pos": 8
-      }
-    ],
-    "window_scale": 0.6,
-    "interpolation_ms": 130,
-    "max_step_delta": 34,
-    "duration_scale": 5.0
-  },
-  "milking-deep-squeeze": {
-    "name": "Milking Deep Squeeze",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 72
-      },
-      {
-        "at": 260,
-        "pos": 96
-      },
-      {
-        "at": 520,
-        "pos": 82
-      },
-      {
-        "at": 900,
-        "pos": 100
-      }
-    ],
-    "window_scale": 0.18,
-    "speed_scale": 0.95,
-    "interpolation_ms": 170,
-    "max_step_delta": 22,
-    "duration_scale": 5.0
-  },
-  "milking-final-wave": {
-    "name": "Milking Final Wave",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 12
-      },
-      {
-        "at": 280,
-        "pos": 60
-      },
-      {
-        "at": 560,
-        "pos": 96
-      },
-      {
-        "at": 840,
-        "pos": 42
-      },
-      {
-        "at": 1120,
-        "pos": 100
-      },
-      {
-        "at": 1400,
-        "pos": 18
-      }
-    ],
-    "window_scale": 0.5,
-    "speed_scale": 1.02,
-    "interpolation_ms": 130,
-    "max_step_delta": 30,
-    "duration_scale": 5.0
-  },
-  "edge-build-low": {
-    "name": "Edge Build Low",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 10
-      },
-      {
-        "at": 360,
-        "pos": 34
-      },
-      {
-        "at": 720,
-        "pos": 18
-      },
-      {
-        "at": 1080,
-        "pos": 42
-      }
-    ],
-    "window_scale": 0.28,
-    "speed_scale": 0.8,
-    "interpolation_ms": 160,
-    "max_step_delta": 22,
-    "duration_scale": 5.0
-  },
-  "edge-build-mid": {
-    "name": "Edge Build Mid",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 18
-      },
-      {
-        "at": 380,
-        "pos": 48
-      },
-      {
-        "at": 760,
-        "pos": 70
-      },
-      {
-        "at": 1140,
-        "pos": 36
-      }
-    ],
-    "window_scale": 0.34,
-    "speed_scale": 0.9,
-    "interpolation_ms": 150,
-    "max_step_delta": 26,
-    "duration_scale": 5.0
-  },
-  "edge-hold": {
-    "name": "Edge Hold",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 42
-      },
-      {
-        "at": 380,
-        "pos": 58
-      },
-      {
-        "at": 760,
-        "pos": 48
-      },
-      {
-        "at": 1140,
-        "pos": 64
-      }
-    ],
-    "window_scale": 0.18,
-    "speed_scale": 0.68,
-    "interpolation_ms": 180,
-    "max_step_delta": 18,
-    "duration_scale": 5.0
-  },
-  "edge-tip-tease": {
-    "name": "Edge Tip Tease",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 12
-      },
-      {
-        "at": 240,
-        "pos": 34
-      },
-      {
-        "at": 480,
-        "pos": 8
-      },
-      {
-        "at": 720,
+        "at": 3030,
         "pos": 30
       },
       {
-        "at": 960,
-        "pos": 14
+        "at": 3523,
+        "pos": 64.8
+      },
+      {
+        "at": 4015,
+        "pos": 88
+      },
+      {
+        "at": 4508,
+        "pos": 53.2
+      },
+      {
+        "at": 5000,
+        "pos": 35
       }
     ],
-    "window_scale": 0.18,
-    "speed_scale": 0.88,
-    "interpolation_ms": 150,
-    "max_step_delta": 20,
-    "duration_scale": 5.0
+    "window_scale": 0.34,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
   },
-  "edge-recover": {
-    "name": "Edge Recover",
+  "hold": {
+    "name": "hold",
     "actions": [
       {
         "at": 0,
+        "pos": 62
+      },
+      {
+        "at": 1129,
+        "pos": 86
+      },
+      {
+        "at": 2258,
+        "pos": 58
+      },
+      {
+        "at": 3500,
         "pos": 82
       },
       {
-        "at": 420,
-        "pos": 54
+        "at": 4742,
+        "pos": 64
       },
       {
-        "at": 840,
-        "pos": 70
+        "at": 5871,
+        "pos": 88
+      },
+      {
+        "at": 7000,
+        "pos": 62
+      }
+    ],
+    "window_scale": 0.32,
+    "speed_scale": 0.8,
+    "min_interval_ms": 0
+  },
+  "plunge": {
+    "name": "plunge",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 12
       },
       {
         "at": 1260,
-        "pos": 48
-      }
-    ],
-    "window_scale": 0.15,
-    "speed_scale": 0.62,
-    "interpolation_ms": 200,
-    "max_step_delta": 18,
-    "duration_scale": 5.0
-  },
-  "edge-slow-wide": {
-    "name": "Edge Slow Wide",
-    "actions": [
-      {
-        "at": 0,
-        "pos": 8
+        "pos": 61.8
       },
       {
-        "at": 520,
-        "pos": 82
+        "at": 3600,
+        "pos": 95
       },
       {
-        "at": 1040,
-        "pos": 18
+        "at": 4920,
+        "pos": 45.2
       },
       {
-        "at": 1560,
-        "pos": 88
+        "at": 6000,
+        "pos": 12
       }
     ],
     "window_scale": 0.46,
-    "speed_scale": 0.74,
-    "interpolation_ms": 180,
-    "max_step_delta": 26,
-    "duration_scale": 5.0
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
   },
-  "edge-shallow-snap": {
-    "name": "Edge Shallow Snap",
+  "ramp": {
+    "name": "ramp",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 35
+      },
+      {
+        "at": 1125,
+        "pos": 58
+      },
+      {
+        "at": 2250,
+        "pos": 28
+      },
+      {
+        "at": 3375,
+        "pos": 72
+      },
+      {
+        "at": 4500,
+        "pos": 16
+      },
+      {
+        "at": 5175,
+        "pos": 60.4
+      },
+      {
+        "at": 5850,
+        "pos": 90
+      },
+      {
+        "at": 6525,
+        "pos": 45.6
+      },
+      {
+        "at": 7200,
+        "pos": 30
+      },
+      {
+        "at": 8100,
+        "pos": 55
+      },
+      {
+        "at": 9000,
+        "pos": 35
+      }
+    ],
+    "window_scale": 0.36,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "crest": {
+    "name": "crest",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 25
+      },
+      {
+        "at": 727,
+        "pos": 65
+      },
+      {
+        "at": 1455,
+        "pos": 18
+      },
+      {
+        "at": 2545,
+        "pos": 84
+      },
+      {
+        "at": 3636,
+        "pos": 10
+      },
+      {
+        "at": 5091,
+        "pos": 90
+      },
+      {
+        "at": 6545,
+        "pos": 22
+      },
+      {
+        "at": 7273,
+        "pos": 60
+      },
+      {
+        "at": 8000,
+        "pos": 25
+      }
+    ],
+    "window_scale": 0.4,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "ladder": {
+    "name": "ladder",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 25
+      },
+      {
+        "at": 900,
+        "pos": 48
+      },
+      {
+        "at": 1500,
+        "pos": 38
+      },
+      {
+        "at": 2400,
+        "pos": 62
+      },
+      {
+        "at": 3000,
+        "pos": 50
+      },
+      {
+        "at": 3900,
+        "pos": 78
+      },
+      {
+        "at": 4500,
+        "pos": 64
+      },
+      {
+        "at": 5400,
+        "pos": 90
+      },
+      {
+        "at": 6600,
+        "pos": 45
+      },
+      {
+        "at": 8000,
+        "pos": 25
+      }
+    ],
+    "window_scale": 0.36,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "flutter": {
+    "name": "flutter",
     "actions": [
       {
         "at": 0,
         "pos": 20
       },
       {
-        "at": 110,
-        "pos": 58
+        "at": 469,
+        "pos": 40
       },
       {
-        "at": 220,
-        "pos": 24
-      },
-      {
-        "at": 330,
-        "pos": 62
-      },
-      {
-        "at": 440,
+        "at": 938,
         "pos": 22
-      }
-    ],
-    "window_scale": 0.18,
-    "speed_scale": 1.12,
-    "repeat": 2,
-    "min_interval_ms": 55,
-    "max_step_delta": 22,
-    "duration_scale": 5.0
-  },
-  "edge-middle-hold": {
-    "name": "Edge Middle Hold",
-    "actions": [
+      },
       {
-        "at": 0,
+        "at": 1359,
         "pos": 42
       },
       {
-        "at": 420,
-        "pos": 54
+        "at": 1781,
+        "pos": 18
+      },
+      {
+        "at": 2250,
+        "pos": 38
+      },
+      {
+        "at": 2719,
+        "pos": 24
+      },
+      {
+        "at": 3141,
+        "pos": 44
+      },
+      {
+        "at": 3562,
+        "pos": 20
+      },
+      {
+        "at": 4031,
+        "pos": 40
+      },
+      {
+        "at": 4500,
+        "pos": 20
+      }
+    ],
+    "window_scale": 0.26,
+    "speed_scale": 1.08,
+    "min_interval_ms": 0
+  },
+  "milking-pressure-build": {
+    "name": "Milking Pressure Build",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 35
+      },
+      {
+        "at": 1094,
+        "pos": 65
+      },
+      {
+        "at": 2188,
+        "pos": 30
+      },
+      {
+        "at": 3281,
+        "pos": 78
+      },
+      {
+        "at": 4375,
+        "pos": 25
+      },
+      {
+        "at": 5031,
+        "pos": 64.0
+      },
+      {
+        "at": 5688,
+        "pos": 90
+      },
+      {
+        "at": 6278,
+        "pos": 51.0
+      },
+      {
+        "at": 7000,
+        "pos": 35
+      }
+    ],
+    "window_scale": 0.44,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "milking-wide-pressure": {
+    "name": "Milking Wide Pressure",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 10
+      },
+      {
+        "at": 1100,
+        "pos": 59.2
+      },
+      {
+        "at": 2200,
+        "pos": 92
+      },
+      {
+        "at": 2920,
+        "pos": 42.8
+      },
+      {
+        "at": 4000,
+        "pos": 14
+      },
+      {
+        "at": 5100,
+        "pos": 62.6
+      },
+      {
+        "at": 6200,
+        "pos": 95
+      },
+      {
+        "at": 6920,
+        "pos": 46.4
+      },
+      {
+        "at": 8000,
+        "pos": 10
+      }
+    ],
+    "window_scale": 0.52,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "milking-deep-pulse": {
+    "name": "Milking Deep Pulse",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 55
+      },
+      {
+        "at": 833,
+        "pos": 88
+      },
+      {
+        "at": 1667,
+        "pos": 52
+      },
+      {
+        "at": 2500,
+        "pos": 90
+      },
+      {
+        "at": 3333,
+        "pos": 58
+      },
+      {
+        "at": 4167,
+        "pos": 92
+      },
+      {
+        "at": 5000,
+        "pos": 55
+      }
+    ],
+    "window_scale": 0.36,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "milking-fast-middle": {
+    "name": "Milking Fast Middle",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 30
+      },
+      {
+        "at": 667,
+        "pos": 68
+      },
+      {
+        "at": 1333,
+        "pos": 32
+      },
+      {
+        "at": 2000,
+        "pos": 72
+      },
+      {
+        "at": 2667,
+        "pos": 28
+      },
+      {
+        "at": 3333,
+        "pos": 70
+      },
+      {
+        "at": 4000,
+        "pos": 30
+      }
+    ],
+    "window_scale": 0.34,
+    "speed_scale": 1.1,
+    "min_interval_ms": 0
+  },
+  "milking-deep-finish": {
+    "name": "Milking Deep Finish",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 20
       },
       {
         "at": 840,
-        "pos": 46
+        "pos": 65.0
       },
       {
-        "at": 1260,
+        "at": 2100,
+        "pos": 95
+      },
+      {
+        "at": 2800,
+        "pos": 50.0
+      },
+      {
+        "at": 3500,
+        "pos": 35
+      },
+      {
+        "at": 4625,
+        "pos": 88
+      },
+      {
+        "at": 6000,
+        "pos": 20
+      }
+    ],
+    "window_scale": 0.48,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "milking-recover": {
+    "name": "Milking Recover",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 35
+      },
+      {
+        "at": 1288,
+        "pos": 62
+      },
+      {
+        "at": 2576,
+        "pos": 38
+      },
+      {
+        "at": 3992,
+        "pos": 58
+      },
+      {
+        "at": 5409,
+        "pos": 40
+      },
+      {
+        "at": 6955,
+        "pos": 54
+      },
+      {
+        "at": 8500,
+        "pos": 35
+      }
+    ],
+    "window_scale": 0.3,
+    "speed_scale": 0.75,
+    "min_interval_ms": 0
+  },
+  "milking-steady-press": {
+    "name": "Milking Steady Press",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 50
+      },
+      {
+        "at": 1250,
+        "pos": 85
+      },
+      {
+        "at": 2500,
+        "pos": 48
+      },
+      {
+        "at": 3750,
+        "pos": 84
+      },
+      {
+        "at": 5000,
+        "pos": 52
+      },
+      {
+        "at": 6250,
+        "pos": 86
+      },
+      {
+        "at": 7500,
+        "pos": 50
+      }
+    ],
+    "window_scale": 0.4,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "milking-short-burst": {
+    "name": "Milking Short Burst",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 35
+      },
+      {
+        "at": 652,
+        "pos": 78
+      },
+      {
+        "at": 1448,
+        "pos": 38
+      },
+      {
+        "at": 2035,
+        "pos": 80
+      },
+      {
+        "at": 2752,
+        "pos": 34
+      },
+      {
+        "at": 3403,
+        "pos": 76
+      },
+      {
+        "at": 4200,
+        "pos": 35
+      }
+    ],
+    "window_scale": 0.36,
+    "speed_scale": 1.12,
+    "min_interval_ms": 0
+  },
+  "milking-full-drive": {
+    "name": "Milking Full Drive",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 8
+      },
+      {
+        "at": 894,
+        "pos": 59.6
+      },
+      {
+        "at": 1788,
+        "pos": 94
+      },
+      {
+        "at": 2372,
+        "pos": 42.4
+      },
+      {
+        "at": 3250,
+        "pos": 12
+      },
+      {
+        "at": 4144,
+        "pos": 60.0
+      },
+      {
+        "at": 5038,
+        "pos": 92
+      },
+      {
+        "at": 5622,
+        "pos": 44.0
+      },
+      {
+        "at": 6500,
+        "pos": 8
+      }
+    ],
+    "window_scale": 0.52,
+    "speed_scale": 1.05,
+    "min_interval_ms": 0
+  },
+  "milking-deep-squeeze": {
+    "name": "Milking Deep Squeeze",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 70
+      },
+      {
+        "at": 1364,
+        "pos": 92
+      },
+      {
+        "at": 2727,
+        "pos": 66
+      },
+      {
+        "at": 4364,
+        "pos": 90
+      },
+      {
+        "at": 6000,
+        "pos": 70
+      }
+    ],
+    "window_scale": 0.26,
+    "speed_scale": 0.8,
+    "min_interval_ms": 0
+  },
+  "milking-final-wave": {
+    "name": "Milking Final Wave",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 30
+      },
+      {
+        "at": 1029,
+        "pos": 72
+      },
+      {
+        "at": 2059,
+        "pos": 20
+      },
+      {
+        "at": 3191,
+        "pos": 86
+      },
+      {
+        "at": 4324,
+        "pos": 10
+      },
+      {
+        "at": 5060,
+        "pos": 61.6
+      },
+      {
+        "at": 5796,
+        "pos": 96
+      },
+      {
+        "at": 6398,
+        "pos": 44.4
+      },
+      {
+        "at": 7000,
+        "pos": 30
+      }
+    ],
+    "window_scale": 0.5,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "edge-build-low": {
+    "name": "Edge Build Low",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 58
+      },
+      {
+        "at": 1548,
+        "pos": 78
+      },
+      {
+        "at": 3095,
+        "pos": 55
+      },
+      {
+        "at": 4798,
+        "pos": 82
+      },
+      {
+        "at": 6500,
         "pos": 58
       }
     ],
-    "window_scale": 0.2,
-    "speed_scale": 0.76,
-    "interpolation_ms": 190,
-    "max_step_delta": 18,
-    "duration_scale": 5.0
+    "window_scale": 0.3,
+    "speed_scale": 0.8,
+    "min_interval_ms": 0
   },
-  "edge-deeper-risk": {
-    "name": "Edge Deeper Risk",
+  "edge-build-mid": {
+    "name": "Edge Build Mid",
     "actions": [
       {
         "at": 0,
         "pos": 40
       },
       {
-        "at": 320,
-        "pos": 78
+        "at": 1000,
+        "pos": 62
       },
       {
-        "at": 640,
-        "pos": 56
+        "at": 2000,
+        "pos": 38
       },
       {
-        "at": 960,
-        "pos": 88
+        "at": 3000,
+        "pos": 66
+      },
+      {
+        "at": 4000,
+        "pos": 42
+      },
+      {
+        "at": 5000,
+        "pos": 68
+      },
+      {
+        "at": 6000,
+        "pos": 40
+      }
+    ],
+    "window_scale": 0.3,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "edge-hold": {
+    "name": "Edge Hold",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 55
+      },
+      {
+        "at": 1591,
+        "pos": 70
+      },
+      {
+        "at": 3182,
+        "pos": 52
+      },
+      {
+        "at": 5091,
+        "pos": 68
+      },
+      {
+        "at": 7000,
+        "pos": 55
       }
     ],
     "window_scale": 0.24,
-    "speed_scale": 0.98,
-    "interpolation_ms": 140,
-    "max_step_delta": 24,
-    "duration_scale": 5.0
+    "speed_scale": 0.72,
+    "min_interval_ms": 0
+  },
+  "edge-tip-tease": {
+    "name": "Edge Tip Tease",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 10
+      },
+      {
+        "at": 938,
+        "pos": 28
+      },
+      {
+        "at": 1875,
+        "pos": 12
+      },
+      {
+        "at": 2812,
+        "pos": 32
+      },
+      {
+        "at": 3750,
+        "pos": 8
+      },
+      {
+        "at": 4988,
+        "pos": 46
+      },
+      {
+        "at": 6000,
+        "pos": 10
+      }
+    ],
+    "window_scale": 0.24,
+    "speed_scale": 0.8,
+    "min_interval_ms": 0
+  },
+  "edge-recover": {
+    "name": "Edge Recover",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 40
+      },
+      {
+        "at": 1212,
+        "pos": 60
+      },
+      {
+        "at": 2424,
+        "pos": 42
+      },
+      {
+        "at": 3758,
+        "pos": 56
+      },
+      {
+        "at": 5091,
+        "pos": 44
+      },
+      {
+        "at": 6545,
+        "pos": 54
+      },
+      {
+        "at": 8000,
+        "pos": 40
+      }
+    ],
+    "window_scale": 0.26,
+    "speed_scale": 0.7,
+    "min_interval_ms": 0
+  },
+  "edge-slow-wide": {
+    "name": "Edge Slow Wide",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 15
+      },
+      {
+        "at": 1071,
+        "pos": 57.0
+      },
+      {
+        "at": 2381,
+        "pos": 85
+      },
+      {
+        "at": 3452,
+        "pos": 43.0
+      },
+      {
+        "at": 4762,
+        "pos": 18
+      },
+      {
+        "at": 5940,
+        "pos": 56.4
+      },
+      {
+        "at": 7381,
+        "pos": 82
+      },
+      {
+        "at": 8560,
+        "pos": 43.6
+      },
+      {
+        "at": 10000,
+        "pos": 15
+      }
+    ],
+    "window_scale": 0.46,
+    "speed_scale": 0.8,
+    "min_interval_ms": 0
+  },
+  "edge-shallow-snap": {
+    "name": "Edge Shallow Snap",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 14
+      },
+      {
+        "at": 812,
+        "pos": 30
+      },
+      {
+        "at": 1625,
+        "pos": 12
+      },
+      {
+        "at": 2019,
+        "pos": 38
+      },
+      {
+        "at": 2500,
+        "pos": 15
+      },
+      {
+        "at": 3250,
+        "pos": 28
+      },
+      {
+        "at": 4000,
+        "pos": 13
+      },
+      {
+        "at": 4450,
+        "pos": 36
+      },
+      {
+        "at": 5000,
+        "pos": 14
+      }
+    ],
+    "window_scale": 0.24,
+    "speed_scale": 1.0,
+    "min_interval_ms": 0
+  },
+  "edge-middle-hold": {
+    "name": "Edge Middle Hold",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 45
+      },
+      {
+        "at": 1591,
+        "pos": 60
+      },
+      {
+        "at": 3182,
+        "pos": 44
+      },
+      {
+        "at": 5091,
+        "pos": 58
+      },
+      {
+        "at": 7000,
+        "pos": 45
+      }
+    ],
+    "window_scale": 0.22,
+    "speed_scale": 0.7,
+    "min_interval_ms": 0
+  },
+  "edge-deeper-risk": {
+    "name": "Edge Deeper Risk",
+    "actions": [
+      {
+        "at": 0,
+        "pos": 50
+      },
+      {
+        "at": 1129,
+        "pos": 74
+      },
+      {
+        "at": 2258,
+        "pos": 48
+      },
+      {
+        "at": 3387,
+        "pos": 80
+      },
+      {
+        "at": 4516,
+        "pos": 52
+      },
+      {
+        "at": 5758,
+        "pos": 86
+      },
+      {
+        "at": 7000,
+        "pos": 50
+      }
+    ],
+    "window_scale": 0.32,
+    "speed_scale": 0.85,
+    "min_interval_ms": 0
   },
   "edge-pull-back": {
     "name": "Edge Pull Back",
     "actions": [
       {
         "at": 0,
-        "pos": 82
+        "pos": 85
       },
       {
-        "at": 260,
-        "pos": 96
+        "at": 1400,
+        "pos": 45
       },
       {
-        "at": 520,
-        "pos": 88
+        "at": 2600,
+        "pos": 22
+      },
+      {
+        "at": 3600,
+        "pos": 32
+      },
+      {
+        "at": 4600,
+        "pos": 20
+      },
+      {
+        "at": 6000,
+        "pos": 85
       }
     ],
-    "window_scale": 0.14,
-    "speed_scale": 0.6,
-    "interpolation_ms": 160,
-    "max_step_delta": 20,
-    "duration_scale": 5.0
+    "window_scale": 0.3,
+    "speed_scale": 0.75,
+    "min_interval_ms": 0
   },
   "edge-restart": {
     "name": "Edge Restart",
     "actions": [
       {
         "at": 0,
-        "pos": 12
+        "pos": 42
       },
       {
-        "at": 320,
-        "pos": 34
+        "at": 968,
+        "pos": 58
       },
       {
-        "at": 640,
-        "pos": 52
+        "at": 1935,
+        "pos": 36
       },
       {
-        "at": 960,
-        "pos": 26
+        "at": 2903,
+        "pos": 66
+      },
+      {
+        "at": 3871,
+        "pos": 28
+      },
+      {
+        "at": 4935,
+        "pos": 76
+      },
+      {
+        "at": 6000,
+        "pos": 42
       }
     ],
-    "window_scale": 0.22,
-    "speed_scale": 0.82,
-    "interpolation_ms": 160,
-    "max_step_delta": 20,
-    "duration_scale": 5.0
+    "window_scale": 0.32,
+    "speed_scale": 0.85,
+    "min_interval_ms": 0
   }
 }
