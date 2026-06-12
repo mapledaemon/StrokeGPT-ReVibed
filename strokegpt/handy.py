@@ -14,6 +14,22 @@ _HTTP_SESSION_LOCK = threading.Lock()
 _HTTP_SESSION = None
 
 
+class _ModuleHTTPFallback:
+    """Session-shaped proxy for environments without ``requests.Session``.
+
+    Some dependency-free test stubs register a minimal ``requests`` module.
+    Production always has the real library, so this proxy only exists to
+    keep import-order-sensitive test environments working; it simply
+    forwards to the module-level functions without pooling.
+    """
+
+    def put(self, url, **kwargs):
+        return requests.put(url, **kwargs)
+
+    def get(self, url, **kwargs):
+        return requests.get(url, **kwargs)
+
+
 def _http_session():
     """Shared pooled HTTP session for Handy REST traffic.
 
@@ -28,11 +44,18 @@ def _http_session():
     global _HTTP_SESSION
     with _HTTP_SESSION_LOCK:
         if _HTTP_SESSION is None:
-            session = requests.Session()
-            adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=8)
-            session.mount("https://", adapter)
-            session.mount("http://", adapter)
-            _HTTP_SESSION = session
+            session_factory = getattr(requests, "Session", None)
+            if session_factory is None:
+                _HTTP_SESSION = _ModuleHTTPFallback()
+            else:
+                session = session_factory()
+                adapters = getattr(requests, "adapters", None)
+                adapter_factory = getattr(adapters, "HTTPAdapter", None) if adapters else None
+                if callable(adapter_factory):
+                    adapter = adapter_factory(pool_connections=4, pool_maxsize=8)
+                    session.mount("https://", adapter)
+                    session.mount("http://", adapter)
+                _HTTP_SESSION = session
     return _HTTP_SESSION
 
 
