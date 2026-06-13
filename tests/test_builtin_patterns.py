@@ -131,22 +131,38 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # slow draw back up, authored at real timescale with no jitter.
         milk = PATTERNS["milk"]
         self.assertEqual(milk.actions[0].at, 0)
-        self.assertEqual(milk.actions[-1].at, 5500)
+        self.assertEqual(milk.actions[-1].at, 6400)
         self.assertEqual(milk.actions[0].pos, milk.actions[-1].pos)
-        self.assertGreaterEqual(max(action.pos for action in milk.actions), 88.0)
+        self.assertEqual(max(action.pos for action in milk.actions), 100.0)
+        self.assertEqual(min(action.pos for action in milk.actions), 0.0)
         self.assertEqual(milk.depth_jitter, 0.0)
         self.assertEqual(milk.range_jitter, 0.0)
 
-    def test_hold_pattern_keeps_deep_pressure_band(self):
-        # The redesigned hold is deep slow rolls -- pressure without a dead
-        # stop -- so all motion stays in the deep band instead of the old
-        # broad sweep with a twitchy dwell.
+    def test_hold_pattern_is_relative_multi_roll_waveform(self):
+        # Patterns are relative waveforms: positions span the full 0-100
+        # range and the deep-pressure character of hold comes from the cue
+        # defaults / mode-arc targets, never from band-authored positions
+        # (band authoring gets windowed twice and collapses to twitching).
         hold = PATTERNS["hold"]
         positions = [action.pos for action in hold.actions]
 
-        self.assertGreaterEqual(min(positions), 55.0)
-        self.assertGreaterEqual(max(positions), 86.0)
+        self.assertEqual(min(positions), 0.0)
+        self.assertEqual(max(positions), 100.0)
+        interior_peaks = [
+            positions[i]
+            for i in range(1, len(positions) - 1)
+            if positions[i] > positions[i - 1] and positions[i] > positions[i + 1]
+        ]
+        self.assertGreaterEqual(len(interior_peaks), 2)
         self.assertEqual(hold.depth_jitter, 0.0)
+
+    def test_all_patterns_span_full_relative_range(self):
+        # Catalog-wide invariant for the relative-projection contract.
+        for pattern_id, motion_pattern in PATTERNS.items():
+            with self.subTest(pattern_id=pattern_id):
+                positions = [action.pos for action in motion_pattern.actions]
+                self.assertLessEqual(min(positions), 0.1)
+                self.assertGreaterEqual(max(positions), 99.9)
 
     def test_edge_build_low_pattern_endpoints_match_expected_shape(self):
         pattern = PATTERNS["edge-build-low"]
@@ -160,7 +176,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # so future tweaks to the loader path cannot silently shift
         # pattern duration.
         self.assertEqual(PATTERNS["stroke"].duration_ms, 4500)
-        self.assertEqual(PATTERNS["milk"].duration_ms, 5500)
+        self.assertEqual(PATTERNS["milk"].duration_ms, 6400)
 
     def test_json_data_file_only_uses_known_fields(self):
         # The loader silently skips unknown fields, so this test catches
@@ -200,12 +216,26 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
                 ).target.depth
                 self.assertLess(abs(first - last), 1.0)
 
+    BURST_CLASS_PATTERN_IDS = frozenset({
+        # Deliberately sharp accent patterns; mirrored from
+        # scripts/generate_builtin_patterns.py BURST_CLASS.
+        "flick",
+        "flutter",
+        "milking-short-burst",
+        "milking-fast-middle",
+        "edge-shallow-snap",
+    })
+
     def test_continuous_builtin_samples_do_not_have_abrupt_depth_steps(self):
+        # Fixed 25ms sampling makes the step budget a uniform velocity cap
+        # (120 pos/s routine, 300 pos/s burst). The old 240-samples-per-cycle
+        # form was a per-cycle cap: loose for short twitchy cycles, strangling
+        # for long luxurious sweeps.
         target = MotionTarget(50, 50, 80, "catalog guard")
-        sample_count = 240
         for pattern_id in PATTERNS:
             with self.subTest(pattern_id=pattern_id):
                 plan = continuous_motion_plan(pattern_id)
+                sample_count = max(2, int(round(plan.duration_seconds / 0.025)))
                 depths = [
                     sample_continuous_motion(
                         plan,
@@ -218,7 +248,8 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
                     abs(depths[index + 1] - depths[index])
                     for index in range(sample_count)
                 )
-                self.assertLess(largest_step, 3.0)
+                budget = 7.5 if pattern_id in self.BURST_CLASS_PATTERN_IDS else 3.0
+                self.assertLess(largest_step, budget)
 
     def test_continuous_timed_phase_points_keep_dense_transport_spacing(self):
         for pattern_id in PATTERNS:

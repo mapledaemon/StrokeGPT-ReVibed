@@ -180,7 +180,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         # timescale; the old 5x duration_scale stretch and its baked cosine
         # interpolation are gone.
         self.assertEqual(PATTERNS["stroke"].actions[-1].at, 4500)
-        self.assertEqual(PATTERNS["flick"].actions[-1].at, 4000)
+        self.assertEqual(PATTERNS["flick"].actions[-1].at, 5600)
         self.assertEqual(PATTERNS["stroke"].duration_scale, 1.0)
         self.assertEqual(PATTERNS["flick"].duration_scale, 1.0)
         self.assertEqual(PATTERNS["stroke"].interpolation_ms, 0)
@@ -604,12 +604,12 @@ class MotionScriptPlannerTests(unittest.TestCase):
         range_span = max(sample.stroke_range for sample in samples)
         program_range = continuous_plan_depth_range(plan, target)
 
-        # Hold is now deep slow rolls: a clear rolling span inside the deep
-        # half of the projected window rather than the old broad sweep.
-        self.assertGreaterEqual(depth_span, 12.0)
+        # Hold is a relative multi-roll waveform: it sweeps the full
+        # projected window (deep character comes from cue/arc targets).
+        self.assertGreaterEqual(depth_span, 30.0)
         self.assertGreaterEqual(range_span, 15.0)
-        self.assertGreaterEqual(program_range["min"], 52)
-        self.assertGreaterEqual(program_range["max"], 75)
+        self.assertLessEqual(program_range["min"], 15)
+        self.assertGreaterEqual(program_range["max"], 85)
 
     def test_mode_arcs_start_base_mid_before_tip(self):
         for arc in EDGING_ARCS:
@@ -650,23 +650,24 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertLess(pullback_index, recover_index)
         self.assertLess(recover_index, hold_index)
 
-    def test_edge_patterns_use_expected_regions(self):
-        # Normalized action bands for the redesigned edge patterns: hold
-        # rolls stay deep-mid, recover decays around the middle, pull-back
-        # starts deep, retreats to the tip region, and returns deep for the
-        # loop seam.
-        hold_positions = [action.pos for action in PATTERNS["edge-hold"].actions]
-        self.assertGreaterEqual(min(hold_positions), 50)
-        self.assertLessEqual(max(hold_positions), 72)
-
-        recover_positions = [action.pos for action in PATTERNS["edge-recover"].actions]
-        self.assertGreaterEqual(min(recover_positions), 38)
-        self.assertLessEqual(max(recover_positions), 62)
-
+    def test_edge_patterns_use_expected_relative_shapes(self):
+        # Patterns are relative waveforms (bands come from arc targets):
+        # pin the SHAPES instead. Pull-back starts at its relative deepest,
+        # retreats fully, and returns deep for the loop seam; hold and
+        # recover are gentle multi-roll cycles.
         pullback_positions = [action.pos for action in PATTERNS["edge-pull-back"].actions]
-        self.assertGreaterEqual(pullback_positions[0], 80)
-        self.assertLessEqual(min(pullback_positions), 25)
-        self.assertGreaterEqual(pullback_positions[-1], 80)
+        self.assertEqual(pullback_positions[0], 100.0)
+        self.assertEqual(min(pullback_positions), 0.0)
+        self.assertEqual(pullback_positions[-1], 100.0)
+
+        for pattern_id in ("edge-hold", "edge-recover"):
+            positions = [action.pos for action in PATTERNS[pattern_id].actions]
+            interior_peaks = [
+                positions[i]
+                for i in range(1, len(positions) - 1)
+                if positions[i] > positions[i - 1] and positions[i] > positions[i + 1]
+            ]
+            self.assertGreaterEqual(len(interior_peaks), 1, pattern_id)
 
     def test_pattern_palette_uses_funscript_style_actions(self):
         self.assertIn("flick", pattern_names())
@@ -736,12 +737,12 @@ class MotionScriptPlannerTests(unittest.TestCase):
         actions = PATTERNS["flick"].actions
         positions = [action.pos for action in actions]
 
-        self.assertLessEqual(max(positions), 60)
-        accent_peaks = [pos for pos in positions if pos >= 50]
-        base_peaks = [pos for pos in positions if 35 <= pos <= 45]
+        self.assertEqual(max(positions), 100.0)
+        accent_peaks = [pos for pos in positions if pos >= 90]
+        base_peaks = [pos for pos in positions if 45 <= pos <= 70]
         self.assertGreaterEqual(len(accent_peaks), 2)
         self.assertGreaterEqual(len(base_peaks), 2)
-        self.assertEqual(actions[-1].at, 4000)
+        self.assertEqual(actions[-1].at, 5600)
 
     def test_milk_pattern_is_available_and_full_range(self):
         self.assertIn("milk", pattern_names())
