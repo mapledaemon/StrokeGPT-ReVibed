@@ -7,6 +7,18 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-13 - PR #324 - Routine Pattern Cycle Floor
+---------------------------------------------------
+
+Branch: claude-routine-cycle-floor
+
+- Floored routine built-in pattern cycles at 6.6s (time-only stretch of the
+  authored waypoints, amplitude/shape unchanged) after on-device feedback
+  that shorter-cycle patterns (stroke 4.5s, pulse 5.8s) stuttered while
+  longer ones (milk, sway) felt smooth. Burst patterns stay short.
+- Hypothesis-driven from the cycle-length signal; the stutter was not
+  reproducible in synthetic wire analysis.
+
 2026-06-13 - PR #323 - Pattern Relative Span Normalization
 -----------------------------------------------------------
 

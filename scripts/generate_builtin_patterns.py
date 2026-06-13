@@ -43,6 +43,15 @@ OUTPUT_PATH = REPO_ROOT / "strokegpt" / "builtin_patterns.json"
 ROUTINE_MAX_ACCEL = 700.0
 BURST_MAX_ACCEL = 2600.0
 ROUTINE_MIN_REVERSAL_GAP_SECONDS = 0.45
+# Real-device testing: routine patterns with cycles shorter than ~6.4s
+# (stroke 4.5s, pulse 5.8s) felt like they stuttered while moving, while
+# the same shapes at 6.4s+ (milk, sway) felt smooth. The mechanism is not
+# visible in the synthetic wire trace (all patterns share the same
+# integer-quantization granularity), so this is a time-only floor applied
+# to the authored waypoints, never an amplitude or shape change. Burst
+# patterns are exempt: their quick character is the point, and they were
+# not reported as stuttering.
+ROUTINE_MIN_CYCLE_MS = 6600
 PROFILE_SPEED = 50
 
 BURST_CLASS = frozenset({
@@ -514,6 +523,27 @@ def build_catalog():
         speed_scale=0.85,
     )
 
+    return _apply_routine_cycle_floor(catalog)
+
+
+def _apply_routine_cycle_floor(catalog):
+    """Time-stretch short routine patterns up to ROUTINE_MIN_CYCLE_MS.
+
+    Pure time scaling of the authored waypoints (positions untouched), so
+    amplitude, shape, and the closed-loop seam are preserved exactly and
+    every velocity/acceleration budget can only improve.
+    """
+    for pattern_id, payload in catalog.items():
+        if pattern_id in BURST_CLASS:
+            continue
+        actions = payload["actions"]
+        span = actions[-1]["at"] - actions[0]["at"]
+        if span <= 0 or span >= ROUTINE_MIN_CYCLE_MS:
+            continue
+        scale = ROUTINE_MIN_CYCLE_MS / span
+        payload["actions"] = _wp(
+            [(action["at"] * scale, action["pos"]) for action in actions]
+        )
     return catalog
 
 
