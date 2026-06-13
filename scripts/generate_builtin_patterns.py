@@ -107,10 +107,30 @@ def multi_lobe(total_ms, lobes):
     return _wp(points)
 
 
+def normalize_span(actions):
+    """Rescale positions so every pattern spans the full 0-100 range.
+
+    The projection pipeline treats pattern positions as *relative*: the
+    sampler maps ``pos`` onto the live target window
+    (``depth +/- stroke_range/2``), so depth-band character must come from
+    cue defaults and mode-arc targets, never from the authored positions.
+    Band-authored patterns get windowed twice and collapse to a few units
+    of real motion -- the "barely moves, just twitches" failure observed
+    on-device in patterned modes.
+    """
+    positions = [action["pos"] for action in actions]
+    low, high = min(positions), max(positions)
+    span = max(1.0, high - low)
+    return [
+        {"at": action["at"], "pos": round((action["pos"] - low) * 100.0 / span, 1)}
+        for action in actions
+    ]
+
+
 def pattern(name, actions, *, window_scale=0.3, speed_scale=1.0):
     return {
         "name": name,
-        "actions": actions,
+        "actions": normalize_span(actions),
         "window_scale": window_scale,
         "speed_scale": speed_scale,
         "min_interval_ms": 0,
@@ -167,7 +187,7 @@ def build_catalog():
     )
     catalog["milk"] = pattern(
         "milk",
-        multi_lobe(5500, [
+        multi_lobe(6400, [
             # quick drop deep, slow draw back up: base-weighted milking pull
             (1.0, 15, 88, 0.38, (0.5, 0.45)),
             (1.0, 12, 92, 0.38, (0.5, 0.45)),
@@ -177,7 +197,7 @@ def build_catalog():
     )
     catalog["tease"] = pattern(
         "tease",
-        multi_lobe(7000, [
+        multi_lobe(8200, [
             (1.0, 12, 34, 0.5),
             (0.9, 15, 38, 0.5),
             (1.3, 10, 70, 0.55, (0.5, 0.5)),
@@ -198,7 +218,7 @@ def build_catalog():
     )
     catalog["flick"] = pattern(
         "flick",
-        multi_lobe(4000, [
+        multi_lobe(5600, [
             (1.3, 15, 40, 0.5),
             (0.6, 18, 56, 0.45),
             (1.2, 14, 38, 0.5),
@@ -209,7 +229,7 @@ def build_catalog():
     )
     catalog["pulse"] = pattern(
         "pulse",
-        multi_lobe(5000, [
+        multi_lobe(5800, [
             (1.0, 35, 72, 0.5),
             (1.0, 38, 75, 0.5),
             (1.3, 30, 88, 0.5, (0.5, 0.5)),
@@ -301,7 +321,7 @@ def build_catalog():
     )
     catalog["milking-deep-pulse"] = pattern(
         "Milking Deep Pulse",
-        multi_lobe(5000, [
+        multi_lobe(5800, [
             (1.0, 55, 88, 0.5),
             (1.0, 52, 90, 0.5),
             (1.0, 58, 92, 0.5),
@@ -375,7 +395,7 @@ def build_catalog():
     )
     catalog["milking-final-wave"] = pattern(
         "Milking Final Wave",
-        multi_lobe(7000, [
+        multi_lobe(7800, [
             (1.0, 30, 72, 0.5),
             (1.1, 20, 86, 0.5),
             (1.3, 10, 96, 0.55, (0.5, 0.5)),
@@ -442,7 +462,7 @@ def build_catalog():
     )
     catalog["edge-shallow-snap"] = pattern(
         "Edge Shallow Snap",
-        multi_lobe(5000, [
+        multi_lobe(5600, [
             (1.3, 14, 30, 0.5),
             (0.7, 12, 38, 0.45),
             (1.2, 15, 28, 0.5),
@@ -555,15 +575,26 @@ def profile_catalog(catalog):
             failures.append(
                 f"{pattern_id}: reversal gap {min_gap:.2f}s < {ROUTINE_MIN_REVERSAL_GAP_SECONDS}s"
             )
-        # Mirror the catalog guardrail test exactly: 240 samples per cycle,
-        # max per-sample position step < 3.0.
+        # Mirror the catalog guardrail test: fixed 25ms sampling, so the
+        # step budget is a uniform velocity cap (120 pos/s routine,
+        # 300 pos/s burst) instead of a per-cycle cap that loosens for
+        # short twitchy cycles and strangles long luxurious sweeps.
+        step_count = max(2, int(round(duration / 0.025)))
         coarse = [
-            sample_continuous_motion(plan, target, duration * index / 240).target.depth
-            for index in range(241)
+            sample_continuous_motion(plan, target, duration * index / step_count).target.depth
+            for index in range(step_count + 1)
         ]
-        max_step = max(abs(coarse[i + 1] - coarse[i]) for i in range(240))
-        if max_step >= 3.0:
-            failures.append(f"{pattern_id}: 240-sample step {max_step:.2f} >= 3.0")
+        max_step = max(abs(coarse[i + 1] - coarse[i]) for i in range(step_count))
+        step_budget = 7.5 if burst else 3.0
+        if max_step >= step_budget:
+            failures.append(
+                f"{pattern_id}: 25ms step {max_step:.2f} >= {step_budget}"
+            )
+        positions = [action["pos"] for action in payload["actions"]]
+        if min(positions) > 0.1 or max(positions) < 99.9:
+            failures.append(
+                f"{pattern_id}: positions {min(positions)}-{max(positions)} must span 0-100"
+            )
 
     print(f"{'pattern':26s} {'cyc_s':>6s} {'maxA':>6s} {'minRev':>7s}  class")
     for pattern_id, duration, max_accel, min_gap, burst in sorted(rows, key=lambda r: -r[2]):
