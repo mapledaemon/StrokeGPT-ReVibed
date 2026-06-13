@@ -2601,7 +2601,11 @@ class MotionControllerTests(unittest.TestCase):
     def test_continuous_backend_keeps_sample_speed_out_of_current_intent(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0)
-        target = MotionTarget(20, 50, 80, "stroke")
+        # A burst pattern keeps fast segments inside the initial buffer so the
+        # derivative speed budget is exercised promptly; the routine
+        # min-cycle floor pushes routine patterns' fast phase later in the
+        # (longer) cycle, outside the first buffered batch this asserts on.
+        target = MotionTarget(20, 50, 80, "flick")
 
         try:
             controller.apply_continuous_target(target, source="unit test")

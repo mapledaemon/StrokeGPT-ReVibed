@@ -163,23 +163,25 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreaterEqual(first.stroke_range, 5)
 
     def test_continuous_motion_plan_duration_includes_wrap_segment(self):
-        # Built-in patterns keep their authored action shape but apply a 5x
-        # duration scale so the device has more time to follow the range.
+        # Patterns are authored at real timescale and close their loop, so
+        # the plan duration is the authored span (no synthetic wrap pause).
         ramp = continuous_motion_plan("ramp")
         self.assertIsNotNone(ramp)
         self.assertAlmostEqual(ramp.duration_seconds, 9.0)
 
-        # Symmetric patterns that already end where they start skip the
-        # synthetic wrap segment so HSP playback does not pause at the apex.
+        # The routine min-cycle floor stretches short patterns up to 6.6s;
+        # stroke was authored at 4.5s and now plays at the floor.
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
-        self.assertAlmostEqual(stroke.duration_seconds, 4.5)
+        self.assertAlmostEqual(stroke.duration_seconds, 6.6)
 
     def test_builtin_patterns_use_real_timescale_authoring(self):
-        # The regenerated catalog authors waypoints at their final playback
-        # timescale; the old 5x duration_scale stretch and its baked cosine
-        # interpolation are gone.
-        self.assertEqual(PATTERNS["stroke"].actions[-1].at, 4500)
+        # The regenerated catalog authors at real timescale (no 5x
+        # duration_scale, no baked cosine). Routine patterns are then
+        # floored to the 6.6s min-cycle for on-device smoothness; stroke
+        # was authored at 4.5s and plays at the floor, while the burst
+        # flick keeps its short authored cycle.
+        self.assertEqual(PATTERNS["stroke"].actions[-1].at, 6600)
         self.assertEqual(PATTERNS["flick"].actions[-1].at, 5600)
         self.assertEqual(PATTERNS["stroke"].duration_scale, 1.0)
         self.assertEqual(PATTERNS["flick"].duration_scale, 1.0)

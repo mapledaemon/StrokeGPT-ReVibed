@@ -121,7 +121,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         stroke = PATTERNS["stroke"]
         self.assertEqual(stroke.name, "stroke")
         self.assertEqual(stroke.actions[0].at, 0)
-        self.assertEqual(stroke.actions[-1].at, 4500)
+        self.assertEqual(stroke.actions[-1].at, 6600)  # routine min-cycle floor
         self.assertEqual(stroke.actions[0].pos, stroke.actions[-1].pos)
         self.assertEqual(stroke.duration_scale, 1.0)
         self.assertEqual(stroke.interpolation_ms, 0)
@@ -131,7 +131,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # slow draw back up, authored at real timescale with no jitter.
         milk = PATTERNS["milk"]
         self.assertEqual(milk.actions[0].at, 0)
-        self.assertEqual(milk.actions[-1].at, 6400)
+        self.assertEqual(milk.actions[-1].at, 6600)  # routine min-cycle floor
         self.assertEqual(milk.actions[0].pos, milk.actions[-1].pos)
         self.assertEqual(max(action.pos for action in milk.actions), 100.0)
         self.assertEqual(min(action.pos for action in milk.actions), 0.0)
@@ -175,8 +175,8 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # against the JSON-materialized catalog. Pin a couple of values
         # so future tweaks to the loader path cannot silently shift
         # pattern duration.
-        self.assertEqual(PATTERNS["stroke"].duration_ms, 4500)
-        self.assertEqual(PATTERNS["milk"].duration_ms, 6400)
+        self.assertEqual(PATTERNS["stroke"].duration_ms, 6600)
+        self.assertEqual(PATTERNS["milk"].duration_ms, 6600)
 
     def test_json_data_file_only_uses_known_fields(self):
         # The loader silently skips unknown fields, so this test catches
