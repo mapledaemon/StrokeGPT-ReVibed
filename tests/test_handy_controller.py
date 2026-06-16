@@ -217,6 +217,19 @@ class HandyControllerTests(unittest.TestCase):
             ["slide", "hamp/velocity"],
         )
 
+    def test_move_sets_velocity_before_hamp_handoff_from_hsp(self):
+        handy = RecordingV3HandyController()
+        handy._hsp_streaming = True
+        handy._current_mode = handy_module.MODE_HSP
+        handy._hamp_started = False
+
+        handy.move(35, 82, 34)
+
+        self.assertEqual(
+            [path for path, _body in handy.v3_commands],
+            ["hsp/stop", "mode2", "hamp/start", "hamp/velocity", "hamp/stroke"],
+        )
+
     def test_stop_clears_motion_cache_so_next_move_reapplies_bounds(self):
         handy = RecordingHandyController()
 

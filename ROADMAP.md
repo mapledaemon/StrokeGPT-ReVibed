@@ -57,11 +57,11 @@ verification and planner/control fixes, not more basic instrumentation.
   HSP point spacing / HDSP per-sample command speed, effective cycle timing,
   and the final Handy command metadata instead of treating any one of those
   fields as "the speed."
-- Include non-pattern LLM and Legacy Auto targets in that validation. Their
-  default-backend path should use HSP area-focus streaming when available and
-  fall back only through explicit legacy backend selection, while named
-  patterns and explicit anchor programs use the continuous position/script
-  transport.
+- Include plain non-pattern LLM and Legacy Auto targets in that validation.
+  Plain direct targets and idle generated regional focus starts may use HSP
+  area-focus streaming when available, while active generated regional focus
+  retargets and explicit anchor programs intentionally use the live-stroke
+  bypass after repeated real-device reports of HSP focus/morph stop-go behavior.
 - Treat regular Freestyle stops, end-of-sequence stalls, and the
   Auto-to-Freestyle no-action case as the current major reliability bug
   cluster. Reproduce the cases where the motion indicator advances but the

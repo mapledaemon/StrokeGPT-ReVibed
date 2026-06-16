@@ -1523,6 +1523,8 @@ class HandyController:
             print("[WARN] Incomplete move received from AI, ignoring.")
             return False
 
+        was_hamp_started = bool(self._hamp_started)
+        was_hsp_streaming = bool(self._hsp_streaming)
         if not self._ensure_hamp():
             return False
 
@@ -1535,10 +1537,16 @@ class HandyController:
         relative_speed_pct = self._safe_percent(speed)
         final_physical_speed = self._relative_speed_to_velocity(relative_speed_pct)
 
-        # When redirecting from fast motion into a narrower/deeper range, lower
-        # velocity before changing slide bounds so the device does not race to
-        # the new focus area using the previous high speed.
-        velocity_first = self._last_velocity is not None and final_physical_speed < self._last_velocity
+        # When redirecting from fast motion into a new slide window, lower or
+        # establish HAMP velocity before changing bounds so the device does
+        # not race to the new focus area using a stale/default speed. This
+        # matters most when handing off from HSP to HAMP, because the HAMP
+        # velocity cache is reset by the mode switch.
+        bounds_changed = (slide_min, slide_max) != self._last_slide_bounds
+        velocity_first = bounds_changed and (
+            was_hsp_streaming
+            or (was_hamp_started and self._last_velocity is not None and final_physical_speed < self._last_velocity)
+        )
         if velocity_first and not self._send_velocity(final_physical_speed):
             return False
 

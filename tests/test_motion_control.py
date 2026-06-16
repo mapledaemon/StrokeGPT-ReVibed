@@ -25,6 +25,9 @@ from strokegpt.motion import (
     CONTINUOUS_STREAM_TARGET_BUFFER_SECONDS,
     ContinuousPhaseState,
     IntentMatcher,
+    LIVE_STROKE_MAX_DEPTH_STEP,
+    LIVE_STROKE_MAX_RANGE_STEP,
+    LIVE_STROKE_SPATIAL_SPEED_CAP,
     MotionController,
     MotionSanitizer,
     MotionTarget,
@@ -1465,10 +1468,10 @@ class MotionControllerTests(unittest.TestCase):
     def test_continuous_hsp_area_focus_coalesces_fractional_chatter(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
-        intent = IntentMatcher().parse("focus on the tip", controller.semantic_target())
+        target = MotionTarget(30, 34, 82, "tip area_focus")
 
         try:
-            controller.apply_generated_target(intent.target, source="llm")
+            controller.apply_generated_target(target, source="llm")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
             points = handy.stream_starts[0]["points"]
@@ -2291,7 +2294,7 @@ class MotionControllerTests(unittest.TestCase):
             CONTINUOUS_HSP_AREA_FOCUS_POINT_INTERVAL_SECONDS,
         )
 
-    def test_continuous_middle_area_focus_initial_play_keeps_hsp_reserve(self):
+    def test_generated_middle_area_focus_initial_uses_hsp_stream(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
         target = MotionSanitizer().from_llm_move(
@@ -2301,13 +2304,9 @@ class MotionControllerTests(unittest.TestCase):
 
         try:
             controller.apply_generated_target(target, source="llm")
-            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
-            points = handy.stream_starts[0]["points"]
-            intervals = [right["t"] - left["t"] for left, right in zip(points, points[1:])]
-            self.assertLessEqual(len(points), CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND)
-            self.assertGreaterEqual(points[-1]["t"] - points[0]["t"], 5000)
-            self.assertGreaterEqual(min(intervals), 80)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            self.assertEqual(handy.moves, [])
             trace = self.wait_for_hsp_trace(
                 controller,
                 lambda point: point.get("source") == "llm"
@@ -2318,8 +2317,6 @@ class MotionControllerTests(unittest.TestCase):
             self.assertTrue(play_points)
             self.assertEqual({point.get("continuous_area_focus_zone") for point in play_points}, {"middle"})
             self.assertEqual({point.get("continuous_area_focus_transport_depth") for point in play_points}, {50.0})
-            self.assertGreaterEqual(play_points[-1]["hsp_target_buffer_ms"], 5000.0)
-            self.assertGreaterEqual(play_points[-1]["hsp_buffer_after_command_ms"], 4800.0)
         finally:
             controller.stop()
 
@@ -2394,6 +2391,31 @@ class MotionControllerTests(unittest.TestCase):
         self.assertEqual(repeated_zone, "base")
         self.assertAlmostEqual(repeated.depth, clean.depth, delta=0.001)
         self.assertAlmostEqual(repeated.stroke_range, clean.stroke_range, delta=0.001)
+
+    def test_long_endpoint_area_focus_keeps_larger_local_window(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        intent = IntentMatcher().parse("long strokes at the tip", controller.semantic_target())
+
+        clean, zone = controller._area_focus_transport_target(intent.target)
+
+        self.assertEqual(zone, "tip")
+        self.assertEqual(intent.target.motion_program.get("focus_length"), "long")
+        self.assertGreater(clean.stroke_range, 36.0)
+        self.assertLessEqual(clean.stroke_range, 58.0)
+
+    def test_explicit_endpoint_area_focus_range_keeps_larger_local_window(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        target = MotionSanitizer().from_llm_move(
+            {"zone": "base", "rng": 70, "sp": 42},
+            controller.semantic_target(),
+        )
+
+        clean, zone = controller._area_focus_transport_target(target)
+
+        self.assertEqual(zone, "base")
+        self.assertTrue(target.motion_program.get("explicit_range"))
+        self.assertGreater(clean.stroke_range, 36.0)
+        self.assertLessEqual(clean.stroke_range, 58.0)
 
     def test_raw_depth_noise_on_generated_middle_area_focus_keeps_active_stream(self):
         handy = StreamingFakeHandy()
@@ -3215,7 +3237,7 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
-    def test_continuous_backend_routes_regional_focus_program_through_hsp_area_focus(self):
+    def test_continuous_backend_routes_idle_regional_focus_program_through_hsp(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
         intent = IntentMatcher().parse("focus on the base", controller.current_target())
@@ -3225,14 +3247,9 @@ class MotionControllerTests(unittest.TestCase):
 
             controller.apply_generated_target(intent.target, source="chat command: base")
 
-            self.assertEqual(handy.moves, [])
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
-            points = handy.stream_starts[0]["points"]
-            self.assertGreater(max(point["x"] for point in points), 90)
-            steady_points = [point for point in points if point["t"] >= 1800]
-            self.assertTrue(steady_points, points)
-            self.assertGreater(min(point["semantic_x"] for point in steady_points), 60)
-            self.wait_for_hsp_trace(
+            self.assertEqual(handy.moves, [])
+            trace = self.wait_for_hsp_trace(
                 controller,
                 lambda point: (
                     point.get("continuous_plan_kind") == "area_focus"
@@ -3241,8 +3258,7 @@ class MotionControllerTests(unittest.TestCase):
                     and point.get("continuous_area_focus_zone") == "base"
                 ),
             )
-            trace = controller.observability_snapshot()["trace"]
-            self.assertTrue(all(point.get("continuous_schema") != "hamp_live_anchor" for point in trace))
+            self.assertTrue(trace)
         finally:
             controller.stop()
 
@@ -3261,7 +3277,7 @@ class MotionControllerTests(unittest.TestCase):
             controller.apply_generated_target(base_intent.target, source="llm")
 
             self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
-            self.assertTrue(handy.stream_stops)
+            self.assertEqual(len(handy.stream_starts), 1)
             self.assertEqual(handy.stream_replacements, [])
             self.assertEqual(handy.moves[-1][0], 42)
             self.assertGreaterEqual(handy.moves[-1][1], 80)
@@ -3282,6 +3298,67 @@ class MotionControllerTests(unittest.TestCase):
         finally:
             controller.stop()
 
+    def test_generated_focus_live_stroke_handoff_caps_speed_until_window_is_set(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.0)
+        matcher = IntentMatcher()
+
+        try:
+            tip_intent = matcher.parse("focus on the tip", controller.semantic_target())
+            fast_tip = MotionTarget(
+                82,
+                tip_intent.target.depth,
+                tip_intent.target.stroke_range,
+                tip_intent.target.label,
+                motion_program=tip_intent.target.motion_program,
+            )
+            controller.apply_generated_target(fast_tip, source="llm")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            base_intent = matcher.parse("focus on the base", controller.semantic_target())
+            fast_base = MotionTarget(
+                88,
+                base_intent.target.depth,
+                base_intent.target.stroke_range,
+                base_intent.target.label,
+                motion_program=base_intent.target.motion_program,
+            )
+            controller.apply_generated_target(fast_base, source="llm")
+
+            self.assertTrue(self.wait_until(lambda: bool(handy.moves)), handy.moves)
+            self.assertGreater(len(handy.moves), 2, handy.moves)
+            spatial_moves = handy.moves[:-1]
+            self.assertTrue(
+                all(move[0] <= LIVE_STROKE_SPATIAL_SPEED_CAP for move in spatial_moves),
+                handy.moves,
+            )
+            self.assertEqual(handy.moves[-1][0], 88)
+            self.assertEqual(handy.moves[-2][1:], handy.moves[-1][1:])
+            self.assertTrue(
+                all(
+                    abs(right[1] - left[1]) <= LIVE_STROKE_MAX_DEPTH_STEP + 1
+                    for left, right in zip(spatial_moves, spatial_moves[1:])
+                ),
+                handy.moves,
+            )
+            self.assertTrue(
+                all(
+                    abs(right[2] - left[2]) <= LIVE_STROKE_MAX_RANGE_STEP + 1
+                    for left, right in zip(spatial_moves, spatial_moves[1:])
+                ),
+                handy.moves,
+            )
+            trace = controller.observability_snapshot()["trace"]
+            live_points = [
+                point
+                for point in trace
+                if point.get("continuous_schema") == "hamp_live_anchor"
+            ]
+            self.assertTrue(live_points)
+            self.assertTrue(live_points[-1]["live_stroke_spatial_speed_capped"])
+        finally:
+            controller.stop()
+
     def test_chat_plain_retarget_bypasses_hsp_morph_replacement(self):
         # The user-reported "morph" stop in normal chat: a plain LLM
         # adjustment (no zone program, no pattern label) while an HSP
@@ -3290,11 +3367,12 @@ class MotionControllerTests(unittest.TestCase):
         # live-stroke bypass like regional retargets do.
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
-        matcher = IntentMatcher()
 
         try:
-            tip_intent = matcher.parse("focus on the tip", controller.semantic_target())
-            controller.apply_generated_target(tip_intent.target, source="llm")
+            controller.apply_generated_target(
+                MotionTarget(45, 50, 70, "llm steady"),
+                source="llm",
+            )
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
             time.sleep(0.12)

@@ -263,14 +263,19 @@ GitHub Actions runs the same tests on Python 3.11 for pushes to `master`
 or `main` and for pull requests. Local Chatterbox is intentionally not
 exercised in CI because the stack is large and hardware-sensitive.
 
+## License
+
+StrokeGPT-ReVibed is licensed under the GNU General Public License v3.0.
+See [LICENSE](LICENSE) for the full license text.
+
 ## Attribution
 
 Derived from [StrokeGPT](https://github.com/StrokeGPT/StrokeGPT), but has
 diverged radically at this point. This fork preserves attribution and
 repository history but is not affiliated with the original maintainers.
-The original repository did not include a local license file at the time
-this fork was prepared, but the original maintainer states that the code
-is "fully open-source"
+The original repository did not include a local license file when this
+fork was prepared, but the original maintainer states that the code is
+"fully open-source"
 ([archived discussion](https://web.archive.org/web/20260423111210/https://discuss.eroscripts.com/t/strokegpt-a-free-customisable-chatbot-for-the-handy-that-invents-funscripts-and-fucks-you-in-real-time/271231/257)).
 
 ## Support Development

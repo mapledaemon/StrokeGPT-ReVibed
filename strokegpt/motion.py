@@ -26,6 +26,9 @@ def _lerp(start: float, end: float, amount: float) -> float:
 
 
 POSITION_MAX_DEPTH_STEP = 9.0
+LIVE_STROKE_MAX_DEPTH_STEP = 8.0
+LIVE_STROKE_MAX_RANGE_STEP = 10.0
+LIVE_STROKE_SPATIAL_SPEED_CAP = 35.0
 POSITION_BLEND_DELAY_FACTOR = 0.16
 POSITION_TURN_DELAY_FACTOR = 0.2
 TURN_BRAKE_SPEED_FACTOR = 0.45
@@ -371,6 +374,8 @@ def _regional_motion_program(cues: MotionCues, existing_program: Optional[dict[s
     )
     if program:
         program["generated_area_focus"] = True
+        if cues.length:
+            program["focus_length"] = cues.length
     return program
 
 
@@ -544,6 +549,12 @@ def _target_from_cues(
         next_range = _range_with_broad_default(current, next_depth, next_range, cues)
 
     motion_program = _regional_motion_program(cues, motion_program)
+    if isinstance(motion_program, dict) and motion_program.get("generated_area_focus"):
+        motion_program = dict(motion_program)
+        if cues.length:
+            motion_program["focus_length"] = cues.length
+        if stroke_range is not None:
+            motion_program["explicit_range"] = True
 
     labels = cues.labels()
     if label_prefix:
@@ -1235,8 +1246,8 @@ class MotionController:
         program = target.motion_program
         if not isinstance(program, dict):
             return False
-        if bool(program.get("generated_area_focus")) and self._is_frame_playback_active():
-            return True
+        if bool(program.get("generated_area_focus")):
+            return self._is_frame_playback_active()
         return (
             _is_anchor_loop_program(program)
             and not bool(program.get("generated_area_focus"))
@@ -1253,7 +1264,7 @@ class MotionController:
         ):
             return False
         if _is_anchor_loop_program(program):
-            return bool(program.get("generated_area_focus"))
+            return bool(isinstance(program, dict) and program.get("generated_area_focus"))
         if self._pattern_from_label(target.label):
             return False
         if program is None:
@@ -1305,14 +1316,50 @@ class MotionController:
             return "middle"
         return None
 
+    def _area_focus_range_controls(self, target: MotionTarget) -> tuple[str, bool]:
+        program = target.motion_program
+        length = ""
+        explicit_range = False
+        if isinstance(program, dict):
+            length = str(program.get("focus_length") or "").strip().lower()
+            explicit_range = bool(program.get("explicit_range"))
+        label = _normalize_text(target.label).replace("+", " ")
+        if not length:
+            if re.search(r"\bfull\b", label):
+                length = "full"
+            elif re.search(r"\b(?:long|big|wide)\b", label):
+                length = "long"
+            elif re.search(r"\bhalf\b", label):
+                length = "half"
+        return length, explicit_range
+
     def _localized_area_focus_range(self, target: MotionTarget, zone: str) -> float:
         requested_range = float(target.stroke_range)
+        length, explicit_range = self._area_focus_range_controls(target)
         if zone in {"tip", "base"}:
             if requested_range <= 36.0:
                 return requested_range
+            if length == "full":
+                return min(requested_range, 70.0)
+            if length == "long" or explicit_range:
+                return min(requested_range, 58.0)
+            if length == "half":
+                return min(requested_range, 50.0)
             return min(requested_range, max(22.0, min(36.0, requested_range * 0.42)))
         if zone == "upper":
+            if length == "full":
+                return min(requested_range, 70.0)
+            if length == "long" or explicit_range:
+                return min(requested_range, 60.0)
+            if length == "half":
+                return min(requested_range, 50.0)
             return min(requested_range, max(26.0, min(42.0, requested_range * 0.48)))
+        if length == "full":
+            return min(requested_range, 90.0)
+        if length == "long" or explicit_range:
+            return min(requested_range, 75.0)
+        if length == "half":
+            return min(requested_range, 58.0)
         return min(requested_range, max(34.0, min(58.0, requested_range * 0.62)))
 
     def _area_focus_transport_target(self, target: MotionTarget) -> tuple[MotionTarget, Optional[str]]:
@@ -1415,6 +1462,54 @@ class MotionController:
             phase_key=("area_focus_zone", focus_zone or "general"),
         )
 
+    def _live_stroke_transition_path(self, current: MotionTarget, target: MotionTarget) -> list[MotionTarget]:
+        current = current.clamped()
+        target = target.clamped()
+        depth_delta = target.depth - current.depth
+        range_delta = target.stroke_range - current.stroke_range
+        spatial_retarget = abs(depth_delta) > 0.5 or abs(range_delta) > 0.5
+        if not spatial_retarget:
+            return self.sanitizer.transition_path(current, target)
+
+        steps = max(
+            1,
+            math.ceil(abs(target.speed - current.speed) / self.sanitizer.limits.max_speed_delta),
+            math.ceil(abs(depth_delta) / LIVE_STROKE_MAX_DEPTH_STEP),
+            math.ceil(abs(range_delta) / LIVE_STROKE_MAX_RANGE_STEP),
+        )
+        capped_speed = min(target.speed, LIVE_STROKE_SPATIAL_SPEED_CAP)
+        path: list[MotionTarget] = []
+        for index in range(1, steps + 1):
+            amount = index / steps
+            step_speed = _lerp(current.speed, target.speed, amount)
+            step_speed = min(step_speed, capped_speed)
+            path.append(
+                MotionTarget(
+                    step_speed,
+                    _lerp(current.depth, target.depth, amount),
+                    _lerp(current.stroke_range, target.stroke_range, amount),
+                    label=target.label,
+                    motion_program=target.motion_program,
+                ).rounded()
+            )
+
+        window_target = MotionTarget(
+            capped_speed,
+            target.depth,
+            target.stroke_range,
+            label=target.label,
+            motion_program=target.motion_program,
+        ).rounded()
+        if not path or path[-1].depth != window_target.depth or path[-1].stroke_range != window_target.stroke_range:
+            path.append(window_target)
+        else:
+            path[-1] = window_target
+
+        final_target = target.rounded()
+        if final_target.speed > window_target.speed:
+            path.append(final_target)
+        return path
+
     def _apply_live_stroke_continuous_target(
         self,
         target: MotionTarget,
@@ -1475,8 +1570,14 @@ class MotionController:
         if trace_metadata:
             for key, value in trace_metadata.items():
                 extras.setdefault(str(key), value)
+        transition_path = self._live_stroke_transition_path(start_target, target)
+        speed_capped = len(transition_path) >= 2 and transition_path[-2].speed < transition_path[-1].speed
+        if speed_capped:
+            extras["live_stroke_spatial_speed_capped"] = True
+            extras["live_stroke_spatial_speed_cap"] = int(round(LIVE_STROKE_SPATIAL_SPEED_CAP))
+        extras["live_stroke_transition_steps"] = len(transition_path)
         try:
-            for step in self.sanitizer.transition_path(start_target, target):
+            for step in transition_path:
                 with self._lock:
                     if generation != self._generation:
                         return False
