@@ -7,8 +7,8 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-2026-06-16 - Unreleased - Generated Focus Motion Routing
---------------------------------------------------------
+2026-06-16 - PR #327 - Generated Focus Motion Routing
+-----------------------------------------------------
 
 - Reviewed external smoothness/variability findings against the current code
   and kept idle generated tip/shaft/base focus starts on the smoother HSP
