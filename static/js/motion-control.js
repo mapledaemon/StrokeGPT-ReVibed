@@ -342,7 +342,16 @@ export function populateMotionSettings(data = {}) {
     state.motionPatternLibraryEnabledInChat = data.motion_pattern_library_enabled_in_chat ?? state.motionPatternLibraryEnabledInChat ?? false;
     state.allowLlmEdgeInFreestyle = data.allow_llm_edge_in_freestyle ?? state.allowLlmEdgeInFreestyle ?? true;
     state.allowLlmEdgeInChat = data.allow_llm_edge_in_chat ?? state.allowLlmEdgeInChat ?? true;
-    state.allowLlmModeActionsInChat = data.allow_llm_mode_actions_in_chat ?? state.allowLlmModeActionsInChat ?? false;
+    state.allowLlmFreestyleInChat = data.allow_llm_freestyle_in_chat ?? state.allowLlmFreestyleInChat ?? false;
+    state.allowLlmEdgingInChat = data.allow_llm_edging_in_chat ?? state.allowLlmEdgingInChat ?? false;
+    state.allowLlmMilkingInChat = data.allow_llm_milking_in_chat ?? state.allowLlmMilkingInChat ?? false;
+    state.allowLlmLegacyAutoInChat = data.allow_llm_legacy_auto_in_chat ?? state.allowLlmLegacyAutoInChat ?? false;
+    state.allowLlmModeActionsInChat = Boolean(
+        state.allowLlmFreestyleInChat
+        || state.allowLlmEdgingInChat
+        || state.allowLlmMilkingInChat
+        || state.allowLlmLegacyAutoInChat,
+    );
     state.autospeakMinSeconds = data.autospeak_min_seconds ?? state.autospeakMinSeconds ?? 12;
     state.autospeakMaxSeconds = data.autospeak_max_seconds ?? state.autospeakMaxSeconds ?? 45;
     state.autospeakMotionAutonomy = data.autospeak_motion_autonomy ?? state.autospeakMotionAutonomy ?? 'full';
@@ -362,8 +371,17 @@ export function populateMotionSettings(data = {}) {
     if (el.allowLlmEdgeChatCheckbox) {
         el.allowLlmEdgeChatCheckbox.checked = Boolean(state.allowLlmEdgeInChat);
     }
-    if (el.allowLlmModeActionsChatCheckbox) {
-        el.allowLlmModeActionsChatCheckbox.checked = Boolean(state.allowLlmModeActionsInChat);
+    if (el.allowLlmFreestyleChatCheckbox) {
+        el.allowLlmFreestyleChatCheckbox.checked = Boolean(state.allowLlmFreestyleInChat);
+    }
+    if (el.allowLlmEdgingChatCheckbox) {
+        el.allowLlmEdgingChatCheckbox.checked = Boolean(state.allowLlmEdgingInChat);
+    }
+    if (el.allowLlmMilkingChatCheckbox) {
+        el.allowLlmMilkingChatCheckbox.checked = Boolean(state.allowLlmMilkingInChat);
+    }
+    if (el.allowLlmLegacyAutoChatCheckbox) {
+        el.allowLlmLegacyAutoChatCheckbox.checked = Boolean(state.allowLlmLegacyAutoInChat);
     }
     if (el.autospeakMinSecondsInput) el.autospeakMinSecondsInput.value = state.autospeakMinSeconds;
     if (el.autospeakMaxSecondsInput) el.autospeakMaxSecondsInput.value = state.autospeakMaxSeconds;
@@ -374,7 +392,14 @@ export function populateMotionSettings(data = {}) {
     readAutospeakTimingPair();
     if (el.llmEdgePermissionsStatus) {
         const autonomy = autospeakMotionAutonomyDetails(state.autospeakMotionAutonomy).label;
-        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${state.allowLlmModeActionsInChat ? 'allowed' : 'blocked'}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'} (${state.autospeakMinSeconds}-${state.autospeakMaxSeconds}s, ${autonomy}).`;
+        const chatModeActions = [
+            state.allowLlmFreestyleInChat ? 'Freestyle' : null,
+            state.allowLlmEdgingInChat ? 'Edge' : null,
+            state.allowLlmMilkingInChat ? 'Milk' : null,
+            state.allowLlmLegacyAutoInChat ? 'Legacy Auto' : null,
+        ].filter(Boolean);
+        const chatModeActionsLabel = chatModeActions.length ? chatModeActions.join('/') : 'blocked';
+        el.llmEdgePermissionsStatus.textContent = `Freestyle edge: ${state.allowLlmEdgeInFreestyle ? 'allowed' : 'blocked'}. Chat edge: ${state.allowLlmEdgeInChat ? 'allowed' : 'blocked'}. Chat mode actions: ${chatModeActionsLabel}. Autospeak: ${state.autospeakEnabled ? 'on' : 'off'} (${state.autospeakMinSeconds}-${state.autospeakMaxSeconds}s, ${autonomy}).`;
     }
     updateMemoryToggleUi(data.use_long_term_memory ?? state.useLongTermMemory);
     renderMotionBackendOptions(data.motion_backends || state.motionBackends, data.motion_backend || state.motionBackend);
@@ -1555,7 +1580,10 @@ async function saveLlmEdgePermissions() {
         body: JSON.stringify({
             allow_llm_edge_in_freestyle: Boolean(el.allowLlmEdgeFreestyleCheckbox?.checked),
             allow_llm_edge_in_chat: Boolean(el.allowLlmEdgeChatCheckbox?.checked),
-            allow_llm_mode_actions_in_chat: Boolean(el.allowLlmModeActionsChatCheckbox?.checked),
+            allow_llm_freestyle_in_chat: Boolean(el.allowLlmFreestyleChatCheckbox?.checked),
+            allow_llm_edging_in_chat: Boolean(el.allowLlmEdgingChatCheckbox?.checked),
+            allow_llm_milking_in_chat: Boolean(el.allowLlmMilkingChatCheckbox?.checked),
+            allow_llm_legacy_auto_in_chat: Boolean(el.allowLlmLegacyAutoChatCheckbox?.checked),
             autospeak_enabled: Boolean(state.autospeakEnabled),
             autospeak_min_seconds: autospeakMin,
             autospeak_max_seconds: autospeakMax,

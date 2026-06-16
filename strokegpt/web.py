@@ -934,6 +934,10 @@ def voice_input_status_payload(status="success"):
     payload = voice_input.status()
     payload["status"] = status
     payload["hands_free_mode_actions"] = bool(settings.voice_input_hands_free_mode_actions)
+    payload["hands_free_freestyle"] = bool(settings.voice_input_hands_free_freestyle)
+    payload["hands_free_edging"] = bool(settings.voice_input_hands_free_edging)
+    payload["hands_free_milking"] = bool(settings.voice_input_hands_free_milking)
+    payload["hands_free_legacy_auto"] = bool(settings.voice_input_hands_free_legacy_auto)
     return payload
 
 def setup_check_payload():
@@ -2896,6 +2900,34 @@ def _request_mode_action_context(data):
         return True, "typed chat"
     return False, ""
 
+# Per-mode start kinds gated by the typed-chat and hands-free mode-action permissions.
+LLM_MODE_ACTION_START_KINDS = ("freestyle", "edging", "milking", "legacy_auto")
+
+def _chat_mode_action_allowed_kinds():
+    return {
+        "freestyle": bool(settings.allow_llm_freestyle_in_chat),
+        "edging": bool(settings.allow_llm_edging_in_chat),
+        "milking": bool(settings.allow_llm_milking_in_chat),
+        "legacy_auto": bool(settings.allow_llm_legacy_auto_in_chat),
+    }
+
+def _handsfree_mode_action_allowed_kinds():
+    return {
+        "freestyle": bool(settings.voice_input_hands_free_freestyle),
+        "edging": bool(settings.voice_input_hands_free_edging),
+        "milking": bool(settings.voice_input_hands_free_milking),
+        "legacy_auto": bool(settings.voice_input_hands_free_legacy_auto),
+    }
+
+def _request_mode_action_allowed_kinds(data):
+    """Return the per-mode start permissions for whichever source owns this request."""
+    if _request_allows_handsfree_mode_actions(data):
+        return _handsfree_mode_action_allowed_kinds()
+    source = _normalize_request_source(data.get("source"))
+    if bool(settings.allow_llm_mode_actions_in_chat) and source == "chat":
+        return _chat_mode_action_allowed_kinds()
+    return {kind: False for kind in LLM_MODE_ACTION_START_KINDS}
+
 LLM_MODE_ACTION_ALIASES = {
     "continue": "continue_mode",
     "continue_mode": "continue_mode",
@@ -2961,7 +2993,20 @@ def _start_mode_for_llm_action(action):
     start_background_mode(mode_logic, initial_message, mode_name=mode_name)
     return True, message
 
-def _apply_llm_mode_action(response):
+LLM_MODE_ACTION_START_KIND_BY_ACTION = {
+    "start_freestyle": "freestyle",
+    "start_edging": "edging",
+    "start_milking": "milking",
+    "start_legacy_auto": "legacy_auto",
+}
+
+def _mode_action_start_allowed(kind, allowed_kinds):
+    # No permission map means "no source gating" (e.g. direct/internal callers): allow.
+    if not isinstance(allowed_kinds, dict):
+        return True
+    return bool(allowed_kinds.get(kind))
+
+def _apply_llm_mode_action(response, allowed_kinds=None):
     if not isinstance(response, dict):
         return "", False, ""
     action = _normalize_llm_mode_action(response.get("mode_action"))
@@ -2976,6 +3021,8 @@ def _apply_llm_mode_action(response):
         ok, _mode_name, message = _signal_active_mode_close()
         if ok:
             return action, True, message
+        if not _mode_action_start_allowed("milking", allowed_kinds):
+            return action, False, "No active mode to receive the close signal."
         ok, message = _start_mode_for_llm_action("start_milking")
         return action, ok, message
     if action == "stop_mode":
@@ -2985,6 +3032,9 @@ def _apply_llm_mode_action(response):
             app_state.auto_mode_active_task.stop()
         _stop_motion_training()
         return action, True, "Stopping active mode."
+    start_kind = LLM_MODE_ACTION_START_KIND_BY_ACTION.get(action)
+    if start_kind is not None and not _mode_action_start_allowed(start_kind, allowed_kinds):
+        return action, False, f"{action} is not permitted for this request."
     ok, message = _start_mode_for_llm_action(action)
     return action, ok, message
 
@@ -3215,7 +3265,9 @@ def _finalize_llm_chat_response(
     mode_action_message = ""
     if mode_actions_allowed:
         mode_action_started = time.perf_counter()
-        mode_action, mode_action_applied, mode_action_message = _apply_llm_mode_action(llm_response)
+        mode_action, mode_action_applied, mode_action_message = _apply_llm_mode_action(
+            llm_response, context.get("mode_action_allowed_kinds")
+        )
         timings["mode_action_ms"] = int((time.perf_counter() - mode_action_started) * 1000)
     active_mode_message_relayed = False
     if (
@@ -3307,6 +3359,7 @@ def handle_user_message():
     context["mode_actions_enabled"] = mode_actions_allowed
     context["mode_action_request_source"] = mode_action_source
     context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
+    context["mode_action_allowed_kinds"] = _request_mode_action_allowed_kinds(data)
     current_before_llm = _motion_semantic_target()
     if not active_mode_before_llm and not _looks_like_motion_request(user_input):
         _chat_motion_keepalive_once("chat preflight")
@@ -3381,6 +3434,7 @@ def handle_user_message_stream():
         context["mode_actions_enabled"] = mode_actions_allowed
         context["mode_action_request_source"] = mode_action_source
         context["handsfree_mode_actions_enabled"] = handsfree_mode_actions_allowed
+        context["mode_action_allowed_kinds"] = _request_mode_action_allowed_kinds(data)
         current_before_llm = _motion_semantic_target()
         if not active_mode_before_llm and not _looks_like_motion_request(user_input):
             _chat_motion_keepalive_once("chat preflight")

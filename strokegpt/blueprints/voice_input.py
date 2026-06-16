@@ -134,10 +134,33 @@ def set_voice_input_route():
         "silence_trim",
         web.settings.voice_input_silence_trim,
     )
-    hands_free_mode_actions = web._request_bool_value(
+    # Back-compat: honor the legacy aggregate toggle as a "set all" default before
+    # reading the per-mode keys, which still override it when present.
+    if "hands_free_mode_actions" in data:
+        web.settings.voice_input_hands_free_mode_actions = web._request_bool_value(
+            data,
+            "hands_free_mode_actions",
+            web.settings.voice_input_hands_free_mode_actions,
+        )
+    hands_free_freestyle = web._request_bool_value(
         data,
-        "hands_free_mode_actions",
-        web.settings.voice_input_hands_free_mode_actions,
+        "hands_free_freestyle",
+        web.settings.voice_input_hands_free_freestyle,
+    )
+    hands_free_edging = web._request_bool_value(
+        data,
+        "hands_free_edging",
+        web.settings.voice_input_hands_free_edging,
+    )
+    hands_free_milking = web._request_bool_value(
+        data,
+        "hands_free_milking",
+        web.settings.voice_input_hands_free_milking,
+    )
+    hands_free_legacy_auto = web._request_bool_value(
+        data,
+        "hands_free_legacy_auto",
+        web.settings.voice_input_hands_free_legacy_auto,
     )
     beam_size = web.settings._normalize_voice_input_beam_size(
         data.get("beam_size", web.settings.voice_input_beam_size)
@@ -174,7 +197,10 @@ def set_voice_input_route():
     web.settings.voice_input_noise_floor_rms = noise_floor_rms
     web.settings.voice_input_audio_preprocessing = audio_preprocessing
     web.settings.voice_input_silence_trim = silence_trim
-    web.settings.voice_input_hands_free_mode_actions = hands_free_mode_actions
+    web.settings.voice_input_hands_free_freestyle = hands_free_freestyle
+    web.settings.voice_input_hands_free_edging = hands_free_edging
+    web.settings.voice_input_hands_free_milking = hands_free_milking
+    web.settings.voice_input_hands_free_legacy_auto = hands_free_legacy_auto
     web.settings.voice_input_beam_size = beam_size
     web.settings.voice_input_condition_on_previous_text = condition_on_previous_text
     web.settings.voice_input_vad_threshold = vad_threshold

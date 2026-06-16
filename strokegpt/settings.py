@@ -215,6 +215,10 @@ def default_settings_dict():
         "voice_input_audio_preprocessing": DEFAULT_VOICE_INPUT_AUDIO_PREPROCESSING,
         "voice_input_silence_trim": DEFAULT_VOICE_INPUT_SILENCE_TRIM,
         "voice_input_hands_free_mode_actions": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
+        "voice_input_hands_free_freestyle": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
+        "voice_input_hands_free_edging": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
+        "voice_input_hands_free_milking": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
+        "voice_input_hands_free_legacy_auto": DEFAULT_VOICE_INPUT_HANDS_FREE_MODE_ACTIONS,
         "voice_input_beam_size": DEFAULT_VOICE_INPUT_BEAM_SIZE,
         "voice_input_condition_on_previous_text": DEFAULT_VOICE_INPUT_CONDITION_ON_PREVIOUS_TEXT,
         "voice_input_vad_threshold": DEFAULT_VOICE_INPUT_VAD_THRESHOLD,
@@ -237,6 +241,10 @@ def default_settings_dict():
         "allow_llm_edge_in_freestyle": True,
         "allow_llm_edge_in_chat": True,
         "allow_llm_mode_actions_in_chat": False,
+        "allow_llm_freestyle_in_chat": False,
+        "allow_llm_edging_in_chat": False,
+        "allow_llm_milking_in_chat": False,
+        "allow_llm_legacy_auto_in_chat": False,
         "autospeak_enabled": False,
         "autospeak_min_seconds": DEFAULT_AUTOSPEAK_MIN_SECONDS,
         "autospeak_max_seconds": DEFAULT_AUTOSPEAK_MAX_SECONDS,
@@ -305,6 +313,42 @@ class SettingsManager:
         self.session_liked_patterns = []
         if save:
             self.save()
+
+    @property
+    def allow_llm_mode_actions_in_chat(self):
+        """Aggregate gate: typed chat may request a mode action if any per-mode chat permission is on."""
+        return bool(
+            self.allow_llm_freestyle_in_chat
+            or self.allow_llm_edging_in_chat
+            or self.allow_llm_milking_in_chat
+            or self.allow_llm_legacy_auto_in_chat
+        )
+
+    @allow_llm_mode_actions_in_chat.setter
+    def allow_llm_mode_actions_in_chat(self, value):
+        resolved = bool(value)
+        self.allow_llm_freestyle_in_chat = resolved
+        self.allow_llm_edging_in_chat = resolved
+        self.allow_llm_milking_in_chat = resolved
+        self.allow_llm_legacy_auto_in_chat = resolved
+
+    @property
+    def voice_input_hands_free_mode_actions(self):
+        """Aggregate gate: hands-free voice may request a mode action if any per-mode permission is on."""
+        return bool(
+            self.voice_input_hands_free_freestyle
+            or self.voice_input_hands_free_edging
+            or self.voice_input_hands_free_milking
+            or self.voice_input_hands_free_legacy_auto
+        )
+
+    @voice_input_hands_free_mode_actions.setter
+    def voice_input_hands_free_mode_actions(self, value):
+        resolved = bool(value)
+        self.voice_input_hands_free_freestyle = resolved
+        self.voice_input_hands_free_edging = resolved
+        self.voice_input_hands_free_milking = resolved
+        self.voice_input_hands_free_legacy_auto = resolved
 
     def load(self):
         if not self.file_path.exists():
@@ -427,9 +471,25 @@ class SettingsManager:
         self.allow_llm_edge_in_chat = bool(
             data.get("allow_llm_edge_in_chat", defaults["allow_llm_edge_in_chat"])
         )
-        self.allow_llm_mode_actions_in_chat = _as_bool(
+        legacy_chat_mode_actions = _as_bool(
             data.get("allow_llm_mode_actions_in_chat", defaults["allow_llm_mode_actions_in_chat"]),
             defaults["allow_llm_mode_actions_in_chat"],
+        )
+        self.allow_llm_freestyle_in_chat = _as_bool(
+            data.get("allow_llm_freestyle_in_chat", legacy_chat_mode_actions),
+            legacy_chat_mode_actions,
+        )
+        self.allow_llm_edging_in_chat = _as_bool(
+            data.get("allow_llm_edging_in_chat", legacy_chat_mode_actions),
+            legacy_chat_mode_actions,
+        )
+        self.allow_llm_milking_in_chat = _as_bool(
+            data.get("allow_llm_milking_in_chat", legacy_chat_mode_actions),
+            legacy_chat_mode_actions,
+        )
+        self.allow_llm_legacy_auto_in_chat = _as_bool(
+            data.get("allow_llm_legacy_auto_in_chat", legacy_chat_mode_actions),
+            legacy_chat_mode_actions,
         )
         self.autospeak_enabled = _as_bool(
             data.get("autospeak_enabled", defaults["autospeak_enabled"]),
@@ -554,12 +614,28 @@ class SettingsManager:
             data.get("voice_input_silence_trim", defaults["voice_input_silence_trim"]),
             defaults["voice_input_silence_trim"],
         )
-        self.voice_input_hands_free_mode_actions = _as_bool(
+        legacy_hands_free_mode_actions = _as_bool(
             data.get(
                 "voice_input_hands_free_mode_actions",
                 defaults["voice_input_hands_free_mode_actions"],
             ),
             defaults["voice_input_hands_free_mode_actions"],
+        )
+        self.voice_input_hands_free_freestyle = _as_bool(
+            data.get("voice_input_hands_free_freestyle", legacy_hands_free_mode_actions),
+            legacy_hands_free_mode_actions,
+        )
+        self.voice_input_hands_free_edging = _as_bool(
+            data.get("voice_input_hands_free_edging", legacy_hands_free_mode_actions),
+            legacy_hands_free_mode_actions,
+        )
+        self.voice_input_hands_free_milking = _as_bool(
+            data.get("voice_input_hands_free_milking", legacy_hands_free_mode_actions),
+            legacy_hands_free_mode_actions,
+        )
+        self.voice_input_hands_free_legacy_auto = _as_bool(
+            data.get("voice_input_hands_free_legacy_auto", legacy_hands_free_mode_actions),
+            legacy_hands_free_mode_actions,
         )
         self.voice_input_beam_size = self._normalize_voice_input_beam_size(
             data.get("voice_input_beam_size", defaults["voice_input_beam_size"])
@@ -658,6 +734,10 @@ class SettingsManager:
             "voice_input_audio_preprocessing": bool(self.voice_input_audio_preprocessing),
             "voice_input_silence_trim": bool(self.voice_input_silence_trim),
             "voice_input_hands_free_mode_actions": bool(self.voice_input_hands_free_mode_actions),
+            "voice_input_hands_free_freestyle": bool(self.voice_input_hands_free_freestyle),
+            "voice_input_hands_free_edging": bool(self.voice_input_hands_free_edging),
+            "voice_input_hands_free_milking": bool(self.voice_input_hands_free_milking),
+            "voice_input_hands_free_legacy_auto": bool(self.voice_input_hands_free_legacy_auto),
             "voice_input_beam_size": self._normalize_voice_input_beam_size(self.voice_input_beam_size),
             "voice_input_condition_on_previous_text": bool(self.voice_input_condition_on_previous_text),
             "voice_input_vad_threshold": self._normalize_voice_input_vad_threshold(self.voice_input_vad_threshold),
@@ -682,6 +762,10 @@ class SettingsManager:
             "allow_llm_edge_in_freestyle": bool(self.allow_llm_edge_in_freestyle),
             "allow_llm_edge_in_chat": bool(self.allow_llm_edge_in_chat),
             "allow_llm_mode_actions_in_chat": bool(self.allow_llm_mode_actions_in_chat),
+            "allow_llm_freestyle_in_chat": bool(self.allow_llm_freestyle_in_chat),
+            "allow_llm_edging_in_chat": bool(self.allow_llm_edging_in_chat),
+            "allow_llm_milking_in_chat": bool(self.allow_llm_milking_in_chat),
+            "allow_llm_legacy_auto_in_chat": bool(self.allow_llm_legacy_auto_in_chat),
             "autospeak_enabled": bool(self.autospeak_enabled),
             "autospeak_min_seconds": self.autospeak_min_seconds,
             "autospeak_max_seconds": self.autospeak_max_seconds,

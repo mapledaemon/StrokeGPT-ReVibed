@@ -753,10 +753,33 @@ def set_llm_edge_permissions_route():
         "allow_llm_edge_in_chat",
         web.settings.allow_llm_edge_in_chat,
     )
-    web.settings.allow_llm_mode_actions_in_chat = web._request_bool_value(
+    # Back-compat: an older client may post only the aggregate toggle. Apply it as a
+    # "set all" default first, then let any per-mode keys below override it.
+    if "allow_llm_mode_actions_in_chat" in data:
+        web.settings.allow_llm_mode_actions_in_chat = web._request_bool_value(
+            data,
+            "allow_llm_mode_actions_in_chat",
+            web.settings.allow_llm_mode_actions_in_chat,
+        )
+    web.settings.allow_llm_freestyle_in_chat = web._request_bool_value(
         data,
-        "allow_llm_mode_actions_in_chat",
-        web.settings.allow_llm_mode_actions_in_chat,
+        "allow_llm_freestyle_in_chat",
+        web.settings.allow_llm_freestyle_in_chat,
+    )
+    web.settings.allow_llm_edging_in_chat = web._request_bool_value(
+        data,
+        "allow_llm_edging_in_chat",
+        web.settings.allow_llm_edging_in_chat,
+    )
+    web.settings.allow_llm_milking_in_chat = web._request_bool_value(
+        data,
+        "allow_llm_milking_in_chat",
+        web.settings.allow_llm_milking_in_chat,
+    )
+    web.settings.allow_llm_legacy_auto_in_chat = web._request_bool_value(
+        data,
+        "allow_llm_legacy_auto_in_chat",
+        web.settings.allow_llm_legacy_auto_in_chat,
     )
     web.settings.autospeak_enabled = web._request_bool_value(
         data,
@@ -793,6 +816,10 @@ def set_llm_edge_permissions_route():
         "allow_llm_edge_in_freestyle": web.settings.allow_llm_edge_in_freestyle,
         "allow_llm_edge_in_chat": web.settings.allow_llm_edge_in_chat,
         "allow_llm_mode_actions_in_chat": web.settings.allow_llm_mode_actions_in_chat,
+        "allow_llm_freestyle_in_chat": web.settings.allow_llm_freestyle_in_chat,
+        "allow_llm_edging_in_chat": web.settings.allow_llm_edging_in_chat,
+        "allow_llm_milking_in_chat": web.settings.allow_llm_milking_in_chat,
+        "allow_llm_legacy_auto_in_chat": web.settings.allow_llm_legacy_auto_in_chat,
         "autospeak_enabled": web.settings.autospeak_enabled,
         "autospeak_min_seconds": web.settings.autospeak_min_seconds,
         "autospeak_max_seconds": web.settings.autospeak_max_seconds,

@@ -363,14 +363,22 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   feedback because their intentionally tiny ranges can look like fixed-speed or
   paused continuous motion during ordinary Freestyle.
 - Hands-free voice can optionally expose a narrow LLM `mode_action` field.
-  Keep it gated by saved Hands-free Voice mode plus the Advanced Flow toggle,
-  and route normalized actions through the same preset-mode start/stop and
-  close-signal helpers used by visible controls. If no mode action is chosen
-  while a mode is active, keep relaying the transcript to the active planner.
+  Keep it gated by saved Hands-free Voice mode plus the per-mode Advanced Flow
+  checkboxes (Freestyle/Edge/Milk/Legacy Auto), and route normalized actions
+  through the same preset-mode start/stop and close-signal helpers used by
+  visible controls. The prompt schema and `_apply_llm_mode_action` both honor
+  the per-mode permission map (`context["mode_action_allowed_kinds"]`): only
+  permitted starts are offered, and a disallowed start is rejected rather than
+  run. Stop/continue/close signals stay available whenever any mode is enabled.
+  If no mode action is chosen while a mode is active, keep relaying the
+  transcript to the active planner.
 - Typed chat can optionally expose the same narrow LLM `mode_action` field
-  behind the Motion > LLM Mode Permissions toggle. Keep reviewed/manual voice
-  transcript sends out of this path until they get their own explicit product
-  decision.
+  behind the Motion > LLM Mode Permissions per-mode checkboxes. Keep
+  reviewed/manual voice transcript sends out of this path until they get their
+  own explicit product decision. The legacy single `allow_llm_mode_actions_in_chat`
+  / `voice_input_hands_free_mode_actions` keys remain as computed aggregate
+  properties (any per-mode flag on) for back-compat; saved settings and posted
+  payloads using the old combined key migrate to "all four modes on".
 - Visible preset-mode buttons should start modes through explicit
   `/start_*_mode` routes. Do not route sidebar mode starts through chat text
   just to reuse natural-language intent parsing.

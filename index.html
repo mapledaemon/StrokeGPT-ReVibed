@@ -320,8 +320,12 @@
                         <summary>Advanced Flow</summary>
                         <fieldset id="voice-input-hands-free-action-control" class="voice-input-tuning-group" data-requires-backend>
                             <legend>Hands-Free Mode Actions</legend>
-                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-mode-actions-checkbox" data-requires-backend> Let hands-free voice let the model choose mode actions</label>
-                            <div class="settings-help">Allows hands-free transcripts to request guarded mode actions such as Freestyle, Edge, Milk, Legacy Auto, Stop, or I'm Close.</div>
+                            <div class="settings-field-label">Let hands-free voice let the model choose mode actions</div>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-freestyle-checkbox" data-requires-backend> Freestyle</label>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-edging-checkbox" data-requires-backend> Edge</label>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-milking-checkbox" data-requires-backend> Milk</label>
+                            <label class="settings-checkbox-line"><input type="checkbox" id="voice-input-hands-free-legacy-auto-checkbox" data-requires-backend> Legacy Auto</label>
+                            <div class="settings-help">Lets hands-free transcripts request the checked guarded mode actions. Stop and "I'm close" signals stay available whenever any mode above is enabled.</div>
                         </fieldset>
                     </details>
                     <fieldset id="voice-input-tuning-control" class="voice-input-tuning-group">
@@ -491,7 +495,13 @@
                     <h4>LLM Mode Permissions</h4>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-freestyle-checkbox" checked> Allow LLM to edge in freestyle</label>
                     <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edge-chat-checkbox" checked> Allow LLM to edge in chat</label>
-                    <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-mode-actions-chat-checkbox" data-requires-backend> Allow typed chat to request mode actions</label>
+                    <fieldset class="settings-checkbox-group" id="chat-mode-action-permissions" data-requires-backend>
+                        <legend>Allow typed chat to request mode actions</legend>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-freestyle-chat-checkbox" data-requires-backend> Freestyle</label>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-edging-chat-checkbox" data-requires-backend> Edge</label>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-milking-chat-checkbox" data-requires-backend> Milk</label>
+                        <label class="settings-checkbox-line"><input type="checkbox" id="allow-llm-legacy-auto-chat-checkbox" data-requires-backend> Legacy Auto</label>
+                    </fieldset>
                     <div class="timing-row autospeak-timing-row" aria-label="Autospeak seconds range"><label for="autospeak-min-seconds">Autospeak</label><input type="number" id="autospeak-min-seconds" min="0" max="300" step="1" value="12" aria-label="Minimum Autospeak seconds" data-requires-backend><span>to</span><input type="number" id="autospeak-max-seconds" min="0" max="300" step="1" value="45" aria-label="Maximum Autospeak seconds" data-requires-backend><span>s</span></div>
                     <label class="settings-field-label" for="autospeak-motion-autonomy-select">Autospeak autonomy</label>
                     <select id="autospeak-motion-autonomy-select" data-requires-backend>
