@@ -111,7 +111,7 @@ class WebChatRouteTests(WebTestCase):
     def test_ordinary_duplicate_generated_area_focus_does_not_refresh_active_target(self):
         import strokegpt.web as web
         from strokegpt.motion import MotionTarget
-        from strokegpt.web import motion
+        from strokegpt.web import motion, settings
 
         current = MotionTarget(
             17,
@@ -121,17 +121,50 @@ class WebChatRouteTests(WebTestCase):
             motion_program={"generated_area_focus": True},
         )
 
-        with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
-                mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
-                mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
-            target = web._apply_llm_response_move(
-                {"chat": "Mmm.", "move": {"zone": "middle", "sp": 17, "dp": 56, "rng": 50}},
-                current,
-                user_input="that feels good",
-            )
+        # Force the chat pattern library on so the move reaches the
+        # tight-focus guard / fallback path. With the default (disabled)
+        # setting the move is rerouted before the fallback, so this test
+        # would pass in CI even while the bug -- an affirmation retargeting
+        # an active area-focus stream to milk -- was live.
+        original_pattern_library_chat = settings.motion_pattern_library_enabled_in_chat
+        try:
+            settings.motion_pattern_library_enabled_in_chat = True
+            with mock.patch("strokegpt.web._motion_semantic_target", return_value=current), \
+                    mock.patch.object(motion, "observability_snapshot", return_value={"playback_active": True}), \
+                    mock.patch.object(motion, "apply_generated_target") as apply_generated_target:
+                target = web._apply_llm_response_move(
+                    {"chat": "Mmm.", "move": {"zone": "middle", "sp": 17, "dp": 56, "rng": 50}},
+                    current,
+                    user_input="that feels good",
+                )
+        finally:
+            settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
 
         self.assertIsNone(target)
         apply_generated_target.assert_not_called()
+
+    def test_unrequested_tight_focus_fallback_preserves_active_area_focus(self):
+        # Direct guard on the fallback: an unrequested narrowing while an
+        # area-focus stream is active must preserve that stream's depth,
+        # range, and generated_area_focus program -- not invent a broad
+        # llm+milk target (which dropped the program and looked like a new
+        # pattern to the duplicate detector).
+        from strokegpt.motion import MotionTarget
+        from strokegpt.web import _fallback_target_preserving_current_motion
+
+        current = MotionTarget(
+            17, 50, 86, "llm+middle", motion_program={"generated_area_focus": True}
+        )
+        tight_target = MotionTarget(
+            22, 18, 30, "llm+tip", motion_program={"generated_area_focus": True}
+        )
+
+        preserved = _fallback_target_preserving_current_motion(current, tight_target)
+
+        self.assertEqual(preserved.label, "llm+middle")
+        self.assertEqual(round(preserved.depth), 50)
+        self.assertEqual(round(preserved.stroke_range), 86)
+        self.assertEqual(preserved.motion_program, {"generated_area_focus": True})
 
     def test_explicit_duplicate_llm_motion_does_not_trigger_repair_when_active(self):
         import strokegpt.web as web

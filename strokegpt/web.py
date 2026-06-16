@@ -1819,20 +1819,23 @@ def _fallback_target_preserving_current_motion(current, target):
     if speed <= 0:
         speed = float(getattr(current, "speed", 35) or 35)
 
-    if current_pattern and current_pattern not in LLM_TIGHT_FOCUS_PATTERN_IDS:
-        return MotionTarget(
-            speed,
-            float(getattr(current, "depth", 50) or 50),
-            float(getattr(current, "stroke_range", 70) or 70),
-            getattr(current, "label", "") or f"llm+{current_pattern}",
-            motion_program=getattr(current, "motion_program", None),
-        ).clamped()
-
+    # Preserve the active motion's spatial character -- depth, range, label,
+    # and any generated area-focus program -- rather than inventing a fresh
+    # target. The guard only fires for an unrequested narrowing, so the
+    # correct response is "keep doing the current motion," which also lets
+    # the duplicate detector suppress a no-op re-apply during affirmation /
+    # comfort chat ("that feels good"). The non-named-pattern path used to
+    # hardcode a broad ``llm+milk`` target here, which dropped the
+    # area-focus program and looked like a new pattern to the duplicate
+    # check, so ordinary affirmations mid-stream silently retargeted to
+    # milk.
+    default_label = f"llm+{current_pattern}" if current_pattern else "llm"
     return MotionTarget(
         speed,
-        50,
-        max(70.0, float(getattr(current, "stroke_range", 70) or 70)),
-        "llm+milk",
+        float(getattr(current, "depth", 50) or 50),
+        float(getattr(current, "stroke_range", 70) or 70),
+        getattr(current, "label", "") or default_label,
+        motion_program=getattr(current, "motion_program", None),
     ).clamped()
 
 def _guard_unrequested_tight_llm_target(user_input, current, target):
