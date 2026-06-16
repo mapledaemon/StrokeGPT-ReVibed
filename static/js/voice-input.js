@@ -672,7 +672,16 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
         state.voiceInputAutoGainControl = Boolean(el.voiceInputAutoGainControlCheckbox?.checked);
         state.voiceInputAudioPreprocessing = Boolean(el.voiceInputAudioPreprocessingCheckbox?.checked);
         state.voiceInputSilenceTrim = Boolean(el.voiceInputSilenceTrimCheckbox?.checked);
-        state.voiceInputHandsFreeModeActions = Boolean(el.voiceInputHandsFreeModeActionsCheckbox?.checked);
+        state.voiceInputHandsFreeFreestyle = Boolean(el.voiceInputHandsFreeFreestyleCheckbox?.checked);
+        state.voiceInputHandsFreeEdging = Boolean(el.voiceInputHandsFreeEdgingCheckbox?.checked);
+        state.voiceInputHandsFreeMilking = Boolean(el.voiceInputHandsFreeMilkingCheckbox?.checked);
+        state.voiceInputHandsFreeLegacyAuto = Boolean(el.voiceInputHandsFreeLegacyAutoCheckbox?.checked);
+        state.voiceInputHandsFreeModeActions = Boolean(
+            state.voiceInputHandsFreeFreestyle
+            || state.voiceInputHandsFreeEdging
+            || state.voiceInputHandsFreeMilking
+            || state.voiceInputHandsFreeLegacyAuto,
+        );
         state.voiceInputConditionOnPreviousText = Boolean(el.voiceInputConditionPreviousCheckbox?.checked);
     }
     if (el.voiceInputSensitivitySlider) el.voiceInputSensitivitySlider.value = String(state.voiceInputHandsFreeSensitivity);
@@ -690,7 +699,10 @@ function updateVoiceInputTuningReadouts({fromDom = true} = {}) {
     if (el.voiceInputAutoGainControlCheckbox) el.voiceInputAutoGainControlCheckbox.checked = state.voiceInputAutoGainControl;
     if (el.voiceInputAudioPreprocessingCheckbox) el.voiceInputAudioPreprocessingCheckbox.checked = state.voiceInputAudioPreprocessing;
     if (el.voiceInputSilenceTrimCheckbox) el.voiceInputSilenceTrimCheckbox.checked = state.voiceInputSilenceTrim;
-    if (el.voiceInputHandsFreeModeActionsCheckbox) el.voiceInputHandsFreeModeActionsCheckbox.checked = state.voiceInputHandsFreeModeActions;
+    if (el.voiceInputHandsFreeFreestyleCheckbox) el.voiceInputHandsFreeFreestyleCheckbox.checked = state.voiceInputHandsFreeFreestyle;
+    if (el.voiceInputHandsFreeEdgingCheckbox) el.voiceInputHandsFreeEdgingCheckbox.checked = state.voiceInputHandsFreeEdging;
+    if (el.voiceInputHandsFreeMilkingCheckbox) el.voiceInputHandsFreeMilkingCheckbox.checked = state.voiceInputHandsFreeMilking;
+    if (el.voiceInputHandsFreeLegacyAutoCheckbox) el.voiceInputHandsFreeLegacyAutoCheckbox.checked = state.voiceInputHandsFreeLegacyAuto;
     if (el.voiceInputConditionPreviousCheckbox) el.voiceInputConditionPreviousCheckbox.checked = state.voiceInputConditionOnPreviousText;
     if (el.voiceInputNoiseFloorVal) {
         const floor = voiceInputNoiseFloorRms();
@@ -777,10 +789,36 @@ export function populateVoiceInputSettings(data = {}, {autoLoadHandsFree = true}
     state.voiceInputNoiseFloorRms = status.noise_floor_rms ?? data.voice_input_noise_floor_rms ?? DEFAULT_NOISE_FLOOR_RMS;
     state.voiceInputAudioPreprocessing = Boolean(status.audio_preprocessing ?? data.voice_input_audio_preprocessing ?? true);
     state.voiceInputSilenceTrim = Boolean(status.silence_trim ?? data.voice_input_silence_trim ?? true);
-    state.voiceInputHandsFreeModeActions = Boolean(
+    const handsFreeModeActionsLegacy = Boolean(
         status.hands_free_mode_actions
         ?? data.voice_input_hands_free_mode_actions
         ?? false,
+    );
+    state.voiceInputHandsFreeFreestyle = Boolean(
+        status.hands_free_freestyle
+        ?? data.voice_input_hands_free_freestyle
+        ?? handsFreeModeActionsLegacy,
+    );
+    state.voiceInputHandsFreeEdging = Boolean(
+        status.hands_free_edging
+        ?? data.voice_input_hands_free_edging
+        ?? handsFreeModeActionsLegacy,
+    );
+    state.voiceInputHandsFreeMilking = Boolean(
+        status.hands_free_milking
+        ?? data.voice_input_hands_free_milking
+        ?? handsFreeModeActionsLegacy,
+    );
+    state.voiceInputHandsFreeLegacyAuto = Boolean(
+        status.hands_free_legacy_auto
+        ?? data.voice_input_hands_free_legacy_auto
+        ?? handsFreeModeActionsLegacy,
+    );
+    state.voiceInputHandsFreeModeActions = Boolean(
+        state.voiceInputHandsFreeFreestyle
+        || state.voiceInputHandsFreeEdging
+        || state.voiceInputHandsFreeMilking
+        || state.voiceInputHandsFreeLegacyAuto,
     );
     state.voiceInputBeamSize = status.beam_size ?? data.voice_input_beam_size ?? DEFAULT_VOICE_INPUT_BEAM_SIZE;
     state.voiceInputConditionOnPreviousText = Boolean(
@@ -851,7 +889,10 @@ async function saveVoiceInputSettings({autoLoadHandsFree = true} = {}) {
         noise_floor_rms: voiceInputNoiseFloorRms(),
         audio_preprocessing: state.voiceInputAudioPreprocessing,
         silence_trim: state.voiceInputSilenceTrim,
-        hands_free_mode_actions: state.voiceInputHandsFreeModeActions,
+        hands_free_freestyle: state.voiceInputHandsFreeFreestyle,
+        hands_free_edging: state.voiceInputHandsFreeEdging,
+        hands_free_milking: state.voiceInputHandsFreeMilking,
+        hands_free_legacy_auto: state.voiceInputHandsFreeLegacyAuto,
         beam_size: voiceInputBeamSize(),
         condition_on_previous_text: state.voiceInputConditionOnPreviousText,
         vad_threshold: voiceInputVadThreshold(),
@@ -1569,7 +1610,10 @@ export function initVoiceInputControls({sendUserMessage}) {
         el.voiceInputAutoGainControlCheckbox,
         el.voiceInputAudioPreprocessingCheckbox,
         el.voiceInputSilenceTrimCheckbox,
-        el.voiceInputHandsFreeModeActionsCheckbox,
+        el.voiceInputHandsFreeFreestyleCheckbox,
+        el.voiceInputHandsFreeEdgingCheckbox,
+        el.voiceInputHandsFreeMilkingCheckbox,
+        el.voiceInputHandsFreeLegacyAutoCheckbox,
         el.voiceInputConditionPreviousCheckbox,
     ].forEach(input => input?.addEventListener('change', () => updateVoiceInputTuningReadouts()));
     el.calibrateVoiceInputNoiseBtn?.addEventListener('click', calibrateVoiceInputNoise);

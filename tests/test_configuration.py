@@ -289,6 +289,57 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(saved["autospeak_max_seconds"], 12.0)
         self.assertEqual(saved["autospeak_cadence_default_version"], AUTOSPEAK_CADENCE_DEFAULT_VERSION)
 
+    def test_legacy_chat_mode_action_toggle_migrates_to_per_mode_flags(self):
+        fake_path = FakePath(json.dumps({
+            "allow_llm_mode_actions_in_chat": True,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+        settings.save()
+
+        saved = json.loads(fake_path.written)
+        # Legacy aggregate True fans out to every per-mode chat permission.
+        self.assertTrue(settings.allow_llm_freestyle_in_chat)
+        self.assertTrue(settings.allow_llm_edging_in_chat)
+        self.assertTrue(settings.allow_llm_milking_in_chat)
+        self.assertTrue(settings.allow_llm_legacy_auto_in_chat)
+        self.assertTrue(settings.allow_llm_mode_actions_in_chat)
+        self.assertTrue(saved["allow_llm_freestyle_in_chat"])
+        self.assertTrue(saved["allow_llm_legacy_auto_in_chat"])
+
+    def test_per_mode_chat_flags_override_legacy_toggle(self):
+        fake_path = FakePath(json.dumps({
+            "allow_llm_mode_actions_in_chat": True,
+            "allow_llm_milking_in_chat": False,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        # Explicit per-mode key wins over the legacy aggregate default.
+        self.assertTrue(settings.allow_llm_freestyle_in_chat)
+        self.assertTrue(settings.allow_llm_edging_in_chat)
+        self.assertFalse(settings.allow_llm_milking_in_chat)
+        self.assertTrue(settings.allow_llm_legacy_auto_in_chat)
+        # Aggregate stays True because other modes remain enabled.
+        self.assertTrue(settings.allow_llm_mode_actions_in_chat)
+
+    def test_legacy_hands_free_mode_action_toggle_migrates_to_per_mode_flags(self):
+        fake_path = FakePath(json.dumps({
+            "voice_input_hands_free_mode_actions": True,
+            "voice_input_hands_free_edging": False,
+        }))
+        settings = SettingsManager("settings.json")
+        settings.file_path = fake_path
+        settings.load()
+
+        self.assertTrue(settings.voice_input_hands_free_freestyle)
+        self.assertFalse(settings.voice_input_hands_free_edging)
+        self.assertTrue(settings.voice_input_hands_free_milking)
+        self.assertTrue(settings.voice_input_hands_free_legacy_auto)
+        self.assertTrue(settings.voice_input_hands_free_mode_actions)
+
     def test_legacy_autospeak_default_range_uses_natural_default(self):
         fake_path = FakePath(json.dumps({
             "autospeak_enabled": True,

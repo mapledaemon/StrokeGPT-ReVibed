@@ -7,6 +7,26 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-16 - PR #326 - Per-Mode Mode-Action Permissions
+-------------------------------------------------------
+
+Branch: claude-per-mode-mode-actions
+
+- Split the single "Allow typed chat to request mode actions" toggle and
+  the hands-free voice mode-action toggle into four per-mode checkboxes
+  each (Freestyle, Edge, Milk, Legacy Auto) for both sources, so the model
+  can be allowed to request some modes but not others.
+- The prompt schema and `_apply_llm_mode_action` honor a per-request
+  permission map (`context["mode_action_allowed_kinds"]`): only permitted
+  start actions are offered, and a disallowed start is rejected instead of
+  run. The `close_signal` milk fallback is gated on the milk permission;
+  stop/continue/close signals stay available whenever any mode is enabled.
+- The legacy `allow_llm_mode_actions_in_chat` and
+  `voice_input_hands_free_mode_actions` keys remain as computed aggregate
+  properties (true if any per-mode flag is on) for back-compat. Saved
+  settings or posted payloads using the old combined key migrate to "all
+  four modes on" for that source; explicit per-mode keys override.
+
 2026-06-13 - PR #325 - Affirmation Chat Motion Preservation
 ------------------------------------------------------------
 

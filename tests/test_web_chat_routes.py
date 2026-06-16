@@ -2173,6 +2173,86 @@ class WebChatRouteTests(WebTestCase):
             app_state.messages_for_ui.clear()
             app_state.chat_history.clear()
 
+    def test_typed_chat_mode_action_respects_per_mode_permissions(self):
+        import strokegpt.web as web
+        from strokegpt.web import app_state, audio, handy, llm, settings
+
+        original_key = handy.handy_key
+        original_settings_key = settings.handy_key
+        original_perms = (
+            settings.allow_llm_freestyle_in_chat,
+            settings.allow_llm_edging_in_chat,
+            settings.allow_llm_milking_in_chat,
+            settings.allow_llm_legacy_auto_in_chat,
+        )
+        captured_contexts = []
+        app_state.messages_for_ui.clear()
+        app_state.chat_history.clear()
+        try:
+            handy.handy_key = "test-key"
+            settings.handy_key = "test-key"
+            # Only milking is permitted from typed chat.
+            settings.allow_llm_freestyle_in_chat = False
+            settings.allow_llm_edging_in_chat = False
+            settings.allow_llm_milking_in_chat = True
+            settings.allow_llm_legacy_auto_in_chat = False
+
+            requested_action = {"value": "start_freestyle"}
+
+            def fake_response(_history, context):
+                captured_contexts.append(dict(context))
+                return {
+                    "chat": "Okay.",
+                    "move": None,
+                    "mode_action": requested_action["value"],
+                    "new_mood": None,
+                }
+
+            with mock.patch.object(llm, "get_chat_response", side_effect=fake_response), \
+                    mock.patch.object(web, "start_background_mode") as start_background_mode, \
+                    mock.patch.object(audio, "enqueue_text_for_audio", return_value=True):
+                # A disallowed mode (freestyle) is rejected without starting anything.
+                blocked = self.client.post("/send_message", json={
+                    "message": "surprise me",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "chat",
+                }).get_json()
+                self.assertEqual(blocked["mode_action"], "start_freestyle")
+                self.assertFalse(blocked["mode_action_applied"])
+                start_background_mode.assert_not_called()
+                self.assertEqual(
+                    captured_contexts[-1]["mode_action_allowed_kinds"],
+                    {"freestyle": False, "edging": False, "milking": True, "legacy_auto": False},
+                )
+
+                # The permitted mode (milking) still starts.
+                requested_action["value"] = "start_milking"
+                allowed = self.client.post("/send_message", json={
+                    "message": "tell me a secret",
+                    "key": "test-key",
+                    "persona_desc": settings.persona_desc,
+                    "source": "chat",
+                }).get_json()
+                self.assertEqual(allowed["mode_action"], "start_milking")
+                self.assertTrue(allowed["mode_action_applied"])
+                start_background_mode.assert_called_once_with(
+                    web.milking_mode_logic,
+                    "You're so close... I'm taking over completely now.",
+                    mode_name="milking",
+                )
+        finally:
+            handy.handy_key = original_key
+            settings.handy_key = original_settings_key
+            (
+                settings.allow_llm_freestyle_in_chat,
+                settings.allow_llm_edging_in_chat,
+                settings.allow_llm_milking_in_chat,
+                settings.allow_llm_legacy_auto_in_chat,
+            ) = original_perms
+            app_state.messages_for_ui.clear()
+            app_state.chat_history.clear()
+
     def test_handsfree_without_mode_action_still_relays_feedback_to_active_mode(self):
         from strokegpt.web import app_state, audio, handy, llm, settings
 

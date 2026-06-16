@@ -415,12 +415,32 @@ Return one JSON object only: {{"chat":"<sarcastic reply>","move":{{"sp":<0-100|n
             or context.get("handsfree_mode_actions_enabled")
         )
         mode_action_source = str(context.get("mode_action_request_source") or "this request").strip() or "this request"
+        mode_action_allowed_kinds = context.get("mode_action_allowed_kinds")
+        if not isinstance(mode_action_allowed_kinds, dict) or not mode_action_allowed_kinds:
+            # No per-mode map (back-compat / direct prompt builds): offer every start action.
+            mode_action_allowed_kinds = {
+                "freestyle": True,
+                "edging": True,
+                "milking": True,
+                "legacy_auto": True,
+            }
+        mode_action_start_options = []
+        if mode_action_allowed_kinds.get("freestyle"):
+            mode_action_start_options.append("start_freestyle")
+        if mode_action_allowed_kinds.get("edging"):
+            mode_action_start_options.append("start_edging")
+        if mode_action_allowed_kinds.get("milking"):
+            mode_action_start_options.append("start_milking")
+        if mode_action_allowed_kinds.get("legacy_auto"):
+            mode_action_start_options.append("start_legacy_auto")
         mode_action_schema = ""
         if mode_actions_enabled:
-            mode_action_schema = (
-                ',"mode_action":"<null|continue_mode|close_signal|start_freestyle|'
-                'start_edging|start_milking|start_legacy_auto|stop_mode>"'
+            mode_action_options = (
+                ["null", "continue_mode", "close_signal"]
+                + mode_action_start_options
+                + ["stop_mode"]
             )
+            mode_action_schema = ',"mode_action":"<' + "|".join(mode_action_options) + '>"'
         autospeak_schema = ""
         if context.get("autospeak_enabled"):
             autospeak_min, autospeak_max = _context_autospeak_range(context)
@@ -517,11 +537,29 @@ Use `move:null` for purely conversational replies. Valid moods: {mood_options}.
 - "short strokes": low `rng` 15-30 with sensible `sp` and `dp`.
 """
         if mode_actions_enabled:
+            mode_action_start_lines = []
+            if mode_action_allowed_kinds.get("freestyle"):
+                mode_action_start_lines.append(
+                    "- Use `start_freestyle` for adaptive continuous patterning."
+                )
+            if mode_action_allowed_kinds.get("edging"):
+                mode_action_start_lines.append(
+                    "- Use `start_edging` for edge play."
+                )
+            if mode_action_allowed_kinds.get("milking"):
+                mode_action_start_lines.append(
+                    "- Use `start_milking` for finish/I'm close requests when no compatible active mode can receive a close signal."
+                )
+            if mode_action_allowed_kinds.get("legacy_auto"):
+                mode_action_start_lines.append(
+                    "- Use `start_legacy_auto` only when I explicitly ask for the legacy scripted Auto takeover loop."
+                )
+            mode_action_start_block = ("\n" + "\n".join(mode_action_start_lines)) if mode_action_start_lines else ""
             prompt_text += f"""
 ### MODE ACTIONS
 - This request came from {mode_action_source} with mode actions enabled. `move` still controls ordinary motion. `mode_action` is only for visible mode controls.
-- Active mode: `{context.get('active_mode') or 'none'}`. Use `continue_mode` to keep the current mode going after ordinary feedback, and use `close_signal` for "I'm close" style signals while Edge, Milk, or Freestyle is active.
-- Use `start_freestyle` for adaptive continuous patterning, `start_edging` for edge play, `start_milking` for finish/I'm close requests when no compatible active mode can receive a close signal, and `start_legacy_auto` only when I explicitly ask for the legacy scripted Auto takeover loop.
+- Active mode: `{context.get('active_mode') or 'none'}`. Use `continue_mode` to keep the current mode going after ordinary feedback, and use `close_signal` for "I'm close" style signals while an Edge, Milk, or Freestyle mode is active.{mode_action_start_block}
+- Only the mode actions listed in the schema are permitted for this request; do not request a mode that is not listed.
 - Use `stop_mode` only for explicit stop/manual-control requests. Otherwise leave `mode_action` null.
 """
         if not context.get("allow_llm_edge_in_chat", True):

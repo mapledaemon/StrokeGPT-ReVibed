@@ -60,19 +60,25 @@ detected, fresh or reset settings select **Local faster-whisper**.
 Non-NVIDIA users retain all voice-input functionality through
 faster-whisper.
 
-## Hands-free mode-action toggle
+## Hands-free mode-action permissions
 
-The Voice tab's **Advanced Flow** section has an off-by-default hands-free
-mode-action toggle. When Voice mode is Hands-free and transcripts are sent
-through that path, this lets the local model request guarded mode actions
-such as Freestyle, Edge, Milk, Legacy Auto, Stop, or an I'm Close signal.
-The backend still routes those requests through the same preset-mode guard
-rails as the buttons. Legacy Auto is the old scripted takeover loop; use
-Freestyle for adaptive pattern selection and continuation.
+The Voice tab's **Advanced Flow** section has off-by-default hands-free
+mode-action checkboxes — one each for **Freestyle**, **Edge**, **Milk**,
+and **Legacy Auto**. When Voice mode is Hands-free and transcripts are sent
+through that path, the local model may request only the modes whose boxes
+are checked; the prompt schema lists just those starts and the backend
+rejects any other start. Stop and "I'm close" (close) signals stay
+available whenever at least one mode is enabled. The backend still routes
+every request through the same preset-mode guard rails as the buttons.
+Legacy Auto is the old scripted takeover loop; use Freestyle for adaptive
+pattern selection and continuation.
 
-The Motion tab has a separate off-by-default **Allow typed chat to request
-mode actions** toggle. It gives typed chat the same guarded mode-action
-path without changing reviewed voice transcript sends.
+The Motion tab has a separate group of off-by-default **Allow typed chat to
+request mode actions** checkboxes with the same four per-mode toggles. They
+give typed chat the same guarded, per-mode mode-action path without
+changing reviewed voice transcript sends. Settings saved from an older
+build that used the single combined toggle migrate automatically: a
+previously enabled toggle turns on all four modes for that source.
 
 ## Troubleshooting
 

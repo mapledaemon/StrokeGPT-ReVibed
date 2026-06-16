@@ -274,7 +274,10 @@ describe('motion/audio save feedback', () => {
         getStubElement('milking-max-time').value = '5';
         getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
         getStubElement('allow-llm-edge-chat-checkbox').checked = true;
-        getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
+        getStubElement('allow-llm-freestyle-chat-checkbox').checked = true;
+        getStubElement('allow-llm-edging-chat-checkbox').checked = true;
+        getStubElement('allow-llm-milking-chat-checkbox').checked = true;
+        getStubElement('allow-llm-legacy-auto-chat-checkbox').checked = true;
         getStubElement('motion-pattern-library-freestyle-checkbox').checked = true;
         getStubElement('motion-pattern-library-chat-checkbox').checked = true;
 
@@ -605,6 +608,10 @@ describe('motion/audio save feedback', () => {
                 allow_llm_edge_in_freestyle: true,
                 allow_llm_edge_in_chat: false,
                 allow_llm_mode_actions_in_chat: true,
+                allow_llm_freestyle_in_chat: true,
+                allow_llm_edging_in_chat: true,
+                allow_llm_milking_in_chat: true,
+                allow_llm_legacy_auto_in_chat: true,
                 autospeak_enabled: true,
                 autospeak_min_seconds: 2,
                 autospeak_max_seconds: 12,
@@ -630,7 +637,10 @@ describe('motion/audio save feedback', () => {
         });
         getStubElement('allow-llm-edge-freestyle-checkbox').checked = true;
         getStubElement('allow-llm-edge-chat-checkbox').checked = false;
-        getStubElement('allow-llm-mode-actions-chat-checkbox').checked = true;
+        getStubElement('allow-llm-freestyle-chat-checkbox').checked = true;
+        getStubElement('allow-llm-edging-chat-checkbox').checked = true;
+        getStubElement('allow-llm-milking-chat-checkbox').checked = true;
+        getStubElement('allow-llm-legacy-auto-chat-checkbox').checked = true;
         getStubElement('autospeak-min-seconds').value = '12';
         getStubElement('autospeak-max-seconds').value = '2';
         getStubElement('autospeak-motion-autonomy-select').value = 'full';
@@ -643,7 +653,10 @@ describe('motion/audio save feedback', () => {
             {
                 allow_llm_edge_in_freestyle: true,
                 allow_llm_edge_in_chat: false,
-                allow_llm_mode_actions_in_chat: true,
+                allow_llm_freestyle_in_chat: true,
+                allow_llm_edging_in_chat: true,
+                allow_llm_milking_in_chat: true,
+                allow_llm_legacy_auto_in_chat: true,
                 autospeak_enabled: true,
                 autospeak_min_seconds: 2,
                 autospeak_max_seconds: 12,
