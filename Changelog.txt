@@ -7,6 +7,21 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-16 - Unreleased - Generated Focus Motion Routing
+--------------------------------------------------------
+
+- Reviewed external smoothness/variability findings against the current code
+  and kept idle generated tip/shaft/base focus starts on the smoother HSP
+  area-focus stream while preserving the localized live-stroke bypass for
+  active focus retargets that previously hit HSP morph stop/go behavior.
+- Preserved wider local focus windows when the user/model explicitly requests
+  `long`, `half`, `full`, or a numeric range, instead of compressing every
+  endpoint focus request to the same small stroke window.
+- Added a capped live-stroke spatial ramp for active generated focus handoffs
+  and set HAMP velocity before the first slide-window command when handing off
+  from HSP, reducing sudden fast corrections during LLM focus changes.
+- Added a top-level GNU GPLv3 `LICENSE` file and README license section.
+
 2026-06-16 - PR #326 - Per-Mode Mode-Action Permissions
 -------------------------------------------------------
 

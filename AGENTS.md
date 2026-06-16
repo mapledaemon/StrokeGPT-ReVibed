@@ -235,11 +235,12 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
   position control until the next command or stop. Explicit LLM anchor-loop /
   bounce programs should stay on the live-stroke bypass because real-device
   HSP anchor-loop/morph replacements have repeatedly felt micro-stepped or
-  stop-like. Plain generated targets that do not resolve to a fixed pattern or
-  explicit anchor program may start on the HSP area-focus stroke path when HSP
-  streaming is available, but active generated regional focus retargets should
-  use the live-stroke bypass rather than flushed HSP morph replacements. If HSP
-  is unavailable, HAMP remains the selectable legacy backend.
+  stop-like. Generated regional focus starts may use HSP area-focus streaming
+  when idle, but active generated regional focus retargets should use the
+  live-stroke bypass rather than flushed HSP morph replacements. Plain generated
+  targets that do not resolve to a fixed pattern or explicit anchor program may
+  still start on the HSP area-focus stroke path when HSP streaming is available.
+  If HSP is unavailable, HAMP remains the selectable legacy backend.
   Keep `hamp` selectable only as a legacy fallback unless real-device testing
   shows the continuous backend is worse for a specific recovery path.
   Motion Direction is a physical orientation setting, not a pattern phase
@@ -354,7 +355,9 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - Area-only focus commands should not inherit a previous high-speed state. When
   reducing speed and changing Handy slide bounds, `HandyController.move()` must
   send the lower velocity before the new bounds so the device does not jump to a
-  new region at the old speed.
+  new region at the old speed. HSP-to-HAMP live-stroke handoffs should also set
+  the capped transition velocity before the first HAMP slide-window command,
+  then restore the requested speed only after the localized window is in place.
 - When Auto, Edge, or Milk mode is active, motion feedback from chat should be
   queued into the active mode planner and wake the mode loop. Do not apply it as
   a one-off command that the next scripted mode step can immediately overwrite.
@@ -450,7 +453,8 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - CI covers the lightweight Python unit tests, Python compile checks, and the
   Node-driven behavioral frontend tests under `tests/js/`, but not the full
   local Chatterbox stack.
-- The original upstream repository did not include a local license file when this fork was prepared.
+- The fork now includes GNU GPLv3 license text in `LICENSE`; keep the
+  original StrokeGPT attribution in the README.
 - Runtime state is intentionally single-operator: one trusted active browser
   session, one Flask process, one Handy controller, and one shared settings
   file. Multiple tabs share update queues and device state; keep the

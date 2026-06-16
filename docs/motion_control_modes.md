@@ -32,11 +32,19 @@ remaining HSP area-focus playback:
 
 - Explicit LLM `anchor_loop` / bounce programs use the live-stroke bypass,
   even when HSP streaming is available.
-- Active generated regional focus retargets also use the live-stroke bypass,
+- Idle generated regional focus targets may use HSP area-focus streaming,
+  because that path is smoother than a burst of HAMP retarget commands when no
+  replacement is involved.
+- Active generated regional focus retargets use the live-stroke bypass,
   avoiding flushed HSP morph replacements during normal chat changes.
   They must still pass through the area-focus localization step first, so
   `tip`, `shaft`, and `base` requests become bounded local stroke windows
-  instead of raw broad LLM targets.
+  instead of raw broad LLM targets. Explicit long/half/full or numeric range
+  focus requests may keep a wider local window than a bare focus cue.
+- Live-stroke focus handoffs ramp spatial slide-window changes at a capped
+  transition speed, then restore the requested speed after the new window is
+  already set. This avoids replacing one HSP morph stop with a sudden high-speed
+  HAMP correction into a new focus area.
 - Active *plain* chat retargets (no zone program, no pattern label — e.g.
   "faster", "slower", numeric speed/depth adjustments) also take the
   live-stroke bypass (`generated_plain_retarget_hsp_morph_bypass`). Before
@@ -46,7 +54,6 @@ remaining HSP area-focus playback:
   `chat command`, `chat motion keepalive`); Freestyle and the scripted modes
   intentionally keep swapping patterns through HSP area-focus replacement
   streaming.
-- Idle generated area-focus starts may still use HSP area-focus streaming.
 - Remaining HSP area-focus intent morphs choose a handoff time and replacement
   phase that avoid opposing-direction and near-hold segments during the first
   morph window.
@@ -55,10 +62,12 @@ When debugging this path, check trace fields such as
 `continuous_schema`, `active_continuous_schema`, `continuous_plan_kind`, `hsp_replacement_kind`,
 `morph_phase_frozen`, `hsp_area_focus_handoff_delay_ms`,
 `hsp_area_focus_handoff_reason`, `hsp_segment_depth_per_second`, and the Handy
-command result fields. For generated chat focus changes while motion is active,
-seeing `continuous_schema=hamp_live_anchor` is expected; seeing a flushed HSP
-replacement labeled `area_focus continuous morph` is suspicious unless the
-caller intentionally requested the internal HSP area-focus path.
+command result fields. For idle generated chat focus starts, seeing
+`continuous_plan_kind=area_focus` with an HSP `play` batch is expected. For
+active generated chat focus changes, seeing `continuous_schema=hamp_live_anchor`
+is expected; seeing a flushed HSP replacement labeled `area_focus continuous
+morph` is suspicious unless the caller intentionally requested the internal HSP
+area-focus path.
 
 Because `hamp_live_anchor` is not an HSP stream, stale or starving HSP state
 from a previous stream should not trigger chat keepalive recovery while the
