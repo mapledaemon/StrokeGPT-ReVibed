@@ -7,6 +7,18 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-13 - PR #325 - Affirmation Chat Motion Preservation
+------------------------------------------------------------
+
+Branch: claude-fix-affirmation-retarget
+
+- Fixed non-action affirmation chat ("that feels good") silently
+  retargeting an active generated area-focus stream to a broad milk
+  motion when the chat pattern library was enabled. The unrequested-
+  narrowing fallback now preserves the active motion's depth, range,
+  label, and area-focus program instead of inventing a milk target, so
+  the duplicate detector suppresses the no-op re-apply.
+
 2026-06-13 - PR #324 - Routine Pattern Cycle Floor
 ---------------------------------------------------
 
