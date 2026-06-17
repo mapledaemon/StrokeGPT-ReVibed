@@ -7,19 +7,25 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-2026-06-17 - PR #330 - Settings Save Confirmation For Calibration Sliders
-------------------------------------------------------------------------
+2026-06-17 - PR #330 - Restore Settings Save Buttons
+----------------------------------------------------
 
 Branch: claude-fix-settings-save-feedback
 
-- Fixed the Speed Limits and Stroke Range save buttons appearing to do
-  nothing: their save confirmation only wrote to the global chat status
-  bar, which the open settings modal covers. Added dedicated in-modal
-  status lines (`#motion-speed-limits-status`, `#motion-depth-range-status`)
-  and routed save success/failure to them, matching the Backend/Style/
-  Direction sections. The save path itself was already correct, and no
-  per-section save button was removed in the six-tab refactor (only the
-  two aggregate "Save All" buttons were intentionally dropped).
+- Fixed every per-section Save button in the settings popup being
+  invisible. An orphaned CSS rule (`#settings-dialog #save-* { display:
+  none }`) hid all of them; it existed to suppress per-section saves
+  behind the old aggregate "Save Motion/Device Settings" buttons. The
+  six-tab refactor (PR #328) removed those aggregate buttons but left the
+  hide rule, so Speed Limits, Stroke Range, Backend, Style, Direction,
+  Timings, LLM Permissions, Transport, Connect, and Firmware were left
+  with no working save control. Removing the rule restores them. Verified
+  in a live browser (the buttons render at full size again).
+- Added in-modal status lines for Speed Limits and Stroke Range
+  (`#motion-speed-limits-status`, `#motion-depth-range-status`) so save
+  confirmation shows next to the control instead of only on the global
+  chat status bar that the open modal covers.
+- Added a regression guard asserting the orphaned hide rule stays gone.
 - Restored the PR #329 changelog entry below, which was dropped when a
   master-into-branch merge resolved the Changelog.txt conflict in favor
   of master before the PR merged.
