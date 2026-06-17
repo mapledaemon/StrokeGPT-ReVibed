@@ -7,6 +7,46 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-17 - PR #330 - Restore Settings Save Buttons
+----------------------------------------------------
+
+Branch: claude-fix-settings-save-feedback
+
+- Fixed every per-section Save button in the settings popup being
+  invisible. An orphaned CSS rule (`#settings-dialog #save-* { display:
+  none }`) hid all of them; it existed to suppress per-section saves
+  behind the old aggregate "Save Motion/Device Settings" buttons. The
+  six-tab refactor (PR #328) removed those aggregate buttons but left the
+  hide rule, so Speed Limits, Stroke Range, Backend, Style, Direction,
+  Timings, LLM Permissions, Transport, Connect, and Firmware were left
+  with no working save control. Removing the rule restores them. Verified
+  in a live browser (the buttons render at full size again).
+- Added in-modal status lines for Speed Limits and Stroke Range
+  (`#motion-speed-limits-status`, `#motion-depth-range-status`) so save
+  confirmation shows next to the control instead of only on the global
+  chat status bar that the open modal covers.
+- Added a regression guard asserting the orphaned hide rule stays gone.
+- Restored the PR #329 changelog entry below, which was dropped when a
+  master-into-branch merge resolved the Changelog.txt conflict in favor
+  of master before the PR merged.
+
+2026-06-17 - PR #329 - Pattern Shape Cleanup And Studio Graphing
+---------------------------------------------------------------
+
+Branch: claude-pattern-cleanup-graphing
+
+- Re-authored the jagged built-in motion patterns to remove mid-cycle
+  direction reversals that read as jitter. Patterns previously bounced
+  through mid-values (e.g. milk was 0->100->40->100->0, producing a
+  rapid back-and-forth at the deep end); they now use clean 0<->100
+  strokes with character coming from timing asymmetry. All pattern IDs,
+  durations, endpoints, style fields, and test contracts are preserved.
+- Reworked the Motion Pattern Studio preview and crop timeline to sample
+  the same Fritsch-Carlson monotone cubic the backend uses, instead of
+  an overshooting Catmull-Rom that hid shudder. Added time labels to the
+  preview, density-adaptive authored-point thinning, and a monotone
+  curve on the crop timeline colored by segment intensity.
+
 2026-06-17 - PR #328 - Settings UI Refactor And Prompt Library
 ---------------------------------------------------------------
 

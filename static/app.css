@@ -441,16 +441,6 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-subsection h4 { margin: 0; color: var(--cyan); font-size: 0.95rem; }
 .settings-help { color: var(--comment); font-size: 0.85rem; line-height: 1.35; overflow-wrap: anywhere; }
 .settings-field-label, .voice-input-choice-group legend, .voice-input-tuning-group legend { color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
-#settings-dialog #save-motion-backend-btn,
-#settings-dialog #save-motion-style-btn,
-#settings-dialog #save-motion-reverse-direction-btn,
-#settings-dialog #save-motion-speed-limits,
-#settings-dialog #save-timings-btn,
-#settings-dialog #save-llm-edge-permissions-btn,
-#settings-dialog #save-handy-transport-btn,
-#settings-dialog #save-handy-key-btn,
-#settings-dialog #save-handy-device-config-btn,
-#settings-dialog #save-motion-depth-range { display: none; }
 .prompt-mode-panel { display: grid; gap: 7px; min-width: 0; }
 .prompt-anatomy-controls { display: grid; grid-template-columns: minmax(8rem, 0.7fr) minmax(12rem, 1fr) auto; gap: 8px; align-items: stretch; min-width: 0; }
 .prompt-anatomy-controls select, .prompt-anatomy-controls input { min-width: 0; }
