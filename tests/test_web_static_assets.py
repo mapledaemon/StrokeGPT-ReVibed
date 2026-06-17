@@ -629,6 +629,12 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".chat-jump-button { position: absolute; left: 50%; bottom: var(--space-3);", css)
             self.assertIn(".chat-jump-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; transform: translateX(-50%) translateY(-1px); }", css)
             self.assertIn(".chat-jump-button[hidden] { display: none; }", css)
+            # Regression: the per-section save buttons must stay visible. An orphaned
+            # rule once hid every `#settings-dialog #save-*` button (it existed to hide
+            # them behind the old aggregate "Save All" buttons, which were removed),
+            # leaving the settings tabs with no working save controls.
+            self.assertNotIn("#settings-dialog #save-motion-speed-limits", css)
+            self.assertNotIn("#settings-dialog #save-handy-device-config-btn", css)
             self.assertIn(".chat-message-container { display: grid; grid-template-columns: var(--chat-message-side-gutter) minmax(0, 1fr) var(--chat-message-side-gutter);", css)
             self.assertIn("align-items: flex-end; column-gap: var(--space-2);", css)
             self.assertIn("width: 100%; max-width: 100%; margin: 0;", css)
