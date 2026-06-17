@@ -122,7 +122,47 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["llm_prompt_mode"], "custom:my-custom")
             self.assertTrue(any(option["id"] == "custom:my-custom" for option in data["llm_prompt_mode_options"]))
             self.assertEqual(llm.system_prompt({}), "CUSTOM CHAT")
+            # The save response carries the editable stored prompts for the library editor.
+            saved_set = next(item for item in data["prompt_sets"] if item["mode"] == "custom:my-custom")
+            self.assertTrue(saved_set["custom"])
+            self.assertEqual(saved_set["prompts"]["chat"], "CUSTOM CHAT")
+            self.assertEqual(saved_set["prompts"]["repair"], "CUSTOM REPAIR")
             save.assert_called_once()
+        finally:
+            settings.llm_prompt_mode = original_mode
+            settings.llm_custom_prompt_sets = original_prompt_sets
+            llm.set_custom_prompt_set(settings.selected_llm_custom_prompt_set())
+
+    def test_custom_llm_prompt_set_can_be_deleted(self):
+        from strokegpt.web import llm, settings
+
+        original_mode = settings.llm_prompt_mode
+        original_prompt_sets = list(getattr(settings, "llm_custom_prompt_sets", []))
+        try:
+            with mock.patch.object(settings, "save"):
+                settings.set_llm_custom_prompt_set(
+                    "Disposable",
+                    {"chat": "TEMP CHAT", "repair": "", "name_this_move": "", "profile_consolidation": ""},
+                )
+            # Saving makes it active; deleting the active set falls back to the default.
+            self.assertEqual(settings.llm_prompt_mode, "custom:disposable")
+
+            with mock.patch.object(settings, "save") as save:
+                response = self.client.post("/delete_llm_prompt_set", json={
+                    "prompt_set_id": "disposable",
+                })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["llm_prompt_mode"], "revibed")
+            self.assertFalse(any(option["id"] == "custom:disposable" for option in data["llm_prompt_mode_options"]))
+            self.assertEqual(data["prompt_sets"], [])
+            save.assert_called_once()
+
+            # Deleting a non-existent set is a 400, not a crash.
+            missing = self.client.post("/delete_llm_prompt_set", json={"prompt_set_id": "nope"})
+            self.assertEqual(missing.status_code, 400)
         finally:
             settings.llm_prompt_mode = original_mode
             settings.llm_custom_prompt_sets = original_prompt_sets
@@ -850,6 +890,11 @@ class WebSettingsRouteTests(WebTestCase):
             self.assertEqual(data["repair"], "ROUTE CUSTOM REPAIR")
             self.assertIn("Route name 60 40 Teasing", data["name_this_move"])
             self.assertIn("Route profile", data["profile_consolidation"])
+            # The Prompt Library editor needs each custom set's stored prompt text.
+            route_set = next(item for item in data["prompt_sets"] if item["mode"] == "custom:route-custom")
+            self.assertTrue(route_set["custom"])
+            self.assertEqual(route_set["prompts"]["chat"], "ROUTE CUSTOM CHAT")
+            self.assertEqual(route_set["prompts"]["repair"], "ROUTE CUSTOM REPAIR")
         finally:
             settings.llm_prompt_mode = original_mode
             settings.llm_custom_prompt_sets = original_prompt_sets
