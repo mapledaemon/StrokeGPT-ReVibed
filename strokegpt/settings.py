@@ -963,6 +963,42 @@ class SettingsManager:
         self.llm_prompt_mode = f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}"
         return saved_prompt_set, ""
 
+    def delete_llm_custom_prompt_set(self, prompt_id):
+        prompt_id = self._normalize_llm_custom_prompt_id(prompt_id)
+        if not prompt_id:
+            return False, "Prompt set id is required."
+        existing = list(getattr(self, "llm_custom_prompt_sets", []) or [])
+        remaining = [item for item in existing if item.get("id") != prompt_id]
+        if len(remaining) == len(existing):
+            return False, "Prompt set not found."
+        # Resolve the active mode BEFORE removing the set, since normalization
+        # would otherwise no longer recognize the deleted custom id.
+        was_active = self._normalize_llm_prompt_mode(
+            getattr(self, "llm_prompt_mode", DEFAULT_LLM_PROMPT_MODE)
+        ) == f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}"
+        self.llm_custom_prompt_sets = self._normalize_llm_custom_prompt_sets(remaining)
+        if was_active:
+            # The deleted set was active; fall back to the default style.
+            self.llm_prompt_mode = DEFAULT_LLM_PROMPT_MODE
+        return True, ""
+
+    def llm_custom_prompt_set_contents(self):
+        """Full stored prompt text for each custom set, for the Prompt Library editor."""
+        contents = []
+        for prompt_set in getattr(self, "llm_custom_prompt_sets", []) or []:
+            prompt_id = prompt_set.get("id")
+            if not prompt_id:
+                continue
+            prompts = prompt_set.get("prompts") if isinstance(prompt_set.get("prompts"), dict) else {}
+            contents.append({
+                "id": prompt_id,
+                "mode": f"{CUSTOM_LLM_PROMPT_PREFIX}{prompt_id}",
+                "label": prompt_set.get("label") or prompt_id,
+                "custom": True,
+                "prompts": {key: prompts.get(key, "") for key in LLM_PROMPT_SET_KEYS},
+            })
+        return contents
+
     def _normalize_bool_map(self, values):
         if not isinstance(values, dict):
             return {}

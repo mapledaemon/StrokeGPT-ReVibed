@@ -232,9 +232,7 @@
                 <button class="settings-tab active" data-settings-tab="voice">Voice</button>
                 <button class="settings-tab" data-settings-tab="device">Device</button>
                 <button class="settings-tab" data-settings-tab="motion">Motion</button>
-                <button class="settings-tab" data-settings-tab="prompts">Prompts</button>
                 <button class="settings-tab" data-settings-tab="diagnostics">Diagnostics</button>
-                <button class="settings-tab" data-settings-tab="advanced">Advanced</button>
             </div>
             <div id="settings-tab-persona" class="settings-panel">
                 <label class="profile-picture-field" for="pfp-upload">
@@ -250,6 +248,22 @@
                 <div class="voice-actions">
                     <button id="set-persona-btn" class="my-button" data-requires-backend>Use Prompt</button>
                     <button id="save-persona-prompt-btn" class="my-button" data-requires-backend>Save Prompt</button>
+                </div>
+                <div class="settings-subsection">
+                    <h4>Prompt Anatomy</h4>
+                    <div class="settings-field-group prompt-mode-panel">
+                        <label class="settings-field-label" for="user-genitalia-select">User anatomy for prompts</label>
+                        <div class="prompt-anatomy-controls">
+                            <select id="user-genitalia-select" class="input-text" data-requires-backend>
+                                <option value="penis">Penis</option>
+                                <option value="vagina">Vagina</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <input type="text" id="user-genitalia-custom-input" class="input-text" placeholder="Custom anatomy wording" autocomplete="off" data-requires-backend>
+                            <button id="save-user-genitalia-btn" class="my-button" data-requires-backend>Save Anatomy</button>
+                        </div>
+                        <div id="user-genitalia-status" class="settings-help">This tells the prompt what the device is being used on, separate from persona gender.</div>
+                    </div>
                 </div>
             </div>
             <div id="settings-tab-model" class="settings-panel">
@@ -279,11 +293,14 @@
                     <div id="ollama-thinking-status" class="settings-status-line">Thinking is off for faster chat.</div>
                     <div class="settings-subsection memory-settings-panel">
                         <h4>Model Memory</h4>
-                        <label class="settings-checkbox-line">
-                            <input type="checkbox" id="long-term-memory-checkbox" data-requires-backend>
-                            Use saved long-term memories
+                        <label class="toggle-switch-line">
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="long-term-memory-checkbox" data-requires-backend role="switch">
+                                <span class="toggle-switch-track" aria-hidden="true"></span>
+                            </span>
+                            <span class="toggle-switch-text">Use saved long-term memories</span>
                         </label>
-                        <div class="settings-help">Saved profile memory persists across restarts. The active chat window context is temporary.</div>
+                        <div class="settings-help">Saved profile memory persists across restarts. The active chat window context is temporary. This switch takes effect immediately.</div>
                         <div class="model-actions model-actions-wide">
                             <button id="clear-long-term-memory-btn" class="my-button" data-requires-backend>Clear Memories</button>
                         </div>
@@ -291,6 +308,12 @@
                         <div id="long-term-memory-items" class="memory-item-list" aria-live="polite"></div>
                         <pre id="long-term-memory-preview" class="diagnostics-output memory-preview-output">No memory loaded.</pre>
                     </div>
+                </div>
+                <div class="settings-subsection">
+                    <h4>Prompt Library</h4>
+                    <div class="settings-help">Manage the chat prompt style and your library of custom prompt sets in a dedicated window.</div>
+                    <button id="open-prompt-library-btn" class="my-button" data-requires-backend>Manage Prompt Sets</button>
+                    <div id="prompt-library-active-status" class="settings-status-line">Active prompt set not loaded yet.</div>
                 </div>
             </div>
             <div id="settings-tab-voice" class="settings-panel active">
@@ -479,12 +502,6 @@
                     <div id="motion-reverse-direction-status" class="settings-help">Current direction: Normal.</div>
                 </div>
                 <div class="settings-subsection motion-panel">
-                    <h4>Speed Limits</h4>
-                    <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider" data-requires-backend><span id="motion-speed-min-val">10%</span></div>
-                    <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider" data-requires-backend><span id="motion-speed-max-val">80%</span></div>
-                    <button id="save-motion-speed-limits" class="my-button" data-requires-backend>Save Speed Limits</button>
-                </div>
-                <div class="settings-subsection motion-panel">
                     <h4>Mode Timings (Seconds)</h4>
                     <div class="timing-row"><label for="auto-min-time">Auto:</label><input type="number" id="auto-min-time" min="1" max="60" step="1" value="4"><span>-</span><input type="number" id="auto-max-time" min="1" max="60" step="1" value="7"></div>
                     <div class="timing-row"><label for="edging-min-time">Edging:</label><input type="number" id="edging-min-time" min="1" max="60" step="1" value="5"><span>-</span><input type="number" id="edging-max-time" min="1" max="60" step="1" value="8"></div>
@@ -541,9 +558,6 @@
                     <div id="motion-program-status" class="settings-help">Program list not loaded yet.</div>
                     <div id="motion-program-list" class="motion-pattern-list motion-program-list"></div>
                 </div>
-                <div class="settings-tab-actions">
-                    <button id="save-motion-tab-btn" class="my-button" data-requires-backend>Save Motion Settings</button>
-                </div>
             </div>
             <div id="settings-tab-device" class="settings-panel">
                 <div class="settings-subsection device-panel">
@@ -584,56 +598,11 @@
                         <button id="save-motion-depth-range" class="my-button" data-requires-backend>Save Range</button>
                     </div>
                 </div>
-                <div class="settings-tab-actions">
-                    <button id="save-device-tab-btn" class="my-button" data-requires-backend>Save Device Settings</button>
-                </div>
-            </div>
-            <div id="settings-tab-prompts" class="settings-panel">
-                <div class="settings-subsection">
-                    <h4>System Prompts</h4>
-                    <p class="settings-help">
-                        Snapshot of every system prompt the local model can receive.
-                        The Chat and Repair prompts are rendered against your current persona,
-                        speed limits, edge permissions, and special-persona mode; Name Move and
-                        Profile Consolidation use representative sample inputs because they only
-                        run on demand. Chat history and the per-request user message are appended
-                        outside these prompts and are not shown here.
-                    </p>
-                    <div class="settings-field-group prompt-mode-panel">
-                        <label class="settings-field-label" for="user-genitalia-select">User anatomy for prompts</label>
-                        <div class="prompt-anatomy-controls">
-                            <select id="user-genitalia-select" class="input-text" data-requires-backend>
-                                <option value="penis">Penis</option>
-                                <option value="vagina">Vagina</option>
-                                <option value="custom">Custom</option>
-                            </select>
-                            <input type="text" id="user-genitalia-custom-input" class="input-text" placeholder="Custom anatomy wording" autocomplete="off" data-requires-backend>
-                            <button id="save-user-genitalia-btn" class="my-button" data-requires-backend>Save Anatomy</button>
-                        </div>
-                        <div id="user-genitalia-status" class="settings-help">This tells the prompt what the device is being used on, separate from persona gender.</div>
-                    </div>
-                    <div class="settings-field-group prompt-mode-panel">
-                        <label class="settings-field-label" for="llm-prompt-mode-select">Chat prompt style</label>
-                        <div class="prompt-mode-controls">
-                            <select id="llm-prompt-mode-select" class="input-text" data-requires-backend></select>
-                            <button id="save-llm-prompt-mode-btn" class="my-button" data-requires-backend>Save</button>
-                            <button id="edit-llm-prompt-style-btn" class="my-button" data-requires-backend>Edit Style</button>
-                            <button id="cancel-llm-prompt-edit-btn" class="my-button" hidden>Cancel</button>
-                        </div>
-                        <div id="llm-prompt-mode-status" class="settings-help">ReVibed is the less clinical default; Legacy keeps the previous prompt shape.</div>
-                    </div>
-                    <div class="prompt-refresh-row">
-                        <button id="refresh-system-prompts-btn" class="my-button" data-requires-backend>Refresh</button>
-                        <span id="system-prompts-status" class="settings-help prompt-refresh-status"></span>
-                    </div>
-                    <h5>Chat</h5>
-                    <textarea id="system-prompt-chat" class="diagnostics-output prompt-textarea" rows="9" readonly aria-label="Chat system prompt">Open this tab to load the current chat prompt.</textarea>
-                    <h5>Motion Repair</h5>
-                    <textarea id="system-prompt-repair" class="diagnostics-output prompt-textarea" rows="9" readonly aria-label="Motion repair prompt">Open this tab to load the motion repair prompt.</textarea>
-                    <h5>Name This Move <span id="system-prompt-name-this-move-sample" style="font-size: 0.8em; color: var(--comment);"></span></h5>
-                    <textarea id="system-prompt-name-this-move" class="diagnostics-output prompt-textarea" rows="5" readonly aria-label="Name-this-move prompt">Open this tab to load the name-this-move prompt.</textarea>
-                    <h5>Profile Consolidation</h5>
-                    <textarea id="system-prompt-profile-consolidation" class="diagnostics-output prompt-textarea" rows="8" readonly aria-label="Profile consolidation prompt">Open this tab to load the profile consolidation prompt.</textarea>
+                <div class="settings-subsection device-panel">
+                    <h4>Speed Limits</h4>
+                    <div class="slider-container"><label for="motion-speed-min-slider">Minimum</label><input type="range" min="0" max="100" value="10" id="motion-speed-min-slider" data-requires-backend><span id="motion-speed-min-val">10%</span></div>
+                    <div class="slider-container"><label for="motion-speed-max-slider">Maximum</label><input type="range" min="0" max="100" value="80" id="motion-speed-max-slider" data-requires-backend><span id="motion-speed-max-val">80%</span></div>
+                    <button id="save-motion-speed-limits" class="my-button" data-requires-backend>Save Speed Limits</button>
                 </div>
             </div>
             <div id="settings-tab-diagnostics" class="settings-panel">
@@ -699,12 +668,62 @@
                     </div>
                     <pre id="ollama-diagnostics-output" class="diagnostics-output">No Ollama requests recorded.</pre>
                 </div>
-            </div>
-            <div id="settings-tab-advanced" class="settings-panel">
-                <div class="settings-subsection">
-                    <h4>Settings Data</h4>
+                <div class="settings-subsection diagnostics-panel">
+                    <h4>Maintenance</h4>
                     <button id="reset-settings-btn" class="my-button stop" data-requires-backend>Reset All Settings</button>
                     <div id="reset-settings-status" style="font-size: 0.85em; color: var(--comment);">Resets saved settings and restarts setup.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="prompt-library-dialog" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="prompt-library-title">
+        <div class="modal-box prompt-library-box">
+            <div class="modal-header">
+                <h3 id="prompt-library-title">Prompt Library</h3>
+                <button id="close-prompt-library-btn" class="modal-close" aria-label="Close prompt library">&times;</button>
+            </div>
+            <div class="prompt-library-workspace">
+                <div class="prompt-library-list-pane">
+                    <div class="prompt-library-list-actions">
+                        <button id="prompt-library-new-btn" class="my-button" type="button" data-requires-backend>New Set</button>
+                        <button id="refresh-system-prompts-btn" class="my-button" type="button" data-requires-backend>Refresh</button>
+                    </div>
+                    <div id="prompt-library-list" class="prompt-library-list" role="listbox" aria-label="Prompt sets"></div>
+                    <div id="system-prompts-status" class="settings-help prompt-library-list-status"></div>
+                </div>
+                <div class="prompt-library-editor-pane">
+                    <div class="prompt-library-editor-header">
+                        <div class="prompt-library-editor-head">
+                            <input type="text" id="prompt-library-name-input" class="input-text" placeholder="Prompt set name" autocomplete="off" data-requires-backend>
+                            <span id="prompt-library-kind-badge" class="prompt-library-badge"></span>
+                        </div>
+                        <div class="prompt-library-actions">
+                            <button id="prompt-library-use-btn" class="my-button" type="button" data-requires-backend>Use</button>
+                            <button id="prompt-library-save-btn" class="my-button" type="button" data-requires-backend>Save</button>
+                            <button id="prompt-library-duplicate-btn" class="my-button" type="button" data-requires-backend>Duplicate</button>
+                            <button id="prompt-library-delete-btn" class="my-button stop" type="button" data-requires-backend>Delete</button>
+                        </div>
+                        <div id="prompt-library-status" class="settings-help prompt-library-status">Select a prompt set to view or edit it.</div>
+                    </div>
+                    <div class="prompt-library-fields">
+                        <p class="settings-help prompt-library-help">Default sets render live against your current context and are read-only. Custom sets store editable templates. Chat history and the per-request message are appended outside these prompts.</p>
+                        <div class="prompt-library-field">
+                            <label class="prompt-library-field-label" for="system-prompt-chat">Chat</label>
+                            <textarea id="system-prompt-chat" class="diagnostics-output prompt-textarea" rows="9" aria-label="Chat system prompt">Open the Prompt Library to load prompts.</textarea>
+                        </div>
+                        <div class="prompt-library-field">
+                            <label class="prompt-library-field-label" for="system-prompt-repair">Motion Repair</label>
+                            <textarea id="system-prompt-repair" class="diagnostics-output prompt-textarea" rows="9" aria-label="Motion repair prompt"></textarea>
+                        </div>
+                        <div class="prompt-library-field">
+                            <label class="prompt-library-field-label" for="system-prompt-name-this-move">Name This Move<span id="system-prompt-name-this-move-sample" class="prompt-library-field-hint"></span></label>
+                            <textarea id="system-prompt-name-this-move" class="diagnostics-output prompt-textarea" rows="5" aria-label="Name-this-move prompt"></textarea>
+                        </div>
+                        <div class="prompt-library-field">
+                            <label class="prompt-library-field-label" for="system-prompt-profile-consolidation">Profile Consolidation</label>
+                            <textarea id="system-prompt-profile-consolidation" class="diagnostics-output prompt-textarea" rows="8" aria-label="Profile consolidation prompt"></textarea>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

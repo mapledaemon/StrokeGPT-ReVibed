@@ -1601,25 +1601,6 @@ async function saveLlmEdgePermissions() {
     }
 }
 
-async function saveMotionTabSettings() {
-    setStatusMessage(el.statusText, 'Saving motion settings...', 'neutral');
-    const steps = [
-        saveMotionBackend,
-        saveMotionStyle,
-        saveMotionReverseDirection,
-        saveMotionSpeedLimits,
-        saveModeTimings,
-        saveLlmEdgePermissions,
-        saveMotionFeedbackOptions,
-    ];
-    for (const step of steps) {
-        const saved = await step();
-        if (saved !== true) return false;
-    }
-    setStatusMessage(el.statusText, 'Motion settings saved.', 'success');
-    return true;
-}
-
 async function saveAutospeakToggle(enabled) {
     const previousEnabled = state.autospeakEnabled;
     updateAutospeakToggleUi(enabled);
@@ -1686,7 +1667,6 @@ export function initMotionControls({sendUserMessage}) {
     el.toggleMemoryBtn?.addEventListener('click', toggleLongTermMemory);
     el.motionSpeedMinSlider.addEventListener('input', normalizeMotionSpeedLimits);
     el.motionSpeedMaxSlider.addEventListener('input', normalizeMotionSpeedLimits);
-    el.saveMotionTabBtn?.addEventListener('click', saveMotionTabSettings);
     el.saveMotionBackendBtn.addEventListener('click', saveMotionBackend);
     el.motionBackendSelect.addEventListener('change', () => updateMotionBackendUi(el.motionBackendSelect.value));
     el.saveMotionStyleBtn?.addEventListener('click', saveMotionStyle);

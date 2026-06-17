@@ -169,21 +169,45 @@ The top bar status area uses separate fixed-size active-mode label and timer
 chips, followed by the mood chip, so long mode names or elapsed clocks do not
 resize each other.
 
-The unified settings popup has tabs:
+The unified settings popup has six tabs, grouped by user mental model
+(consolidated from eight; the former Prompts and Advanced tabs were removed):
 
-- Persona
-- Model
-- Voice
-- Device
-- Motion
-- Prompts (read-only visibility into the system prompts the local model
-  can receive: chat, motion repair, name-this-move, profile
-  consolidation. Lazy-loaded on first open; refresh button re-renders
-  against the current context.)
-- Diagnostics (setup checks, Ollama/voice latency probes, and diagnostics
-  verbosity. Latency probes must not trigger surprise model downloads or paid
-  hosted TTS calls; they measure only already-loaded local voice paths.)
-- Advanced
+- Persona (identity: picture, name, persona prompt, and Prompt Anatomy —
+  the body the device is used on, moved here from the old Prompts tab).
+- Model (Ollama model selection/download, thinking, Model Memory, and the
+  Prompt Library launcher. The "Use saved long-term memories" control is a
+  toggle switch, not a checkbox, because it takes effect immediately with no
+  Save button. "Manage Prompt Sets" opens the Prompt Library modal — see
+  below.)
+- Voice (input + output; progressive disclosure via `<details>` panels).
+- Device (Handy connection, firmware, and Calibration — both Stroke Range
+  and Speed Limits live here as the physical safety envelope; Speed Limits
+  moved in from Motion).
+- Motion (backend, style, direction, mode timings, LLM mode permissions,
+  autospeak, patterns, programs).
+- Diagnostics (setup checks, Ollama/voice latency probes, transport capture,
+  diagnostics verbosity, and Maintenance / Reset All Settings moved from the
+  old Advanced tab. Latency probes must not trigger surprise model downloads
+  or paid hosted TTS calls; they measure only already-loaded local voice
+  paths.)
+
+The Prompt Library is a dedicated modal (`#prompt-library-dialog`) opened
+from the Model tab, not a settings tab. It lists every prompt set with a
+clear Custom/Default badge plus an Active badge, and a per-set editor for the
+four prompt kinds (chat, motion-repair, name-this-move, profile-consolidation).
+Default sets (ReVibed/Legacy) render live from `/system_prompts` and are
+read-only; custom sets store editable templates exposed via the
+`prompt_sets` field of `/system_prompts`. Backend: `/save_llm_prompt_set`
+(create/update, max 20), `/delete_llm_prompt_set` (deleting the active set
+falls back to the default), `/set_llm_prompt_mode` (activate). Anatomy is a
+separate persona-context setting and stays on the Persona tab. The Persona
+tab's anatomy and the Prompt Library both rely on the single
+`/system_prompts` fetch (lazy-loaded on Persona open / on modal open).
+
+Toggle switches are reserved for settings that take effect immediately (no
+Save button), per NN/g guidance; Save-gated settings stay checkboxes. Each
+settings section keeps its own per-section Save button — there is no
+tab-level "Save All" button (removed as a redundant/ambiguous affordance).
 
 Do not move detailed settings back into the sidebar unless there is a strong usability reason.
 

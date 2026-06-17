@@ -195,27 +195,36 @@ class WebStaticAssetTests(WebTestCase):
                 finally:
                     response.close()
 
-    def test_settings_dialog_contains_system_prompts_visibility_tab(self):
+    def test_settings_dialog_contains_prompt_library(self):
         response = self.client.get("/")
         try:
             page = response.get_data(as_text=True)
 
-            self.assertIn('data-settings-tab="prompts"', page)
-            self.assertIn('id="settings-tab-prompts"', page)
+            # IA consolidation: the standalone Prompts and Advanced tabs were
+            # removed. Anatomy moved to Persona; prompt management moved into a
+            # dedicated Prompt Library modal opened from the Model tab.
+            self.assertNotIn('data-settings-tab="prompts"', page)
+            self.assertNotIn('id="settings-tab-prompts"', page)
+            self.assertNotIn('id="llm-prompt-mode-select"', page)
+            # Anatomy now lives on the Persona tab.
             self.assertIn('id="user-genitalia-select"', page)
             self.assertIn('id="user-genitalia-custom-input"', page)
             self.assertIn('id="save-user-genitalia-btn"', page)
-            self.assertIn('id="user-genitalia-status"', page)
             self.assertIn('class="prompt-anatomy-controls"', page)
             self.assertIn('This tells the prompt what the device is being used on', page)
-            self.assertIn('id="llm-prompt-mode-select"', page)
-            self.assertIn('id="save-llm-prompt-mode-btn"', page)
-            self.assertIn('id="edit-llm-prompt-style-btn"', page)
-            self.assertIn('id="cancel-llm-prompt-edit-btn"', page)
-            self.assertIn('id="llm-prompt-mode-status"', page)
-            self.assertIn('class="settings-field-group prompt-mode-panel"', page)
-            self.assertIn('class="prompt-mode-controls"', page)
-            self.assertIn('class="prompt-refresh-row"', page)
+            # The Model tab launches the Prompt Library window.
+            self.assertIn('id="open-prompt-library-btn"', page)
+            self.assertIn('id="prompt-library-active-status"', page)
+            # Prompt Library modal: list of sets + per-set editor.
+            self.assertIn('id="prompt-library-dialog"', page)
+            self.assertIn('id="prompt-library-list"', page)
+            self.assertIn('id="prompt-library-new-btn"', page)
+            self.assertIn('id="prompt-library-name-input"', page)
+            self.assertIn('id="prompt-library-kind-badge"', page)
+            self.assertIn('id="prompt-library-use-btn"', page)
+            self.assertIn('id="prompt-library-save-btn"', page)
+            self.assertIn('id="prompt-library-duplicate-btn"', page)
+            self.assertIn('id="prompt-library-delete-btn"', page)
             self.assertIn('id="refresh-system-prompts-btn"', page)
             self.assertIn('id="system-prompts-status"', page)
             self.assertIn('id="system-prompt-chat"', page)
@@ -226,19 +235,15 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('class="diagnostics-output prompt-textarea"', page)
             self.assertIn('data-settings-tab="diagnostics"', page)
             self.assertIn('id="settings-tab-diagnostics"', page)
-            # The Prompts tab sits before Diagnostics and Advanced so the
-            # tab order matches the architecture note in AGENTS.md.
+            # Diagnostics is the final tab, after Motion; Prompts/Advanced are gone.
+            self.assertNotIn('data-settings-tab="advanced"', page)
             motion_tab = page.find('data-settings-tab="motion"')
-            prompts_tab = page.find('data-settings-tab="prompts"')
             diagnostics_tab = page.find('data-settings-tab="diagnostics"')
-            advanced_tab = page.find('data-settings-tab="advanced"')
-            self.assertGreater(prompts_tab, motion_tab)
-            self.assertGreater(diagnostics_tab, prompts_tab)
-            self.assertGreater(advanced_tab, diagnostics_tab)
+            self.assertGreater(diagnostics_tab, motion_tab)
         finally:
             response.close()
 
-    def test_frontend_js_wires_system_prompts_tab(self):
+    def test_frontend_js_wires_prompt_library(self):
         scripts = self.frontend_scripts()
 
         self.assertIn("async function refreshSystemPrompts", scripts)
@@ -246,22 +251,22 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("/set_llm_prompt_mode", scripts)
         self.assertIn("/set_user_genitalia", scripts)
         self.assertIn("/save_llm_prompt_set", scripts)
+        self.assertIn("/delete_llm_prompt_set", scripts)
         self.assertIn("systemPromptsLoadedOnce", scripts)
         self.assertIn("populateUserGenitaliaSetting", scripts)
         self.assertIn("userGenitaliaSelect", scripts)
-        self.assertIn("userGenitaliaCustomInput", scripts)
-        self.assertIn("saveUserGenitaliaBtn", scripts)
         self.assertIn("user_genitalia_options", scripts)
-        self.assertIn("llmPromptEditActive", scripts)
         self.assertIn("populatePromptModeSetting", scripts)
         self.assertIn("name_this_move_sample_inputs", scripts)
-        self.assertIn("refreshSystemPromptsBtn", scripts)
-        self.assertIn("llmPromptModeSelect", scripts)
-        self.assertIn("saveLlmPromptModeBtn", scripts)
-        self.assertIn("editLlmPromptStyleBtn", scripts)
+        self.assertIn("prompt_sets", scripts)
+        self.assertIn("function openPromptLibrary", scripts)
+        self.assertIn("function selectPromptSet", scripts)
+        self.assertIn("function savePromptSet", scripts)
+        self.assertIn("function deletePromptSet", scripts)
+        self.assertIn("function duplicatePromptSet", scripts)
+        self.assertIn("renderPromptLibraryList", scripts)
+        self.assertIn("promptLibraryList", scripts)
         self.assertIn("systemPromptChat", scripts)
-        self.assertIn("systemPromptRepair", scripts)
-        self.assertIn("systemPromptNameThisMove", scripts)
         self.assertIn("systemPromptProfileConsolidation", scripts)
 
     def test_settings_dialog_contains_device_and_speed_controls(self):
@@ -276,7 +281,6 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="handy-transport-select"', page)
             self.assertIn('id="save-handy-transport-btn"', page)
             self.assertIn('id="handy-transport-status"', page)
-            self.assertIn('id="save-device-tab-btn"', page)
             self.assertIn('id="handy-key-input"', page)
             self.assertIn('id="handy-firmware-select"', page)
             self.assertIn('id="handy-api-v3-key-input"', page)
@@ -286,7 +290,6 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="motion-speed-min-slider"', page)
             self.assertIn('id="motion-speed-max-slider"', page)
             self.assertIn('id="save-motion-speed-limits"', page)
-            self.assertIn('id="save-motion-tab-btn"', page)
             self.assertIn('id="motion-backend-select"', page)
             self.assertIn('id="save-motion-backend-btn"', page)
             self.assertIn('id="motion-backend-status"', page)
@@ -430,8 +433,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="motion-capture-status"', page)
             self.assertIn('id="motion-capture-results"', page)
             self.assertIn('id="motion-capture-output"', page)
-            self.assertIn('data-settings-tab="advanced"', page)
-            self.assertIn('id="settings-tab-advanced"', page)
+            self.assertNotIn('data-settings-tab="advanced"', page)
+            self.assertNotIn('id="settings-tab-advanced"', page)
             self.assertIn('id="reset-settings-btn"', page)
             self.assertIn('id="local-tts-engine-select"', page)
             self.assertIn('value="chatterbox_turbo"', page)
@@ -597,7 +600,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".about-box { width: min(720px, 100%); }", css)
             self.assertIn(".about-wallet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));", css)
             self.assertIn(".about-wallet img { width: 132px; height: 132px;", css)
-            self.assertIn(".settings-tabs { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));", css)
+            self.assertIn(".settings-tabs { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));", css)
             self.assertIn(".settings-tab { width: 100%; min-height: 2.25rem;", css)
             self.assertIn(".settings-tab:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }", css)
             self.assertIn(".prompt-anatomy-controls { display: grid; grid-template-columns: minmax(8rem, 0.7fr) minmax(12rem, 1fr) auto;", css)

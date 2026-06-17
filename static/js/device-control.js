@@ -373,21 +373,6 @@ async function saveHandyTransport() {
     }
 }
 
-async function saveDeviceTabSettings() {
-    setStatusMessage(el.statusText, 'Saving device settings...', 'neutral');
-    if (await saveHandyTransport() !== true) return false;
-    if (state.handyTransport !== 'browser_bluetooth') {
-        const keyDraft = (el.handyKeyInput?.value || '').trim();
-        if (keyDraft && keyDraft !== state.myHandyKey) {
-            if (await saveHandyConnectionKey(el.handyKeyInput) !== true) return false;
-        }
-    }
-    if (await saveHandyDeviceConfig() !== true) return false;
-    if (await saveMotionDepthRange() !== true) return false;
-    setStatusMessage(el.statusText, 'Device settings saved.', 'success');
-    return true;
-}
-
 export function initDeviceControls() {
     handyKeyInputs().forEach(input => {
         input.addEventListener('input', event => {
@@ -414,7 +399,6 @@ export function initDeviceControls() {
     el.motionDepthMaxSlider.addEventListener('change', testMotionDepthRange);
     document.getElementById('test-motion-depth-range').addEventListener('click', testMotionDepthRange);
     document.getElementById('save-motion-depth-range').addEventListener('click', saveMotionDepthRange);
-    el.saveDeviceTabBtn?.addEventListener('click', saveDeviceTabSettings);
     el.handyFirmwareSelect?.addEventListener('change', () => {
         state.handyFirmwareVersion = el.handyFirmwareSelect.value || 'fw4';
         updateHandyFirmwareStatus();
