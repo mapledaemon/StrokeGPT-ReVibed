@@ -44,6 +44,7 @@ function stubCanvas(canvas, width = 400, height = 220) {
     canvas.getBoundingClientRect = () => ({top: 0, left: 0, right: width, bottom: height, width, height});
     const context = {
         bezierCurveCalls: 0,
+        lineToCalls: 0,
         clipCalls: 0,
         rectCalls: [],
         beginPath() {},
@@ -54,7 +55,7 @@ function stubCanvas(canvas, width = 400, height = 220) {
         fill() {},
         fillRect() {},
         fillText() {},
-        lineTo() {},
+        lineTo() { this.lineToCalls += 1; },
         moveTo() {},
         rect(x, y, rectWidth, rectHeight) { this.rectCalls.push({x, y, width: rectWidth, height: rectHeight}); },
         restore() {},
@@ -167,7 +168,7 @@ describe('motion pattern studio helpers', () => {
         assert.ok(simplified.length > 24);
     });
 
-    it('renders preview actions as a curved path when the canvas supports it', () => {
+    it('renders preview actions as a monotone cubic path matching backend sampling', () => {
         const canvas = el.motionTrainingPreviewCanvas;
         stubCanvas(canvas);
 
@@ -179,7 +180,11 @@ describe('motion pattern studio helpers', () => {
             ],
         }, 'Empty');
 
-        assert.ok(canvas.__testContext.bezierCurveCalls > 0);
+        // The preview now uses the same Fritsch-Carlson monotone cubic as the
+        // backend, drawn as dense line segments instead of overshooting
+        // Catmull-Rom beziers, so the graph matches device output.
+        assert.ok(canvas.__testContext.lineToCalls > 0, 'expected monotone line segments');
+        assert.strictEqual(canvas.__testContext.bezierCurveCalls, 0);
         assert.strictEqual(canvas.__testContext.clipCalls, 1);
         assert.deepStrictEqual(canvas.__testContext.rectCalls.at(-1), {x: 34, y: 34, width: 332, height: 152});
     });
