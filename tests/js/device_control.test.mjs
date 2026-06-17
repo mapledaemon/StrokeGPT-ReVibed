@@ -62,7 +62,6 @@ describe('Device Handy connection controls', () => {
             'motion-depth-max-val',
             'test-motion-depth-range',
             'save-motion-depth-range',
-            'save-device-tab-btn',
             'status-text',
         ].forEach(resetStubElement);
         getStubElement('motion-depth-min-slider').value = '5';
@@ -95,7 +94,6 @@ describe('Device Handy connection controls', () => {
             'motion-depth-max-slider',
             'motion-depth-min-val',
             'motion-depth-max-val',
-            'save-device-tab-btn',
             'status-text',
         ].forEach(resetStubElement);
         state.myHandyKey = '';
@@ -270,119 +268,6 @@ describe('Device Handy connection controls', () => {
             getStubElement('status-text').textContent,
             'Local Bluetooth selected. Connect from Handy Connection before starting motion.',
         );
-    });
-
-    it('Save Device Settings saves each visible Device section through existing routes', async () => {
-        const calls = [];
-        globalThis.fetch = async (endpoint, options = {}) => {
-            calls.push({endpoint, body: JSON.parse(options.body || '{}')});
-            if (endpoint === '/set_handy_transport') {
-                return jsonResponse(200, {
-                    status: 'success',
-                    handy_transport: 'rest',
-                    message: 'Cloud REST transport selected.',
-                });
-            }
-            if (endpoint === '/set_handy_key') {
-                return jsonResponse(200, {
-                    status: 'success',
-                    connected: true,
-                    connection_status: 'connected',
-                    message: 'Connected to Handy.',
-                    connection: {
-                        status: 'connected',
-                        connected: true,
-                        message: 'Connected to Handy.',
-                    },
-                });
-            }
-            if (endpoint === '/set_handy_device_config') {
-                return jsonResponse(200, {
-                    status: 'success',
-                    handy_firmware_version: 'fw4',
-                    handy_api_v3_key: 'app-id',
-                    handy_api_v3_enabled: true,
-                    handy_api_v3_key_configured: true,
-                    continuous_streaming_supported: true,
-                    message: 'Handy firmware saved.',
-                });
-            }
-            if (endpoint === '/set_depth_limits') {
-                return jsonResponse(200, {status: 'success'});
-            }
-            throw new Error(`unexpected endpoint ${endpoint}`);
-        };
-
-        state.myHandyKey = 'old-key';
-        state.handyTransport = 'rest';
-        getStubElement('handy-transport-select').value = 'rest';
-        getStubElement('handy-key-input').value = 'new-key';
-        getStubElement('handy-firmware-select').value = 'fw4';
-        getStubElement('handy-api-v3-key-input').value = 'app-id';
-        getStubElement('motion-depth-min-slider').value = '8';
-        getStubElement('motion-depth-max-slider').value = '92';
-
-        getStubElement('save-device-tab-btn').click();
-        await flushAsyncHandlers();
-
-        assert.deepEqual(calls, [
-            {endpoint: '/set_handy_transport', body: {handy_transport: 'rest'}},
-            {endpoint: '/set_handy_key', body: {key: 'new-key'}},
-            {endpoint: '/set_handy_device_config', body: {handy_firmware_version: 'fw4', handy_api_v3_key: 'app-id'}},
-            {endpoint: '/set_depth_limits', body: {min_depth: 8, max_depth: 92}},
-        ]);
-        assert.equal(state.myHandyKey, 'new-key');
-        assert.equal(getStubElement('status-text').textContent, 'Device settings saved.');
-    });
-
-    it('Save Device Settings does not save a hidden Cloud REST key while Bluetooth is selected', async () => {
-        const calls = [];
-        globalThis.fetch = async (endpoint, options = {}) => {
-            calls.push({endpoint, body: JSON.parse(options.body || '{}')});
-            if (endpoint === '/set_handy_transport') {
-                return jsonResponse(200, {
-                    status: 'success',
-                    handy_transport: 'browser_bluetooth',
-                    bluetooth: {connected: false, status: 'disconnected'},
-                    message: 'Local Bluetooth selected.',
-                });
-            }
-            if (endpoint === '/set_handy_device_config') {
-                return jsonResponse(200, {
-                    status: 'success',
-                    handy_firmware_version: 'fw4',
-                    handy_api_v3_key: 'app-id',
-                    handy_api_v3_enabled: true,
-                    handy_api_v3_key_configured: true,
-                    continuous_streaming_supported: true,
-                    message: 'Handy firmware saved.',
-                });
-            }
-            if (endpoint === '/set_depth_limits') {
-                return jsonResponse(200, {status: 'success'});
-            }
-            throw new Error(`unexpected endpoint ${endpoint}`);
-        };
-
-        state.myHandyKey = 'old-key';
-        state.handyTransport = 'browser_bluetooth';
-        getStubElement('handy-transport-select').value = 'browser_bluetooth';
-        getStubElement('handy-key-input').value = 'new-key';
-        getStubElement('handy-firmware-select').value = 'fw4';
-        getStubElement('handy-api-v3-key-input').value = 'app-id';
-        getStubElement('motion-depth-min-slider').value = '8';
-        getStubElement('motion-depth-max-slider').value = '92';
-
-        getStubElement('save-device-tab-btn').click();
-        await flushAsyncHandlers();
-
-        assert.deepEqual(calls.map(call => call.endpoint), [
-            '/set_handy_transport',
-            '/set_handy_device_config',
-            '/set_depth_limits',
-        ]);
-        assert.equal(state.myHandyKey, 'old-key');
-        assert.equal(getStubElement('status-text').textContent, 'Device settings saved.');
     });
 
     it('startup Local Bluetooth state hides Cloud REST connection-key sections', () => {

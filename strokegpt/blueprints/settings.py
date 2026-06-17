@@ -132,12 +132,30 @@ def save_llm_prompt_set_route():
         "status": "success",
         "llm_prompt_mode": web.settings.llm_prompt_mode,
         "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
+        "prompt_sets": web.settings.llm_custom_prompt_set_contents(),
         "prompt_set": {
             "id": prompt_set.get("id"),
             "label": prompt_set.get("label"),
             "description": prompt_set.get("description"),
             "custom": True,
         },
+    })
+
+
+@settings_blueprint.route('/delete_llm_prompt_set', methods=['POST'])
+def delete_llm_prompt_set_route():
+    web = _web()
+    data = web._request_json()
+    ok, message = web.settings.delete_llm_custom_prompt_set(data.get("prompt_set_id"))
+    if not ok:
+        return jsonify({"status": "error", "message": message or "Prompt set could not be deleted."}), 400
+    web.settings.save()
+    web.llm.set_custom_prompt_set(web.settings.selected_llm_custom_prompt_set())
+    return jsonify({
+        "status": "success",
+        "llm_prompt_mode": web.settings.llm_prompt_mode,
+        "llm_prompt_mode_options": web.payloads.llm_prompt_mode_options(web.settings),
+        "prompt_sets": web.settings.llm_custom_prompt_set_contents(),
     })
 
 
@@ -407,6 +425,7 @@ def system_prompts_route():
             current_profile=web.settings.user_profile,
         ),
         "name_this_move_sample_inputs": dict(_PROMPT_VISIBILITY_SAMPLE_NAME_MOVE),
+        "prompt_sets": web.settings.llm_custom_prompt_set_contents(),
     })
 
 

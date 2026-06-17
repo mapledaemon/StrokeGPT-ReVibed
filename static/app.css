@@ -390,7 +390,7 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .about-wallet { display: grid; justify-items: center; gap: 8px; min-width: 0; padding: 12px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-darker); text-align: center; }
 .about-wallet img { width: 132px; height: 132px; border-radius: 4px; background: #fff; }
 .about-wallet code { color: var(--comment); font-size: 0.82rem; line-height: 1.35; overflow-wrap: anywhere; }
-.settings-tabs { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; padding: 4px; border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
+.settings-tabs { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; padding: 4px; border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
 .settings-tab { width: 100%; min-height: 2.25rem; padding: 0.45rem 0.55rem; border: 1px solid transparent; background: transparent; color: var(--comment); border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.88rem; line-height: 1.15; overflow-wrap: anywhere; }
 .settings-tab.active { background: var(--background-lighter); color: var(--foreground); border-color: #2d333d; }
 .settings-tab:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
@@ -495,6 +495,50 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
 .settings-checkbox-line input { flex: 0 0 auto; }
 .settings-checkbox-group { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; border: 0; min-inline-size: 0; }
 .settings-checkbox-group legend { padding: 0; margin: 0 0 var(--space-1); color: var(--comment); font-size: 0.76rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
+/* Toggle switch: reserved for settings that take effect immediately (no Save button), per NN/g toggle guidelines. */
+.toggle-switch-line { display: flex; align-items: center; gap: 10px; color: var(--foreground); font-size: 0.9rem; cursor: pointer; }
+.toggle-switch { position: relative; display: inline-flex; flex: 0 0 auto; width: 40px; height: 22px; }
+.toggle-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.toggle-switch-track { position: absolute; inset: 0; border-radius: 999px; background: var(--background-lighter); border: 1px solid #2d333d; transition: background 0.15s ease, border-color 0.15s ease; }
+.toggle-switch-track::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--comment); transition: transform 0.15s ease, background 0.15s ease; }
+.toggle-switch input:checked + .toggle-switch-track { background: var(--cyan); border-color: var(--cyan); }
+.toggle-switch input:checked + .toggle-switch-track::before { transform: translateX(18px); background: var(--background-darker); }
+.toggle-switch input:focus-visible + .toggle-switch-track { outline: 2px solid var(--purple); outline-offset: 2px; }
+.toggle-switch-text { line-height: 1.2; }
+/* Prompt Library modal */
+.prompt-library-box { width: min(960px, 94vw); max-height: 90vh; display: flex; flex-direction: column; }
+.prompt-library-workspace { display: grid; grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr); gap: var(--space-4); min-height: 0; flex: 1 1 auto; }
+.prompt-library-list-pane { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; padding-right: var(--space-3); border-right: 1px solid var(--background-lighter); }
+.prompt-library-list-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.prompt-library-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; max-height: 62vh; padding: 2px; }
+.prompt-library-list-status { margin: 0; min-height: 1.2rem; }
+.prompt-library-item { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 8px 10px; border: 1px solid #2d333d; border-radius: 6px; background: var(--background-darker); color: var(--foreground); cursor: pointer; text-align: left; }
+.prompt-library-item:hover { border-color: var(--purple); }
+.prompt-library-item:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.prompt-library-item.selected { border-color: var(--cyan); background: var(--background-lighter); }
+.prompt-library-item-name { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; }
+.prompt-library-item-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.prompt-library-badge { display: inline-flex; align-items: center; padding: 0.08rem 0.46rem; border-radius: 999px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; border: 1px solid transparent; }
+.prompt-library-badge:empty { display: none; }
+.prompt-library-badge.kind-custom { color: var(--purple); border-color: rgba(169, 154, 239, 0.5); background: rgba(169, 154, 239, 0.12); }
+.prompt-library-badge.kind-default { color: var(--cyan); border-color: rgba(127, 183, 163, 0.5); background: rgba(127, 183, 163, 0.12); }
+.prompt-library-badge.is-active { color: var(--green); border-color: rgba(79, 192, 109, 0.5); background: rgba(79, 192, 109, 0.12); }
+.prompt-library-editor-pane { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; overflow: auto; max-height: 80vh; padding: 0 4px 2px 0; }
+.prompt-library-editor-header { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-3); border-bottom: 1px solid var(--background-lighter); }
+.prompt-library-editor-head { display: flex; align-items: center; gap: var(--space-2); }
+.prompt-library-editor-head .input-text { flex: 1 1 auto; min-width: 0; }
+.prompt-library-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.prompt-library-status { margin: 0; min-height: 1.2rem; }
+.prompt-library-fields { display: flex; flex-direction: column; gap: var(--space-3); }
+.prompt-library-help { margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid #2d333d; border-radius: 6px; background: var(--background-darker); font-size: 0.8rem; line-height: 1.4; }
+.prompt-library-field { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid #2d333d; border-radius: 8px; background: var(--background-darker); }
+.prompt-library-field-label { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--background-lighter); color: var(--cyan); font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.prompt-library-field-hint { color: var(--comment); font-size: 0.72rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.prompt-library-editor-pane .prompt-textarea[readonly] { opacity: 0.82; }
+/* Override .diagnostics-output's 180px cap so the vertical resize grip works.
+   The editor pane itself still scrolls (max-height: 80vh), so an expanded
+   textarea never overflows the modal. */
+.prompt-library-field .prompt-textarea { max-height: none; flex: 0 0 auto; }
 .diagnostics-output { margin: 0; max-height: 180px; overflow: auto; padding: 8px; border: 1px solid #2d333d; border-radius: 6px; background: #101217; color: var(--comment); font-size: 0.78rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memory-preview-output { max-height: 120px; }
 .memory-item-list { display: flex; flex-direction: column; gap: 6px; }
@@ -718,6 +762,9 @@ body.chat-model-unavailable #status-text { color: var(--yellow); }
     .slider-container, .motion-panel .slider-container, .device-panel .slider-container { grid-template-columns: 1fr auto; }
     .slider-container label { grid-column: 1 / -1; }
     .settings-tabs { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .prompt-library-workspace { grid-template-columns: 1fr; }
+    .prompt-library-list-pane { border-right: none; border-bottom: 1px solid var(--background-lighter); padding-right: 0; padding-bottom: var(--space-3); }
+    .prompt-library-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .prompt-anatomy-controls, .prompt-mode-controls, .prompt-refresh-row { grid-template-columns: 1fr; }
     .prompt-anatomy-controls .my-button, .prompt-mode-controls .my-button, .prompt-refresh-row .my-button { width: 100%; }
     .model-actions, .model-actions-wide, .voice-actions, .motion-actions, .motion-pattern-actions, .motion-program-actions, .settings-tab-actions, .diagnostics-actions, .diagnostics-action-row { grid-template-columns: 1fr; }

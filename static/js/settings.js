@@ -5,7 +5,9 @@ import { refreshSystemStatus } from './setup-check.js';
 export function setSettingsTab(tabName) {
     el.settingsTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.settingsTab === tabName));
     el.settingsPanels.forEach(panel => panel.classList.toggle('active', panel.id === `settings-tab-${tabName}`));
-    if (tabName === 'prompts' && !state.systemPromptsLoadedOnce) {
+    // The Persona tab shows Prompt Anatomy, populated by the /system_prompts fetch.
+    // (The prompt sets themselves live in the Prompt Library modal, which loads on open.)
+    if (tabName === 'persona' && !state.systemPromptsLoadedOnce) {
         refreshSystemPrompts();
     }
     if (tabName === 'diagnostics' && !state.systemStatusText) {
@@ -13,68 +15,72 @@ export function setSettingsTab(tabName) {
     }
 }
 
-export async function refreshSystemPrompts() {
-    if (state.llmPromptEditActive) {
-        if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Finish or cancel the custom prompt edit before refreshing.';
-        return null;
+function isPromptLibraryOpen() {
+    return Boolean(el.promptLibraryDialog && el.promptLibraryDialog.classList.contains('open'));
+}
+
+function promptSetByMode(mode) {
+    return (state.llmPromptModeOptions || []).find(option => option.id === mode) || null;
+}
+
+function activePromptLabel() {
+    const active = promptSetByMode(state.llmPromptMode);
+    return active ? (active.label || active.id) : (state.llmPromptMode || 'ReVibed');
+}
+
+function updatePromptLibraryActiveStatus() {
+    if (el.promptLibraryActiveStatus) {
+        el.promptLibraryActiveStatus.textContent = `Active prompt set: ${activePromptLabel()}.`;
     }
-    if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Loading...';
+}
+
+function applyPromptLibraryData(data = {}) {
+    const sets = {};
+    (data.prompt_sets || []).forEach(entry => {
+        const mode = entry.mode || (entry.id ? `custom:${entry.id}` : '');
+        if (mode) sets[mode] = entry;
+    });
+    state.promptLibrarySets = sets;
+}
+
+export async function refreshSystemPrompts() {
+    if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Loading prompt sets...';
     const data = await apiCall('/system_prompts');
     if (!data) {
-        if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Could not load system prompts.';
-        return;
+        if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = 'Could not load prompt sets.';
+        return null;
     }
+    applyPromptLibraryData(data);
     populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
     populateUserGenitaliaSetting(data.user_genitalia, data.user_genitalia_custom, data.user_genitalia_options);
-    setPromptBoxText(el.systemPromptChat, data.chat || '');
-    setPromptBoxText(el.systemPromptRepair, data.repair || '');
-    setPromptBoxText(el.systemPromptNameThisMove, data.name_this_move || '');
-    setPromptBoxText(el.systemPromptProfileConsolidation, data.profile_consolidation || '');
-    if (el.systemPromptNameThisMoveSample) {
-        const sample = data.name_this_move_sample_inputs || {};
-        const speed = sample.speed ?? 0;
-        const depth = sample.depth ?? 0;
-        const mood = sample.mood || '';
-        el.systemPromptNameThisMoveSample.textContent = `(sample inputs: speed ${speed}%, depth ${depth}%, mood '${mood}')`;
-    }
+    state.promptLibraryRendered = {
+        chat: data.chat || '',
+        repair: data.repair || '',
+        name_this_move: data.name_this_move || '',
+        profile_consolidation: data.profile_consolidation || '',
+    };
+    const sample = data.name_this_move_sample_inputs || {};
+    state.promptLibrarySampleName = `(sample inputs: speed ${sample.speed ?? 0}%, depth ${sample.depth ?? 0}%, mood '${sample.mood || ''}')`;
+    if (el.systemPromptNameThisMoveSample) el.systemPromptNameThisMoveSample.textContent = state.promptLibrarySampleName;
     state.systemPromptsLoadedOnce = true;
-    setPromptEditMode(false);
-    if (el.systemPromptsStatus) el.systemPromptsStatus.textContent = `Loaded at ${new Date().toLocaleTimeString()}.`;
+    if (isPromptLibraryOpen()) {
+        const reselect = promptSetByMode(state.promptLibrarySelectedMode) ? state.promptLibrarySelectedMode : state.llmPromptMode;
+        renderPromptLibraryList();
+        selectPromptSet(reselect);
+    }
     return data;
 }
 
-function promptModeStatusText(mode) {
-    if (mode === 'legacy') return 'Legacy prompt style selected.';
-    if (String(mode || '').startsWith('custom:')) return 'Custom prompt style selected.';
-    return 'ReVibed prompt style selected.';
-}
-
 export function populatePromptModeSetting(mode = 'revibed', options = []) {
-    const normalizedMode = mode || 'revibed';
-    const normalizedOptions = Array.isArray(options) && options.length
+    state.llmPromptMode = mode || 'revibed';
+    state.llmPromptModeOptions = Array.isArray(options) && options.length
         ? options
         : [
-            {id: 'revibed', label: 'ReVibed', description: 'Less clinical default voice with the same motion-control contract.'},
-            {id: 'legacy', label: 'Legacy', description: 'Previous technical prompt shape for comparison or fallback.'},
+            {id: 'revibed', label: 'ReVibed', description: 'Less clinical default voice with the same motion-control contract.', custom: false},
+            {id: 'legacy', label: 'Legacy', description: 'Previous technical prompt shape for comparison or fallback.', custom: false},
         ];
-    state.llmPromptMode = normalizedMode;
-    state.llmPromptModeOptions = normalizedOptions;
-    if (el.llmPromptModeSelect) {
-        el.llmPromptModeSelect.innerHTML = '';
-        normalizedOptions.forEach(option => {
-            const item = D.createElement('option');
-            item.value = option.id;
-            item.textContent = option.label || option.id;
-            if (option.description) item.title = option.description;
-            el.llmPromptModeSelect.appendChild(item);
-        });
-        el.llmPromptModeSelect.value = normalizedMode;
-    }
-    if (el.llmPromptModeStatus) {
-        const current = normalizedOptions.find(option => option.id === normalizedMode) || {};
-        el.llmPromptModeStatus.textContent = current.description || promptModeStatusText(normalizedMode);
-        el.llmPromptModeStatus.style.color = 'var(--comment)';
-    }
+    updatePromptLibraryActiveStatus();
+    if (isPromptLibraryOpen()) renderPromptLibraryList();
 }
 
 function userGenitaliaStatusText(value, custom = '') {
@@ -185,30 +191,227 @@ function promptBoxText(box) {
     return 'value' in box ? box.value : box.textContent;
 }
 
-function setPromptEditMode(active, name = '') {
-    state.llmPromptEditActive = Boolean(active);
-    state.llmPromptEditName = active ? name : '';
+const PROMPT_LIBRARY_KEYS = [
+    ['chat', 'systemPromptChat'],
+    ['repair', 'systemPromptRepair'],
+    ['name_this_move', 'systemPromptNameThisMove'],
+    ['profile_consolidation', 'systemPromptProfileConsolidation'],
+];
+
+function setPromptEditorReadonly(readonly) {
     promptBoxes().forEach(box => {
-        if (active) {
-            box.removeAttribute('readonly');
-            box.classList.add('prompt-editing');
-        } else {
-            box.setAttribute('readonly', '');
-            box.classList.remove('prompt-editing');
-        }
+        box.classList.toggle('prompt-editing', !readonly);
+        if (readonly) box.setAttribute('readonly', '');
+        else box.removeAttribute('readonly');
     });
-    if (el.saveLlmPromptModeBtn) {
-        el.saveLlmPromptModeBtn.textContent = active ? 'Save Custom' : 'Save';
+    if (el.promptLibraryNameInput) el.promptLibraryNameInput.readOnly = Boolean(readonly);
+}
+
+function loadPromptEditor(prompts = {}) {
+    PROMPT_LIBRARY_KEYS.forEach(([key, ref]) => setPromptBoxText(el[ref], prompts[key] || ''));
+}
+
+function setPromptKindBadge(kind) {
+    if (!el.promptLibraryKindBadge) return;
+    el.promptLibraryKindBadge.className = `prompt-library-badge kind-${kind}`;
+    el.promptLibraryKindBadge.textContent = kind === 'custom' ? 'Custom' : 'Default';
+}
+
+function updatePromptLibraryButtons() {
+    const selected = promptSetByMode(state.promptLibrarySelectedMode);
+    const isCustomSelected = Boolean(selected && selected.custom);
+    const isDraft = Boolean(state.promptLibraryDraftIsNew);
+    if (el.promptLibraryUseBtn) el.promptLibraryUseBtn.disabled = isDraft || !selected;
+    if (el.promptLibrarySaveBtn) el.promptLibrarySaveBtn.disabled = !(isDraft || isCustomSelected);
+    if (el.promptLibraryDuplicateBtn) el.promptLibraryDuplicateBtn.disabled = !(isDraft || selected);
+    if (el.promptLibraryDeleteBtn) el.promptLibraryDeleteBtn.disabled = !isCustomSelected;
+}
+
+function renderPromptLibraryList() {
+    if (!el.promptLibraryList) return;
+    el.promptLibraryList.replaceChildren();
+    const options = state.llmPromptModeOptions || [];
+    options.forEach(option => {
+        const mode = option.id;
+        const item = D.createElement('button');
+        item.type = 'button';
+        item.className = 'prompt-library-item';
+        item.setAttribute('role', 'option');
+        const isActive = mode === state.llmPromptMode;
+        item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        if (mode === state.promptLibrarySelectedMode && !state.promptLibraryDraftIsNew) {
+            item.classList.add('selected');
+        }
+        const name = D.createElement('div');
+        name.className = 'prompt-library-item-name';
+        name.textContent = option.label || mode;
+        item.appendChild(name);
+
+        const badges = D.createElement('div');
+        badges.className = 'prompt-library-item-badges';
+        const kind = D.createElement('span');
+        kind.className = `prompt-library-badge kind-${option.custom ? 'custom' : 'default'}`;
+        kind.textContent = option.custom ? 'Custom' : 'Default';
+        badges.appendChild(kind);
+        if (isActive) {
+            const activeBadge = D.createElement('span');
+            activeBadge.className = 'prompt-library-badge is-active';
+            activeBadge.textContent = 'Active';
+            badges.appendChild(activeBadge);
+        }
+        item.appendChild(badges);
+
+        item.addEventListener('click', () => selectPromptSet(mode));
+        el.promptLibraryList.appendChild(item);
+    });
+    if (el.systemPromptsStatus) {
+        const customCount = options.filter(option => option.custom).length;
+        el.systemPromptsStatus.textContent = options.length
+            ? `${options.length} prompt set${options.length === 1 ? '' : 's'} (${customCount} custom).`
+            : 'No prompt sets loaded.';
     }
-    if (el.editLlmPromptStyleBtn) {
-        el.editLlmPromptStyleBtn.disabled = active;
+}
+
+function setPromptLibraryStatus(text, tone = 'neutral') {
+    if (!el.promptLibraryStatus) return;
+    el.promptLibraryStatus.textContent = text;
+    const colors = {neutral: 'var(--comment)', info: 'var(--comment)', warning: 'var(--yellow)', success: 'var(--cyan)'};
+    el.promptLibraryStatus.style.color = colors[tone] || 'var(--comment)';
+}
+
+function selectPromptSet(mode) {
+    const option = promptSetByMode(mode);
+    if (!option) return;
+    state.promptLibrarySelectedMode = mode;
+    state.promptLibraryDraftIsNew = false;
+    const isCustom = Boolean(option.custom);
+    state.promptLibraryEditingId = isCustom ? (state.promptLibrarySets[mode] || {}).id || '' : '';
+    if (el.promptLibraryNameInput) el.promptLibraryNameInput.value = option.label || mode;
+    setPromptKindBadge(isCustom ? 'custom' : 'default');
+    if (isCustom) {
+        loadPromptEditor((state.promptLibrarySets[mode] || {}).prompts || {});
+        setPromptEditorReadonly(false);
+        setPromptLibraryStatus('Editing a custom set. Save your changes, or Use to make it the active prompt.');
+    } else if (mode === state.llmPromptMode) {
+        loadPromptEditor(state.promptLibraryRendered || {});
+        setPromptEditorReadonly(true);
+        setPromptLibraryStatus('Default set, rendered live against your current context (read-only). Duplicate to customize.');
+    } else {
+        loadPromptEditor({chat: 'Use this default set, then Refresh to preview its rendered prompt.'});
+        setPromptEditorReadonly(true);
+        setPromptLibraryStatus('Default set. Use it to activate, then Refresh to preview the rendered prompt.');
     }
-    if (el.refreshSystemPromptsBtn) {
-        el.refreshSystemPromptsBtn.disabled = active;
+    updatePromptLibraryButtons();
+    renderPromptLibraryList();
+}
+
+function newPromptSet() {
+    state.promptLibrarySelectedMode = '';
+    state.promptLibraryEditingId = '';
+    state.promptLibraryDraftIsNew = true;
+    if (el.promptLibraryNameInput) el.promptLibraryNameInput.value = '';
+    setPromptKindBadge('custom');
+    loadPromptEditor(state.promptLibraryRendered || {});
+    setPromptEditorReadonly(false);
+    updatePromptLibraryButtons();
+    renderPromptLibraryList();
+    setPromptLibraryStatus('New custom set seeded from the active prompt. Name it, edit, then Save.');
+    el.promptLibraryNameInput?.focus?.();
+}
+
+function duplicatePromptSet() {
+    const baseName = (el.promptLibraryNameInput?.value || activePromptLabel() || 'Prompt set').trim() || 'Prompt set';
+    state.promptLibrarySelectedMode = '';
+    state.promptLibraryEditingId = '';
+    state.promptLibraryDraftIsNew = true;
+    if (el.promptLibraryNameInput) el.promptLibraryNameInput.value = `${baseName} copy`.slice(0, 80);
+    setPromptKindBadge('custom');
+    setPromptEditorReadonly(false);
+    updatePromptLibraryButtons();
+    renderPromptLibraryList();
+    setPromptLibraryStatus('Duplicated into a new custom set. Adjust the name and prompts, then Save.');
+    el.promptLibraryNameInput?.focus?.();
+}
+
+async function usePromptSet() {
+    const mode = state.promptLibrarySelectedMode;
+    if (!mode) return;
+    setPromptLibraryStatus('Activating prompt set...');
+    const data = await apiCall('/set_llm_prompt_mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({llm_prompt_mode: mode}),
+    });
+    if (data && data.status === 'success') {
+        populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
+        await refreshSystemPrompts();
+        selectPromptSet(state.llmPromptMode);
+        setPromptLibraryStatus(`Active prompt set: ${activePromptLabel()}.`, 'success');
+        if (el.statusText) el.statusText.textContent = 'Prompt set activated.';
+    } else {
+        reportSaveFailure(el.promptLibraryStatus || el.statusText, data, 'Could not activate prompt set.');
     }
-    if (el.cancelLlmPromptEditBtn) {
-        el.cancelLlmPromptEditBtn.hidden = !active;
+}
+
+async function savePromptSet() {
+    const name = (el.promptLibraryNameInput?.value || '').trim();
+    const prompts = promptSetPayload();
+    if (!name || !prompts.chat.trim()) {
+        setPromptLibraryStatus('A custom set needs a name and chat prompt text.', 'warning');
+        return;
     }
+    const body = {name, prompts};
+    if (!state.promptLibraryDraftIsNew && state.promptLibraryEditingId) {
+        body.prompt_set_id = state.promptLibraryEditingId;
+    }
+    setPromptLibraryStatus('Saving custom set...');
+    const data = await apiCall('/save_llm_prompt_set', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    if (data && data.status === 'success') {
+        await refreshSystemPrompts();
+        selectPromptSet(state.llmPromptMode);
+        setPromptLibraryStatus('Custom prompt set saved and activated.', 'success');
+        if (el.statusText) el.statusText.textContent = 'Custom prompt set saved.';
+    } else {
+        reportSaveFailure(el.promptLibraryStatus || el.statusText, data, 'Could not save custom prompt set.');
+    }
+}
+
+async function deletePromptSet() {
+    const selected = promptSetByMode(state.promptLibrarySelectedMode);
+    if (!selected || !selected.custom) return;
+    const promptId = (state.promptLibrarySets[selected.id] || {}).id || selected.id.replace(/^custom:/, '');
+    const ok = window.confirm(`Delete the custom prompt set "${selected.label || selected.id}"? This cannot be undone.`);
+    if (!ok) return;
+    setPromptLibraryStatus('Deleting custom set...');
+    const data = await apiCall('/delete_llm_prompt_set', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt_set_id: promptId}),
+    });
+    if (data && data.status === 'success') {
+        await refreshSystemPrompts();
+        selectPromptSet(state.llmPromptMode);
+        setPromptLibraryStatus('Custom prompt set deleted.', 'success');
+        if (el.statusText) el.statusText.textContent = 'Custom prompt set deleted.';
+    } else {
+        reportSaveFailure(el.promptLibraryStatus || el.statusText, data, 'Could not delete custom prompt set.');
+    }
+}
+
+export async function openPromptLibrary() {
+    if (!el.promptLibraryDialog) return;
+    el.promptLibraryDialog.classList.add('open');
+    await refreshSystemPrompts();
+    selectPromptSet(state.llmPromptMode);
+    el.closePromptLibraryBtn?.focus?.();
+}
+
+function closePromptLibrary() {
+    el.promptLibraryDialog?.classList.remove('open');
 }
 
 function promptSetPayload() {
@@ -927,92 +1130,6 @@ async function saveDiagnosticsLevels() {
     }
 }
 
-async function savePromptModeSetting() {
-    if (state.llmPromptEditActive) {
-        const name = (state.llmPromptEditName || '').trim();
-        const prompts = promptSetPayload();
-        if (!name || !prompts.chat.trim()) {
-            if (el.llmPromptModeStatus) {
-                el.llmPromptModeStatus.textContent = 'Custom style needs a name and chat prompt text.';
-                el.llmPromptModeStatus.style.color = 'var(--yellow)';
-            }
-            return null;
-        }
-        if (el.llmPromptModeStatus) {
-            el.llmPromptModeStatus.textContent = `Saving custom style "${name}"...`;
-            el.llmPromptModeStatus.style.color = 'var(--comment)';
-        }
-        const data = await apiCall('/save_llm_prompt_set', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name, prompts}),
-        });
-        if (data && data.status === 'success') {
-            setPromptEditMode(false);
-            populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
-            state.systemPromptsLoadedOnce = false;
-            await refreshSystemPrompts();
-            if (el.statusText) el.statusText.textContent = 'Custom prompt style saved.';
-        } else {
-            reportSaveFailure(el.llmPromptModeStatus || el.statusText, data, 'Custom prompt style save failed.');
-        }
-        return data;
-    }
-    const mode = el.llmPromptModeSelect?.value || state.llmPromptMode || 'revibed';
-    if (el.llmPromptModeStatus) {
-        el.llmPromptModeStatus.textContent = 'Saving prompt style...';
-        el.llmPromptModeStatus.style.color = 'var(--comment)';
-    }
-    const data = await apiCall('/set_llm_prompt_mode', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({llm_prompt_mode: mode}),
-    });
-    if (data && data.status === 'success') {
-        populatePromptModeSetting(data.llm_prompt_mode, data.llm_prompt_mode_options);
-        state.systemPromptsLoadedOnce = false;
-        await refreshSystemPrompts();
-        if (el.statusText) el.statusText.textContent = 'Prompt style saved.';
-    } else {
-        reportSaveFailure(el.llmPromptModeStatus || el.statusText, data, 'Prompt style save failed.');
-    }
-    return data;
-}
-
-async function beginPromptStyleEdit() {
-    if (state.llmPromptEditActive) return;
-    if (!state.systemPromptsLoadedOnce) {
-        const loaded = await refreshSystemPrompts();
-        if (!loaded) return;
-    }
-    const selected = state.llmPromptModeOptions.find(option => option.id === (el.llmPromptModeSelect?.value || state.llmPromptMode)) || {};
-    const baseLabel = selected.label || 'Custom';
-    const defaultName = selected.custom ? `${baseLabel} copy` : `${baseLabel} custom`;
-    const name = window.prompt('Name this custom prompt style', defaultName);
-    if (name === null) return;
-    const cleaned = name.trim();
-    if (!cleaned) {
-        if (el.llmPromptModeStatus) {
-            el.llmPromptModeStatus.textContent = 'Custom style name is required.';
-            el.llmPromptModeStatus.style.color = 'var(--yellow)';
-        }
-        return;
-    }
-    setPromptEditMode(true, cleaned);
-    if (el.llmPromptModeStatus) {
-        el.llmPromptModeStatus.textContent = `Editing "${cleaned}". The current prompt text is copied into editable boxes; click Save Custom when done.`;
-        el.llmPromptModeStatus.style.color = 'var(--comment)';
-    }
-    el.systemPromptChat?.focus?.();
-}
-
-async function cancelPromptStyleEdit() {
-    if (!state.llmPromptEditActive) return;
-    setPromptEditMode(false);
-    state.systemPromptsLoadedOnce = false;
-    await refreshSystemPrompts();
-}
-
 async function setOllamaModel(model) {
     const normalized = normalizeModelName(model);
     if (!normalized) {
@@ -1273,6 +1390,7 @@ export function initSettingsControls({addChatMessage}) {
             closeProfileMenu();
             closeAboutDialog();
             closeOllamaModelRequiredDialog();
+            closePromptLibrary();
         }
     });
     el.toggleSidebarBtn.addEventListener('click', () => {
@@ -1316,32 +1434,31 @@ export function initSettingsControls({addChatMessage}) {
     if (el.saveUserGenitaliaBtn) {
         el.saveUserGenitaliaBtn.addEventListener('click', saveUserGenitaliaSetting);
     }
-    if (el.llmPromptModeSelect) {
-        el.llmPromptModeSelect.addEventListener('change', () => {
-            if (!el.llmPromptModeStatus) return;
-            if (state.llmPromptEditActive) {
-                el.llmPromptModeSelect.value = state.llmPromptMode;
-                el.llmPromptModeStatus.textContent = 'Finish or cancel the custom prompt edit before changing styles.';
-                el.llmPromptModeStatus.style.color = 'var(--yellow)';
-                return;
-            }
-            const mode = el.llmPromptModeSelect.value || 'revibed';
-            if (mode === state.llmPromptMode) {
-                populatePromptModeSetting(state.llmPromptMode, state.llmPromptModeOptions);
-                return;
-            }
-            el.llmPromptModeStatus.textContent = `Unsaved. ${promptModeStatusText(mode)}`;
-            el.llmPromptModeStatus.style.color = 'var(--comment)';
+    if (el.openPromptLibraryBtn) {
+        el.openPromptLibraryBtn.addEventListener('click', openPromptLibrary);
+    }
+    if (el.closePromptLibraryBtn) {
+        el.closePromptLibraryBtn.addEventListener('click', closePromptLibrary);
+    }
+    if (el.promptLibraryDialog) {
+        el.promptLibraryDialog.addEventListener('click', event => {
+            if (event.target === el.promptLibraryDialog) closePromptLibrary();
         });
     }
-    if (el.saveLlmPromptModeBtn) {
-        el.saveLlmPromptModeBtn.addEventListener('click', savePromptModeSetting);
+    if (el.promptLibraryNewBtn) {
+        el.promptLibraryNewBtn.addEventListener('click', newPromptSet);
     }
-    if (el.editLlmPromptStyleBtn) {
-        el.editLlmPromptStyleBtn.addEventListener('click', beginPromptStyleEdit);
+    if (el.promptLibraryUseBtn) {
+        el.promptLibraryUseBtn.addEventListener('click', usePromptSet);
     }
-    if (el.cancelLlmPromptEditBtn) {
-        el.cancelLlmPromptEditBtn.addEventListener('click', cancelPromptStyleEdit);
+    if (el.promptLibrarySaveBtn) {
+        el.promptLibrarySaveBtn.addEventListener('click', savePromptSet);
+    }
+    if (el.promptLibraryDuplicateBtn) {
+        el.promptLibraryDuplicateBtn.addEventListener('click', duplicatePromptSet);
+    }
+    if (el.promptLibraryDeleteBtn) {
+        el.promptLibraryDeleteBtn.addEventListener('click', deletePromptSet);
     }
     D.getElementById('use-selected-model-btn').addEventListener('click', () => setOllamaModel(el.ollamaModelSelect.value));
     D.getElementById('refresh-model-field-btn').addEventListener('click', () => {

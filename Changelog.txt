@@ -7,6 +7,34 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+Unreleased - Settings UI Refactor And Prompt Library
+-----------------------------------------------------
+
+Branch: claude-settings-prompt-library
+
+- Consolidated the settings popup from eight tabs to six (Persona, Model,
+  Voice, Device, Motion, Diagnostics) grouped by user mental model. The
+  former Prompts tab is gone; anatomy moved to Persona, Speed Limits moved
+  to Device, and Maintenance/Reset moved to Diagnostics. Toggle switches
+  are reserved for immediate-effect settings; Save-gated settings keep
+  checkboxes with per-section Save buttons (no tab-level "Save All").
+- Added the Prompt Library as a dedicated modal opened from the Model tab.
+  It lists every prompt set with Custom/Default and Active badges and a
+  per-set editor for the four prompt kinds (chat, motion-repair,
+  name-this-move, profile-consolidation). Default sets render live from
+  `/system_prompts` and are read-only; custom sets store editable
+  templates exposed via the `prompt_sets` field.
+- Added `/delete_llm_prompt_set` (deleting the active set falls back to
+  the default) and exposed full custom prompt text through
+  `llm_custom_prompt_set_contents()` so the editor can load saved drafts.
+- Reworked the Prompt Library modal layout: list/editor pane divider,
+  separated editor header from prompt fields, and bordered field cards
+  with labeled headings so sections are visually distinct.
+- Fixed the prompt textarea resize grip: `.diagnostics-output`'s
+  `max-height: 180px` was clamping the height and silently blocking
+  vertical resizing. Scoped override lets the grip expand the textarea
+  while the editor pane keeps scrolling within the modal.
+
 2026-06-16 - PR #327 - Generated Focus Motion Routing
 -----------------------------------------------------
 
