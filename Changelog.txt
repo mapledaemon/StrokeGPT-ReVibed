@@ -7,8 +7,8 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-Unreleased - Pattern Shape Cleanup And Studio Graphing
--------------------------------------------------------
+2026-06-17 - PR #329 - Pattern Shape Cleanup And Studio Graphing
+---------------------------------------------------------------
 
 Branch: claude-pattern-cleanup-graphing
 
