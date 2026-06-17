@@ -7,6 +7,40 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-17 - PR #330 - Settings Save Confirmation For Calibration Sliders
+------------------------------------------------------------------------
+
+Branch: claude-fix-settings-save-feedback
+
+- Fixed the Speed Limits and Stroke Range save buttons appearing to do
+  nothing: their save confirmation only wrote to the global chat status
+  bar, which the open settings modal covers. Added dedicated in-modal
+  status lines (`#motion-speed-limits-status`, `#motion-depth-range-status`)
+  and routed save success/failure to them, matching the Backend/Style/
+  Direction sections. The save path itself was already correct, and no
+  per-section save button was removed in the six-tab refactor (only the
+  two aggregate "Save All" buttons were intentionally dropped).
+- Restored the PR #329 changelog entry below, which was dropped when a
+  master-into-branch merge resolved the Changelog.txt conflict in favor
+  of master before the PR merged.
+
+2026-06-17 - PR #329 - Pattern Shape Cleanup And Studio Graphing
+---------------------------------------------------------------
+
+Branch: claude-pattern-cleanup-graphing
+
+- Re-authored the jagged built-in motion patterns to remove mid-cycle
+  direction reversals that read as jitter. Patterns previously bounced
+  through mid-values (e.g. milk was 0->100->40->100->0, producing a
+  rapid back-and-forth at the deep end); they now use clean 0<->100
+  strokes with character coming from timing asymmetry. All pattern IDs,
+  durations, endpoints, style fields, and test contracts are preserved.
+- Reworked the Motion Pattern Studio preview and crop timeline to sample
+  the same Fritsch-Carlson monotone cubic the backend uses, instead of
+  an overshooting Catmull-Rom that hid shudder. Added time labels to the
+  preview, density-adaptive authored-point thinning, and a monotone
+  curve on the crop timeline colored by segment intensity.
+
 2026-06-17 - PR #328 - Settings UI Refactor And Prompt Library
 ---------------------------------------------------------------
 
