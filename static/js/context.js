@@ -220,6 +220,8 @@ export const el = {
     motionDirectionReverseRadio: D.getElementById('motion-direction-reverse'),
     saveMotionReverseDirectionBtn: D.getElementById('save-motion-reverse-direction-btn'),
     motionReverseDirectionStatus: D.getElementById('motion-reverse-direction-status'),
+    motionSpeedLimitsStatus: D.getElementById('motion-speed-limits-status'),
+    motionDepthRangeStatus: D.getElementById('motion-depth-range-status'),
     motionDiagnosticsLevelSelect: D.getElementById('motion-diagnostics-level-select'),
     saveMotionDiagnosticsLevelBtn: D.getElementById('save-motion-diagnostics-level-btn'),
     ollamaDiagnosticsLevelSelect: D.getElementById('ollama-diagnostics-level-select'),

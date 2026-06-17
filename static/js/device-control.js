@@ -280,10 +280,12 @@ async function saveMotionDepthRange() {
         body: JSON.stringify({min_depth: state.motionMinDepth, max_depth: state.motionMaxDepth}),
     });
     if (res && res.status === 'success') {
-        el.statusText.textContent = `Stroke range saved: ${state.motionMinDepth}-${state.motionMaxDepth}%.`;
+        const message = `Stroke range saved: ${state.motionMinDepth}-${state.motionMaxDepth}%.`;
+        setStatusMessage(el.motionDepthRangeStatus, message, 'success');
+        el.statusText.textContent = message;
         return true;
     }
-    reportSaveFailure(el.statusText, res, 'Could not save stroke range.');
+    reportSaveFailure(el.motionDepthRangeStatus || el.statusText, res, 'Could not save stroke range.');
     return false;
 }
 

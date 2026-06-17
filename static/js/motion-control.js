@@ -478,10 +478,12 @@ async function saveMotionSpeedLimits() {
     });
     if (res && res.status === 'success') {
         populateMotionSettings({min_speed: res.min_speed, max_speed: res.max_speed});
-        el.statusText.textContent = `Speed limits saved: ${state.motionMinSpeed}-${state.motionMaxSpeed}%.`;
+        const message = `Speed limits saved: ${state.motionMinSpeed}-${state.motionMaxSpeed}%.`;
+        setStatusMessage(el.motionSpeedLimitsStatus, message, 'success');
+        el.statusText.textContent = message;
         return true;
     } else {
-        reportSaveFailure(el.statusText, res, 'Could not save speed limits.');
+        reportSaveFailure(el.motionSpeedLimitsStatus || el.statusText, res, 'Could not save speed limits.');
         return false;
     }
 }

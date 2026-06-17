@@ -162,7 +162,7 @@ describe('motion/audio save feedback', () => {
         assert.strictEqual(status.style.color, 'var(--yellow)');
     });
 
-    it('saveMotionSpeedLimits surfaces the backend message on global status', async () => {
+    it('saveMotionSpeedLimits surfaces the backend message on the speed-limits status line', async () => {
         installBackendError('Speed limit range is invalid.');
 
         getStubElement('motion-speed-min-slider').value = '20';
@@ -170,7 +170,7 @@ describe('motion/audio save feedback', () => {
         getStubElement('save-motion-speed-limits').click();
         await flushAsyncHandlers();
 
-        const status = getStubElement('status-text');
+        const status = getStubElement('motion-speed-limits-status');
         assert.strictEqual(status.textContent, 'Speed limit range is invalid.');
         assert.strictEqual(status.style.color, 'var(--yellow)');
     });

@@ -290,6 +290,10 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn('id="motion-speed-min-slider"', page)
             self.assertIn('id="motion-speed-max-slider"', page)
             self.assertIn('id="save-motion-speed-limits"', page)
+            # Calibration sliders surface save confirmation in-modal (not just the
+            # global chat status bar that the open settings modal covers).
+            self.assertIn('id="motion-speed-limits-status"', page)
+            self.assertIn('id="motion-depth-range-status"', page)
             self.assertIn('id="motion-backend-select"', page)
             self.assertIn('id="save-motion-backend-btn"', page)
             self.assertIn('id="motion-backend-status"', page)
