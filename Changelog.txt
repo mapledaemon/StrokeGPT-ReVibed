@@ -7,8 +7,8 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-Unreleased - Settings UI Refactor And Prompt Library
------------------------------------------------------
+2026-06-17 - PR #328 - Settings UI Refactor And Prompt Library
+---------------------------------------------------------------
 
 Branch: claude-settings-prompt-library
 
