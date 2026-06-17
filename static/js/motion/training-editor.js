@@ -666,6 +666,91 @@ function drawCurvePath(ctx, points) {
     }
 }
 
+const MONOTONE_WRAP_POSITION_EPSILON = 0.5;
+
+function wrapSegmentMs(actions) {
+    if (actions.length < 2) return 0;
+    const posDelta = Math.abs(actions[0].pos - actions[actions.length - 1].pos);
+    if (posDelta <= MONOTONE_WRAP_POSITION_EPSILON) return 0;
+    return Math.max(50, Math.round(posDelta * 10));
+}
+
+function buildMonotoneCurve(actions) {
+    if (actions.length < 2) return null;
+    const wrap = wrapSegmentMs(actions);
+    const times = [0];
+    const positions = [actions[0].pos];
+    for (let i = 1; i < actions.length; i++) {
+        times.push(times[times.length - 1] + Math.max(1, actions[i].at - actions[i - 1].at));
+        positions.push(actions[i].pos);
+    }
+    if (wrap > 0) {
+        times.push(times[times.length - 1] + wrap);
+        positions.push(actions[0].pos);
+    }
+    const segmentCount = times.length - 1;
+    if (segmentCount <= 0) return null;
+    const durations = [];
+    const secants = [];
+    for (let i = 0; i < segmentCount; i++) {
+        durations.push(times[i + 1] - times[i]);
+        secants.push((positions[i + 1] - positions[i]) / Math.max(1, durations[i]));
+    }
+    const tangents = [];
+    for (let k = 0; k < segmentCount; k++) {
+        const sPrev = secants[(k - 1 + segmentCount) % segmentCount];
+        const sNext = secants[k];
+        if (sPrev === 0 || sNext === 0 || (sPrev > 0) !== (sNext > 0)) {
+            tangents.push(0);
+            continue;
+        }
+        const dPrev = durations[(k - 1 + segmentCount) % segmentCount];
+        const dNext = durations[k];
+        const w1 = 2 * dNext + dPrev;
+        const w2 = dNext + 2 * dPrev;
+        tangents.push((w1 + w2) / (w1 / sPrev + w2 / sNext));
+    }
+    return {times, positions, tangents, segmentCount, totalCycleMs: times[times.length - 1]};
+}
+
+function sampleMonotone(curve, phase) {
+    if (!curve) return 50;
+    const {times, positions, tangents, segmentCount, totalCycleMs} = curve;
+    if (segmentCount <= 0 || totalCycleMs <= 0) return positions[0] ?? 50;
+    const sampleAt = ((phase % 1) + 1) % 1 * totalCycleMs;
+    let segmentIndex = 0;
+    for (let i = 0; i < segmentCount; i++) {
+        if (sampleAt <= times[i + 1]) { segmentIndex = i; break; }
+        segmentIndex = i;
+    }
+    const duration = times[segmentIndex + 1] - times[segmentIndex];
+    if (duration <= 0) return positions[segmentIndex];
+    const u = (sampleAt - times[segmentIndex]) / duration;
+    const u2 = u * u;
+    const u3 = u2 * u;
+    const p0 = positions[segmentIndex];
+    const p1 = positions[segmentIndex + 1];
+    const m0 = tangents[segmentIndex];
+    const m1 = tangents[(segmentIndex + 1) % segmentCount];
+    const value = (2 * u3 - 3 * u2 + 1) * p0
+        + (u3 - 2 * u2 + u) * duration * m0
+        + (-2 * u3 + 3 * u2) * p1
+        + (u3 - u2) * duration * m1;
+    return Math.max(0, Math.min(100, value));
+}
+
+function sampleMonotoneDense(actions, sampleCount) {
+    const curve = buildMonotoneCurve(actions);
+    if (!curve) return [];
+    const count = Math.max(2, Math.round(sampleCount));
+    const samples = [];
+    for (let i = 0; i < count; i++) {
+        const phase = i / (count - 1);
+        samples.push({phase, pos: sampleMonotone(curve, phase)});
+    }
+    return samples;
+}
+
 function drawWithinPlotBounds(ctx, pad, width, height, draw) {
     if (
         typeof ctx.save !== 'function'
@@ -760,13 +845,28 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
 
     const selectedPointIndex = Number.isInteger(options.selectedPointIndex) ? options.selectedPointIndex : -1;
     drawWithinPlotBounds(previewCtx, pad, width, height, () => {
+        // Sample the same Fritsch-Carlson monotone cubic the backend uses,
+        // dense across the plot width, so the preview matches what the
+        // device actually plays instead of an overshooting Catmull-Rom.
+        const innerWidth = width - pad * 2;
+        const denseSamples = sampleMonotoneDense(actions, Math.max(32, Math.round(innerWidth / 2)));
         previewCtx.strokeStyle = lineColor;
         previewCtx.lineWidth = 2.5;
         previewCtx.beginPath();
-        drawCurvePath(previewCtx, actions.map(action => ({x: xFor(action), y: yFor(action)})));
+        denseSamples.forEach((sample, index) => {
+            const x = pad + sample.phase * innerWidth;
+            const y = pad + ((100 - clampNumber(sample.pos, 0, 100, 50)) / 100) * (height - pad * 2);
+            if (index === 0) previewCtx.moveTo(x, y);
+            else previewCtx.lineTo(x, y);
+        });
         previewCtx.stroke();
 
+        // Density-adaptive point thinning: for dense/imported patterns,
+        // stride the authored-point dots so they don't merge into a blob.
+        // Sparse patterns still show every authored control.
+        const pointStride = actions.length > 60 ? Math.ceil(actions.length / 60) : 1;
         actions.forEach((action, index) => {
+            if (index !== selectedPointIndex && index % pointStride !== 0 && index !== actions.length - 1) return;
             if (index === selectedPointIndex) {
                 previewCtx.strokeStyle = 'rgba(189, 147, 249, 0.96)';
                 previewCtx.lineWidth = 2;
@@ -784,6 +884,14 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
     previewCtx.fillStyle = 'rgba(232, 230, 223, 0.7)';
     previewCtx.fillText('tip', width - pad + 6, pad + 4);
     previewCtx.fillText('base', width - pad + 6, height - pad + 4);
+    // Time axis labels so patterns of different durations are readable.
+    const startSeconds = msToSeconds(start);
+    const endSeconds = msToSeconds(end);
+    previewCtx.textAlign = 'left';
+    previewCtx.fillText(`${startSeconds}s`, pad, height - 4);
+    previewCtx.textAlign = 'right';
+    previewCtx.fillText(`${endSeconds}s`, width - pad, height - 4);
+    previewCtx.textAlign = 'left';
 }
 
 export function drawMotionTrainingPreview(pattern = state.motionTrainingPreviewPattern) {
@@ -1070,21 +1178,47 @@ function drawStudioCropTimeline() {
         ...actions.filter(action => action.at > start && action.at < end),
         actionAt(actions, end),
     ];
-    const xFor = action => padX + ((action.at - start) / duration) * (width - padX * 2);
-    const yFor = action => padY + ((100 - clampNumber(action.pos, 0, 100, 50)) / 100) * (height - padY * 2);
+    const xForMs = ms => padX + ((ms - start) / duration) * (width - padX * 2);
+    const yForPos = pos => padY + ((100 - clampNumber(pos, 0, 100, 50)) / 100) * (height - padY * 2);
 
+    // Draw the monotone cubic curve (matches backend sampling) colored by
+    // segment intensity, instead of straight line segments that misrepresent
+    // the shape between authored controls.
+    const curve = buildMonotoneCurve(visibleActions);
+    const innerWidth = width - padX * 2;
+    const denseCount = Math.max(40, Math.round(innerWidth / 2));
     ctx.lineWidth = 2.5;
-    for (let i = 1; i < visibleActions.length; i++) {
-        const left = visibleActions[i - 1];
-        const right = visibleActions[i];
-        const intensity = segmentIntensity(left, right);
-        ctx.strokeStyle = timelineIntensityColor(intensity);
-        ctx.beginPath();
-        ctx.moveTo(xFor(left), yFor(left));
-        ctx.lineTo(xFor(right), yFor(right));
-        ctx.stroke();
-        ctx.fillStyle = timelineIntensityColor(intensity, 0.28);
-        ctx.fillRect(xFor(left), height - padY + 2, Math.max(1, xFor(right) - xFor(left)), 4);
+    if (curve) {
+        for (let i = 0; i < denseCount; i++) {
+            const phaseA = i / denseCount;
+            const phaseB = (i + 1) / denseCount;
+            const msA = start + phaseA * duration;
+            const msB = start + phaseB * duration;
+            const posA = sampleMonotone(curve, phaseA);
+            const posB = sampleMonotone(curve, phaseB);
+            const intensity = segmentIntensity({at: msA, pos: posA}, {at: msB, pos: posB});
+            ctx.strokeStyle = timelineIntensityColor(intensity);
+            ctx.beginPath();
+            ctx.moveTo(xForMs(msA), yForPos(posA));
+            ctx.lineTo(xForMs(msB), yForPos(posB));
+            ctx.stroke();
+            ctx.fillStyle = timelineIntensityColor(intensity, 0.28);
+            ctx.fillRect(xForMs(msA), height - padY + 2, Math.max(1, xForMs(msB) - xForMs(msA)), 4);
+        }
+    } else {
+        ctx.lineWidth = 2.5;
+        for (let i = 1; i < visibleActions.length; i++) {
+            const left = visibleActions[i - 1];
+            const right = visibleActions[i];
+            const intensity = segmentIntensity(left, right);
+            ctx.strokeStyle = timelineIntensityColor(intensity);
+            ctx.beginPath();
+            ctx.moveTo(xForMs(left.at), yForPos(left.pos));
+            ctx.lineTo(xForMs(right.at), yForPos(right.pos));
+            ctx.stroke();
+            ctx.fillStyle = timelineIntensityColor(intensity, 0.28);
+            ctx.fillRect(xForMs(left.at), height - padY + 2, Math.max(1, xForMs(right.at) - xForMs(left.at)), 4);
+        }
     }
 
     ctx.fillStyle = 'rgba(216, 182, 106, 0.7)';
@@ -1092,7 +1226,7 @@ function drawStudioCropTimeline() {
     visibleActions.forEach((action, index) => {
         if (index % stride !== 0 && index !== visibleActions.length - 1) return;
         ctx.beginPath();
-        ctx.arc(xFor(action), yFor(action), 2, 0, Math.PI * 2);
+        ctx.arc(xForMs(action.at), yForPos(action.pos), 2, 0, Math.PI * 2);
         ctx.fill();
     });
     ctx.fillStyle = 'rgba(232, 230, 223, 0.62)';
