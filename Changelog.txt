@@ -7,6 +7,30 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-18 - PR #331 - Latency-Aware Mode Transition Dwell
+----------------------------------------------------------
+
+Branch: codex-mode-transition-dwell
+
+- Added a measured HSP transition dwell floor for continuous scripted
+  modes. Auto, Milk, Edge, and Freestyle now hold an applied target for at
+  least the observed recent HSP command latency plus the existing buffer
+  padding, capped at 12 seconds, so Cloud REST latency spikes do not cause
+  mode planners to replace the active stream as quickly as the device can
+  accept it.
+- Enforced that dwell as an autonomous retarget deadline, so a routine
+  early wake does not immediately issue the next replacement. Explicit
+  motion feedback and close-signal reactions can still interrupt.
+- Reduced replacement batch waste by starting HSP bridge points near the
+  estimated command-arrival window instead of filling the front of the
+  flushed batch with points that are already expired before Cloud REST can
+  deliver the command.
+- Kept the dwell floor specific to active continuous/HSP motion: skipped
+  no-op retargets and non-continuous backends keep their existing timing.
+- Verified the suspected chat pattern-library leak against current tests;
+  disabled normal-chat pattern library still strips exact fixed patterns and
+  milk/edge aliases before motion application.
+
 2026-06-17 - PR #330 - Restore Settings Save Buttons
 ----------------------------------------------------
 

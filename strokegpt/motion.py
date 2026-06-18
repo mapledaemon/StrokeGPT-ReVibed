@@ -61,6 +61,7 @@ CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS = 1.1
 CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS = 6.5
 CONTINUOUS_HSP_AREA_FOCUS_REPLACEMENT_MAX_LEAD_SECONDS = CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS
 CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS = 1.0
+CONTINUOUS_HSP_TRANSITION_DWELL_MAX_SECONDS = 12.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
 CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON = 0.2
@@ -2685,6 +2686,22 @@ class MotionController:
             else:
                 self._recent_hsp_command_seconds = seconds
 
+    def continuous_transition_dwell_floor_seconds(self) -> float:
+        if not self._supports_continuous_streaming():
+            return 0.0
+        observed_seconds = max(
+            self._recent_hsp_command_latency_seconds(),
+            self._recent_hsp_peak_command_latency_seconds(),
+        )
+        if observed_seconds <= 0:
+            return 0.0
+        floor = (
+            observed_seconds
+            + CONTINUOUS_HSP_APPEND_LATENCY_PADDING_SECONDS
+            + CONTINUOUS_HSP_LATENCY_BUFFER_RESERVE_SECONDS
+        )
+        return _clamp(floor, 0.0, CONTINUOUS_HSP_TRANSITION_DWELL_MAX_SECONDS)
+
     def _continuous_append_threshold_seconds(self, plan=None) -> float:
         threshold = CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS
         observed_seconds = max(
@@ -3388,7 +3405,11 @@ class MotionController:
                 max(hsp_clock_start_seconds, hsp_clock_start_seconds + bridge_start_latency_seconds),
                 latest_bridge_start,
             )
-            bridge_start_stream_seconds = min(bridge_handoff_stream_seconds, latency_bridge_start_stream_seconds)
+            bridge_start_stream_seconds = max(
+                hsp_clock_start_seconds,
+                latency_bridge_start_stream_seconds - bridge_interval_seconds,
+            )
+            bridge_handoff_stream_seconds = bridge_start_stream_seconds
             bridge_stream_seconds = bridge_start_stream_seconds + bridge_interval_seconds
         stream_wall_zero = None
         sync_count = 0
