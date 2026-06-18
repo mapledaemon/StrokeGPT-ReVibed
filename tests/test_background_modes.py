@@ -857,14 +857,17 @@ class AutoModeThreadTests(unittest.TestCase):
             "freestyle_candidates": lambda: candidates,
         }
         sleep_count = 0
+        now = 1000.0
 
         def stop_after_two_iterations(event, _seconds, *_args, **_kwargs):
-            nonlocal sleep_count
+            nonlocal sleep_count, now
             sleep_count += 1
+            now += max(0.0, float(_seconds or 0.0))
             if sleep_count >= 2:
                 event.set()
 
-        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_two_iterations):
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_two_iterations), \
+                mock.patch.object(background_modes.time, "monotonic", lambda: now):
             background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(remembered, ["sway", "sway"])
@@ -896,6 +899,143 @@ class AutoModeThreadTests(unittest.TestCase):
             hold_seconds = freestyle._freestyle_continuous_hold_seconds(choice, 1.0, 1.0, random.Random(2))
 
         self.assertAlmostEqual(hold_seconds, 13.8)
+
+    def test_mode_step_sleep_uses_transition_floor_after_applied_motion(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_transition_dwell_floor_seconds = lambda: 6.25
+        step = ScriptStep(MotionTarget(30, 50, 70), hold_seconds_floor=2.0)
+
+        self.assertEqual(
+            background_modes._mode_step_sleep_seconds(
+                1.0,
+                step,
+                motion,
+                applied_motion=True,
+            ),
+            6.25,
+        )
+
+    def test_mode_step_sleep_falls_back_to_config_when_latency_unknown(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_transition_dwell_floor_seconds = lambda: 0.0
+        step = ScriptStep(MotionTarget(30, 50, 70), hold_seconds_floor=2.0)
+
+        self.assertEqual(
+            background_modes._mode_step_sleep_seconds(
+                4.5,
+                step,
+                motion,
+                applied_motion=True,
+            ),
+            4.5,
+        )
+
+    def test_mode_step_sleep_ignores_transition_floor_when_motion_skipped(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_transition_dwell_floor_seconds = lambda: 6.25
+        step = ScriptStep(MotionTarget(30, 50, 70), hold_seconds_floor=2.0)
+
+        self.assertEqual(
+            background_modes._mode_step_sleep_seconds(
+                1.0,
+                step,
+                motion,
+                applied_motion=False,
+            ),
+            2.0,
+        )
+
+    def test_scripted_mode_early_wake_respects_autonomous_transition_dwell(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_transition_dwell_floor_seconds = lambda: 9.0
+        sleeps = []
+
+        callbacks = {
+            "get_timings": lambda _mode: (0.0, 0.0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+        }
+        stop_event = threading.Event()
+
+        def early_wake(event, seconds, _callbacks, _mode, autospeak_interval, next_autospeak_at, **_kwargs):
+            sleeps.append(seconds)
+            if len(sleeps) >= 2:
+                event.set()
+            return autospeak_interval, next_autospeak_at
+
+        class DeterministicPlanner:
+            def __init__(self, *_args, **_kwargs):
+                self.count = 0
+
+            def next_step(self, *_args, **_kwargs):
+                self.count += 1
+                return ScriptStep(
+                    MotionTarget(30 + self.count, 45, 65, label=f"test step {self.count}"),
+                    delay_factor=1.0,
+                )
+
+        with mock.patch.object(background_modes, "MotionScriptPlanner", DeterministicPlanner), \
+                mock.patch.object(background_modes, "_sleep_with_autospeak", early_wake):
+            background_modes._run_scripted_mode(
+                stop_event,
+                {"motion": motion},
+                callbacks,
+                "auto",
+                max_steps=2,
+            )
+
+        self.assertEqual(len(motion.generated), 1)
+        self.assertGreaterEqual(sleeps[0], 9.0)
+        self.assertGreaterEqual(sleeps[1], 8.9)
+
+    def test_freestyle_continuous_sleep_uses_transition_floor(self):
+        motion = FakeMotionController()
+        motion.backend = "continuous"
+        motion.continuous_transition_dwell_floor_seconds = lambda: 10.0
+        motion.generated_calls = []
+
+        def apply_generated_target(target, source="generated", trace_metadata=None):
+            motion.applied.append(target)
+            motion.generated_calls.append((target, trace_metadata or {}))
+            return True
+
+        motion.apply_generated_target = apply_generated_target
+        stop_event = threading.Event()
+        candidates = [
+            {
+                "id": "sway",
+                "name": "Sway",
+                "source": "fixed",
+                "enabled": True,
+                "weight": 80,
+                "record": FakePatternRecord("sway", "Sway"),
+            },
+        ]
+        callbacks = {
+            "get_timings": lambda _mode: (0.0, 0.0),
+            "message_queue": deque(),
+            "message_event": threading.Event(),
+            "send_message": lambda _message: None,
+            "update_mood": lambda _mood: None,
+            "remember_pattern_id": lambda _pattern_id: None,
+            "freestyle_candidates": lambda: candidates,
+        }
+        sleeps = []
+
+        def stop_after_sleep(event, seconds, *_args, **_kwargs):
+            sleeps.append(seconds)
+            event.set()
+
+        with mock.patch.object(background_modes, "_sleep_with_stop", stop_after_sleep):
+            background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
+
+        self.assertEqual(sleeps, [10.0])
 
     def test_freestyle_continuous_fixed_patterns_use_generated_flow_target(self):
         class FlowMotion(FakeMotionController):

@@ -19,6 +19,7 @@ from strokegpt.motion import (
     CONTINUOUS_HSP_REPLACEMENT_BRIDGE_MIN_LATENCY_SECONDS,
     CONTINUOUS_HSP_TAIL_THRESHOLD_LEAD_SECONDS,
     CONTINUOUS_HSP_REPLACEMENT_MAX_LEAD_SECONDS,
+    CONTINUOUS_HSP_TRANSITION_DWELL_MAX_SECONDS,
     CONTINUOUS_SAMPLE_INTERVAL_SECONDS,
     CONTINUOUS_STREAM_APPEND_THRESHOLD_SECONDS,
     CONTINUOUS_STREAM_MAX_POINTS_PER_COMMAND,
@@ -2248,6 +2249,27 @@ class MotionControllerTests(unittest.TestCase):
         self.assertLess(controller._recent_hsp_command_latency_seconds(), 1.0)
         self.assertGreaterEqual(controller._continuous_append_threshold_seconds(), 5.0)
 
+    def test_continuous_transition_dwell_floor_uses_peak_hsp_latency(self):
+        controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
+
+        controller._observe_hsp_command_seconds(4.0)
+        controller._observe_hsp_command_seconds(0.12)
+
+        self.assertLess(controller._recent_hsp_command_latency_seconds(), 1.0)
+        self.assertGreaterEqual(controller.continuous_transition_dwell_floor_seconds(), 6.0)
+
+    def test_continuous_transition_dwell_floor_clamps_and_requires_hsp(self):
+        streaming = MotionController(StreamingFakeHandy(), step_delay=0.16)
+        streaming._observe_hsp_command_seconds(20.0)
+        self.assertEqual(
+            streaming.continuous_transition_dwell_floor_seconds(),
+            CONTINUOUS_HSP_TRANSITION_DWELL_MAX_SECONDS,
+        )
+
+        legacy = MotionController(FakeHandy(), step_delay=0.16)
+        legacy._observe_hsp_command_seconds(4.0)
+        self.assertEqual(legacy.continuous_transition_dwell_floor_seconds(), 0.0)
+
     def test_continuous_hsp_buffer_expands_without_sparsening_points(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
 
@@ -3093,11 +3115,13 @@ class MotionControllerTests(unittest.TestCase):
                 and point.get("freestyle_pattern_id") == "wave"
             )
             hsp_clock_start_ms = first_bridge["hsp_play_start_ms"] - first_bridge["hsp_replacement_lead_ms"]
-
-            self.assertLessEqual(
-                bridge_points[0]["t"] - hsp_clock_start_ms,
-                (CONTINUOUS_SAMPLE_INTERVAL_SECONDS * 1000.0) + 5.0,
+            expected_bridge_start_ms = (
+                first_bridge["hsp_replacement_latency_bridge_start_ms"]
+                - first_bridge["hsp_replacement_bridge_interval_ms"]
             )
+
+            self.assertGreaterEqual(bridge_points[0]["t"] - hsp_clock_start_ms, expected_bridge_start_ms - 5.0)
+            self.assertLessEqual(bridge_points[0]["t"] - hsp_clock_start_ms, expected_bridge_start_ms + 5.0)
             pre_start_bridge_points = [
                 point for point in bridge_points if point["t"] < replacement["start_time_ms"]
             ]
@@ -3122,6 +3146,50 @@ class MotionControllerTests(unittest.TestCase):
                 delta=1.0,
             )
             self.assertGreaterEqual(first_bridge["hsp_replacement_bridge_latency_ms"], 420.0)
+        finally:
+            controller.stop()
+
+    def test_high_latency_replacement_bridge_omits_pre_arrival_span(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_generated_target(MotionTarget(54, 50, 78, "freestyle flow"), source="first")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+            controller._observe_hsp_command_seconds(3.2)
+
+            controller.apply_generated_target(MotionTarget(62, 58, 70, "freestyle flow"), source="second")
+
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            replacement = handy.stream_replacements[0]
+            bridge_points = [point for point in replacement["points"] if point.get("hsp_replacement_bridge")]
+            self.assertTrue(bridge_points)
+
+            trace = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("source") == "second"
+                and point.get("hsp_batch") == "replace"
+                and point.get("hsp_replacement_bridge"),
+                timeout=2.0,
+            )
+            first_bridge = next(
+                point
+                for point in trace
+                if point.get("source") == "second"
+                and point.get("hsp_replacement_bridge")
+            )
+            hsp_clock_start_ms = first_bridge["hsp_play_start_ms"] - first_bridge["hsp_replacement_lead_ms"]
+            bridge_start_offset_ms = bridge_points[0]["t"] - hsp_clock_start_ms
+            latency_start_offset_ms = (
+                first_bridge["hsp_replacement_latency_bridge_start_ms"] - hsp_clock_start_ms
+            )
+
+            self.assertGreaterEqual(bridge_start_offset_ms, 3000.0)
+            self.assertLessEqual(
+                latency_start_offset_ms - bridge_start_offset_ms,
+                first_bridge["hsp_replacement_bridge_interval_ms"] + 5.0,
+            )
+            self.assertLess(bridge_points[0]["t"], replacement["start_time_ms"])
         finally:
             controller.stop()
 

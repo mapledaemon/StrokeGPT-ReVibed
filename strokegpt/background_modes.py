@@ -477,7 +477,25 @@ def _apply_mode_motion(motion_controller, target, source, *, use_pattern_library
         return True
 
 
-def _mode_step_sleep_seconds(base_seconds: float, step: ScriptStep, motion_controller) -> float:
+def _mode_transport_transition_floor_seconds(motion_controller, *, applied_motion: bool = True) -> float:
+    if not applied_motion or not _uses_continuous_motion(motion_controller):
+        return 0.0
+    floor_callback = getattr(motion_controller, "continuous_transition_dwell_floor_seconds", None)
+    if not callable(floor_callback):
+        return 0.0
+    try:
+        return max(0.0, float(floor_callback() or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _mode_step_sleep_seconds(
+    base_seconds: float,
+    step: ScriptStep | None,
+    motion_controller,
+    *,
+    applied_motion: bool = True,
+) -> float:
     sleep_seconds = max(0.0, float(base_seconds or 0.0))
     if not _uses_continuous_motion(motion_controller):
         return sleep_seconds
@@ -485,7 +503,18 @@ def _mode_step_sleep_seconds(base_seconds: float, step: ScriptStep, motion_contr
         hold_floor = max(0.0, float(getattr(step, "hold_seconds_floor", 0.0) or 0.0))
     except (TypeError, ValueError):
         hold_floor = 0.0
-    return max(sleep_seconds, hold_floor)
+    transition_floor = _mode_transport_transition_floor_seconds(
+        motion_controller,
+        applied_motion=applied_motion,
+    )
+    return max(sleep_seconds, hold_floor, transition_floor)
+
+
+def _mode_autonomous_dwell_remaining(deadline: float) -> float:
+    try:
+        return max(0.0, float(deadline or 0.0) - time.monotonic())
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _run_scripted_mode(
@@ -514,6 +543,7 @@ def _run_scripted_mode(
     )
     step_count = 0
     mode_intensity = initial_intensity
+    next_autonomous_motion_at = 0.0
     autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     if allow_mode_decisions:
@@ -571,6 +601,21 @@ def _run_scripted_mode(
         feedback_target = _feedback_target(stop_event, motion_controller, user_message)
         if stop_event.is_set():
             break
+        if not feedback_target:
+            dwell_remaining = _mode_autonomous_dwell_remaining(next_autonomous_motion_at)
+            if dwell_remaining > 0:
+                autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+                    stop_event,
+                    dwell_remaining,
+                    callbacks,
+                    mode,
+                    autospeak_interval,
+                    next_autospeak_at,
+                    wake_event=message_event,
+                    pause_event=pause_event,
+                    current_target=lambda: _semantic_target(motion_controller),
+                )
+                continue
 
         step = planner.next_step(_semantic_target(motion_controller), feedback_target=feedback_target)
         if step.message:
@@ -590,7 +635,10 @@ def _run_scripted_mode(
             random.uniform(min_time, max_time) * step.delay_factor,
             step,
             motion_controller,
+            applied_motion=applied_motion,
         )
+        if applied_motion:
+            next_autonomous_motion_at = time.monotonic() + sleep_seconds
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
             stop_event,
             sleep_seconds,
@@ -630,6 +678,7 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
     close_style_until = 0.0
     repeat_choice = None
     repeat_steps_remaining = 0
+    next_autonomous_motion_at = 0.0
     autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     while not stop_event.is_set():
@@ -739,6 +788,22 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             feedback_target = close_style_target
         elif close_style_target and time.monotonic() >= close_style_until:
             close_style_target = None
+        if not feedback_target:
+            dwell_remaining = _mode_autonomous_dwell_remaining(next_autonomous_motion_at)
+            if dwell_remaining > 0:
+                autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+                    stop_event,
+                    dwell_remaining,
+                    callbacks,
+                    "freestyle",
+                    autospeak_interval,
+                    next_autospeak_at,
+                    wake_event=message_event,
+                    pause_event=pause_event,
+                    edge_count=close_count,
+                    current_target=lambda: _semantic_target(motion_controller),
+                )
+                continue
 
         continuous_freestyle = _uses_continuous_motion(motion_controller)
         repeat_active = False
@@ -797,13 +862,14 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
             }
 
         use_pattern_library = pattern_library_enabled() if callable(pattern_library_enabled) else pattern_library_enabled
-        if freestyle_helpers._apply_freestyle_choices(
+        applied_motion = freestyle_helpers._apply_freestyle_choices(
             motion_controller,
             choices,
             rng,
             trace_metadata=trace_metadata,
             use_pattern_library=bool(use_pattern_library),
-        ):
+        )
+        if applied_motion:
             update_mood(choices[-1].mood)
             played_choices = choices[:1] if continuous_freestyle else choices
             for played_choice in played_choices:
@@ -824,6 +890,17 @@ def freestyle_mode_logic(stop_event: threading.Event, services: ModeServices, ca
                 else:
                     repeat_choice = None
                     repeat_steps_remaining = 0
+        if continuous_freestyle:
+            sleep_seconds = _mode_step_sleep_seconds(
+                sleep_seconds,
+                None,
+                motion_controller,
+                applied_motion=bool(applied_motion),
+            )
+            if applied_motion:
+                next_autonomous_motion_at = time.monotonic() + sleep_seconds
+            if trace_metadata is not None:
+                trace_metadata["freestyle_planner_sleep_ms"] = round(sleep_seconds * 1000.0, 1)
 
         step_count += 1 if continuous_freestyle else len(choices)
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
@@ -867,6 +944,7 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
     max_steps = random.randint(56, 78)
     mode_intensity = None
     reaction_steps_remaining = None
+    next_autonomous_motion_at = 0.0
     autospeak_interval, next_autospeak_at = _initial_autospeak_schedule(callbacks)
 
     edging_min, edging_max = get_timings("edging")
@@ -1002,20 +1080,40 @@ def edging_mode_logic(stop_event: threading.Event, services: ModeServices, callb
                         mode_decision_helpers._step_limit_for_duration(decision, edging_min, edging_max, len(planner.steps) + 1) - 1,
                     )
             else:
+                if not feedback_target:
+                    dwell_remaining = _mode_autonomous_dwell_remaining(next_autonomous_motion_at)
+                    if dwell_remaining > 0:
+                        autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
+                            stop_event,
+                            dwell_remaining,
+                            callbacks,
+                            "edging",
+                            autospeak_interval,
+                            next_autospeak_at,
+                            wake_event=message_event,
+                            pause_event=pause_event,
+                            edge_count=edge_count,
+                            current_target=lambda: _semantic_target(motion_controller),
+                        )
+                        continue
                 step = planner.next_step(_semantic_target(motion_controller), feedback_target=feedback_target)
 
         if step.message:
             send_message(step.message)
         update_mood(step.mood)
         target = mode_decision_helpers._target_with_intensity(step.target, mode_intensity)
-        _apply_mode_motion(motion_controller, target, source="edging mode")
-        remember_pattern(target)
+        applied_motion = _apply_mode_motion(motion_controller, target, source="edging mode")
+        if applied_motion:
+            remember_pattern(target)
         step_count += 1
         sleep_seconds = _mode_step_sleep_seconds(
             random.uniform(edging_min, edging_max) * step.delay_factor,
             step,
             motion_controller,
+            applied_motion=applied_motion,
         )
+        if applied_motion:
+            next_autonomous_motion_at = time.monotonic() + sleep_seconds
         autospeak_interval, next_autospeak_at = _sleep_with_autospeak(
             stop_event,
             sleep_seconds,
