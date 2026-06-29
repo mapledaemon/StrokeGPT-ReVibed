@@ -39,7 +39,7 @@ from .motion_preferences import (
     feedback_weight,
     should_auto_disable,
 )
-from . import payloads
+from . import ollama_runtime, payloads
 from .pattern_library import (
     ALLOWED_IMPORT_EXTENSIONS,
     PatternLibrary,
@@ -705,104 +705,65 @@ def _remember_chat_motion_target(target):
 
 
 def get_ollama_models_for_ui():
-    return payloads.ollama_models_for_ui(settings, llm)
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime.get_ollama_models_for_ui(settings, llm)
 
 def _format_bytes(value):
-    return payloads.format_bytes(value)
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime``.
+    return ollama_runtime._format_bytes(value)
 
 def _set_ollama_pull_state(**updates):
-    return app_state.set_ollama_pull_state(**updates)
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and pass ``app_state`` explicitly.
+    return ollama_runtime._set_ollama_pull_state(app_state, **updates)
 
 def _ollama_pull_snapshot():
-    return app_state.ollama_pull_snapshot()
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and pass ``app_state`` explicitly.
+    return ollama_runtime._ollama_pull_snapshot(app_state)
 
 def _diagnostics_level_options():
     return payloads.diagnostics_level_options()
 
 def _ollama_installed_models():
-    response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=0.5)
-    response.raise_for_status()
-    data = response.json()
-    models = []
-    for item in data.get("models", []):
-        name = normalize_ollama_model(item.get("model") or item.get("name") or "")
-        if not name:
-            continue
-        models.append({
-            "name": name,
-            "size": int(item.get("size") or 0),
-            "size_label": _format_bytes(item.get("size")),
-        })
-    models.sort(key=lambda item: item["name"].lower())
-    return models
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._ollama_installed_models(
+        OLLAMA_BASE_URL,
+        format_bytes=_format_bytes,
+        requests_module=requests,
+    )
 
 def _ollama_running_models():
-    response = requests.get(f"{OLLAMA_BASE_URL}/api/ps", timeout=0.5)
-    response.raise_for_status()
-    data = response.json()
-    models = []
-    for item in data.get("models", []):
-        name = normalize_ollama_model(item.get("model") or item.get("name") or "")
-        if not name:
-            continue
-        size = int(item.get("size") or 0)
-        size_vram_reported = "size_vram" in item
-        size_vram = int(item.get("size_vram") or 0)
-        models.append({
-            "name": name,
-            "size": size,
-            "size_label": _format_bytes(size),
-            "size_vram": size_vram,
-            "size_vram_label": _format_bytes(size_vram),
-            "size_vram_reported": size_vram_reported,
-            "processor": str(item.get("processor") or item.get("processor_label") or "").strip(),
-        })
-    models.sort(key=lambda item: item["name"].lower())
-    return models
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._ollama_running_models(
+        OLLAMA_BASE_URL,
+        format_bytes=_format_bytes,
+        requests_module=requests,
+    )
 
 
 def _ollama_load_model_for_status(model):
-    model = normalize_ollama_model(model)
-    if not model:
-        return {"ok": False, "error": "Model name is required."}
-    response = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json={
-            "model": model,
-            "prompt": "",
-            "stream": False,
-            "keep_alive": "5m",
-            "options": {"num_predict": 0},
-        },
-        timeout=60,
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._ollama_load_model_for_status(
+        OLLAMA_BASE_URL,
+        model,
+        requests_module=requests,
     )
-    response.raise_for_status()
-    data = response.json()
-    return {
-        "ok": True,
-        "model": normalize_ollama_model(data.get("model") or model),
-        "done_reason": data.get("done_reason") or "",
-    }
 
 
 def _ollama_status_payload(live=True):
-    # Service-bound adapter for ``payloads.ollama_status_payload()``: binds the
-    # live ``settings``/``llm`` services and the local pull/installation helpers
-    # so blueprint routes (and tests via ``mock.patch`` on the canonical
-    # ``strokegpt.payloads.ollama_status_payload``) can reuse one entry point.
-    # Do not add new ``web.*`` payload wrappers; extend ``strokegpt.payloads``
-    # instead and bind services here.
-    if not live:
-        return payloads.ollama_status_pending_payload(
-            settings=settings,
-            llm=llm,
-            base_url=OLLAMA_BASE_URL,
-            pull_snapshot=_ollama_pull_snapshot,
-        )
-    return payloads.ollama_status_payload(
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._ollama_status_payload(
         settings=settings,
         llm=llm,
         base_url=OLLAMA_BASE_URL,
+        live=live,
         pull_snapshot=_ollama_pull_snapshot,
         installed_models=_ollama_installed_models,
         running_models=_ollama_running_models,
@@ -810,95 +771,26 @@ def _ollama_status_payload(live=True):
     )
 
 def _run_ollama_pull(model):
-    _set_ollama_pull_state(
-        state="downloading",
-        model=model,
-        message=f"Downloading {model} with Ollama. This can be several GB.",
-        completed=0,
-        total=0,
-        percent=None,
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._run_ollama_pull(
+        model,
+        base_url=OLLAMA_BASE_URL,
+        set_pull_state=_set_ollama_pull_state,
+        format_bytes=_format_bytes,
+        requests_module=requests,
     )
-    try:
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/pull",
-            json={"name": model, "stream": True},
-            stream=True,
-            timeout=(3, None),
-        )
-        response.raise_for_status()
-        last_status = "Downloading"
-        for line in response.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            event = json.loads(line)
-            if event.get("error"):
-                raise RuntimeError(event["error"])
-            last_status = event.get("status") or last_status
-            completed = int(event.get("completed") or 0)
-            total = int(event.get("total") or 0)
-            percent = round((completed / total) * 100, 1) if total else None
-            detail = ""
-            if completed and total:
-                detail = f" ({_format_bytes(completed)} / {_format_bytes(total)}, {percent}%)"
-            _set_ollama_pull_state(
-                state="downloading",
-                model=model,
-                message=f"{last_status}{detail}",
-                completed=completed,
-                total=total,
-                percent=percent,
-            )
-        _set_ollama_pull_state(
-            state="ready",
-            model=model,
-            message=f"{model} is downloaded and ready.",
-            completed=0,
-            total=0,
-            percent=100,
-        )
-    except Exception as exc:
-        _set_ollama_pull_state(
-            state="error",
-            model=model,
-            message=f"Download failed for {model}: {exc}",
-            completed=0,
-            total=0,
-            percent=None,
-        )
 
 def _start_ollama_pull(model):
-    model = normalize_ollama_model(model)
-    if not model:
-        return False, "Model name is required."
-
-    status = _ollama_status_payload()
-    if model in status.get("installed_model_names", []):
-        _set_ollama_pull_state(
-            state="ready",
-            model=model,
-            message=f"{model} is already installed.",
-            completed=0,
-            total=0,
-            percent=100,
-        )
-        return True, "Model is already installed."
-    if not status.get("available"):
-        return False, status.get("message", "Ollama is not reachable.")
-
-    with app_state.lock:
-        if app_state.ollama_pull_thread and app_state.ollama_pull_thread.is_alive():
-            return False, f"Already downloading {app_state.ollama_pull_state.get('model') or 'a model'}."
-        app_state.ollama_pull_state.update({
-            "state": "downloading",
-            "model": model,
-            "message": f"Queued download for {model}.",
-            "completed": 0,
-            "total": 0,
-            "percent": None,
-        })
-        app_state.ollama_pull_thread = threading.Thread(target=_run_ollama_pull, args=(model,), daemon=True)
-        app_state.ollama_pull_thread.start()
-    return True, f"Started downloading {model}."
+    # Compatibility shim - do not extend. New code should import from
+    # ``strokegpt.ollama_runtime`` and bind services explicitly.
+    return ollama_runtime._start_ollama_pull(
+        model,
+        app_state=app_state,
+        status_payload=_ollama_status_payload,
+        set_pull_state=_set_ollama_pull_state,
+        run_ollama_pull=_run_ollama_pull,
+    )
 
 def get_persona_prompts_for_ui():
     return payloads.persona_prompts_for_ui(settings)

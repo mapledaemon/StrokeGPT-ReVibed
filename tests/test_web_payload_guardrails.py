@@ -9,12 +9,9 @@ WEB_PATH = PROJECT_ROOT / "strokegpt" / "web.py"
 ALLOWED_PAYLOAD_BINDING_FUNCTIONS = {
     "_append_motion_feedback_history",
     "_diagnostics_level_options",
-    "_format_bytes",
     "_motion_pattern_catalog_payload",
     "_motion_pattern_summary",
     "_motion_preference_payload",
-    "_ollama_status_payload",
-    "get_ollama_models_for_ui",
     "get_persona_prompts_for_ui",
     "setup_check_payload",
     "settings_payload",
