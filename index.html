@@ -124,14 +124,6 @@
                                     <span id="motion-depth-meter-value" class="motion-meter-value">50%</span>
                                 </div>
                             </div>
-                            <button id="quick-motion-trigger-btn" class="quick-motion-button" type="button" aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false" aria-label="Open quick motion settings" title="Quick motion settings">
-                                <svg class="quick-motion-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                    <path d="M4 7h9m4 0h3M4 12h3m4 0h9M4 17h11m4 0h1"></path>
-                                    <circle cx="15" cy="7" r="2"></circle>
-                                    <circle cx="9" cy="12" r="2"></circle>
-                                    <circle cx="17" cy="17" r="2"></circle>
-                                </svg>
-                            </button>
                             <div id="motion-feedback-buttons">
                                 <button id="dislike-this-move-btn" class="my-button" title="Dislike fixed motion pattern" aria-label="Dislike fixed motion pattern" data-requires-backend>&#128078;</button>
                                 <button id="like-this-move-btn" class="my-button" title="Like move" aria-label="Like move" data-requires-backend>&#128077;</button>
@@ -228,7 +220,7 @@
             </div>
         </div>
         <div id="sidebar-motion-indicator">
-            <div id="handy-cylinder-indicator" aria-hidden="true">
+            <div id="handy-cylinder-indicator" class="quick-motion-cylinder-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false" aria-label="Quick motion settings: speed limits, stroke range, and direction" title="Quick settings - speed, range, direction">
                 <div class="handy-cylinder-cap handy-cylinder-cap-top"></div>
                 <div class="handy-cylinder-track">
                     <div id="handy-cylinder-range"></div>

@@ -496,9 +496,18 @@ async function saveMotionSpeedLimits() {
 // into the canonical inputs and reusing their save helpers, so both UIs and the
 // shared ``state`` stay in sync.
 let quickMotionMenuOpen = false;
+let quickMotionActiveTrigger = null;
 
+// The quick menu opens from the sidebar Handy cylinder visualizer (primary)
+// and the bottom status-strip meter panel (fallback for when the sidebar is
+// collapsed or off-canvas on mobile). The popover anchors to whichever trigger
+// was actually used so it appears next to it rather than a fixed location.
 function quickMotionTriggers() {
-    return [el.quickMotionButton, el.quickMotionTrigger].filter(Boolean);
+    return [el.quickMotionCylinderTrigger, el.quickMotionTrigger].filter(Boolean);
+}
+
+function quickMotionDefaultTrigger() {
+    return quickMotionTriggers()[0] || null;
 }
 
 function quickMotionMenuContains(target) {
@@ -511,7 +520,7 @@ function quickMotionMenuContains(target) {
 }
 
 function positionQuickMotionMenu() {
-    const anchor = el.quickMotionButton || el.quickMotionTrigger;
+    const anchor = quickMotionActiveTrigger || quickMotionDefaultTrigger();
     if (!quickMotionMenuOpen || !el.quickMotionMenu || !anchor) return;
     const popover = el.quickMotionMenu;
     const triggerRect = anchor.getBoundingClientRect();
@@ -564,11 +573,12 @@ function syncQuickMotionControls() {
     updateQuickMotionSummary();
 }
 
-function setQuickMotionMenuOpen(open) {
+function setQuickMotionMenuOpen(open, trigger = null) {
     const nextOpen = Boolean(open && el.quickMotionMenu && quickMotionTriggers().length);
     quickMotionMenuOpen = nextOpen;
+    if (nextOpen) quickMotionActiveTrigger = trigger || quickMotionActiveTrigger || quickMotionDefaultTrigger();
     if (el.quickMotionMenu) el.quickMotionMenu.hidden = !nextOpen;
-    quickMotionTriggers().forEach(trigger => trigger.setAttribute('aria-expanded', String(nextOpen)));
+    quickMotionTriggers().forEach(item => item.setAttribute('aria-expanded', String(nextOpen)));
     if (nextOpen) {
         syncQuickMotionControls();
         requestQuickMotionMenuPosition();
@@ -578,7 +588,10 @@ function setQuickMotionMenuOpen(open) {
 function toggleQuickMotionMenu(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    setQuickMotionMenuOpen(!quickMotionMenuOpen);
+    const clicked = event?.currentTarget && quickMotionTriggers().includes(event.currentTarget)
+        ? event.currentTarget
+        : null;
+    setQuickMotionMenuOpen(!quickMotionMenuOpen, clicked);
 }
 
 function mirrorQuickSpeedToCanonical() {
@@ -632,8 +645,9 @@ function bindQuickMotionMenu() {
     });
     el.quickMotionCloseBtn?.addEventListener('click', event => {
         event.stopPropagation?.();
+        const returnFocus = quickMotionActiveTrigger || quickMotionDefaultTrigger();
         setQuickMotionMenuOpen(false);
-        (el.quickMotionButton || el.quickMotionTrigger)?.focus?.();
+        returnFocus?.focus?.();
     });
     el.quickMotionSpeedMin?.addEventListener('input', mirrorQuickSpeedToCanonical);
     el.quickMotionSpeedMax?.addEventListener('input', mirrorQuickSpeedToCanonical);
@@ -655,8 +669,9 @@ function bindQuickMotionMenu() {
     });
     D.addEventListener('keydown', event => {
         if (event.key === 'Escape' && quickMotionMenuOpen) {
+            const returnFocus = quickMotionActiveTrigger || quickMotionDefaultTrigger();
             setQuickMotionMenuOpen(false);
-            (el.quickMotionButton || el.quickMotionTrigger)?.focus?.();
+            returnFocus?.focus?.();
         }
     });
     D.addEventListener('scroll', () => {
