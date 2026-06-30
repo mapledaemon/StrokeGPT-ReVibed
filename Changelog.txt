@@ -7,6 +7,25 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-29 - PR #333 - Quick Settings Menu On The Visualizer
+------------------------------------------------------------
+
+Branch: claude-quick-motion-menu
+
+- Added a Quick Settings popover opened from the bottom visualizer meter
+  panel, exposing speed limits, stroke range, and reverse direction without
+  opening the full settings dialog.
+- The meter panel is now a keyboard-accessible button with a hover/focus
+  affordance; the popover opens above the trigger, closes on the close
+  button, an outside click, or Escape, and sets an explicit pixel width so
+  it never collapses on a 0-width viewport.
+- Quick controls mirror the canonical Device/Motion settings inputs and
+  reuse their existing save endpoints (`/set_speed_limits`,
+  `/set_depth_limits`, `/set_motion_reverse_direction`), so both UIs and the
+  shared frontend state stay in sync. Exported `saveMotionDepthRange` and
+  `normalizeMotionDepthRange` from `device-control.js` for reuse and added
+  markup/CSS/JS-wiring regression tests.
+
 2026-06-29 - PR #332 - Extract Ollama Runtime Helpers
 -----------------------------------------------------
 
