@@ -381,6 +381,7 @@ export const el = {
     motionDepthMeterValue: D.getElementById('motion-depth-meter-value'),
     quickMotionMenu: D.getElementById('quick-motion-menu'),
     quickMotionTrigger: D.getElementById('motion-meter-panel'),
+    quickMotionButton: D.getElementById('quick-motion-trigger-btn'),
     quickMotionCloseBtn: D.getElementById('quick-motion-close-btn'),
     quickMotionSpeedMin: D.getElementById('quick-motion-speed-min'),
     quickMotionSpeedMax: D.getElementById('quick-motion-speed-max'),

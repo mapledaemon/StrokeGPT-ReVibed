@@ -497,19 +497,24 @@ async function saveMotionSpeedLimits() {
 // shared ``state`` stay in sync.
 let quickMotionMenuOpen = false;
 
+function quickMotionTriggers() {
+    return [el.quickMotionButton, el.quickMotionTrigger].filter(Boolean);
+}
+
 function quickMotionMenuContains(target) {
     let node = target;
     while (node) {
-        if (node === el.quickMotionMenu || node === el.quickMotionTrigger) return true;
+        if (node === el.quickMotionMenu || quickMotionTriggers().includes(node)) return true;
         node = node.parentNode;
     }
     return false;
 }
 
 function positionQuickMotionMenu() {
-    if (!quickMotionMenuOpen || !el.quickMotionMenu || !el.quickMotionTrigger) return;
+    const anchor = el.quickMotionButton || el.quickMotionTrigger;
+    if (!quickMotionMenuOpen || !el.quickMotionMenu || !anchor) return;
     const popover = el.quickMotionMenu;
-    const triggerRect = el.quickMotionTrigger.getBoundingClientRect();
+    const triggerRect = anchor.getBoundingClientRect();
     const viewportWidth = globalThis.window?.innerWidth || D.documentElement?.clientWidth || 1024;
     const viewportHeight = globalThis.window?.innerHeight || D.documentElement?.clientHeight || 768;
     const margin = 8;
@@ -543,7 +548,7 @@ function requestQuickMotionMenuPosition() {
 function updateQuickMotionSummary() {
     if (!el.quickMotionStatus) return;
     el.quickMotionStatus.textContent =
-        `Speed ${state.motionMinSpeed}-${state.motionMaxSpeed}% · Range ${state.motionMinDepth}-${state.motionMaxDepth}% · ${state.motionReverseDirection ? 'Reverse' : 'Normal'}`;
+        `Speed ${state.motionMinSpeed}-${state.motionMaxSpeed}% | Range ${state.motionMinDepth}-${state.motionMaxDepth}% | ${state.motionReverseDirection ? 'Reverse' : 'Normal'}`;
 }
 
 function syncQuickMotionControls() {
@@ -560,10 +565,10 @@ function syncQuickMotionControls() {
 }
 
 function setQuickMotionMenuOpen(open) {
-    const nextOpen = Boolean(open && el.quickMotionMenu && el.quickMotionTrigger);
+    const nextOpen = Boolean(open && el.quickMotionMenu && quickMotionTriggers().length);
     quickMotionMenuOpen = nextOpen;
     if (el.quickMotionMenu) el.quickMotionMenu.hidden = !nextOpen;
-    if (el.quickMotionTrigger) el.quickMotionTrigger.setAttribute('aria-expanded', String(nextOpen));
+    quickMotionTriggers().forEach(trigger => trigger.setAttribute('aria-expanded', String(nextOpen)));
     if (nextOpen) {
         syncQuickMotionControls();
         requestQuickMotionMenuPosition();
@@ -615,18 +620,20 @@ async function commitQuickReverse() {
 }
 
 function bindQuickMotionMenu() {
-    if (!el.quickMotionTrigger || !el.quickMotionMenu) return;
-    el.quickMotionTrigger.addEventListener('click', toggleQuickMotionMenu);
-    el.quickMotionTrigger.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
-            event.preventDefault();
-            toggleQuickMotionMenu(event);
-        }
+    if (!el.quickMotionMenu || !quickMotionTriggers().length) return;
+    quickMotionTriggers().forEach(trigger => {
+        trigger.addEventListener('click', toggleQuickMotionMenu);
+        trigger.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                event.preventDefault();
+                toggleQuickMotionMenu(event);
+            }
+        });
     });
     el.quickMotionCloseBtn?.addEventListener('click', event => {
         event.stopPropagation?.();
         setQuickMotionMenuOpen(false);
-        el.quickMotionTrigger?.focus?.();
+        (el.quickMotionButton || el.quickMotionTrigger)?.focus?.();
     });
     el.quickMotionSpeedMin?.addEventListener('input', mirrorQuickSpeedToCanonical);
     el.quickMotionSpeedMax?.addEventListener('input', mirrorQuickSpeedToCanonical);
@@ -649,7 +656,7 @@ function bindQuickMotionMenu() {
     D.addEventListener('keydown', event => {
         if (event.key === 'Escape' && quickMotionMenuOpen) {
             setQuickMotionMenuOpen(false);
-            el.quickMotionTrigger?.focus?.();
+            (el.quickMotionButton || el.quickMotionTrigger)?.focus?.();
         }
     });
     D.addEventListener('scroll', () => {

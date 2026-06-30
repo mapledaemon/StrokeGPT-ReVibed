@@ -542,13 +542,19 @@ class WebStaticAssetTests(WebTestCase):
         try:
             page = response.get_data(as_text=True)
 
-            # The bottom visualizer meter panel doubles as the quick-settings
-            # trigger: a real button that controls the quick-motion popover.
+            # The bottom visualizer meter panel remains clickable, while the
+            # adjacent icon button makes the quick settings menu discoverable.
             self.assertIn(
                 'id="motion-meter-panel" class="motion-meter-trigger" role="button" tabindex="0" '
                 'aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false"',
                 page,
             )
+            self.assertIn(
+                'id="quick-motion-trigger-btn" class="quick-motion-button" type="button" '
+                'aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false"',
+                page,
+            )
+            self.assertIn('class="quick-motion-button-icon"', page)
             self.assertIn(
                 'id="quick-motion-menu" class="quick-motion-menu" role="dialog" '
                 'aria-label="Quick motion settings" aria-modal="false" hidden',
@@ -591,6 +597,8 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-meter-trigger { cursor: pointer;", css)
             self.assertIn(".motion-meter-trigger:hover", css)
             self.assertIn('.motion-meter-trigger[aria-expanded="true"]', css)
+            self.assertIn(".quick-motion-button { width:", css)
+            self.assertIn(".quick-motion-button-icon", css)
             self.assertIn(".quick-motion-menu { position: fixed;", css)
             self.assertIn(".quick-motion-menu[hidden] { display: none; }", css)
             self.assertIn('.quick-motion-menu[data-placement="top"]', css)
@@ -604,7 +612,9 @@ class WebStaticAssetTests(WebTestCase):
         self.assertIn("function bindQuickMotionMenu", scripts)
         self.assertIn("function setQuickMotionMenuOpen", scripts)
         self.assertIn("function positionQuickMotionMenu", scripts)
+        self.assertIn("function quickMotionTriggers", scripts)
         self.assertIn("function syncQuickMotionControls", scripts)
+        self.assertIn("quickMotionButton", scripts)
         self.assertIn("quickMotionReverseToggle", scripts)
         # The quick menu reuses the canonical save helpers (one of which is
         # exported from device-control.js) instead of duplicating endpoints.
@@ -737,7 +747,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-compact-summary { display: none; }", css)
             self.assertIn("#visualizer-box { width: 100%; height: var(--motion-strip-height); max-height: var(--motion-strip-height); min-height: 0;", css)
             self.assertIn("border: 1px solid #2d333d; overflow: hidden; display: grid; grid-template-rows: 2.65rem minmax(0, 1fr); align-items: stretch;", css)
-            self.assertIn("#motion-quick-status-row { display: grid; grid-template-columns: minmax(12rem, 1fr) auto;", css)
+            self.assertIn("#motion-quick-status-row { display: grid; grid-template-columns: minmax(12rem, 1fr) 2.2rem auto;", css)
             self.assertIn("gap: var(--space-1); height: 2.65rem; min-height: 0;", css)
             self.assertIn(".motion-meter-row { display: grid; grid-template-columns: 42px minmax(80px, 1fr) 36px;", css)
             self.assertIn(".motion-meter-track { height: 7px;", css)
@@ -788,7 +798,7 @@ class WebStaticAssetTests(WebTestCase):
             self.assertIn(".motion-sequence-log { height: var(--motion-compact-log-height); max-height: var(--motion-compact-log-height); min-height: 0;", css)
             self.assertIn("--motion-compact-status-height: 6.75rem;", css)
             self.assertIn("#visualizer-box { height: var(--motion-compact-status-height); max-height: var(--motion-compact-status-height); min-height: 0; }", css)
-            self.assertIn("#motion-quick-status-row { grid-template-columns: minmax(9.375rem, 1fr) auto; gap: var(--space-1); height: 2.625rem; min-height: 0; }", css)
+            self.assertIn("#motion-quick-status-row { grid-template-columns: minmax(9.375rem, 1fr) 2rem auto; gap: var(--space-1); height: 2.625rem; min-height: 0; }", css)
             self.assertIn("#motion-feedback-buttons { grid-template-columns: repeat(2, 2rem); gap: var(--space-1); }", css)
             self.assertIn("#like-this-move-btn, #dislike-this-move-btn { width: 2rem; height: 2rem; min-height: 2rem; font-size: 0.88rem; }", css)
             self.assertIn("overflow-y: auto", css)

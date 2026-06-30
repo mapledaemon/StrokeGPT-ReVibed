@@ -19,6 +19,9 @@ Branch: claude-quick-motion-menu
   affordance; the popover opens above the trigger, closes on the close
   button, an outside click, or Escape, and sets an explicit pixel width so
   it never collapses on a 0-width viewport.
+- Added a persistent sliders button beside the visualizer meters so the
+  quick settings menu is visible without needing to discover the meter-panel
+  click target.
 - Quick controls mirror the canonical Device/Motion settings inputs and
   reuse their existing save endpoints (`/set_speed_limits`,
   `/set_depth_limits`, `/set_motion_reverse_direction`), so both UIs and the
