@@ -537,6 +537,95 @@ class WebStaticAssetTests(WebTestCase):
         finally:
             response.close()
 
+    def test_quick_motion_menu_markup(self):
+        response = self.client.get("/")
+        try:
+            page = response.get_data(as_text=True)
+
+            # The sidebar Handy cylinder visualizer is the primary quick-settings
+            # trigger; the bottom meter panel stays clickable as a fallback for
+            # when the sidebar is collapsed or off-canvas on mobile.
+            self.assertIn(
+                'id="handy-cylinder-indicator" class="quick-motion-cylinder-trigger" role="button" tabindex="0" '
+                'aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false"',
+                page,
+            )
+            self.assertIn(
+                'id="motion-meter-panel" class="motion-meter-trigger" role="button" tabindex="0" '
+                'aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false"',
+                page,
+            )
+            # Codex's standalone sliders button was replaced by the cylinder trigger.
+            self.assertNotIn('id="quick-motion-trigger-btn"', page)
+            self.assertIn(
+                'id="quick-motion-menu" class="quick-motion-menu" role="dialog" '
+                'aria-label="Quick motion settings" aria-modal="false" hidden',
+                page,
+            )
+            self.assertIn('id="quick-motion-close-btn"', page)
+            self.assertIn('id="quick-motion-speed-min"', page)
+            self.assertIn('id="quick-motion-speed-max"', page)
+            self.assertIn('id="quick-motion-speed-min-val"', page)
+            self.assertIn('id="quick-motion-speed-max-val"', page)
+            self.assertIn('id="quick-motion-depth-min"', page)
+            self.assertIn('id="quick-motion-depth-max"', page)
+            self.assertIn('id="quick-motion-reverse-toggle"', page)
+            self.assertIn('id="quick-motion-status"', page)
+            self.assertIn('id="quick-motion-settings-link"', page)
+            # The quick controls write to the backend, so they must carry the
+            # connection-lost guard like the canonical settings controls.
+            for control_id in (
+                "quick-motion-speed-min",
+                "quick-motion-speed-max",
+                "quick-motion-depth-min",
+                "quick-motion-depth-max",
+                "quick-motion-reverse-toggle",
+            ):
+                idx = page.index(f'id="{control_id}"')
+                tag = page[idx:page.index(">", idx)]
+                self.assertIn(
+                    "data-requires-backend",
+                    tag,
+                    f"{control_id} must be gated by data-requires-backend",
+                )
+        finally:
+            response.close()
+
+    def test_quick_motion_menu_css_present(self):
+        response = self.client.get("/static/app.css")
+        try:
+            css = response.get_data(as_text=True)
+
+            self.assertIn(".motion-meter-trigger { cursor: pointer;", css)
+            self.assertIn(".motion-meter-trigger:hover", css)
+            self.assertIn(".quick-motion-cylinder-trigger { cursor: pointer;", css)
+            self.assertIn(".quick-motion-cylinder-trigger:hover", css)
+            # Triggers show a hover/focus affordance but must not stay highlighted
+            # while the menu is open (no persistent aria-expanded highlight).
+            self.assertNotIn('.motion-meter-trigger[aria-expanded="true"]', css)
+            self.assertNotIn('.quick-motion-cylinder-trigger[aria-expanded="true"]', css)
+            self.assertIn(".quick-motion-menu { position: fixed;", css)
+            self.assertIn(".quick-motion-menu[hidden] { display: none; }", css)
+            self.assertIn('.quick-motion-menu[data-placement="top"]', css)
+            self.assertIn(".quick-motion-menu .slider-container", css)
+        finally:
+            response.close()
+
+    def test_quick_motion_menu_js_wiring(self):
+        scripts = self.frontend_scripts()
+
+        self.assertIn("function bindQuickMotionMenu", scripts)
+        self.assertIn("function setQuickMotionMenuOpen", scripts)
+        self.assertIn("function positionQuickMotionMenu", scripts)
+        self.assertIn("function quickMotionTriggers", scripts)
+        self.assertIn("function syncQuickMotionControls", scripts)
+        self.assertIn("quickMotionCylinderTrigger", scripts)
+        self.assertIn("quickMotionReverseToggle", scripts)
+        # The quick menu reuses the canonical save helpers (one of which is
+        # exported from device-control.js) instead of duplicating endpoints.
+        self.assertIn("saveMotionDepthRange", scripts)
+        self.assertIn("normalizeMotionDepthRange", scripts)
+
     def test_frontend_css_contains_responsive_layout_guards(self):
         response = self.client.get("/static/app.css")
         try:

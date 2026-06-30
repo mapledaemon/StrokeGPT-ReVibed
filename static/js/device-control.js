@@ -100,7 +100,7 @@ function updateHandyRestConnectionVisibility() {
     if (el.sidebarHandyPanel) el.sidebarHandyPanel.hidden = bluetoothSelected;
 }
 
-function normalizeMotionDepthRange() {
+export function normalizeMotionDepthRange() {
     const a = parseInt(el.motionDepthMinSlider.value, 10);
     const b = parseInt(el.motionDepthMaxSlider.value, 10);
     state.motionMinDepth = Math.min(a, b);
@@ -272,7 +272,7 @@ async function testMotionDepthRange() {
     if (res && res.status === 'busy') el.statusText.textContent = 'Depth test already running.';
 }
 
-async function saveMotionDepthRange() {
+export async function saveMotionDepthRange() {
     normalizeMotionDepthRange();
     const res = await apiCall('/set_depth_limits', {
         method: 'POST',
@@ -280,6 +280,7 @@ async function saveMotionDepthRange() {
         body: JSON.stringify({min_depth: state.motionMinDepth, max_depth: state.motionMaxDepth}),
     });
     if (res && res.status === 'success') {
+        populateDeviceSettings({min_depth: res.min_depth, max_depth: res.max_depth});
         const message = `Stroke range saved: ${state.motionMinDepth}-${state.motionMaxDepth}%.`;
         setStatusMessage(el.motionDepthRangeStatus, message, 'success');
         el.statusText.textContent = message;

@@ -52,8 +52,8 @@ import {
     openMotionProgramWindow,
 } from './motion/program-player.js';
 import { updateMotionTagSuggestions } from './motion/tag-editor.js';
-import { updateHandyConnectionStatusFromMotion } from './device-control.js';
-import { populateLongTermMemorySetting } from './settings.js';
+import { normalizeMotionDepthRange, saveMotionDepthRange, updateHandyConnectionStatusFromMotion } from './device-control.js';
+import { openSettings, populateLongTermMemorySetting } from './settings.js';
 import {
     bindMotionPatternStudioControls,
     drawMotionTrainingPreview,
@@ -416,6 +416,7 @@ export function populateMotionSettings(data = {}) {
     el.milkingMaxTimeInput.value = timings.milking_max ?? el.milkingMaxTimeInput.value ?? 4.5;
     if (data.motion_patterns) renderMotionPatterns(data.motion_patterns);
     if (data.motion_programs) renderMotionPrograms(data.motion_programs);
+    syncQuickMotionControls();
 }
 
 async function saveMotionBackend() {
@@ -486,6 +487,200 @@ async function saveMotionSpeedLimits() {
         reportSaveFailure(el.motionSpeedLimitsStatus || el.statusText, res, 'Could not save speed limits.');
         return false;
     }
+}
+
+// ----- Quick motion settings popover (anchored to the bottom visualizer) -----
+// Mirrors the canonical Device/Motion settings controls so speed limits, stroke
+// range, and direction can be tweaked without opening the full settings dialog.
+// All saves route through the same endpoints as the settings panels by writing
+// into the canonical inputs and reusing their save helpers, so both UIs and the
+// shared ``state`` stay in sync.
+let quickMotionMenuOpen = false;
+let quickMotionActiveTrigger = null;
+
+// The quick menu opens from the sidebar Handy cylinder visualizer (primary)
+// and the bottom status-strip meter panel (fallback for when the sidebar is
+// collapsed or off-canvas on mobile). The popover anchors to whichever trigger
+// was actually used so it appears next to it rather than a fixed location.
+function quickMotionTriggers() {
+    return [el.quickMotionCylinderTrigger, el.quickMotionTrigger].filter(Boolean);
+}
+
+function quickMotionDefaultTrigger() {
+    return quickMotionTriggers()[0] || null;
+}
+
+function quickMotionMenuContains(target) {
+    let node = target;
+    while (node) {
+        if (node === el.quickMotionMenu || quickMotionTriggers().includes(node)) return true;
+        node = node.parentNode;
+    }
+    return false;
+}
+
+function positionQuickMotionMenu() {
+    const anchor = quickMotionActiveTrigger || quickMotionDefaultTrigger();
+    if (!quickMotionMenuOpen || !el.quickMotionMenu || !anchor) return;
+    const popover = el.quickMotionMenu;
+    const triggerRect = anchor.getBoundingClientRect();
+    const viewportWidth = globalThis.window?.innerWidth || D.documentElement?.clientWidth || 1024;
+    const viewportHeight = globalThis.window?.innerHeight || D.documentElement?.clientHeight || 768;
+    const margin = 8;
+    const gap = 8;
+    popover.style.position = 'fixed';
+    // Set an explicit pixel width instead of trusting the CSS ``100vw`` cap so
+    // the popover never collapses if the viewport reports 0 (mirrors the Handy
+    // Bluetooth popover, which is robust to the same headless/early-layout case).
+    const popoverWidth = Math.max(220, Math.min(320, viewportWidth - margin * 2));
+    popover.style.width = `${Math.round(popoverWidth)}px`;
+    const popoverHeight = Math.max(Number(popover.scrollHeight) || 0, Number(popover.offsetHeight) || 0);
+    const aboveSpace = Math.max(0, Number(triggerRect.top || 0) - margin - gap);
+    const belowSpace = Math.max(0, viewportHeight - Number(triggerRect.bottom || 0) - margin - gap);
+    const openAbove = aboveSpace >= Math.min(popoverHeight, 160) || aboveSpace > belowSpace;
+    const rawTop = openAbove
+        ? Number(triggerRect.top || 0) - gap - popoverHeight
+        : Number(triggerRect.bottom || 0) + gap;
+    const top = Math.max(margin, Math.min(rawTop, viewportHeight - margin - popoverHeight));
+    const left = Math.max(margin, Math.min(Number(triggerRect.left || 0), viewportWidth - margin - popoverWidth));
+    popover.dataset.placement = openAbove ? 'top' : 'bottom';
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+}
+
+function requestQuickMotionMenuPosition() {
+    positionQuickMotionMenu();
+    const requestFrame = globalThis.requestAnimationFrame || globalThis.window?.requestAnimationFrame;
+    if (typeof requestFrame === 'function') requestFrame(positionQuickMotionMenu);
+}
+
+function updateQuickMotionSummary() {
+    if (!el.quickMotionStatus) return;
+    el.quickMotionStatus.textContent =
+        `Speed ${state.motionMinSpeed}-${state.motionMaxSpeed}% | Range ${state.motionMinDepth}-${state.motionMaxDepth}% | ${state.motionReverseDirection ? 'Reverse' : 'Normal'}`;
+}
+
+function syncQuickMotionControls() {
+    if (el.quickMotionSpeedMin) el.quickMotionSpeedMin.value = state.motionMinSpeed;
+    if (el.quickMotionSpeedMax) el.quickMotionSpeedMax.value = state.motionMaxSpeed;
+    if (el.quickMotionSpeedMinVal) el.quickMotionSpeedMinVal.textContent = `${state.motionMinSpeed}%`;
+    if (el.quickMotionSpeedMaxVal) el.quickMotionSpeedMaxVal.textContent = `${state.motionMaxSpeed}%`;
+    if (el.quickMotionDepthMin) el.quickMotionDepthMin.value = state.motionMinDepth;
+    if (el.quickMotionDepthMax) el.quickMotionDepthMax.value = state.motionMaxDepth;
+    if (el.quickMotionDepthMinVal) el.quickMotionDepthMinVal.textContent = `${state.motionMinDepth}%`;
+    if (el.quickMotionDepthMaxVal) el.quickMotionDepthMaxVal.textContent = `${state.motionMaxDepth}%`;
+    if (el.quickMotionReverseToggle) el.quickMotionReverseToggle.checked = Boolean(state.motionReverseDirection);
+    updateQuickMotionSummary();
+}
+
+function setQuickMotionMenuOpen(open, trigger = null) {
+    const nextOpen = Boolean(open && el.quickMotionMenu && quickMotionTriggers().length);
+    quickMotionMenuOpen = nextOpen;
+    if (nextOpen) quickMotionActiveTrigger = trigger || quickMotionActiveTrigger || quickMotionDefaultTrigger();
+    if (el.quickMotionMenu) el.quickMotionMenu.hidden = !nextOpen;
+    quickMotionTriggers().forEach(item => item.setAttribute('aria-expanded', String(nextOpen)));
+    if (nextOpen) {
+        syncQuickMotionControls();
+        requestQuickMotionMenuPosition();
+    }
+}
+
+function toggleQuickMotionMenu(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const clicked = event?.currentTarget && quickMotionTriggers().includes(event.currentTarget)
+        ? event.currentTarget
+        : null;
+    setQuickMotionMenuOpen(!quickMotionMenuOpen, clicked);
+}
+
+function mirrorQuickSpeedToCanonical() {
+    if (el.motionSpeedMinSlider) el.motionSpeedMinSlider.value = el.quickMotionSpeedMin.value;
+    if (el.motionSpeedMaxSlider) el.motionSpeedMaxSlider.value = el.quickMotionSpeedMax.value;
+    normalizeMotionSpeedLimits();
+    if (el.quickMotionSpeedMinVal) el.quickMotionSpeedMinVal.textContent = `${state.motionMinSpeed}%`;
+    if (el.quickMotionSpeedMaxVal) el.quickMotionSpeedMaxVal.textContent = `${state.motionMaxSpeed}%`;
+    updateQuickMotionSummary();
+}
+
+async function commitQuickSpeed() {
+    mirrorQuickSpeedToCanonical();
+    await saveMotionSpeedLimits();
+    syncQuickMotionControls();
+}
+
+function mirrorQuickDepthToCanonical() {
+    if (el.motionDepthMinSlider) el.motionDepthMinSlider.value = el.quickMotionDepthMin.value;
+    if (el.motionDepthMaxSlider) el.motionDepthMaxSlider.value = el.quickMotionDepthMax.value;
+    normalizeMotionDepthRange();
+    if (el.quickMotionDepthMinVal) el.quickMotionDepthMinVal.textContent = `${state.motionMinDepth}%`;
+    if (el.quickMotionDepthMaxVal) el.quickMotionDepthMaxVal.textContent = `${state.motionMaxDepth}%`;
+    updateQuickMotionSummary();
+}
+
+async function commitQuickDepth() {
+    mirrorQuickDepthToCanonical();
+    await saveMotionDepthRange();
+    syncQuickMotionControls();
+}
+
+async function commitQuickReverse() {
+    const reverse = Boolean(el.quickMotionReverseToggle?.checked);
+    if (el.motionDirectionReverseRadio) el.motionDirectionReverseRadio.checked = reverse;
+    if (el.motionDirectionNormalRadio) el.motionDirectionNormalRadio.checked = !reverse;
+    await saveMotionReverseDirection();
+    syncQuickMotionControls();
+}
+
+function bindQuickMotionMenu() {
+    if (!el.quickMotionMenu || !quickMotionTriggers().length) return;
+    quickMotionTriggers().forEach(trigger => {
+        trigger.addEventListener('click', toggleQuickMotionMenu);
+        trigger.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                event.preventDefault();
+                toggleQuickMotionMenu(event);
+            }
+        });
+    });
+    el.quickMotionCloseBtn?.addEventListener('click', event => {
+        event.stopPropagation?.();
+        const returnFocus = quickMotionActiveTrigger || quickMotionDefaultTrigger();
+        setQuickMotionMenuOpen(false);
+        returnFocus?.focus?.();
+    });
+    el.quickMotionSpeedMin?.addEventListener('input', mirrorQuickSpeedToCanonical);
+    el.quickMotionSpeedMax?.addEventListener('input', mirrorQuickSpeedToCanonical);
+    el.quickMotionSpeedMin?.addEventListener('change', commitQuickSpeed);
+    el.quickMotionSpeedMax?.addEventListener('change', commitQuickSpeed);
+    el.quickMotionDepthMin?.addEventListener('input', mirrorQuickDepthToCanonical);
+    el.quickMotionDepthMax?.addEventListener('input', mirrorQuickDepthToCanonical);
+    el.quickMotionDepthMin?.addEventListener('change', commitQuickDepth);
+    el.quickMotionDepthMax?.addEventListener('change', commitQuickDepth);
+    el.quickMotionReverseToggle?.addEventListener('change', commitQuickReverse);
+    el.quickMotionSettingsLink?.addEventListener('click', event => {
+        event.stopPropagation?.();
+        setQuickMotionMenuOpen(false);
+        openSettings('device');
+    });
+    D.addEventListener('click', event => {
+        if (!quickMotionMenuOpen) return;
+        if (!quickMotionMenuContains(event.target)) setQuickMotionMenuOpen(false);
+    });
+    D.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && quickMotionMenuOpen) {
+            const returnFocus = quickMotionActiveTrigger || quickMotionDefaultTrigger();
+            setQuickMotionMenuOpen(false);
+            returnFocus?.focus?.();
+        }
+    });
+    D.addEventListener('scroll', () => {
+        if (quickMotionMenuOpen) requestQuickMotionMenuPosition();
+    }, true);
+    globalThis.window?.addEventListener?.('resize', () => {
+        if (quickMotionMenuOpen) requestQuickMotionMenuPosition();
+    });
+    syncQuickMotionControls();
 }
 
 async function toggleLongTermMemory() {
@@ -1678,6 +1873,7 @@ export function initMotionControls({sendUserMessage}) {
     el.motionDirectionNormalRadio?.addEventListener('change', () => updateMotionReverseDirectionUi(false));
     el.motionDirectionReverseRadio?.addEventListener('change', () => updateMotionReverseDirectionUi(true));
     D.getElementById('save-motion-speed-limits').addEventListener('click', saveMotionSpeedLimits);
+    bindQuickMotionMenu();
     D.getElementById('save-timings-btn').addEventListener('click', saveModeTimings);
     el.autospeakMinSecondsInput?.addEventListener('change', readAutospeakTimingPair);
     el.autospeakMaxSecondsInput?.addEventListener('change', readAutospeakTimingPair);

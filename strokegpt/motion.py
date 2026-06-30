@@ -858,16 +858,18 @@ class MotionController:
             self.reverse_direction = enabled
 
     @staticmethod
-    def _normalized_speed_limit_pair(min_speed: Any, max_speed: Any) -> tuple[float, float]:
+    def _normalized_percent_pair(first_value: Any, second_value: Any) -> tuple[float, float]:
         try:
-            first = _clamp(float(min_speed))
+            first = _clamp(float(first_value))
         except (TypeError, ValueError):
             first = 0.0
         try:
-            second = _clamp(float(max_speed))
+            second = _clamp(float(second_value))
         except (TypeError, ValueError):
             second = 100.0
         return min(first, second), max(first, second)
+
+    _normalized_speed_limit_pair = _normalized_percent_pair
 
     @classmethod
     def _retarget_speed_for_limit_change(
@@ -907,15 +909,7 @@ class MotionController:
         if abs(old_min - new_min) <= 0.001 and abs(old_max - new_max) <= 0.001:
             return False
 
-        playback_active = self._is_frame_playback_active()
-        hamp_active = bool(getattr(self.handy, "_hamp_started", False))
-        diagnostics = getattr(self.handy, "diagnostics", None)
-        if callable(diagnostics):
-            try:
-                hamp_active = hamp_active or bool(diagnostics().get("hamp_started"))
-            except Exception:
-                pass
-        if not playback_active and not hamp_active:
+        if not self._has_active_motion_output():
             return False
 
         target = self.semantic_target()
@@ -945,7 +939,93 @@ class MotionController:
             "settings_previous_target_speed": round(float(target.speed), 3),
             "settings_next_target_speed": round(float(adjusted_target.speed), 3),
         }
+        return self._refresh_active_motion_target(
+            adjusted_target,
+            source=source,
+            trace_metadata=trace_metadata,
+        )
 
+    def refresh_depth_limits(
+        self,
+        previous_min: Any,
+        previous_max: Any,
+        next_min: Any,
+        next_max: Any,
+        *,
+        source: str = "settings",
+    ) -> bool:
+        old_min, old_max = self._normalized_percent_pair(previous_min, previous_max)
+        new_min, new_max = self._normalized_percent_pair(next_min, next_max)
+        if abs(old_min - new_min) <= 0.001 and abs(old_max - new_max) <= 0.001:
+            return False
+        if not self._has_active_motion_output():
+            return False
+
+        target = self.semantic_target()
+        if target.speed <= 0:
+            return False
+        trace_metadata = {
+            "settings_depth_limit_refresh": True,
+            "settings_previous_depth_range": f"{int(round(old_min))}-{int(round(old_max))}",
+            "settings_next_depth_range": f"{int(round(new_min))}-{int(round(new_max))}",
+        }
+        return self._refresh_active_motion_target(
+            target,
+            source=source,
+            trace_metadata=trace_metadata,
+            force_continuous_replacement=True,
+        )
+
+    def refresh_reverse_direction(
+        self,
+        previous: Any,
+        next_value: Any,
+        *,
+        source: str = "settings",
+    ) -> bool:
+        previous_enabled = bool(previous)
+        next_enabled = bool(next_value)
+        if previous_enabled == next_enabled:
+            return False
+        if not self._has_active_motion_output():
+            return False
+
+        target = self.semantic_target()
+        if target.speed <= 0:
+            return False
+        trace_metadata = {
+            "settings_reverse_direction_refresh": True,
+            "settings_previous_reverse_direction": previous_enabled,
+            "settings_next_reverse_direction": next_enabled,
+        }
+        return self._refresh_active_motion_target(
+            target,
+            source=source,
+            trace_metadata=trace_metadata,
+            force_continuous_replacement=True,
+        )
+
+    def _has_active_motion_output(self) -> bool:
+        if self._is_frame_playback_active():
+            return True
+        hamp_active = bool(getattr(self.handy, "_hamp_started", False))
+        diagnostics = getattr(self.handy, "diagnostics", None)
+        if callable(diagnostics):
+            try:
+                hamp_active = hamp_active or bool(diagnostics().get("hamp_started"))
+            except Exception:
+                pass
+        return hamp_active
+
+    def _refresh_active_motion_target(
+        self,
+        target: MotionTarget,
+        *,
+        source: str,
+        trace_metadata: Optional[dict[str, Any]] = None,
+        force_continuous_replacement: bool = False,
+    ) -> bool:
+        playback_active = self._is_frame_playback_active()
         with self._lock:
             state = self._continuous_phase_state
             generation = self._generation
@@ -958,20 +1038,21 @@ class MotionController:
         ):
             return self._apply_continuous_plan(
                 state.plan,
-                adjusted_target,
+                target,
                 source=source,
                 trace_metadata=trace_metadata,
+                force_replace=force_continuous_replacement,
             )
 
         if playback_active:
             self.apply_generated_target(
-                adjusted_target,
+                target,
                 source=source,
                 trace_metadata=trace_metadata,
             )
             return True
 
-        self.apply_target(adjusted_target, smooth=False, source=source)
+        self.apply_target(target, smooth=False, source=source)
         self._augment_last_trace(trace_metadata)
         return True
 
@@ -2290,6 +2371,7 @@ class MotionController:
         stop_after: bool = False,
         finite_cycles: Optional[float] = None,
         block: bool = False,
+        force_replace: bool = False,
     ) -> bool:
         if plan is None:
             return False
@@ -2315,6 +2397,7 @@ class MotionController:
                 playback_active
                 and not stop_after
                 and finite_cycles is None
+                and not force_replace
                 and self._active_continuous_stream_matches(
                     phase_state,
                     plan,
