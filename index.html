@@ -112,7 +112,7 @@
                     <summary class="motion-compact-summary">Current Status</summary>
                     <div id="visualizer-box">
                         <div id="motion-quick-status-row">
-                            <div id="motion-meter-panel">
+                            <div id="motion-meter-panel" class="motion-meter-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="quick-motion-menu" aria-expanded="false" aria-label="Quick motion settings: speed limits, stroke range, and direction" title="Quick settings — speed, range, direction">
                                 <div class="motion-meter-row">
                                     <span class="motion-meter-label">Speed</span>
                                     <div class="motion-meter-track"><div id="motion-speed-meter-fill" class="motion-meter-fill speed"></div></div>
@@ -132,6 +132,33 @@
                         <div id="motion-diagnostics-panel" class="motion-diagnostics-panel" hidden></div>
                     </div>
                 </details>
+            </div>
+            <div id="quick-motion-menu" class="quick-motion-menu" role="dialog" aria-label="Quick motion settings" aria-modal="false" hidden>
+                <div class="quick-motion-header">
+                    <strong>Quick Settings</strong>
+                    <button id="quick-motion-close-btn" class="quick-motion-close" type="button" aria-label="Close quick settings">&times;</button>
+                </div>
+                <div class="quick-motion-section">
+                    <div class="quick-motion-section-title">Speed Limits</div>
+                    <div class="slider-container"><label for="quick-motion-speed-min">Min</label><input type="range" min="0" max="100" value="10" id="quick-motion-speed-min" aria-label="Minimum speed limit" data-requires-backend><span id="quick-motion-speed-min-val" class="quick-motion-val">10%</span></div>
+                    <div class="slider-container"><label for="quick-motion-speed-max">Max</label><input type="range" min="0" max="100" value="80" id="quick-motion-speed-max" aria-label="Maximum speed limit" data-requires-backend><span id="quick-motion-speed-max-val" class="quick-motion-val">80%</span></div>
+                </div>
+                <div class="quick-motion-section">
+                    <div class="quick-motion-section-title">Stroke Range</div>
+                    <div class="slider-container"><label for="quick-motion-depth-min">Tip / Out</label><input type="range" min="0" max="100" value="5" id="quick-motion-depth-min" aria-label="Stroke range tip / out" data-requires-backend><span id="quick-motion-depth-min-val" class="quick-motion-val">5%</span></div>
+                    <div class="slider-container"><label for="quick-motion-depth-max">Base / In</label><input type="range" min="0" max="100" value="100" id="quick-motion-depth-max" aria-label="Stroke range base / in" data-requires-backend><span id="quick-motion-depth-max-val" class="quick-motion-val">100%</span></div>
+                </div>
+                <div class="quick-motion-section quick-motion-reverse-row">
+                    <label class="toggle-switch-line" for="quick-motion-reverse-toggle">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="quick-motion-reverse-toggle" role="switch" data-requires-backend>
+                            <span class="toggle-switch-track" aria-hidden="true"></span>
+                        </span>
+                        <span class="toggle-switch-text">Reverse direction</span>
+                    </label>
+                </div>
+                <div id="quick-motion-status" class="quick-motion-status" aria-live="polite"></div>
+                <button id="quick-motion-settings-link" class="quick-motion-settings-link" type="button">Open full settings &rarr;</button>
             </div>
             <div id="chat-compose-row">
                 <div id="message-input-line">
