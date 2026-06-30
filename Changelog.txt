@@ -27,6 +27,10 @@ Branch: claude-quick-motion-menu
   shared frontend state stay in sync. Exported `saveMotionDepthRange` and
   `normalizeMotionDepthRange` from `device-control.js` for reuse and added
   markup/CSS/JS-wiring regression tests.
+- Stroke range and reverse-direction quick changes now force-refresh active
+  continuous/HAMP motion after the setting is saved, so active playback does
+  not keep using the previous physical stroke bounds or orientation until a
+  later motion replacement.
 
 2026-06-29 - PR #332 - Extract Ollama Runtime Helpers
 -----------------------------------------------------

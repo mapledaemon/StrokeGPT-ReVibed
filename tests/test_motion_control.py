@@ -1692,6 +1692,49 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(trace[-1]["settings_speed_limit_refresh"])
         self.assertEqual(round(trace[-1]["settings_next_target_speed"]), 100)
 
+    def test_depth_limit_refresh_replaces_active_continuous_stream(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(55, 50, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            refreshed = controller.refresh_depth_limits(5, 100, 20, 90)
+
+            self.assertTrue(refreshed)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            refresh_points = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("settings_depth_limit_refresh") is True
+                and point.get("settings_next_depth_range") == "20-90",
+            )
+            self.assertTrue(refresh_points)
+        finally:
+            controller.stop()
+
+    def test_reverse_direction_refresh_replaces_active_continuous_stream(self):
+        handy = StreamingFakeHandy()
+        controller = MotionController(handy, step_delay=0.16)
+
+        try:
+            controller.apply_continuous_target(MotionTarget(55, 70, 80, "stroke"), source="unit test")
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
+
+            controller.set_reverse_direction(True)
+            refreshed = controller.refresh_reverse_direction(False, True)
+
+            self.assertTrue(refreshed)
+            self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
+            refresh_points = self.wait_for_hsp_trace(
+                controller,
+                lambda point: point.get("settings_reverse_direction_refresh") is True
+                and point.get("settings_next_reverse_direction") is True,
+            )
+            self.assertTrue(refresh_points)
+        finally:
+            controller.stop()
+
     def test_reverse_orientation_does_not_flip_semantic_phase(self):
         controller = MotionController(StreamingFakeHandy(), step_delay=0.16)
         plan = continuous_motion_plan("ramp")

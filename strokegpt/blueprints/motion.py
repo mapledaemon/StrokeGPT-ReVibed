@@ -656,13 +656,26 @@ def get_status_route():
 def set_depth_limits_route():
     web = _web()
     data = web._request_json()
+    previous_min = web.settings.min_depth
+    previous_max = web.settings.max_depth
     depth1 = web._request_int(data, 'min_depth', 5)
     depth2 = web._request_int(data, 'max_depth', 100)
     web.settings.min_depth = min(depth1, depth2)
     web.settings.max_depth = max(depth1, depth2)
     web.handy.update_settings(web.settings.min_speed, web.settings.max_speed, web.settings.min_depth, web.settings.max_depth)
+    motion_refreshed = web.motion.refresh_depth_limits(
+        previous_min,
+        previous_max,
+        web.settings.min_depth,
+        web.settings.max_depth,
+    )
     web.settings.save()
-    return jsonify({"status": "success"})
+    return jsonify({
+        "status": "success",
+        "min_depth": web.settings.min_depth,
+        "max_depth": web.settings.max_depth,
+        "motion_refreshed": bool(motion_refreshed),
+    })
 
 
 @motion_blueprint.route('/set_speed_limits', methods=['POST'])
@@ -721,16 +734,22 @@ def set_motion_style_route():
 def set_motion_reverse_direction_route():
     web = _web()
     data = web._request_json()
+    previous_reverse_direction = web.settings.motion_reverse_direction
     web.settings.motion_reverse_direction = web._request_bool_value(
         data,
         "motion_reverse_direction",
         web.settings.motion_reverse_direction,
     )
     web.motion.set_reverse_direction(web.settings.motion_reverse_direction)
+    motion_refreshed = web.motion.refresh_reverse_direction(
+        previous_reverse_direction,
+        web.settings.motion_reverse_direction,
+    )
     web.settings.save()
     return jsonify({
         "status": "success",
         "motion_reverse_direction": web.settings.motion_reverse_direction,
+        "motion_refreshed": bool(motion_refreshed),
     })
 
 

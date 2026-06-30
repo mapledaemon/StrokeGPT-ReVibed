@@ -535,6 +535,50 @@ class WebSettingsRouteTests(WebTestCase):
             handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
             settings.save()
 
+    def test_depth_limits_refresh_active_motion_with_previous_range(self):
+        from strokegpt.web import handy, motion, settings
+
+        original = (
+            settings.min_depth,
+            settings.max_depth,
+            handy.min_handy_depth,
+            handy.max_handy_depth,
+        )
+        original_refresh = motion.refresh_depth_limits
+        calls = []
+        try:
+            settings.min_depth = 5
+            settings.max_depth = 100
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+
+            def refresh(previous_min, previous_max, next_min, next_max, **kwargs):
+                calls.append((previous_min, previous_max, next_min, next_max, kwargs))
+                return True
+
+            motion.refresh_depth_limits = refresh
+
+            response = self.client.post("/set_depth_limits", json={
+                "min_depth": 80,
+                "max_depth": 20,
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["min_depth"], 20)
+            self.assertEqual(data["max_depth"], 80)
+            self.assertTrue(data["motion_refreshed"])
+            self.assertEqual(calls, [(5, 100, 20, 80, {})])
+        finally:
+            motion.refresh_depth_limits = original_refresh
+            (
+                settings.min_depth,
+                settings.max_depth,
+                handy.min_handy_depth,
+                handy.max_handy_depth,
+            ) = original
+            handy.update_settings(settings.min_speed, settings.max_speed, settings.min_depth, settings.max_depth)
+            settings.save()
+
     def test_motion_backend_can_be_selected_and_saved(self):
         from strokegpt.web import motion, settings
 
@@ -619,7 +663,18 @@ class WebSettingsRouteTests(WebTestCase):
 
         original_setting = settings.motion_reverse_direction
         original_controller = motion.reverse_direction
+        original_refresh = motion.refresh_reverse_direction
+        calls = []
         try:
+            settings.motion_reverse_direction = False
+            motion.set_reverse_direction(False)
+
+            def refresh(previous, next_value, **kwargs):
+                calls.append((previous, next_value, kwargs))
+                return True
+
+            motion.refresh_reverse_direction = refresh
+
             with mock.patch.object(settings, "save"):
                 response = self.client.post("/set_motion_reverse_direction", json={"motion_reverse_direction": True})
 
@@ -627,14 +682,17 @@ class WebSettingsRouteTests(WebTestCase):
             data = response.get_json()
             self.assertEqual(data["status"], "success")
             self.assertTrue(data["motion_reverse_direction"])
+            self.assertTrue(data["motion_refreshed"])
             self.assertTrue(settings.motion_reverse_direction)
             self.assertTrue(motion.reverse_direction)
             self.assertTrue(get_current_context()["motion_reverse_direction"])
+            self.assertEqual(calls, [(False, True, {})])
 
             response = self.client.get("/check_settings")
             payload = response.get_json()
             self.assertTrue(payload["motion_reverse_direction"])
         finally:
+            motion.refresh_reverse_direction = original_refresh
             settings.motion_reverse_direction = original_setting
             motion.set_reverse_direction(original_controller)
 
