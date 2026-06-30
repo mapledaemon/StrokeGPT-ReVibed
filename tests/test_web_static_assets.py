@@ -598,9 +598,12 @@ class WebStaticAssetTests(WebTestCase):
 
             self.assertIn(".motion-meter-trigger { cursor: pointer;", css)
             self.assertIn(".motion-meter-trigger:hover", css)
-            self.assertIn('.motion-meter-trigger[aria-expanded="true"]', css)
             self.assertIn(".quick-motion-cylinder-trigger { cursor: pointer;", css)
-            self.assertIn('.quick-motion-cylinder-trigger[aria-expanded="true"]', css)
+            self.assertIn(".quick-motion-cylinder-trigger:hover", css)
+            # Triggers show a hover/focus affordance but must not stay highlighted
+            # while the menu is open (no persistent aria-expanded highlight).
+            self.assertNotIn('.motion-meter-trigger[aria-expanded="true"]', css)
+            self.assertNotIn('.quick-motion-cylinder-trigger[aria-expanded="true"]', css)
             self.assertIn(".quick-motion-menu { position: fixed;", css)
             self.assertIn(".quick-motion-menu[hidden] { display: none; }", css)
             self.assertIn('.quick-motion-menu[data-placement="top"]', css)
