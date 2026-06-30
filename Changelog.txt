@@ -7,6 +7,22 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-06-29 - PR #332 - Extract Ollama Runtime Helpers
+-----------------------------------------------------
+
+Branch: codex-extract-ollama-runtime
+
+- Moved Ollama model/status/pull orchestration helpers from `strokegpt/web.py`
+  into `strokegpt/ollama_runtime.py`, keeping the pull threading, status
+  payload shape, and download/status messages unchanged.
+- Left `_diagnostics_level_options()` in `web.py` and kept the legacy Ollama
+  helper names as explicit compatibility shims so existing routes/tests can
+  still patch the old `strokegpt.web` names.
+- Added bridge regression coverage for the moved Ollama helpers and narrowed
+  the web payload-wrapper guardrail now that the Ollama payload binding lives
+  outside `web.py`.
+- Deferred caller migration away from `strokegpt.web` to a follow-up PR.
+
 2026-06-18 - PR #331 - Latency-Aware Mode Transition Dwell
 ----------------------------------------------------------
 
