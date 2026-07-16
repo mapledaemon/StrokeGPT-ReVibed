@@ -11,6 +11,11 @@ param(
     [string]$DownloadOllamaModel = "Prompt",
     [string]$PythonWingetId = "Python.Python.3.11",
     [string]$TorchIndexUrl = "https://download.pytorch.org/whl/cu128",
+    [string]$ChatterboxTorchIndexUrl = "https://download.pytorch.org/whl/cu126",
+    [string]$ChatterboxTorchVersion = "2.6.0",
+    [string]$ChatterboxTorchvisionVersion = "0.21.0",
+    [string]$ChatterboxTorchaudioVersion = "2.6.0",
+    [string]$ChatterboxNumpyVersion = "1.26.4",
     [switch]$NonInteractive,
     [switch]$PullModel,
     [switch]$SkipModelPull
@@ -491,10 +496,25 @@ function Install-CudaTorchIfRequested {
         return
     }
 
-    Write-Host "Installing CUDA PyTorch in .venv..."
-    Write-Host "Using PyTorch wheel index: $TorchIndexUrl"
-    Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio")
-    Invoke-VenvPython @("-c", "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA build:', torch.version.cuda)")
+    Write-Host "Installing Chatterbox-compatible CUDA PyTorch in .venv..."
+    Write-Host "Using PyTorch wheel index: $ChatterboxTorchIndexUrl"
+    Write-Host "Pinning torch $ChatterboxTorchVersion, torchvision $ChatterboxTorchvisionVersion, torchaudio $ChatterboxTorchaudioVersion, and NumPy $ChatterboxNumpyVersion."
+    Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "numpy==$ChatterboxNumpyVersion")
+    Invoke-VenvPython @(
+        "-m", "pip", "install", "--force-reinstall", "--no-deps",
+        "--index-url", $ChatterboxTorchIndexUrl,
+        "torch==$ChatterboxTorchVersion",
+        "torchvision==$ChatterboxTorchvisionVersion",
+        "torchaudio==$ChatterboxTorchaudioVersion"
+    )
+    Invoke-VenvPython @("-c", "import numpy, torch, torchvision, torchaudio; from chatterbox.tts import ChatterboxTTS; print('Torch:', torch.__version__); print('Torchvision:', torchvision.__version__); print('Torchaudio:', torchaudio.__version__); print('NumPy:', numpy.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA build:', torch.version.cuda); print('Chatterbox import: OK')")
+}
+
+function Test-MainEnvironment {
+    Write-Host "Checking main Python environment dependency consistency..."
+    Invoke-VenvPython @("-m", "pip", "check")
+    Write-Host "Checking Chatterbox imports without downloading voice models..."
+    Invoke-VenvPython @("-c", "import importlib.util, numpy, torch, torchaudio; from chatterbox.tts import ChatterboxTTS; turbo = importlib.util.find_spec('chatterbox.tts_turbo'); assert turbo is not None, 'chatterbox.tts_turbo is missing'; print('Main environment check passed'); print('Torch:', torch.__version__); print('NumPy:', numpy.__version__); print('CUDA available:', torch.cuda.is_available())")
 }
 
 function Install-ParakeetIfRequested {
@@ -530,6 +550,7 @@ if ($PullModel -or $SkipModelPull) {
     Write-Host "  -SkipModelPull skips Ollama model downloads."
 }
 
+$env:PYTHONNOUSERSITE = "1"
 $script:PythonCommand = @(Find-Python)
 Write-Host "Using Python command: $($script:PythonCommand -join ' ')"
 
@@ -563,6 +584,7 @@ Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip")
 Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements.txt")
 
 Install-CudaTorchIfRequested -NvidiaDetected $NvidiaDetected
+Test-MainEnvironment
 Install-ParakeetIfRequested -NvidiaDetected $NvidiaDetected
 
 Write-Host ""
