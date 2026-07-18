@@ -82,6 +82,42 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("install_parakeet.ps1", script)
         self.assertIn("Legacy model download switch detected", script)
 
+    def test_windows_installer_keeps_chatterbox_dependency_stack_consistent(self):
+        script = (PROJECT_ROOT / "scripts" / "install_windows.ps1").read_text(encoding="utf-8")
+        requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+        core_requirements = (PROJECT_ROOT / "requirements-core.txt").read_text(encoding="utf-8")
+
+        self.assertIn("chatterbox-tts==0.1.7", requirements.splitlines())
+        self.assertIn("-r requirements-core.txt", requirements.splitlines())
+        self.assertIn("Flask", core_requirements.splitlines())
+        self.assertIn("faster-whisper", core_requirements.splitlines())
+        self.assertIn('ChatterboxTorchIndexUrl = "https://download.pytorch.org/whl/cu126"', script)
+        self.assertIn('ChatterboxTorchVersion = "2.6.0"', script)
+        self.assertIn('ChatterboxTorchvisionVersion = "0.21.0"', script)
+        self.assertIn('ChatterboxTorchaudioVersion = "2.6.0"', script)
+        self.assertIn('"--force-reinstall", "--no-deps"', script)
+        self.assertNotIn("ChatterboxNumpyVersion", script)
+        self.assertIn("from chatterbox.tts import ChatterboxTTS", script)
+        self.assertIn("from chatterbox.tts_turbo import ChatterboxTurboTTS", script)
+        self.assertIn("assert torch.cuda.is_available()", script)
+        self.assertIn("torch.ones(1, device='cuda')", script)
+        self.assertIn("torch.cuda.synchronize()", script)
+        self.assertIn('Invoke-VenvPython @("-m", "pip", "check")', script)
+        self.assertIn("--query-gpu=compute_cap", script)
+        self.assertIn("$major -ge 10", script)
+        self.assertIn('$ErrorActionPreference = "SilentlyContinue"', script)
+        self.assertIn("requirements-core.txt", script)
+        self.assertIn("Preserved Chatterbox CUDA check: OK", script)
+        self.assertIn('$PSBoundParameters.ContainsKey("TorchIndexUrl")', script)
+        self.assertIn("configures the isolated Parakeet runtime only", script)
+        self.assertNotIn("$ChatterboxTorchIndexUrl = $TorchIndexUrl", script)
+
+        cuda_install = script.index("Install-CudaTorchIfRequested -NvidiaDetected")
+        environment_check = script.index("Test-MainEnvironment", cuda_install)
+        install_complete = script.index('Write-Host "Install complete."')
+        self.assertLess(cuda_install, environment_check)
+        self.assertLess(environment_check, install_complete)
+
     def test_windows_updater_fast_forwards_without_model_downloads(self):
         script = (PROJECT_ROOT / "scripts" / "update_windows.ps1").read_text(encoding="utf-8")
 
@@ -96,6 +132,23 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("-UpdateParakeet", script)
         self.assertIn("[switch]$RunValidation", script)
         self.assertNotIn("ollama pull", script)
+
+    def test_windows_updater_preserves_compatible_chatterbox_cuda(self):
+        script = (PROJECT_ROOT / "scripts" / "update_windows.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("Test-VenvUsesCudaTorch", script)
+        self.assertIn("Test-UnsupportedChatterboxCudaGpu", script)
+        self.assertIn('$ErrorActionPreference = "SilentlyContinue"', script)
+        self.assertIn('ChatterboxTorchIndexUrl = "https://download.pytorch.org/whl/cu126"', script)
+        self.assertIn('ChatterboxTorchVersion = "2.6.0"', script)
+        self.assertIn('ChatterboxTorchvisionVersion = "0.21.0"', script)
+        self.assertIn('ChatterboxTorchaudioVersion = "2.6.0"', script)
+        self.assertIn('"--force-reinstall", "--no-deps"', script)
+        self.assertIn("torch.ones(1, device='cuda')", script)
+        self.assertIn('Invoke-VenvPython @("-m", "pip", "check")', script)
+        self.assertIn("from chatterbox.tts_turbo import ChatterboxTurboTTS", script)
+        self.assertIn("requirements-core.txt", script)
+        self.assertIn("while refreshing core dependencies", script)
 
     def test_test_and_run_uses_compileall_without_expanding_file_list(self):
         script = (PROJECT_ROOT / "scripts" / "test_and_run.ps1").read_text(encoding="utf-8")
@@ -160,6 +213,10 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("[switch]$SkipOllama", script)
         self.assertIn("[switch]$Json", script)
         self.assertIn("Test-PythonModule", script)
+        self.assertIn('$ErrorActionPreference = "Continue"', script)
+        self.assertIn("$ErrorActionPreference = $oldErrorActionPreference", script)
+        self.assertIn("importlib.import_module(name)", script)
+        self.assertNotIn("importlib.util.find_spec(name)", script)
         self.assertIn('"flask" -Required', script)
         self.assertIn('"requests" -Required', script)
         self.assertIn('"cryptography" -Required', script)
@@ -176,6 +233,20 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotIn("ollama pull", script)
         self.assertNotIn("from_pretrained", script)
         self.assertIn(".\\scripts\\verify_setup.ps1", readme)
+
+    def test_local_voice_docs_pin_the_supported_chatterbox_stack(self):
+        doc = (PROJECT_ROOT / "docs" / "local_voice_setup.md").read_text(encoding="utf-8")
+
+        self.assertIn("chatterbox-tts==0.1.7", doc)
+        self.assertIn("torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0", doc)
+        self.assertIn("https://download.pytorch.org/whl/cu126", doc)
+        self.assertIn("python -m pip check", doc)
+        self.assertIn("from chatterbox.tts_turbo import ChatterboxTurboTTS", doc)
+        self.assertIn("RTX 50-series/Blackwell", doc)
+        self.assertNotIn(
+            "pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
+            doc,
+        )
 
     def test_windows_bootstrap_downloads_or_clones_repo_and_runs_installer(self):
         script = (PROJECT_ROOT / "scripts" / "bootstrap_windows.ps1").read_text(encoding="utf-8")

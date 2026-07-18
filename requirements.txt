@@ -1,6 +1,2 @@
-Flask
-requests
-cryptography
-elevenlabs
-chatterbox-tts
-faster-whisper
+-r requirements-core.txt
+chatterbox-tts==0.1.7
