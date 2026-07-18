@@ -95,7 +95,9 @@ function Invoke-SelectedPython {
         $prefix = $script:PythonCommand[1..($script:PythonCommand.Count - 1)]
     }
 
+    $oldErrorActionPreference = $ErrorActionPreference
     try {
+        $ErrorActionPreference = "Continue"
         $output = & $exe @prefix @Arguments 2>&1
         return [pscustomobject]@{
             ExitCode = $LASTEXITCODE
@@ -107,6 +109,8 @@ function Invoke-SelectedPython {
             ExitCode = 1
             Output = $_.Exception.Message
         }
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
     }
 }
 
@@ -118,7 +122,7 @@ function Test-PythonModule {
         [switch]$Required
     )
 
-    $code = "import importlib.util, sys; name = '$ModuleName'; spec = importlib.util.find_spec(name); print(spec.origin if spec and spec.origin else 'available'); raise SystemExit(0 if spec else 1)"
+    $code = "import importlib; name = '$ModuleName'; module = importlib.import_module(name); print(getattr(module, '__file__', None) or 'available')"
     $result = Invoke-SelectedPython @("-c", $code)
     if ($result.ExitCode -eq 0) {
         Add-Check $Id $Label "ok" "$ModuleName is importable."

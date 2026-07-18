@@ -184,7 +184,9 @@ dependencies, and keeps model downloads inside the app so progress stays
 visible. It refuses to overwrite tracked local edits — commit or stash
 code changes first. Untracked local settings such as `my_settings.json`
 are left alone. Use `.\scripts\update_windows.ps1 -UpdateParakeet` to also
-refresh the isolated NVIDIA Parakeet runtime.
+refresh the isolated NVIDIA Parakeet runtime. If the main environment already
+uses CUDA Torch for Chatterbox, the updater restores the compatible CUDA stack
+after dependency resolution instead of silently replacing it with CPU Torch.
 
 On macOS / Linux, from inside the `.venv`: `git pull` and then
 `python -m pip install -r requirements.txt --upgrade`.
@@ -198,7 +200,9 @@ AMD/Intel/Vulkan setup, and multi-GPU notes.
 
 For fast local Chatterbox TTS on NVIDIA, the Windows installer can install
 CUDA-enabled PyTorch automatically. For manual or non-Windows setup, see
-[docs/local_voice_setup.md](docs/local_voice_setup.md).
+[docs/local_voice_setup.md](docs/local_voice_setup.md). Chatterbox 0.1.7 pins
+Torch 2.6, which does not support RTX 50-series/Blackwell GPUs; the installer
+keeps those cards off the incompatible automatic CUDA path.
 
 ## Troubleshooting
 

@@ -11,12 +11,22 @@ param(
     [string]$DownloadOllamaModel = "Prompt",
     [string]$PythonWingetId = "Python.Python.3.11",
     [string]$TorchIndexUrl = "https://download.pytorch.org/whl/cu128",
+    [string]$ChatterboxTorchIndexUrl = "https://download.pytorch.org/whl/cu126",
+    [string]$ChatterboxTorchVersion = "2.6.0",
+    [string]$ChatterboxTorchvisionVersion = "0.21.0",
+    [string]$ChatterboxTorchaudioVersion = "2.6.0",
     [switch]$NonInteractive,
     [switch]$PullModel,
     [switch]$SkipModelPull
 )
 
 $ErrorActionPreference = "Stop"
+
+# The legacy index remains the Parakeet override; the main environment has a
+# separate index because Chatterbox's Torch 2.6 wheels are unavailable on cu128.
+if ($PSBoundParameters.ContainsKey("TorchIndexUrl") -and -not $PSBoundParameters.ContainsKey("ChatterboxTorchIndexUrl")) {
+    Write-Warning "-TorchIndexUrl configures the isolated Parakeet runtime only. Use -ChatterboxTorchIndexUrl to override the main Chatterbox wheel index."
+}
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
@@ -345,6 +355,46 @@ function Test-NvidiaGpu {
     return $LASTEXITCODE -eq 0
 }
 
+function Test-UnsupportedChatterboxCudaGpu {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        $rows = @(& nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+    foreach ($row in $rows) {
+        $major = 0
+        $majorText = ("$row".Trim() -split "\.")[0]
+        if ([int]::TryParse($majorText, [ref]$major) -and $major -ge 10) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-VenvUsesCudaTorch {
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & $VenvPython -c "import torch; raise SystemExit(0 if torch.version.cuda else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+}
+
 function Write-OllamaModelChoices {
     param([hashtable]$VramInfo)
 
@@ -476,6 +526,15 @@ function Install-OllamaIfRequested {
 function Install-CudaTorchIfRequested {
     param([bool]$NvidiaDetected)
 
+    $unsupportedGpu = Test-UnsupportedChatterboxCudaGpu
+    if ($unsupportedGpu) {
+        if ($InstallCudaTorch -eq "Yes") {
+            throw "Chatterbox 0.1.7 pins Torch 2.6, which does not support this Blackwell/RTX 50-series GPU. Rerun with -InstallCudaTorch No for CPU voice; see docs/local_voice_setup.md."
+        }
+        Write-Warning "Skipping automatic Chatterbox CUDA setup because Torch 2.6 does not support this Blackwell/RTX 50-series GPU. Using CPU Torch instead."
+        return
+    }
+
     $question = if ($NvidiaDetected) {
         "NVIDIA GPU detected. Install CUDA PyTorch for faster local Chatterbox voice?"
     } else {
@@ -491,10 +550,27 @@ function Install-CudaTorchIfRequested {
         return
     }
 
-    Write-Host "Installing CUDA PyTorch in .venv..."
-    Write-Host "Using PyTorch wheel index: $TorchIndexUrl"
-    Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "--force-reinstall", "--index-url", $TorchIndexUrl, "torch", "torchvision", "torchaudio")
-    Invoke-VenvPython @("-c", "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA build:', torch.version.cuda)")
+    if ([version]$PythonVersion -ge [version]"3.14") {
+        throw "The supported Chatterbox CUDA stack requires Python 3.10-3.13. Recreate .venv with Python 3.11."
+    }
+    Write-Host "Installing Chatterbox-compatible CUDA PyTorch in .venv..."
+    Write-Host "Using PyTorch wheel index: $ChatterboxTorchIndexUrl"
+    Write-Host "Pinning torch $ChatterboxTorchVersion, torchvision $ChatterboxTorchvisionVersion, and torchaudio $ChatterboxTorchaudioVersion."
+    Invoke-VenvPython @(
+        "-m", "pip", "install", "--force-reinstall", "--no-deps",
+        "--index-url", $ChatterboxTorchIndexUrl,
+        "torch==$ChatterboxTorchVersion",
+        "torchvision==$ChatterboxTorchvisionVersion",
+        "torchaudio==$ChatterboxTorchaudioVersion"
+    )
+    Invoke-VenvPython @("-c", "import numpy, torch, torchvision, torchaudio; from chatterbox.tts import ChatterboxTTS; from chatterbox.tts_turbo import ChatterboxTurboTTS; assert torch.cuda.is_available(), 'CUDA PyTorch was requested but CUDA is unavailable'; probe = torch.ones(1, device='cuda'); assert probe.item() == 1; torch.cuda.synchronize(); print('Torch:', torch.__version__); print('Torchvision:', torchvision.__version__); print('Torchaudio:', torchaudio.__version__); print('NumPy:', numpy.__version__); print('CUDA build:', torch.version.cuda); print('GPU:', torch.cuda.get_device_name(0)); print('Chatterbox CUDA check: OK')")
+}
+
+function Test-MainEnvironment {
+    Write-Host "Checking main Python environment dependency consistency..."
+    Invoke-VenvPython @("-m", "pip", "check")
+    Write-Host "Checking Chatterbox imports without downloading voice models..."
+    Invoke-VenvPython @("-c", "import numpy, torch, torchaudio; from chatterbox.tts import ChatterboxTTS; from chatterbox.tts_turbo import ChatterboxTurboTTS; print('Main environment check passed'); print('Torch:', torch.__version__); print('NumPy:', numpy.__version__); print('CUDA available:', torch.cuda.is_available())")
 }
 
 function Install-ParakeetIfRequested {
@@ -530,6 +606,7 @@ if ($PullModel -or $SkipModelPull) {
     Write-Host "  -SkipModelPull skips Ollama model downloads."
 }
 
+$env:PYTHONNOUSERSITE = "1"
 $script:PythonCommand = @(Find-Python)
 Write-Host "Using Python command: $($script:PythonCommand -join ' ')"
 
@@ -554,15 +631,25 @@ if ($NvidiaDetected) {
     Write-Host "No NVIDIA GPU was detected through nvidia-smi."
 }
 
+$PreserveBlackwellCudaEnvironment = (Test-UnsupportedChatterboxCudaGpu) -and (Test-VenvUsesCudaTorch)
+if ($PreserveBlackwellCudaEnvironment) {
+    Write-Warning "An existing Blackwell/RTX 50-series CUDA environment was detected. The installer will refresh core dependencies without replacing its manually configured Chatterbox/Torch stack."
+}
+
 Install-OllamaIfRequested
 Download-OllamaModelIfRequested -VramInfo $VramInfo
 
 Write-Host ""
 Write-Host "Installing Python dependencies..."
 Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip")
-Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements.txt")
-
-Install-CudaTorchIfRequested -NvidiaDetected $NvidiaDetected
+if ($PreserveBlackwellCudaEnvironment) {
+    Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements-core.txt")
+    Invoke-VenvPython @("-c", "import torch; from chatterbox.tts import ChatterboxTTS; from chatterbox.tts_turbo import ChatterboxTurboTTS; assert torch.cuda.is_available(), 'Preserved Blackwell CUDA environment is unavailable'; probe = torch.ones(1, device='cuda'); assert probe.item() == 1; torch.cuda.synchronize(); print('Preserved Chatterbox CUDA check: OK')")
+} else {
+    Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements.txt")
+    Install-CudaTorchIfRequested -NvidiaDetected $NvidiaDetected
+    Test-MainEnvironment
+}
 Install-ParakeetIfRequested -NvidiaDetected $NvidiaDetected
 
 Write-Host ""

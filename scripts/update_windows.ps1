@@ -13,6 +13,12 @@ $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $InstallScript = Join-Path $PSScriptRoot "install_windows.ps1"
 $ParakeetInstallScript = Join-Path $PSScriptRoot "install_parakeet.ps1"
 $ValidationScript = Join-Path $PSScriptRoot "test_and_run.ps1"
+$ChatterboxTorchIndexUrl = "https://download.pytorch.org/whl/cu126"
+$ChatterboxTorchVersion = "2.6.0"
+$ChatterboxTorchvisionVersion = "0.21.0"
+$ChatterboxTorchaudioVersion = "2.6.0"
+
+$env:PYTHONNOUSERSITE = "1"
 
 Set-Location $ProjectRoot
 
@@ -31,6 +37,55 @@ function Invoke-Git {
     if ($LASTEXITCODE -ne 0) {
         throw "Git command failed: git $($Arguments -join ' ')"
     }
+}
+
+function Invoke-VenvPython {
+    param([string[]]$Arguments)
+
+    & $VenvPython @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Virtual environment command failed: $($Arguments -join ' ')"
+    }
+}
+
+function Test-VenvUsesCudaTorch {
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & $VenvPython -c "import torch; raise SystemExit(0 if torch.version.cuda else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+}
+
+function Test-UnsupportedChatterboxCudaGpu {
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    $oldErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        $rows = @(& nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+    foreach ($row in $rows) {
+        $major = 0
+        $majorText = ("$row".Trim() -split "\.")[0]
+        if ([int]::TryParse($majorText, [ref]$major) -and $major -ge 10) {
+            return $true
+        }
+    }
+    return $false
 }
 
 function Get-UpstreamRef {
@@ -91,14 +146,31 @@ if (-not $SkipDependencies) {
         Write-Host "No .venv found. Running the Windows installer without model downloads..."
         & $InstallScript -NonInteractive -InstallOllama No -InstallCudaTorch No -InstallParakeet No -DownloadOllamaModel No
     } else {
-        Write-Host "Updating Python dependencies in .venv..."
-        & $VenvPython -m pip install --upgrade pip
-        if ($LASTEXITCODE -ne 0) {
-            throw "pip upgrade failed."
-        }
-        & $VenvPython -m pip install -r requirements.txt
-        if ($LASTEXITCODE -ne 0) {
-            throw "requirements install failed."
+        $restoreCudaTorch = Test-VenvUsesCudaTorch
+        if ($restoreCudaTorch -and (Test-UnsupportedChatterboxCudaGpu)) {
+            Write-Warning "Preserving the manually configured Blackwell/RTX 50-series Chatterbox/Torch stack while refreshing core dependencies. Chatterbox 0.1.7 does not officially support this CUDA combination."
+            Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip")
+            Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements-core.txt")
+            Invoke-VenvPython @("-c", "import torch; from chatterbox.tts import ChatterboxTTS; from chatterbox.tts_turbo import ChatterboxTurboTTS; assert torch.cuda.is_available(), 'Preserved Blackwell CUDA environment is unavailable'; probe = torch.ones(1, device='cuda'); assert probe.item() == 1; torch.cuda.synchronize(); print('Preserved Chatterbox CUDA check: OK')")
+        } else {
+            Write-Host "Updating Python dependencies in .venv..."
+            Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip")
+            Invoke-VenvPython @("-m", "pip", "install", "-r", "requirements.txt")
+
+            if ($restoreCudaTorch) {
+                Write-Host "Restoring the Chatterbox-compatible CUDA PyTorch stack..."
+                Invoke-VenvPython @(
+                    "-m", "pip", "install", "--force-reinstall", "--no-deps",
+                    "--index-url", $ChatterboxTorchIndexUrl,
+                    "torch==$ChatterboxTorchVersion",
+                    "torchvision==$ChatterboxTorchvisionVersion",
+                    "torchaudio==$ChatterboxTorchaudioVersion"
+                )
+                Invoke-VenvPython @("-c", "import torch; assert torch.cuda.is_available(), 'CUDA was available before update but is unavailable after repair'; probe = torch.ones(1, device='cuda'); assert probe.item() == 1; torch.cuda.synchronize(); print('CUDA update check:', torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))")
+            }
+
+            Invoke-VenvPython @("-m", "pip", "check")
+            Invoke-VenvPython @("-c", "from chatterbox.tts import ChatterboxTTS; from chatterbox.tts_turbo import ChatterboxTurboTTS; print('Chatterbox imports: OK')")
         }
     }
 } else {

@@ -7,6 +7,26 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-07-18 - PR #334 - Repair Windows Chatterbox CUDA Installation
+------------------------------------------------------------------
+
+Branch: agent/upstream-windows-chatterbox-fix
+
+- Pinned the supported Chatterbox package contract and changed the Windows
+  CUDA step to install its matching Torch 2.6 / Torchvision 0.21 /
+  Torchaudio 2.6 wheels from the CUDA 12.6 index without allowing their
+  dependencies to overwrite the resolved NumPy stack.
+- Added fatal `pip check`, standard/Turbo import probes, and a real CUDA tensor
+  operation before the installer reports success. User-site packages are
+  disabled during setup so they cannot mask the project virtual environment.
+- Made the separate Chatterbox and Parakeet wheel-index overrides explicit,
+  restored compatible CUDA wheels after normal Windows updates, and protected
+  manually configured RTX 50-series/Blackwell environments from an unsupported
+  Torch 2.6 downgrade while still refreshing unrelated core dependencies.
+- Updated the setup verifier to execute imports instead of only locating module
+  files, and aligned local-voice setup documentation and installer regression
+  tests with the supported package matrix.
+
 2026-06-29 - PR #333 - Quick Settings Menu On The Visualizer
 ------------------------------------------------------------
 
