@@ -46,6 +46,7 @@ from strokegpt.motion_patterns import (
     continuous_plan_timed_points,
     continuous_plan_timed_phase_points,
     continuous_motion_plan_from_pattern,
+    _sample_action_position,
     sample_continuous_motion,
 )
 
@@ -381,7 +382,7 @@ class IntentMatcherTests(unittest.TestCase):
         intent = self.matcher.parse("milk me", self.current)
 
         self.assertEqual(intent.kind, "move")
-        self.assertIn("milk", intent.matched)
+        self.assertIn("pulse", intent.matched)
         self.assertEqual(intent.target.depth, 50)
         self.assertGreaterEqual(intent.target.stroke_range, 92)
         self.assertGreaterEqual(intent.target.speed, 52)
@@ -390,7 +391,7 @@ class IntentMatcherTests(unittest.TestCase):
         intent = self.matcher.parse("short milk strokes", self.current)
 
         self.assertEqual(intent.kind, "move")
-        self.assertIn("milk", intent.matched)
+        self.assertIn("pulse", intent.matched)
         self.assertLessEqual(intent.target.stroke_range, 24)
 
     def test_tip_only_maps_to_shallow_short_motion(self):
@@ -405,7 +406,7 @@ class IntentMatcherTests(unittest.TestCase):
         intent = self.matcher.parse("flutter at the tip", self.current)
 
         self.assertEqual(intent.kind, "move")
-        self.assertIn("flutter", intent.matched)
+        self.assertIn("pulse", intent.matched)
         self.assertLessEqual(intent.target.depth, 12)
         self.assertLessEqual(intent.target.stroke_range, 16)
         self.assertGreaterEqual(intent.target.speed, 58)
@@ -479,11 +480,11 @@ class IntentMatcherTests(unittest.TestCase):
         self.assertGreater(intent.target.speed, current.speed)
         self.assertGreaterEqual(intent.target.stroke_range, 45)
 
-    def test_smooth_alternation_maps_to_wide_sway(self):
+    def test_smooth_alternation_maps_to_wide_stroke(self):
         intent = self.matcher.parse("smoothly alternate across the middle", self.current)
 
         self.assertEqual(intent.kind, "move")
-        self.assertIn("sway", intent.matched)
+        self.assertIn("stroke", intent.matched)
         self.assertEqual(intent.target.depth, 50)
         self.assertGreaterEqual(intent.target.stroke_range, 70)
 
@@ -571,13 +572,13 @@ class MotionSanitizerTests(unittest.TestCase):
         self.assertEqual(target.depth, 10)
         self.assertEqual(target.stroke_range, 18)
 
-    def test_llm_move_accepts_mode_pattern_ids(self):
+    def test_llm_move_canonicalizes_retired_mode_pattern_ids(self):
         sanitizer = MotionSanitizer()
         current = MotionTarget(35, 45, 55)
         target = sanitizer.from_llm_move({"pattern": "milking-pressure-build"}, current)
 
         self.assertIsNotNone(target)
-        self.assertIn("milking-pressure-build", target.label)
+        self.assertIn("pulse", target.label)
 
     def test_llm_move_accepts_milk_pattern_as_full_range(self):
         sanitizer = MotionSanitizer()
@@ -585,7 +586,7 @@ class MotionSanitizerTests(unittest.TestCase):
         target = sanitizer.from_llm_move({"pattern": "milk"}, current)
 
         self.assertIsNotNone(target)
-        self.assertIn("milk", target.label)
+        self.assertIn("pulse", target.label)
         self.assertEqual(target.depth, 50)
         self.assertGreaterEqual(target.stroke_range, 92)
 
@@ -595,7 +596,7 @@ class MotionSanitizerTests(unittest.TestCase):
         target = sanitizer.from_llm_move({"pattern": "milk", "sp": 26, "dp": 96, "rng": 90}, current)
 
         self.assertIsNotNone(target)
-        self.assertIn("milk", target.label)
+        self.assertIn("pulse", target.label)
         self.assertEqual(target.speed, 26)
         self.assertEqual(target.depth, 50)
         self.assertEqual(target.stroke_range, 90)
@@ -609,7 +610,7 @@ class MotionSanitizerTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(target)
-        self.assertIn("milk", target.label)
+        self.assertIn("pulse", target.label)
         self.assertEqual(target.depth, 75)
         self.assertEqual(target.stroke_range, 70)
 
@@ -877,6 +878,15 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(handy.stopped)
         self.assertFalse(controller.observability_snapshot()["playback_active"])
 
+    def test_pattern_label_resolution_uses_token_boundaries(self):
+        controller = MotionController(FakeHandy(), step_delay=0)
+
+        self.assertIsNone(controller._pattern_from_label("impulse response"))
+        self.assertIsNone(controller._pattern_from_label("striptease note"))
+        self.assertIsNone(controller._pattern_from_label("unstroked flow"))
+        self.assertEqual(controller._pattern_from_label("llm+pulse"), "pulse")
+        self.assertEqual(controller._pattern_from_label("llm+milk"), "pulse")
+
     def test_continuous_backend_prefers_hsp_timed_point_stream_when_available(self):
         handy = StreamingFakeHandy()
         controller = MotionController(handy, step_delay=0.16)
@@ -1000,15 +1010,12 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreaterEqual(cycles * duration, MOTION_PATTERN_PREVIEW_MIN_SECONDS)
         self.assertLess(cycles * duration, MOTION_PATTERN_PREVIEW_MIN_SECONDS + duration)
 
-    def test_fast_continuous_short_patterns_keep_high_speed_turn_floor(self):
+    def test_legacy_flick_alias_keeps_magic_handy_cycle_floor(self):
         plan = continuous_motion_plan("flick")
         sample = sample_continuous_motion(plan, MotionTarget(100, 50, 80, "flick"), 0.0)
 
-        self.assertGreaterEqual(
-            sample.effective_duration_seconds,
-            CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS,
-        )
-        self.assertLess(sample.effective_duration_seconds, CONTINUOUS_MIN_EFFECTIVE_CYCLE_SECONDS)
+        self.assertEqual(sample.effective_duration_seconds, 6.6)
+        self.assertEqual(plan.name, "Tease")
 
     def test_continuous_hsp_points_report_intent_range_and_sample_range(self):
         handy = StreamingFakeHandy()
@@ -1089,7 +1096,7 @@ class MotionControllerTests(unittest.TestCase):
         controller = MotionController(handy, step_delay=0.16)
 
         try:
-            controller.apply_continuous_target(MotionTarget(47, 50, 66, "surge"), source="unit test")
+            controller.apply_continuous_target(MotionTarget(47, 50, 66, "tease"), source="unit test")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
             self.assertTrue(self.wait_until(lambda: len(handy.stream_appends) == 1), handy.stream_appends)
 
@@ -1441,7 +1448,7 @@ class MotionControllerTests(unittest.TestCase):
         ]
 
         self.assertGreaterEqual(len(phase_points), 18)
-        self.assertLessEqual(max(depth_steps), 28.0)
+        self.assertLessEqual(max(depth_steps), 35.0)
 
     def test_continuous_hsp_generated_stream_preserves_fractional_integer_bucket_points(self):
         handy = StreamingFakeHandy()
@@ -1546,8 +1553,10 @@ class MotionControllerTests(unittest.TestCase):
             self.assertEqual(slow_handy.effective_speed_calls, 0)
             self.assertEqual(fast_handy.effective_speed_calls, 0)
             self.assertEqual(slow_tempo, {0.5})
-            self.assertEqual(fast_tempo, {12.0})
-            self.assertGreater(min(slow_cycle), max(fast_cycle) * 6.0)
+            self.assertEqual(fast_tempo, {1.0})
+            self.assertEqual(slow_tempo, {0.5})
+            self.assertAlmostEqual(min(slow_cycle), 13.2, places=2)
+            self.assertAlmostEqual(max(fast_cycle), 6.6, places=2)
             self.assertEqual({round(point["intent_speed"]) for point in slow_points}, {0})
             self.assertEqual({round(point["intent_speed"]) for point in fast_points}, {100})
         finally:
@@ -1566,12 +1575,11 @@ class MotionControllerTests(unittest.TestCase):
 
         self.assertEqual(round(slow.intent_speed), 20)
         self.assertEqual(round(fast.intent_speed), 80)
-        self.assertAlmostEqual(slow.tempo_scale, 0.7, places=3)
-        self.assertGreater(fast.tempo_scale, 3.8)
-        self.assertLess(fast.tempo_scale, 4.1)
-        self.assertGreater(fast.tempo_scale - slow.tempo_scale, 3.1)
+        self.assertAlmostEqual(slow.tempo_scale, 1 / 1.8, places=3)
+        self.assertAlmostEqual(fast.tempo_scale, 1 / 1.2, places=3)
+        self.assertGreater(fast.tempo_scale, slow.tempo_scale)
 
-    def test_high_continuous_speed_reaches_near_position_transport_cap(self):
+    def test_high_continuous_speed_preserves_magic_handy_cycle_floor(self):
         plan = continuous_motion_plan("stroke")
         target = MotionTarget(100, 50, 100, "stroke")
         points = continuous_plan_timed_points(plan, target, target_interval_seconds=0.05)
@@ -1582,19 +1590,20 @@ class MotionControllerTests(unittest.TestCase):
             if right.at_seconds > left.at_seconds
         ]
 
-        self.assertLessEqual(points[-1].at_seconds, 0.6)
-        self.assertGreaterEqual(max(segment_rates), 400.0)
+        self.assertAlmostEqual(points[-1].at_seconds, 6.6, places=2)
+        self.assertGreaterEqual(max(segment_rates), 150.0)
+        self.assertLess(max(segment_rates), 300.0)
 
-    def test_max_continuous_speed_compresses_long_fixed_pattern_cadence(self):
+    def test_max_continuous_speed_uses_magic_handy_authored_cadence(self):
         plan = continuous_motion_plan("milk")
         target = MotionTarget(100, 50, 100, "milk")
 
         sample = sample_continuous_motion(plan, target, 0.0)
 
-        self.assertLessEqual(sample.effective_duration_seconds, 0.75)
-        self.assertAlmostEqual(sample.tempo_scale, 12.0)
+        self.assertAlmostEqual(sample.effective_duration_seconds, 6.6)
+        self.assertAlmostEqual(sample.tempo_scale, 1.0)
 
-    def test_turn_heavy_high_speed_patterns_scale_turn_ease_floor(self):
+    def test_fixed_patterns_use_magic_handy_speed_profile(self):
         stroke_mid = sample_continuous_motion(
             continuous_motion_plan("stroke"),
             MotionTarget(80, 50, 100, "stroke"),
@@ -1624,17 +1633,10 @@ class MotionControllerTests(unittest.TestCase):
         self.assertGreater(stroke_mid.effective_duration_seconds, stroke_max.effective_duration_seconds)
         self.assertGreater(flutter_mid.effective_duration_seconds, flutter_high.effective_duration_seconds)
         self.assertGreater(flutter_high.effective_duration_seconds, flutter_max.effective_duration_seconds)
-        self.assertAlmostEqual(
-            stroke_max.effective_duration_seconds,
-            CONTINUOUS_HIGH_SPEED_TURN_EASE_MIN_CYCLE_SECONDS,
-            places=3,
-        )
-        self.assertAlmostEqual(
-            flutter_max.effective_duration_seconds,
-            CONTINUOUS_HIGH_SPEED_MULTI_TURN_EASE_MIN_CYCLE_SECONDS,
-            places=3,
-        )
-        self.assertLess(stroke_max.effective_duration_seconds, flutter_max.effective_duration_seconds)
+        self.assertAlmostEqual(stroke_mid.effective_duration_seconds, 7.92, places=2)
+        self.assertAlmostEqual(stroke_max.effective_duration_seconds, 6.6, places=2)
+        self.assertAlmostEqual(flutter_max.effective_duration_seconds, 6.6, places=2)
+        self.assertEqual(stroke_max.effective_duration_seconds, flutter_max.effective_duration_seconds)
 
     def test_closed_continuous_patterns_do_not_emit_flat_wrap_pause(self):
         plan = continuous_motion_plan("stroke")
@@ -1648,7 +1650,9 @@ class MotionControllerTests(unittest.TestCase):
         )
         authored_tail = [point for point in phase_points if point.get("authored") and point["phase"] >= 0.9]
 
-        self.assertEqual(len(authored_tail), 1)
+        self.assertGreaterEqual(len(authored_tail), 1)
+        tail_positions = [_sample_action_position(plan.actions, point["phase"]) for point in authored_tail]
+        self.assertNotEqual(tail_positions[-2], tail_positions[-1])
 
     def test_speed_limit_refresh_replaces_active_continuous_stream_at_new_cap(self):
         handy = StreamingFakeHandy()
@@ -1858,7 +1862,7 @@ class MotionControllerTests(unittest.TestCase):
     def test_continuous_hsp_preserves_point_timing_without_velocity_stretch(self):
         class HspVelocityTrapHandy(VelocityCappedStreamingFakeHandy):
             def __init__(self):
-                super().__init__(max_velocity=45)
+                super().__init__(max_velocity=30)
                 self.duration_calls = []
 
             def duration_ms_for_depth_interval(self, velocity, start_depth, end_depth):
@@ -2522,7 +2526,7 @@ class MotionControllerTests(unittest.TestCase):
             controller.apply_continuous_target(MotionTarget(50, 50, 80, "stroke"), source="first")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_starts) == 1), handy.stream_starts)
 
-            controller.apply_continuous_target(MotionTarget(70, 50, 80, "wave"), source="second")
+            controller.apply_continuous_target(MotionTarget(70, 50, 80, "pulse"), source="second")
             self.assertTrue(self.wait_until(lambda: len(handy.stream_replacements) == 1), handy.stream_replacements)
 
             trace = self.wait_for_hsp_trace(
@@ -2800,7 +2804,7 @@ class MotionControllerTests(unittest.TestCase):
                 if point.get("continuous_schema") == "hsp"
             )
             self.assertEqual(handy.velocity_intervals, [])
-            self.assertAlmostEqual(point["sample_tempo_scale"], 0.7)
+            self.assertAlmostEqual(point["sample_tempo_scale"], 1 / 1.8, places=3)
             self.assertEqual(point["hsp_transport_time_scale"], 1.0)
         finally:
             controller.stop()
@@ -4054,6 +4058,24 @@ class MotionControllerTests(unittest.TestCase):
         self.assertTrue(timed)
         self.assertGreater(max(frame.target.speed for frame in timed), 90)
         self.assertTrue(any(frame.delay_factor < 0.25 for frame in timed[1:]))
+
+    def test_position_backend_uses_magic_handy_speed_profile(self):
+        controller = MotionController(FakeHandy(), step_delay=0.25)
+        controller.set_backend("position")
+
+        slow_frames = controller._expanded_frames(
+            MotionTarget(20, 50, 80, "stroke"),
+            preserve_timing=True,
+        )
+        max_frames = controller._expanded_frames(
+            MotionTarget(100, 50, 80, "stroke"),
+            preserve_timing=True,
+        )
+
+        slow_duration = sum(frame.delay_factor * controller.step_delay for frame in slow_frames)
+        max_duration = sum(frame.delay_factor * controller.step_delay for frame in max_frames)
+        self.assertAlmostEqual(slow_duration, 11.88, places=2)
+        self.assertAlmostEqual(max_duration, 6.6, places=2)
 
     def test_position_backend_stretches_timed_frames_to_velocity_cap(self):
         handy = CappedPositionFakeHandy(max_velocity=25)

@@ -31,7 +31,7 @@ from .mode_decisions import (
     ModeDecision,
 )
 from .mode_contracts import ModeCallbacks, ModeLogic, ModeServices
-from .motion import IntentMatcher, MotionTarget
+from .motion import LEGACY_BUILTIN_PATTERN_ALIASES, IntentMatcher, MotionTarget
 from .motion_patterns import PATTERNS
 from .motion_scripts import MotionScriptPlanner, ScriptStep
 
@@ -387,6 +387,13 @@ def _mode_pattern_id_from_target(target) -> str:
             or slug_label.startswith(f"{pattern_id}-")
         ):
             return pattern_id
+    for legacy_id, canonical_id in sorted(
+        LEGACY_BUILTIN_PATTERN_ALIASES.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        if legacy_id in parts or slug_label == legacy_id or slug_label.startswith(f"{legacy_id}-"):
+            return canonical_id
     return ""
 
 

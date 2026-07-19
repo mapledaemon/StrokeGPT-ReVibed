@@ -686,7 +686,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "motion_playback_active": False,
             "min_speed": 10,
             "max_speed": 80,
-            "motion_preferences": "Available fixed move.pattern weights from 0-100.\nsway=74",
+            "motion_preferences": "Available fixed move.pattern weights from 0-100.\nstroke=74",
             "motion_style": "full_range",
         })
 
@@ -694,7 +694,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("MOTION STYLE PREFERENCE", prompt)
         self.assertIn("full_range - favor longer travel", prompt)
         self.assertIn("bounded bias", prompt)
-        self.assertIn("sway=74", prompt)
+        self.assertIn("stroke=74", prompt)
         self.assertIn("Motion: stopped. Handy target: 20% speed, 30% depth, 40% range.", prompt)
         self.assertIn("If the Current State says Motion is stopped", prompt)
         self.assertIn('{"chat":"<in-character reply>","move":', prompt)
@@ -706,7 +706,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertIn("do not sanitize or euphemize", prompt)
         self.assertIn("TIP / SHAFT / BASE ARE REGIONS", prompt)
         self.assertIn("prefer `rng` 70-95 with a center inside the region", prompt)
-        self.assertIn("Reserve `flick`, `flutter`, `hold`, `pulse`, and `tease`", prompt)
+        self.assertIn("Use `pulse` for rhythmic, pumping, fluttering, or milking requests", prompt)
         self.assertIn("SPEED WORDS SET `sp`", prompt)
         self.assertIn("favor base-through-mid or mid-base first", prompt)
         self.assertIn("current range `10-80`", prompt)
@@ -820,7 +820,7 @@ class ModelConfigurationTests(unittest.TestCase):
         })
 
         self.assertIn("CHAT EDGE PERMISSION", prompt)
-        self.assertIn("Do not choose edge-specific fixed `move.pattern` ids", prompt)
+        self.assertIn("The ordinary `tease` pattern remains available without implying Edge mode", prompt)
 
     def test_llm_prompt_includes_chat_session_arc_when_started(self):
         service = LLMService(url="http://localhost:11434/api/chat")

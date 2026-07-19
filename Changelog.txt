@@ -7,6 +7,25 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
+2026-07-19 - PR #335 - Replace The Built-In Motion Catalog
+-----------------------------------------------------------
+
+Branch: codex/magic-handy-pattern-catalog
+
+- Replaced the 38-entry fixed motion catalog with MagicHandy's exact `stroke`,
+  `pulse`, and `tease` baseline loops, including their 6.6-second source knots,
+  names, descriptions, tags, and non-compressing routine speed profile. The
+  generator and regression tests now pin that three-pattern contract and keep
+  maximum-speed playback at the hardware-budgeted source cadence.
+- Kept familiar motion vocabulary and saved custom prompts working through
+  non-enumerated aliases, while Milk, Edge, Legacy Auto, Freestyle, and LLM
+  output now route fixed playback through the three canonical IDs.
+- Added backend-sampled curve previews and search to both pattern lists, made
+  Pattern Studio canvases responsive and high-DPI aware, and changed drawn
+  gesture simplification to preserve every direction reversal.
+- Preserved user-imported/trained patterns, their settings overrides, and the
+  existing shared MotionController/HandyController safety path.
+
 2026-07-18 - PR #334 - Repair Windows Chatterbox CUDA Installation
 ------------------------------------------------------------------
 

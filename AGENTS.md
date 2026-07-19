@@ -73,9 +73,11 @@ behavior, and route motion changes through the shared controller path.
 - `strokegpt/motion_patterns.py`: reusable normalized motion pattern shapes,
   the continuous `MotionSample` schema, and the JSON loader that materializes
   the built-in catalog at import time.
-- `strokegpt/builtin_patterns.json`: pure data file holding the 34 built-in
-  `MotionPattern` definitions consumed by `motion_patterns._load_builtin
-  _patterns()`. Keeping the data in JSON keeps it free of Python imports.
+- `strokegpt/builtin_patterns.json`: pure data file holding the three
+  MagicHandy baseline `MotionPattern` definitions (`stroke`, `pulse`, and
+  `tease`) consumed by `motion_patterns._load_builtin_patterns()`. The
+  generator in `scripts/generate_builtin_patterns.py` pins their exact source
+  knots and metadata.
 - `strokegpt/pattern_library.py`: shareable motion pattern schema, built-in
   pattern catalog, and user pattern file registry.
 - `strokegpt/program_library.py`: separate long-form Programs (funscripts)
@@ -121,10 +123,14 @@ behavior, and route motion changes through the shared controller path.
   feedback-controls,training-editor}.js`; `static/js/motion-control.js`
   should stay as wiring and compatibility exports instead of regrowing domain
   behavior.
-- Built-in fixed motion patterns now live in `strokegpt/builtin_patterns.json`,
-  with `motion_patterns.py` responsible for loading, normalizing, expanding,
-  and sampling them. Continuous position is the recommended default backend,
-  while HAMP remains a selectable legacy fallback pending real-device checks.
+- The fixed catalog is the three MagicHandy baseline loops in
+  `strokegpt/builtin_patterns.json`; familiar retired names remain semantic
+  aliases but are not catalog entries. `motion_patterns.py` loads and samples
+  them, browser catalogs receive backend-sampled curve previews, and their
+  `magic_handy` tempo profile stretches low speeds without compressing the
+  hardware-budgeted 6.6-second source cycle at maximum speed. Continuous
+  position is the recommended default backend, while HAMP remains a selectable
+  legacy fallback pending real-device checks.
 - The browser shell has gained responsive chat/layout foundations, profile
   menu/About surfaces, backend-required control locking, single-tab warning,
   top-bar voice controls, streamed chat rendering, fenced-code rendering, and
@@ -385,10 +391,10 @@ Do not move detailed settings back into the sidebar unless there is a strong usa
 - When Auto, Edge, or Milk mode is active, motion feedback from chat should be
   queued into the active mode planner and wake the mode loop. Do not apply it as
   a one-off command that the next scripted mode step can immediately overwrite.
-- Routine Freestyle selection should not randomly choose `edge-*` hold/reaction
-  patterns. Those are reserved for close-signal handling or explicit edge
-  feedback because their intentionally tiny ranges can look like fixed-speed or
-  paused continuous motion during ordinary Freestyle.
+- The fixed catalog has no separate `edge-*` family. Edge stages use the
+  canonical `tease` loop with stage-specific speed/depth/range targets; keep
+  edge permission checks semantic instead of treating every `tease` request as
+  an Edge mode action.
 - Hands-free voice can optionally expose a narrow LLM `mode_action` field.
   Keep it gated by saved Hands-free Voice mode plus the per-mode Advanced Flow
   checkboxes (Freestyle/Edge/Milk/Legacy Auto), and route normalized actions

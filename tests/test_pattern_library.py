@@ -212,15 +212,18 @@ class PatternLibraryTests(unittest.TestCase):
             self.assertFalse(stroke["enabled"])
             self.assertEqual(stroke["feedback"], {"thumbs_up": 4, "neutral": 1, "thumbs_down": 2})
 
-    def test_catalog_includes_mode_specific_fixed_patterns(self):
+    def test_catalog_exposes_only_three_canonical_fixed_patterns(self):
         with temporary_pattern_dir() as temp_dir:
             library = PatternLibrary(temp_dir)
 
             catalog = library.catalog()
             ids = {pattern["id"] for pattern in catalog["patterns"]}
 
-            self.assertIn("milking-pressure-build", ids)
-            self.assertIn("edge-build-low", ids)
+            self.assertEqual(ids, {"stroke", "pulse", "tease"})
+            pulse = next(pattern for pattern in catalog["patterns"] if pattern["id"] == "pulse")
+            self.assertEqual(len(pulse["preview_samples"]), 65)
+            self.assertEqual(pulse["preview_samples"][0]["pos"], 15.0)
+            self.assertEqual(pulse["preview_samples"][-1]["pos"], 15.0)
 
     def test_motion_pattern_summary_enriches_fixed_record_with_weight(self):
         with temporary_pattern_dir() as temp_dir:
@@ -478,7 +481,7 @@ class MotionPatternRouteTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertTrue(calls)
         self.assertTrue(calls[0]["stop_after"])
-        self.assertEqual(calls[0]["pattern"].name, "stroke")
+        self.assertEqual(calls[0]["pattern"].name, "Stroke")
         self.assertFalse(calls[0]["preserve_timing"])
         self.assertEqual(calls[0]["source"], "motion training")
         self.assertEqual(self.stop_calls, ["stopped"])
@@ -717,9 +720,9 @@ class MotionPatternRouteTests(unittest.TestCase):
     def test_pattern_feedback_can_be_reset_individually(self):
         self.web.settings.motion_pattern_feedback = {
             "stroke": {"thumbs_up": 2, "neutral": 1, "thumbs_down": 0},
-            "sway": {"thumbs_up": 0, "neutral": 0, "thumbs_down": 1},
+            "pulse": {"thumbs_up": 0, "neutral": 0, "thumbs_down": 1},
         }
-        self.web.settings.motion_pattern_weights = {"stroke": 84, "sway": 32}
+        self.web.settings.motion_pattern_weights = {"stroke": 84, "pulse": 32}
 
         response = self.client.post("/motion_patterns/stroke/feedback/reset", json={})
 
@@ -731,68 +734,67 @@ class MotionPatternRouteTests(unittest.TestCase):
         self.assertEqual(data["pattern"]["weight"], 50)
         self.assertNotIn("stroke", self.web.settings.motion_pattern_feedback)
         self.assertNotIn("stroke", self.web.settings.motion_pattern_weights)
-        self.assertIn("sway", self.web.settings.motion_pattern_feedback)
-        self.assertEqual(self.web.settings.motion_pattern_weights["sway"], 32)
+        self.assertIn("pulse", self.web.settings.motion_pattern_feedback)
+        self.assertEqual(self.web.settings.motion_pattern_weights["pulse"], 32)
         self.assertEqual(self.web.settings.motion_pattern_feedback_history[0]["rating"], "reset")
         self.assertEqual(data["motion_patterns"]["feedback_history"][0]["rating"], "reset")
 
     def test_three_thumbs_down_does_not_auto_disable_by_default(self):
         for _ in range(3):
-            response = self.client.post("/motion_training/sway/feedback", json={"rating": "thumbs_down"})
+            response = self.client.post("/motion_training/pulse/feedback", json={"rating": "thumbs_down"})
             self.assertEqual(response.status_code, 200)
 
         data = response.get_json()
         self.assertFalse(data["auto_disabled"])
         self.assertTrue(data["pattern"]["enabled"])
         self.assertNotEqual(data["pattern"]["weight"], 0)
-        self.assertNotIn("sway", self.web.settings.motion_pattern_enabled)
-        self.assertEqual(self.web.settings.motion_pattern_feedback["sway"]["thumbs_down"], 3)
-        self.assertIn("sway", data["motion_preferences"]["prompt"])
+        self.assertNotIn("pulse", self.web.settings.motion_pattern_enabled)
+        self.assertEqual(self.web.settings.motion_pattern_feedback["pulse"]["thumbs_down"], 3)
+        self.assertIn("pulse", data["motion_preferences"]["prompt"])
 
     def test_three_thumbs_down_auto_disables_pattern_when_enabled(self):
         self.web.settings.motion_feedback_auto_disable = True
         for _ in range(3):
-            response = self.client.post("/motion_training/sway/feedback", json={"rating": "thumbs_down"})
+            response = self.client.post("/motion_training/pulse/feedback", json={"rating": "thumbs_down"})
             self.assertEqual(response.status_code, 200)
 
         data = response.get_json()
         self.assertTrue(data["auto_disabled"])
         self.assertFalse(data["pattern"]["enabled"])
         self.assertEqual(data["pattern"]["weight"], 0)
-        self.assertFalse(self.web.settings.motion_pattern_enabled["sway"])
-        self.assertEqual(self.web.settings.motion_pattern_weights["sway"], 0)
-        self.assertEqual(self.web.settings.motion_pattern_feedback["sway"]["thumbs_down"], 3)
-        self.assertNotIn("sway", data["motion_preferences"]["prompt"])
-        self.assertIn("sway", data["motion_preferences"]["summary"])
+        self.assertFalse(self.web.settings.motion_pattern_enabled["pulse"])
+        self.assertEqual(self.web.settings.motion_pattern_weights["pulse"], 0)
+        self.assertEqual(self.web.settings.motion_pattern_feedback["pulse"]["thumbs_down"], 3)
+        self.assertNotIn("pulse", data["motion_preferences"]["prompt"])
+        self.assertIn("pulse", data["motion_preferences"]["summary"])
 
     def test_motion_preferences_route_exposes_enabled_weights_only(self):
-        self.web.settings.motion_pattern_weights = {"sway": 74, "flutter": 22}
-        self.web.settings.motion_pattern_enabled = {"flutter": False}
+        self.web.settings.motion_pattern_weights = {"stroke": 74, "pulse": 22}
+        self.web.settings.motion_pattern_enabled = {"pulse": False}
 
         response = self.client.get("/motion_preferences")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
 
-        self.assertIn("sway=74", data["prompt"])
-        self.assertNotIn("flutter", data["prompt"])
-        self.assertIn("Disabled fixed patterns: flutter.", data["summary"])
+        self.assertIn("stroke=74", data["prompt"])
+        self.assertNotIn("pulse=22", data["prompt"])
+        self.assertIn("Disabled fixed patterns: pulse.", data["summary"])
         self.assertIn("Only choose listed pattern names", data["prompt"])
 
-    def test_motion_preferences_route_hides_edge_patterns_when_chat_edge_disabled(self):
+    def test_motion_preferences_route_keeps_tease_visible_when_chat_edge_disabled(self):
         self.web.settings.allow_llm_edge_in_chat = False
-        self.web.settings.motion_pattern_weights = {"edge-hold": 88, "sway": 74}
+        self.web.settings.motion_pattern_weights = {"tease": 88, "stroke": 74}
 
         response = self.client.get("/motion_preferences")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
 
-        self.assertIn("sway=74", data["prompt"])
-        self.assertNotIn("edge-hold", data["prompt"])
-        self.assertIn("edge-hold=88", data["summary"])
+        self.assertIn("stroke=74", data["prompt"])
+        self.assertIn("tease=88", data["prompt"])
 
     def test_motion_preferences_route_hides_prompt_when_chat_library_disabled(self):
         self.web.settings.motion_pattern_library_enabled_in_chat = False
-        self.web.settings.motion_pattern_weights = {"sway": 74}
+        self.web.settings.motion_pattern_weights = {"stroke": 74}
 
         response = self.client.get("/motion_preferences")
         self.assertEqual(response.status_code, 200)
@@ -804,18 +806,18 @@ class MotionPatternRouteTests(unittest.TestCase):
 
     def test_motion_preferences_reset_clears_learned_feedback_and_style(self):
         self.web.settings.motion_pattern_feedback = {
-            "sway": {"thumbs_up": 4, "neutral": 0, "thumbs_down": 1},
+            "pulse": {"thumbs_up": 4, "neutral": 0, "thumbs_down": 1},
         }
         self.web.settings.motion_pattern_feedback_history = [{
-            "pattern_id": "sway",
-            "pattern_name": "Sway",
+            "pattern_id": "pulse",
+            "pattern_name": "Pulse",
             "rating": "thumbs_up",
             "source": "motion training",
             "weight": 82,
             "timestamp": 1,
         }]
-        self.web.settings.motion_pattern_weights = {"sway": 82}
-        self.web.settings.motion_pattern_enabled = {"sway": False}
+        self.web.settings.motion_pattern_weights = {"pulse": 82}
+        self.web.settings.motion_pattern_enabled = {"pulse": False}
         self.web.settings.motion_style = "high_variation"
         self.web.settings.motion_pattern_library_enabled_in_chat = True
 
@@ -825,31 +827,31 @@ class MotionPatternRouteTests(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["motion_style"], "balanced")
-        disabled_sway = next(
+        disabled_pulse = next(
             pattern
             for pattern in data["motion_preferences"]["disabled_fixed_patterns"]
-            if pattern["id"] == "sway"
+            if pattern["id"] == "pulse"
         )
-        self.assertEqual(disabled_sway["weight"], 50)
+        self.assertEqual(disabled_pulse["weight"], 50)
         self.assertEqual(data["motion_patterns"]["feedback_history"], [])
         self.assertEqual(self.web.settings.motion_pattern_feedback, {})
         self.assertEqual(self.web.settings.motion_pattern_feedback_history, [])
         self.assertEqual(self.web.settings.motion_pattern_weights, {})
         self.assertEqual(self.web.settings.motion_style, "balanced")
-        self.assertEqual(self.web.settings.motion_pattern_enabled, {"sway": False})
-        sway = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "sway")
-        self.assertFalse(sway["enabled"])
-        self.assertEqual(sway["weight"], 50)
+        self.assertEqual(self.web.settings.motion_pattern_enabled, {"pulse": False})
+        pulse = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "pulse")
+        self.assertFalse(pulse["enabled"])
+        self.assertEqual(pulse["weight"], 50)
 
     def test_weight_route_persists_fixed_pattern_weight(self):
-        response = self.client.post("/motion_patterns/sway/weight", json={"weight": 88})
+        response = self.client.post("/motion_patterns/stroke/weight", json={"weight": 88})
 
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(data["pattern"]["weight"], 88)
-        self.assertEqual(self.web.settings.motion_pattern_weights["sway"], 88)
-        sway = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "sway")
-        self.assertEqual(sway["weight"], 88)
+        self.assertEqual(self.web.settings.motion_pattern_weights["stroke"], 88)
+        stroke = next(pattern for pattern in data["motion_patterns"]["patterns"] if pattern["id"] == "stroke")
+        self.assertEqual(stroke["weight"], 88)
 
     def test_chat_thumbs_down_rates_last_live_fixed_pattern(self):
         self.web.app_state.last_live_motion_pattern_id = "tease"
@@ -871,16 +873,16 @@ class MotionPatternRouteTests(unittest.TestCase):
 
         self.assertEqual(
             self.web._fixed_pattern_id_from_target(MotionTarget(30, 80, 20, "Edge Hold 3")),
-            "edge-hold",
+            "tease",
         )
         self.assertEqual(
             self.web._fixed_pattern_id_from_target(MotionTarget(60, 55, 80, "Milking Wide Pressure 4")),
-            "milking-wide-pressure",
+            "pulse",
         )
 
     def test_disabled_llm_pattern_is_removed_before_motion(self):
         self.web.settings.motion_pattern_library_enabled_in_chat = True
-        self.web.settings.motion_pattern_enabled = {"flutter": False}
+        self.web.settings.motion_pattern_enabled = {"pulse": False}
 
         move = self.web._sanitize_llm_move_for_disabled_patterns({
             "sp": 40,
@@ -894,7 +896,7 @@ class MotionPatternRouteTests(unittest.TestCase):
 
     def test_zero_weight_llm_pattern_is_removed_before_motion(self):
         self.web.settings.motion_pattern_library_enabled_in_chat = True
-        self.web.settings.motion_pattern_weights = {"flutter": 0}
+        self.web.settings.motion_pattern_weights = {"pulse": 0}
 
         move = self.web._sanitize_llm_move_for_disabled_patterns({
             "sp": 40,
@@ -908,8 +910,8 @@ class MotionPatternRouteTests(unittest.TestCase):
 
     def test_llm_pattern_is_removed_when_chat_library_disabled(self):
         self.web.settings.motion_pattern_library_enabled_in_chat = False
-        self.web.settings.motion_pattern_enabled = {"flutter": True}
-        self.web.settings.motion_pattern_weights = {"flutter": 80}
+        self.web.settings.motion_pattern_enabled = {"pulse": True}
+        self.web.settings.motion_pattern_weights = {"pulse": 80}
 
         move = self.web._sanitize_llm_move_for_disabled_patterns({
             "sp": 40,

@@ -10,8 +10,8 @@ deterministic motion guardrails, and optional voice input/output.
   between *tip*, *shaft*, and *base*.
 - **Deterministic motion safety** for speed limits, smoothing, and stop
   behavior before commands reach hardware.
-- **Motion Pattern Studio** for funscript import, drawing, crop/edit,
-  preview, and save.
+- **Motion Pattern Studio** for searchable curve previews, funscript import,
+  drawing, reversal-preserving simplification, crop/edit, preview, and save.
 - **Programs (funscripts)** for saving, playing, and clipping long authored
   timelines separately from short LLM-selectable loop patterns.
 - **Optional voice** with ElevenLabs or local Chatterbox for output, plus
@@ -131,7 +131,8 @@ If port 5000 is busy, the app picks the next free local port.
    [docs/local_voice_setup.md](docs/local_voice_setup.md) for low-latency
    local voice.
 5. Start chatting. Try "slow tip teasing", "milk me", "deep slow stroke",
-   or a named pattern like *flick* or *ramp*.
+   or one of the built-in *Stroke*, *Pulse*, and *Tease* patterns. Familiar
+   cues such as flick, flutter, sway, and ramp map onto those three loops.
 
 **Start conservatively.** The Handy can be intense even at low speed
 values.

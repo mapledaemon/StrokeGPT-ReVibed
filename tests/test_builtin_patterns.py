@@ -26,53 +26,17 @@ from strokegpt.motion_patterns import (
 from strokegpt.motion import MotionTarget
 
 
-EXPECTED_PATTERN_IDS = frozenset({
-    "stroke",
-    "glide",
-    "feather",
-    "plunge",
-    "crest",
-    "flick",
-    "milk",
-    "pulse",
-    "hold",
-    "wave",
-    "ramp",
-    "tease",
-    "flutter",
-    "ladder",
-    "surge",
-    "sway",
-    "milking-pressure-build",
-    "milking-wide-pressure",
-    "milking-deep-pulse",
-    "milking-fast-middle",
-    "milking-deep-finish",
-    "milking-recover",
-    "milking-steady-press",
-    "milking-short-burst",
-    "milking-full-drive",
-    "milking-deep-squeeze",
-    "milking-final-wave",
-    "edge-build-low",
-    "edge-build-mid",
-    "edge-hold",
-    "edge-tip-tease",
-    "edge-recover",
-    "edge-slow-wide",
-    "edge-shallow-snap",
-    "edge-middle-hold",
-    "edge-deeper-risk",
-    "edge-pull-back",
-    "edge-restart",
-})
+EXPECTED_PATTERN_IDS = frozenset({"stroke", "pulse", "tease"})
 
 
 ALLOWED_STYLE_FIELDS = frozenset({
     "name",
+    "description",
+    "tags",
     "actions",
     "window_scale",
     "speed_scale",
+    "tempo_profile",
     "tempo_scale",
     "duration_scale",
     "depth_jitter",
@@ -114,61 +78,28 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         for pattern_id, pattern in PATTERNS.items():
             self.assertEqual(first[pattern_id], pattern)
 
-    def test_stroke_pattern_endpoints_match_expected_shape(self):
-        # The regenerated catalog authors patterns at their real timescale
-        # as closed waypoint loops for the monotone cubic sampler: no
-        # duration_scale stretch, no baked interpolation points.
-        stroke = PATTERNS["stroke"]
-        self.assertEqual(stroke.name, "stroke")
-        self.assertEqual(stroke.actions[0].at, 0)
-        self.assertEqual(stroke.actions[-1].at, 6600)  # routine min-cycle floor
-        self.assertEqual(stroke.actions[0].pos, stroke.actions[-1].pos)
-        self.assertEqual(stroke.duration_scale, 1.0)
-        self.assertEqual(stroke.interpolation_ms, 0)
-
-    def test_milk_pattern_endpoints_match_expected_shape(self):
-        # Milk is a closed two-lobe base-weighted pull: quick drop deep,
-        # slow draw back up, authored at real timescale with no jitter.
-        milk = PATTERNS["milk"]
-        self.assertEqual(milk.actions[0].at, 0)
-        self.assertEqual(milk.actions[-1].at, 6600)  # routine min-cycle floor
-        self.assertEqual(milk.actions[0].pos, milk.actions[-1].pos)
-        self.assertEqual(max(action.pos for action in milk.actions), 100.0)
-        self.assertEqual(min(action.pos for action in milk.actions), 0.0)
-        self.assertEqual(milk.depth_jitter, 0.0)
-        self.assertEqual(milk.range_jitter, 0.0)
-
-    def test_hold_pattern_is_relative_multi_roll_waveform(self):
-        # Patterns are relative waveforms: positions span the full 0-100
-        # range and the deep-pressure character of hold comes from the cue
-        # defaults / mode-arc targets, never from band-authored positions
-        # (band authoring gets windowed twice and collapses to twitching).
-        hold = PATTERNS["hold"]
-        positions = [action.pos for action in hold.actions]
-
-        self.assertEqual(min(positions), 0.0)
-        self.assertEqual(max(positions), 100.0)
-        interior_peaks = [
-            positions[i]
-            for i in range(1, len(positions) - 1)
-            if positions[i] > positions[i - 1] and positions[i] > positions[i + 1]
-        ]
-        self.assertGreaterEqual(len(interior_peaks), 2)
-        self.assertEqual(hold.depth_jitter, 0.0)
-
-    def test_all_patterns_span_full_relative_range(self):
-        # Catalog-wide invariant for the relative-projection contract.
-        for pattern_id, motion_pattern in PATTERNS.items():
+    def test_patterns_match_magic_handy_source_definitions(self):
+        expected = {
+            "stroke": [0, 100, 0, 100, 0, 100, 0, 100, 0, 100, 0, 100, 0],
+            "pulse": [15, 100, 25, 85, 15, 100, 25, 85, 15, 100, 25, 85, 15],
+            "tease": [20, 45, 20, 60, 20, 80, 20, 100, 20, 75, 20, 55, 20],
+        }
+        metadata = {
+            "stroke": ("Stroke", "Even full-span reversals.", ("steady", "full", "balanced")),
+            "pulse": ("Pulse", "Alternating deep and shorter peaks.", ("rhythmic", "varied", "peaks")),
+            "tease": ("Tease", "Progressive peaks with a consistent return.", ("progressive", "varied", "build")),
+        }
+        for pattern_id, positions in expected.items():
             with self.subTest(pattern_id=pattern_id):
-                positions = [action.pos for action in motion_pattern.actions]
-                self.assertLessEqual(min(positions), 0.1)
-                self.assertGreaterEqual(max(positions), 99.9)
-
-    def test_edge_build_low_pattern_endpoints_match_expected_shape(self):
-        pattern = PATTERNS["edge-build-low"]
-        self.assertGreaterEqual(len(pattern.actions), 2)
-        self.assertEqual(pattern.actions[0].at, 0)
-        self.assertGreater(pattern.actions[-1].at, pattern.actions[0].at)
+                pattern = PATTERNS[pattern_id]
+                self.assertEqual(pattern.name, metadata[pattern_id][0])
+                self.assertEqual(pattern.description, metadata[pattern_id][1])
+                self.assertEqual(pattern.tags, metadata[pattern_id][2])
+                self.assertEqual([action.at for action in pattern.actions], list(range(0, 6601, 550)))
+                self.assertEqual([action.pos for action in pattern.actions], positions)
+                self.assertEqual(pattern.window_scale, 1.0)
+                self.assertEqual(pattern.tempo_profile, "magic_handy")
+                self.assertEqual(pattern.min_interval_ms, 0)
 
     def test_motion_pattern_duration_ms_uses_prepared_actions(self):
         # ``MotionPattern.duration_ms`` runs ``prepare_pattern_actions``
@@ -176,7 +107,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
         # so future tweaks to the loader path cannot silently shift
         # pattern duration.
         self.assertEqual(PATTERNS["stroke"].duration_ms, 6600)
-        self.assertEqual(PATTERNS["milk"].duration_ms, 6600)
+        self.assertEqual(PATTERNS["pulse"].duration_ms, 6600)
 
     def test_json_data_file_only_uses_known_fields(self):
         # The loader silently skips unknown fields, so this test catches
@@ -216,21 +147,9 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
                 ).target.depth
                 self.assertLess(abs(first - last), 1.0)
 
-    BURST_CLASS_PATTERN_IDS = frozenset({
-        # Deliberately sharp accent patterns; mirrored from
-        # scripts/generate_builtin_patterns.py BURST_CLASS.
-        "flick",
-        "flutter",
-        "milking-short-burst",
-        "milking-fast-middle",
-        "edge-shallow-snap",
-    })
-
     def test_continuous_builtin_samples_do_not_have_abrupt_depth_steps(self):
-        # Fixed 25ms sampling makes the step budget a uniform velocity cap
-        # (120 pos/s routine, 300 pos/s burst). The old 240-samples-per-cycle
-        # form was a per-cycle cap: loose for short twitchy cycles, strangling
-        # for long luxurious sweeps.
+        # Fixed 25ms sampling catches source or sampler changes that would make
+        # one of the baseline loops jump between transport points.
         target = MotionTarget(50, 50, 80, "catalog guard")
         for pattern_id in PATTERNS:
             with self.subTest(pattern_id=pattern_id):
@@ -248,8 +167,7 @@ class BuiltinPatternCatalogTests(unittest.TestCase):
                     abs(depths[index + 1] - depths[index])
                     for index in range(sample_count)
                 )
-                budget = 7.5 if pattern_id in self.BURST_CLASS_PATTERN_IDS else 3.0
-                self.assertLess(largest_step, budget)
+                self.assertLess(largest_step, 6.0)
 
     def test_continuous_timed_phase_points_keep_dense_transport_spacing(self):
         for pattern_id in PATTERNS:

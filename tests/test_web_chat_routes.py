@@ -58,7 +58,7 @@ class WebChatRouteTests(WebTestCase):
         finally:
             settings.motion_pattern_library_enabled_in_chat = original_pattern_library_chat
 
-        self.assertEqual(target.label, "llm+tip+flutter")
+        self.assertEqual(target.label, "llm+tip+pulse")
         self.assertEqual(target.speed, 21)
         self.assertEqual(target.depth, 0)
         self.assertEqual(target.stroke_range, 36)
@@ -1760,9 +1760,9 @@ class WebChatRouteTests(WebTestCase):
         try:
             handy.handy_key = "test-key"
             settings.handy_key = "test-key"
-            settings.motion_pattern_enabled["flick"] = True
-            settings.motion_pattern_feedback["flick"] = {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0}
-            settings.motion_pattern_weights["flick"] = 50
+            settings.motion_pattern_enabled["tease"] = True
+            settings.motion_pattern_feedback["tease"] = {"thumbs_up": 0, "neutral": 0, "thumbs_down": 0}
+            settings.motion_pattern_weights["tease"] = 50
             settings.motion_pattern_library_enabled_in_chat = True
             handy.last_relative_speed = 30
             handy.last_depth_pos = 40
@@ -1795,7 +1795,7 @@ class WebChatRouteTests(WebTestCase):
             self.assertTrue(data["motion_applied"])
             repair.assert_called_once()
             self.assertEqual(len(captured_targets), 1)
-            self.assertIn("flick", captured_targets[0].label)
+            self.assertIn("tease", captured_targets[0].label)
             self.assertEqual(captured_targets[0].depth, 10)
         finally:
             handy.handy_key = original_key
