@@ -7,8 +7,8 @@ the current unreleased branch only before a pull request exists. Once a branch
 has an open PR, its changelog entry should use the PR number instead of
 `Unreleased` so follow-up changelog-only PRs are not needed.
 
-2026-07-19 - Unreleased - Replace The Built-In Motion Catalog
--------------------------------------------------------------
+2026-07-19 - PR #335 - Replace The Built-In Motion Catalog
+-----------------------------------------------------------
 
 Branch: codex/magic-handy-pattern-catalog
 
