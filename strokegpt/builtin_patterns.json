@@ -1,496 +1,203 @@
 {
   "stroke": {
-    "name": "stroke",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1996, "pos": 60.0},
-      {"at": 3630, "pos": 100.0},
-      {"at": 4966, "pos": 40.0},
-      {"at": 6600, "pos": 0.0}
+    "name": "Stroke",
+    "description": "Even full-span reversals.",
+    "tags": [
+      "steady",
+      "full",
+      "balanced"
     ],
-    "window_scale": 0.42,
+    "actions": [
+      {
+        "at": 0,
+        "pos": 0.0
+      },
+      {
+        "at": 550,
+        "pos": 100.0
+      },
+      {
+        "at": 1100,
+        "pos": 0.0
+      },
+      {
+        "at": 1650,
+        "pos": 100.0
+      },
+      {
+        "at": 2200,
+        "pos": 0.0
+      },
+      {
+        "at": 2750,
+        "pos": 100.0
+      },
+      {
+        "at": 3300,
+        "pos": 0.0
+      },
+      {
+        "at": 3850,
+        "pos": 100.0
+      },
+      {
+        "at": 4400,
+        "pos": 0.0
+      },
+      {
+        "at": 4950,
+        "pos": 100.0
+      },
+      {
+        "at": 5500,
+        "pos": 0.0
+      },
+      {
+        "at": 6050,
+        "pos": 100.0
+      },
+      {
+        "at": 6600,
+        "pos": 0.0
+      }
+    ],
+    "window_scale": 1.0,
     "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "glide": {
-    "name": "glide",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1600, "pos": 60.0},
-      {"at": 4000, "pos": 100.0},
-      {"at": 5600, "pos": 40.0},
-      {"at": 8000, "pos": 0.0}
-    ],
-    "window_scale": 0.46,
-    "speed_scale": 0.9,
-    "min_interval_ms": 0
-  },
-  "wave": {
-    "name": "wave",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.4,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "surge": {
-    "name": "surge",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 55.0},
-      {"at": 3500, "pos": 100.0},
-      {"at": 5250, "pos": 40.0},
-      {"at": 7000, "pos": 0.0}
-    ],
-    "window_scale": 0.38,
-    "speed_scale": 1.05,
-    "min_interval_ms": 0
-  },
-  "sway": {
-    "name": "sway",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1875, "pos": 100.0},
-      {"at": 3750, "pos": 0.0},
-      {"at": 5625, "pos": 100.0},
-      {"at": 7500, "pos": 0.0}
-    ],
-    "window_scale": 0.42,
-    "speed_scale": 0.9,
-    "min_interval_ms": 0
-  },
-  "milk": {
-    "name": "milk",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.5,
-    "speed_scale": 1.02,
-    "min_interval_ms": 0
-  },
-  "tease": {
-    "name": "tease",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2733, "pos": 100.0},
-      {"at": 5466, "pos": 40.0},
-      {"at": 8200, "pos": 0.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 0.78,
-    "min_interval_ms": 0
-  },
-  "feather": {
-    "name": "feather",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.24,
-    "speed_scale": 0.72,
-    "min_interval_ms": 0
-  },
-  "flick": {
-    "name": "flick",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 933, "pos": 60.0},
-      {"at": 1867, "pos": 100.0},
-      {"at": 2800, "pos": 55.0},
-      {"at": 3733, "pos": 100.0},
-      {"at": 4667, "pos": 55.0},
-      {"at": 5600, "pos": 0.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 1.1,
+    "tempo_profile": "magic_handy",
     "min_interval_ms": 0
   },
   "pulse": {
-    "name": "pulse",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
+    "name": "Pulse",
+    "description": "Alternating deep and shorter peaks.",
+    "tags": [
+      "rhythmic",
+      "varied",
+      "peaks"
     ],
-    "window_scale": 0.34,
+    "actions": [
+      {
+        "at": 0,
+        "pos": 15.0
+      },
+      {
+        "at": 550,
+        "pos": 100.0
+      },
+      {
+        "at": 1100,
+        "pos": 25.0
+      },
+      {
+        "at": 1650,
+        "pos": 85.0
+      },
+      {
+        "at": 2200,
+        "pos": 15.0
+      },
+      {
+        "at": 2750,
+        "pos": 100.0
+      },
+      {
+        "at": 3300,
+        "pos": 25.0
+      },
+      {
+        "at": 3850,
+        "pos": 85.0
+      },
+      {
+        "at": 4400,
+        "pos": 15.0
+      },
+      {
+        "at": 4950,
+        "pos": 100.0
+      },
+      {
+        "at": 5500,
+        "pos": 25.0
+      },
+      {
+        "at": 6050,
+        "pos": 85.0
+      },
+      {
+        "at": 6600,
+        "pos": 15.0
+      }
+    ],
+    "window_scale": 1.0,
     "speed_scale": 1.0,
+    "tempo_profile": "magic_handy",
     "min_interval_ms": 0
   },
-  "hold": {
-    "name": "hold",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 100.0},
-      {"at": 3500, "pos": 0.0},
-      {"at": 5250, "pos": 100.0},
-      {"at": 7000, "pos": 0.0}
+  "tease": {
+    "name": "Tease",
+    "description": "Progressive peaks with a consistent return.",
+    "tags": [
+      "progressive",
+      "varied",
+      "build"
     ],
-    "window_scale": 0.32,
-    "speed_scale": 0.8,
-    "min_interval_ms": 0
-  },
-  "plunge": {
-    "name": "plunge",
     "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1386, "pos": 60.0},
-      {"at": 3960, "pos": 100.0},
-      {"at": 5412, "pos": 40.0},
-      {"at": 6600, "pos": 0.0}
+      {
+        "at": 0,
+        "pos": 20.0
+      },
+      {
+        "at": 550,
+        "pos": 45.0
+      },
+      {
+        "at": 1100,
+        "pos": 20.0
+      },
+      {
+        "at": 1650,
+        "pos": 60.0
+      },
+      {
+        "at": 2200,
+        "pos": 20.0
+      },
+      {
+        "at": 2750,
+        "pos": 80.0
+      },
+      {
+        "at": 3300,
+        "pos": 20.0
+      },
+      {
+        "at": 3850,
+        "pos": 100.0
+      },
+      {
+        "at": 4400,
+        "pos": 20.0
+      },
+      {
+        "at": 4950,
+        "pos": 75.0
+      },
+      {
+        "at": 5500,
+        "pos": 20.0
+      },
+      {
+        "at": 6050,
+        "pos": 55.0
+      },
+      {
+        "at": 6600,
+        "pos": 20.0
+      }
     ],
-    "window_scale": 0.46,
+    "window_scale": 1.0,
     "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "ramp": {
-    "name": "ramp",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1800, "pos": 40.0},
-      {"at": 3600, "pos": 80.0},
-      {"at": 5400, "pos": 100.0},
-      {"at": 7200, "pos": 40.0},
-      {"at": 9000, "pos": 0.0}
-    ],
-    "window_scale": 0.36,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "crest": {
-    "name": "crest",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2000, "pos": 50.0},
-      {"at": 4000, "pos": 100.0},
-      {"at": 6000, "pos": 40.0},
-      {"at": 8000, "pos": 0.0}
-    ],
-    "window_scale": 0.4,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "ladder": {
-    "name": "ladder",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2000, "pos": 50.0},
-      {"at": 4000, "pos": 0.0},
-      {"at": 6000, "pos": 100.0},
-      {"at": 8000, "pos": 0.0}
-    ],
-    "window_scale": 0.36,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "flutter": {
-    "name": "flutter",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 750, "pos": 100.0},
-      {"at": 1500, "pos": 0.0},
-      {"at": 2250, "pos": 100.0},
-      {"at": 3000, "pos": 0.0},
-      {"at": 3750, "pos": 100.0},
-      {"at": 4500, "pos": 0.0}
-    ],
-    "window_scale": 0.26,
-    "speed_scale": 1.08,
-    "min_interval_ms": 0
-  },
-  "milking-pressure-build": {
-    "name": "Milking Pressure Build",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 100.0},
-      {"at": 3500, "pos": 0.0},
-      {"at": 5250, "pos": 100.0},
-      {"at": 7000, "pos": 0.0}
-    ],
-    "window_scale": 0.44,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "milking-wide-pressure": {
-    "name": "Milking Wide Pressure",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2000, "pos": 100.0},
-      {"at": 4000, "pos": 0.0},
-      {"at": 6000, "pos": 100.0},
-      {"at": 8000, "pos": 0.0}
-    ],
-    "window_scale": 0.52,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "milking-deep-pulse": {
-    "name": "Milking Deep Pulse",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.36,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "milking-fast-middle": {
-    "name": "Milking Fast Middle",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1000, "pos": 100.0},
-      {"at": 2000, "pos": 0.0},
-      {"at": 3000, "pos": 100.0},
-      {"at": 4000, "pos": 0.0}
-    ],
-    "window_scale": 0.34,
-    "speed_scale": 1.1,
-    "min_interval_ms": 0
-  },
-  "milking-deep-finish": {
-    "name": "Milking Deep Finish",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.48,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "milking-recover": {
-    "name": "Milking Recover",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2125, "pos": 100.0},
-      {"at": 4250, "pos": 0.0},
-      {"at": 6375, "pos": 100.0},
-      {"at": 8500, "pos": 0.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 0.75,
-    "min_interval_ms": 0
-  },
-  "milking-steady-press": {
-    "name": "Milking Steady Press",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1875, "pos": 100.0},
-      {"at": 3750, "pos": 0.0},
-      {"at": 5625, "pos": 100.0},
-      {"at": 7500, "pos": 0.0}
-    ],
-    "window_scale": 0.4,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "milking-short-burst": {
-    "name": "Milking Short Burst",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1050, "pos": 100.0},
-      {"at": 2100, "pos": 0.0},
-      {"at": 3150, "pos": 100.0},
-      {"at": 4200, "pos": 0.0}
-    ],
-    "window_scale": 0.36,
-    "speed_scale": 1.12,
-    "min_interval_ms": 0
-  },
-  "milking-full-drive": {
-    "name": "Milking Full Drive",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.52,
-    "speed_scale": 1.05,
-    "min_interval_ms": 0
-  },
-  "milking-deep-squeeze": {
-    "name": "Milking Deep Squeeze",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.26,
-    "speed_scale": 0.8,
-    "min_interval_ms": 0
-  },
-  "milking-final-wave": {
-    "name": "Milking Final Wave",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1950, "pos": 100.0},
-      {"at": 3900, "pos": 0.0},
-      {"at": 5850, "pos": 100.0},
-      {"at": 7800, "pos": 0.0}
-    ],
-    "window_scale": 0.5,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "edge-build-low": {
-    "name": "Edge Build Low",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 3300, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 0.8,
-    "min_interval_ms": 0
-  },
-  "edge-build-mid": {
-    "name": "Edge Build Mid",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "edge-hold": {
-    "name": "Edge Hold",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 100.0},
-      {"at": 3500, "pos": 0.0},
-      {"at": 5250, "pos": 100.0},
-      {"at": 7000, "pos": 0.0}
-    ],
-    "window_scale": 0.24,
-    "speed_scale": 0.72,
-    "min_interval_ms": 0
-  },
-  "edge-tip-tease": {
-    "name": "Edge Tip Tease",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.24,
-    "speed_scale": 0.8,
-    "min_interval_ms": 0
-  },
-  "edge-recover": {
-    "name": "Edge Recover",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2000, "pos": 100.0},
-      {"at": 4000, "pos": 0.0},
-      {"at": 6000, "pos": 100.0},
-      {"at": 8000, "pos": 0.0}
-    ],
-    "window_scale": 0.26,
-    "speed_scale": 0.7,
-    "min_interval_ms": 0
-  },
-  "edge-slow-wide": {
-    "name": "Edge Slow Wide",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 2500, "pos": 100.0},
-      {"at": 5000, "pos": 0.0},
-      {"at": 7500, "pos": 100.0},
-      {"at": 10000, "pos": 0.0}
-    ],
-    "window_scale": 0.46,
-    "speed_scale": 0.8,
-    "min_interval_ms": 0
-  },
-  "edge-shallow-snap": {
-    "name": "Edge Shallow Snap",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1400, "pos": 100.0},
-      {"at": 2800, "pos": 0.0},
-      {"at": 4200, "pos": 100.0},
-      {"at": 5600, "pos": 0.0}
-    ],
-    "window_scale": 0.24,
-    "speed_scale": 1.0,
-    "min_interval_ms": 0
-  },
-  "edge-middle-hold": {
-    "name": "Edge Middle Hold",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 100.0},
-      {"at": 3500, "pos": 0.0},
-      {"at": 5250, "pos": 100.0},
-      {"at": 7000, "pos": 0.0}
-    ],
-    "window_scale": 0.22,
-    "speed_scale": 0.7,
-    "min_interval_ms": 0
-  },
-  "edge-deeper-risk": {
-    "name": "Edge Deeper Risk",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1750, "pos": 100.0},
-      {"at": 3500, "pos": 0.0},
-      {"at": 5250, "pos": 100.0},
-      {"at": 7000, "pos": 0.0}
-    ],
-    "window_scale": 0.32,
-    "speed_scale": 0.85,
-    "min_interval_ms": 0
-  },
-  "edge-pull-back": {
-    "name": "Edge Pull Back",
-    "actions": [
-      {"at": 0, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 6600, "pos": 100.0}
-    ],
-    "window_scale": 0.3,
-    "speed_scale": 0.75,
-    "min_interval_ms": 0
-  },
-  "edge-restart": {
-    "name": "Edge Restart",
-    "actions": [
-      {"at": 0, "pos": 0.0},
-      {"at": 1650, "pos": 100.0},
-      {"at": 3300, "pos": 0.0},
-      {"at": 4950, "pos": 100.0},
-      {"at": 6600, "pos": 0.0}
-    ],
-    "window_scale": 0.32,
-    "speed_scale": 0.85,
+    "tempo_profile": "magic_handy",
     "min_interval_ms": 0
   }
 }

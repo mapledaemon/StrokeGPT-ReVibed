@@ -1268,7 +1268,7 @@ class AutoModeThreadTests(unittest.TestCase):
         self.assertEqual(source, "milking mode")
         self.assertEqual(applied_target.label, "scripted generated full flow")
         self.assertNotIn("Milking", applied_target.label)
-        self.assertEqual(motion.generated_metadata[0]["mode_pattern_id"], "milking-pressure-build")
+        self.assertEqual(motion.generated_metadata[0]["mode_pattern_id"], "pulse")
         self.assertEqual(motion.generated_metadata[0]["mode_pattern_transport"], "generated_flow")
         self.assertFalse(motion.generated_metadata[0]["mode_pattern_library_enabled"])
 
@@ -1400,20 +1400,20 @@ class AutoModeThreadTests(unittest.TestCase):
         decisions = []
         candidates = [
             {
-                "id": "sway",
-                "name": "Sway",
+                "id": "stroke",
+                "name": "Stroke",
                 "source": "fixed",
                 "enabled": True,
                 "weight": 80,
-                "record": FakePatternRecord("sway", "Sway"),
+                "record": FakePatternRecord("stroke", "Stroke"),
             },
             {
-                "id": "milking-pressure-build",
-                "name": "Milking Pressure Build",
+                "id": "pulse",
+                "name": "Pulse",
                 "source": "fixed",
                 "enabled": True,
                 "weight": 50,
-                "record": FakePatternRecord("milking-pressure-build", "Milking Pressure Build"),
+                "record": FakePatternRecord("pulse", "Pulse"),
             },
         ]
 
@@ -1445,7 +1445,7 @@ class AutoModeThreadTests(unittest.TestCase):
             background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(decisions, [("freestyle", "close_signal", 1)])
-        self.assertEqual(remembered[0], "milking-pressure-build")
+        self.assertEqual(remembered[0], "pulse")
         self.assertEqual(motion.position_final_stop_on_target, [False])
         self.assertTrue(any("Choosing milk style" in message for message in messages))
 
@@ -1577,20 +1577,20 @@ class AutoModeThreadTests(unittest.TestCase):
         remembered = []
         candidates = [
             {
-                "id": "sway",
-                "name": "Sway",
+                "id": "stroke",
+                "name": "Stroke",
                 "source": "fixed",
                 "enabled": True,
                 "weight": 80,
-                "record": FakePatternRecord("sway", "Sway"),
+                "record": FakePatternRecord("stroke", "Stroke"),
             },
             {
-                "id": "milking-pressure-build",
-                "name": "Milking Pressure Build",
+                "id": "pulse",
+                "name": "Pulse",
                 "source": "fixed",
                 "enabled": True,
                 "weight": 50,
-                "record": FakePatternRecord("milking-pressure-build", "Milking Pressure Build"),
+                "record": FakePatternRecord("pulse", "Pulse"),
             },
         ]
 
@@ -1619,7 +1619,7 @@ class AutoModeThreadTests(unittest.TestCase):
             background_modes.freestyle_mode_logic(stop_event, {"motion": motion}, callbacks)
 
         self.assertEqual(motion.position_sources, ["freestyle planner"])
-        self.assertEqual(remembered[0], "milking-pressure-build")
+        self.assertEqual(remembered[0], "pulse")
         self.assertTrue(any("Switching to milk-style Freestyle" in message for message in messages))
 
     def test_freestyle_close_signal_stops_only_when_llm_requests_stop(self):

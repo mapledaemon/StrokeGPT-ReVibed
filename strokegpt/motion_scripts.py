@@ -4,7 +4,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 
-from .motion import MotionTarget
+from .motion import LEGACY_BUILTIN_PATTERN_ALIASES, MotionTarget, canonical_motion_pattern_id
 from .motion_patterns import (
     PATTERNS,
     continuous_anchor_motion_plan,
@@ -36,7 +36,7 @@ CONTINUOUS_MODE_PATTERN_REPEAT_STEPS = 3
 
 
 def _continuous_hold_floor_for_pattern(pattern_id):
-    pattern = PATTERNS.get(pattern_id)
+    pattern = PATTERNS.get(canonical_motion_pattern_id(pattern_id))
     if not pattern:
         return 0.0
     plan = continuous_motion_plan_from_pattern(pattern)
@@ -59,6 +59,19 @@ def _label_matches_pattern_id(clean_label, pattern_id):
     return bool(re.search(rf"(?<![a-z0-9_-]){re.escape(candidate)}(?![a-z0-9_-])", clean_label))
 
 
+def _pattern_id_from_label(label):
+    clean_label = (label or "").lower()
+    slug_label = _slug_label(label)
+    candidates = sorted((*PATTERNS, *LEGACY_BUILTIN_PATTERN_ALIASES), key=len, reverse=True)
+    for candidate in candidates:
+        if _slug_matches_pattern_id(slug_label, candidate):
+            return canonical_motion_pattern_id(candidate)
+    for candidate in candidates:
+        if _label_matches_pattern_id(clean_label, candidate):
+            return canonical_motion_pattern_id(candidate)
+    return None
+
+
 def _continuous_hold_floor_for_target(target, pattern_id=None):
     if not isinstance(target, MotionTarget):
         return 0.0
@@ -68,74 +81,67 @@ def _continuous_hold_floor_for_target(target, pattern_id=None):
             return max(0.0, float(plan.duration_seconds or 0.0) * CONTINUOUS_STEP_CYCLE_HOLD_MULTIPLIER)
     if pattern_id:
         return _continuous_hold_floor_for_pattern(pattern_id)
-    clean_label = (target.label or "").lower()
-    slug_label = _slug_label(target.label)
-    for candidate in sorted(PATTERNS, key=len, reverse=True):
-        if _slug_matches_pattern_id(slug_label, candidate):
-            return _continuous_hold_floor_for_pattern(candidate)
-    for candidate in sorted(PATTERNS, key=len, reverse=True):
-        if _label_matches_pattern_id(clean_label, candidate):
-            return _continuous_hold_floor_for_pattern(candidate)
-    return 0.0
+    resolved_pattern_id = _pattern_id_from_label(target.label)
+    return _continuous_hold_floor_for_pattern(resolved_pattern_id) if resolved_pattern_id else 0.0
 
 
 AUTO_ARCS = (
     (
-        ("warmup", "Curious", 24, 20, 24),
-        ("shallow drift", "Teasing", 30, 18, 34),
-        ("mid glide", "Playful", 38, 40, 56),
-        ("full sweep", "Passionate", 48, 50, 86),
-        ("deep pulse", "Anticipatory", 44, 78, 30),
-        ("reset", "Loving", 26, 28, 26),
+        ("stroke", "Curious", 24, 20, 24),
+        ("tease", "Teasing", 30, 18, 34),
+        ("stroke", "Playful", 38, 40, 56),
+        ("stroke", "Passionate", 48, 50, 86),
+        ("pulse", "Anticipatory", 44, 78, 30),
+        ("tease", "Loving", 26, 28, 26),
     ),
     (
-        ("slow ladder", "Seductive", 22, 25, 36),
-        ("steady climb", "Confident", 34, 42, 48),
-        ("wide climb", "Excited", 44, 52, 70),
-        ("quick shallow", "Playful", 52, 16, 24),
-        ("settle", "Intimate", 32, 38, 44),
+        ("tease", "Seductive", 22, 25, 36),
+        ("tease", "Confident", 34, 42, 48),
+        ("stroke", "Excited", 44, 52, 70),
+        ("pulse", "Playful", 52, 16, 24),
+        ("tease", "Intimate", 32, 38, 44),
     ),
     (
-        ("deep tease", "Teasing", 28, 72, 20),
-        ("deep hold", "Dominant", 36, 84, 28),
-        ("middle wave", "Passionate", 46, 48, 58),
-        ("long release", "Breathless", 42, 50, 90),
-        ("soft return", "Loving", 24, 24, 28),
+        ("tease", "Teasing", 28, 72, 20),
+        ("tease", "Dominant", 36, 84, 28),
+        ("stroke", "Passionate", 46, 48, 58),
+        ("stroke", "Breathless", 42, 50, 90),
+        ("tease", "Loving", 24, 24, 28),
     ),
 )
 
 MILKING_ARCS = (
     (
-        ("milking-pressure-build", "Dominant", 54, 66, 46),
-        ("milking-wide-pressure", "Passionate", 62, 58, 68),
-        ("milking-deep-pulse", "Overwhelmed", 72, 76, 38),
-        ("milking-fast-middle", "Excited", 78, 48, 46),
-        ("milking-deep-finish", "Dominant", 68, 82, 34),
-        ("milking-recover", "Afterglow", 28, 30, 28),
+        ("pulse", "Dominant", 54, 66, 46),
+        ("pulse", "Passionate", 62, 58, 68),
+        ("pulse", "Overwhelmed", 72, 76, 38),
+        ("pulse", "Excited", 78, 48, 46),
+        ("pulse", "Dominant", 68, 82, 34),
+        ("pulse", "Afterglow", 28, 30, 28),
     ),
     (
-        ("milking-steady-press", "Confident", 58, 64, 48),
-        ("milking-short-burst", "Excited", 74, 58, 30),
-        ("milking-full-drive", "Passionate", 66, 52, 88),
-        ("milking-deep-squeeze", "Dominant", 76, 86, 24),
-        ("milking-final-wave", "Breathless", 70, 58, 74),
+        ("pulse", "Confident", 58, 64, 48),
+        ("pulse", "Excited", 74, 58, 30),
+        ("pulse", "Passionate", 66, 52, 88),
+        ("pulse", "Dominant", 76, 86, 24),
+        ("pulse", "Breathless", 70, 58, 74),
     ),
 )
 
 EDGING_ARCS = (
     (
-        ("edge-build-low", "Seductive", 24, 78, 28),
-        ("edge-build-mid", "Anticipatory", 34, 62, 42),
-        ("edge-hold", "Confident", 34, 42, 42),
-        ("edge-tip-tease", "Playful", 42, 14, 18),
-        ("edge-recover", "Loving", 18, 68, 48),
+        ("tease", "Seductive", 24, 78, 28),
+        ("tease", "Anticipatory", 34, 62, 42),
+        ("tease", "Confident", 34, 42, 42),
+        ("tease", "Playful", 42, 14, 18),
+        ("tease", "Loving", 18, 68, 48),
     ),
     (
-        ("edge-deeper-risk", "Dominant", 28, 78, 28),
-        ("edge-middle-hold", "Confident", 36, 52, 36),
-        ("edge-slow-wide", "Intimate", 30, 54, 52),
-        ("edge-shallow-snap", "Teasing", 46, 16, 20),
-        ("edge-pull-back", "Loving", 14, 88, 18),
+        ("tease", "Dominant", 28, 78, 28),
+        ("tease", "Confident", 36, 52, 36),
+        ("tease", "Intimate", 30, 54, 52),
+        ("tease", "Teasing", 46, 16, 20),
+        ("tease", "Loving", 14, 88, 18),
     ),
 )
 
@@ -185,6 +191,7 @@ class MotionScriptPlanner:
         return steps
 
     def _pattern_cluster(self, current, pattern_id, mood, speed, depth, stroke_range):
+        pattern_id = canonical_motion_pattern_id(pattern_id)
         pattern = PATTERNS.get(pattern_id)
         label = pattern.name if pattern else pattern_id
         target = MotionTarget(
@@ -292,17 +299,10 @@ class MotionScriptPlanner:
         ]
 
     def _pattern_from_label(self, label):
-        clean_label = (label or "").lower()
-        slug_label = _slug_label(label)
-        for pattern in sorted(PATTERNS, key=len, reverse=True):
-            if _slug_matches_pattern_id(slug_label, pattern):
-                return pattern
-        for pattern in sorted(PATTERNS, key=len, reverse=True):
-            if _label_matches_pattern_id(clean_label, pattern):
-                return pattern
-        return None
+        return _pattern_id_from_label(label)
 
     def _pattern_feedback_steps(self, current, target, pattern):
+        pattern = canonical_motion_pattern_id(pattern)
         bridge = MotionTarget(
             (current.speed + target.speed) / 2,
             (current.depth + target.depth) / 2,
@@ -321,15 +321,8 @@ class MotionScriptPlanner:
             ]
         steps = [ScriptStep(bridge, mood="Confident", message="Adjusting.", delay_factor=0.5)]
         mood_by_pattern = {
-            "flick": "Playful",
-            "flutter": "Playful",
+            "stroke": "Passionate",
             "pulse": "Dominant",
-            "hold": "Confident",
-            "wave": "Anticipatory",
-            "ramp": "Anticipatory",
-            "ladder": "Anticipatory",
-            "surge": "Passionate",
-            "sway": "Intimate",
             "tease": "Teasing",
         }
         frames = expand_pattern(pattern, current, target, rng=self.rng)
@@ -368,7 +361,7 @@ class MotionScriptPlanner:
         intensity = min(18 + edge_count * 3, 32)
         steps = self._pattern_cluster(
             current.clamped(),
-            "edge-pull-back",
+            "tease",
             "Dominant",
             8,
             88,
@@ -377,7 +370,7 @@ class MotionScriptPlanner:
         if not steps:
             steps = [
                 ScriptStep(
-                    MotionTarget(8, 88, 18, PATTERNS["edge-pull-back"].name).clamped(),
+                    MotionTarget(8, 88, 18, PATTERNS["tease"].name).clamped(),
                     mood="Dominant",
                     delay_factor=0.6,
                 )
@@ -392,7 +385,7 @@ class MotionScriptPlanner:
         steps.extend(
             self._pattern_cluster(
                 steps[-1].target,
-                "edge-recover",
+                "tease",
                 "Loving",
                 intensity,
                 68,
@@ -402,7 +395,7 @@ class MotionScriptPlanner:
         steps.extend(
             self._pattern_cluster(
                 steps[-1].target,
-                "edge-hold",
+                "tease",
                 "Confident",
                 intensity,
                 32,

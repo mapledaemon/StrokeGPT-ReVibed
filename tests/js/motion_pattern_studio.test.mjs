@@ -22,6 +22,7 @@ import {
     timelineIntensityColor,
 } from '../../static/js/motion/training-editor.js';
 import { el, state } from '../../static/js/context.js';
+import { patternMatchesQuery, patternPreviewPath } from '../../static/js/motion/pattern-list.js';
 
 function studioMetrics(actions, width = 400, height = 200) {
     const pad = 34;
@@ -61,6 +62,7 @@ function stubCanvas(canvas, width = 400, height = 220) {
         restore() {},
         save() {},
         stroke() {},
+        setTransform(...args) { this.transform = args; },
         set fillStyle(_value) {},
         set font(_value) {},
         set lineWidth(_value) {},
@@ -157,7 +159,10 @@ describe('motion pattern studio helpers', () => {
     it('scales the default drawn control budget with pattern duration', () => {
         const dense = [];
         for (let i = 0; i <= 240; i++) {
-            dense.push({ at: i * 100, pos: i % 2 === 0 ? 15 : 85 });
+            dense.push({
+                at: i * 100,
+                pos: 50 + Math.sin((i / 240) * Math.PI * 12) * 35,
+            });
         }
 
         const simplified = simplifyDrawnActions(dense);
@@ -165,7 +170,19 @@ describe('motion pattern studio helpers', () => {
         // Medium detail allows roughly 4.5 controls/second, capped by
         // simplification when the curve needs fewer points.
         assert.ok(simplified.length <= 100);
-        assert.ok(simplified.length > 24);
+        assert.ok(simplified.length >= 13);
+    });
+
+    it('preserves every direction reversal while simplifying', () => {
+        const zigzag = [50, 51, 50, 51, 50].map((pos, index) => ({at: index * 100, pos}));
+
+        assert.throws(
+            () => simplifyDrawnActions(zigzag, {epsilon: 100, maxPoints: 2, minSpacingMs: 0}),
+            /essential reversal points/,
+        );
+        const simplified = simplifyDrawnActions(zigzag, {epsilon: 100, maxPoints: 5, minSpacingMs: 0});
+
+        assert.deepStrictEqual(simplified, zigzag);
     });
 
     it('renders preview actions as a monotone cubic path matching backend sampling', () => {
@@ -187,6 +204,37 @@ describe('motion pattern studio helpers', () => {
         assert.strictEqual(canvas.__testContext.bezierCurveCalls, 0);
         assert.strictEqual(canvas.__testContext.clipCalls, 1);
         assert.deepStrictEqual(canvas.__testContext.rectCalls.at(-1), {x: 34, y: 34, width: 332, height: 152});
+    });
+
+    it('renders preview canvases at device pixel density', () => {
+        const canvas = el.motionTrainingPreviewCanvas;
+        stubCanvas(canvas);
+        const previousRatio = window.devicePixelRatio;
+        window.devicePixelRatio = 2;
+
+        drawPatternPreviewCanvas(canvas, {actions: [{at: 0, pos: 20}, {at: 1000, pos: 80}]}, 'Empty');
+
+        assert.strictEqual(canvas.width, 800);
+        assert.strictEqual(canvas.height, 440);
+        assert.deepStrictEqual(canvas.__testContext.transform, [2, 0, 0, 2, 0, 0]);
+        window.devicePixelRatio = previousRatio;
+    });
+
+    it('builds catalog curves from backend samples and searches metadata', () => {
+        const pattern = {
+            id: 'pulse',
+            name: 'Pulse',
+            description: 'Alternating deep and shorter peaks.',
+            tags: ['rhythmic', 'varied'],
+            preview_samples: [{at: 0, pos: 15}, {at: 500, pos: 100}, {at: 1000, pos: 15}],
+        };
+
+        const path = patternPreviewPath(pattern);
+        assert.match(path, /^M/);
+        assert.match(path, / L/);
+        assert.strictEqual(patternMatchesQuery(pattern, 'shorter'), true);
+        assert.strictEqual(patternMatchesQuery(pattern, 'rhythmic'), true);
+        assert.strictEqual(patternMatchesQuery(pattern, 'stroke'), false);
     });
 
     it('smooths sparse controls without flattening peaks and troughs', () => {

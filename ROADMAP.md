@@ -689,8 +689,9 @@ commitment.
   faithfully through the authored-HSP path (PR #236); speed scales playback
   intensity within the existing safety limits without rewriting authored
   timing or positions.
-- Audit the catalog: the 34 built-in patterns plus any user-imported Programs
-  are not large enough to support pure curation across normal conversation.
+- Audit the catalog: the three baseline built-in patterns plus any user-imported
+  Patterns and Programs are not large enough to support pure curation across
+  normal conversation.
   Decide whether to grow a curated built-in library (manual authoring or
   permissively-licensed funscript sources from the references in item #13),
   rely on user-managed Program imports as the primary content source, or

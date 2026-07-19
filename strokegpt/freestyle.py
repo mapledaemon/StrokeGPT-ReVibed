@@ -38,11 +38,11 @@ FREESTYLE_STYLE_KIND_BIAS = {
 }
 
 FREESTYLE_STYLE_KEYWORD_BIAS = {
-    "pulsing": (("pulse", 28.0), ("surge", 10.0), ("flutter", 8.0)),
-    "ramping": (("ramp", 24.0), ("build", 18.0), ("ladder", 18.0), ("climb", 18.0), ("surge", 12.0)),
-    "full_range": (("full", 18.0), ("wide", 18.0), ("stroke", 14.0), ("wave", 12.0), ("sway", 12.0)),
+    "pulsing": (("pulse", 28.0),),
+    "ramping": (("tease", 24.0), ("build", 18.0)),
+    "full_range": (("full", 18.0), ("wide", 18.0), ("stroke", 24.0)),
     "teasing": (("tease", 18.0), ("tip", 10.0)),
-    "smooth": (("wave", 12.0), ("sway", 12.0)),
+    "smooth": (("stroke", 12.0),),
 }
 
 
@@ -85,7 +85,7 @@ def _freestyle_milk_style_target(decision):
         42 + intensity * 0.36,
         56 + intensity * 0.10,
         58 + intensity * 0.30,
-        label="milking",
+        label="pulse milking",
     ).clamped()
 
 

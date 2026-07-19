@@ -95,6 +95,42 @@ export function createPatternText(pattern, {includeDescription = true, compactMe
     return text;
 }
 
+export function patternMatchesQuery(pattern, query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return true;
+    const tags = Array.isArray(pattern?.tags) ? pattern.tags.join(' ') : '';
+    return [pattern?.id, pattern?.name, pattern?.description, pattern?.source, tags]
+        .some(value => String(value || '').toLowerCase().includes(needle));
+}
+
+export function patternPreviewPath(pattern, width = 128, height = 44, pad = 3) {
+    const samples = normalizedActions(
+        Array.isArray(pattern?.preview_samples) && pattern.preview_samples.length > 1
+            ? pattern.preview_samples
+            : pattern?.actions,
+    );
+    if (samples.length < 2) return '';
+    const start = samples[0].at;
+    const duration = Math.max(1, samples[samples.length - 1].at - start);
+    const innerWidth = Math.max(1, width - pad * 2);
+    const innerHeight = Math.max(1, height - pad * 2);
+    return samples.map((sample, index) => {
+        const x = pad + ((sample.at - start) / duration) * innerWidth;
+        const y = pad + ((100 - sample.pos) / 100) * innerHeight;
+        return `${index ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+}
+
+export function createPatternCurve(pattern) {
+    const path = patternPreviewPath(pattern);
+    if (!path) return null;
+    const curve = D.createElement('div');
+    curve.className = 'motion-pattern-curve';
+    curve.setAttribute('aria-hidden', 'true');
+    curve.innerHTML = `<svg viewBox="0 0 128 44" preserveAspectRatio="none"><path d="${path}"></path></svg>`;
+    return curve;
+}
+
 export function createPatternExportButton(pattern) {
     const exportButton = D.createElement('button');
     exportButton.type = 'button';
@@ -247,11 +283,12 @@ export function renderCompactMotionPatternList(patterns) {
     if (!el.motionPatternList) return;
     el.motionPatternList.replaceChildren();
 
-    if (!patterns.length) {
+    const visiblePatterns = patterns.filter(pattern => patternMatchesQuery(pattern, el.motionPatternSearchInput?.value));
+    if (!visiblePatterns.length) {
         return;
     }
 
-    patterns.forEach(pattern => {
+    visiblePatterns.forEach(pattern => {
         const row = D.createElement('div');
         row.className = 'motion-pattern-row';
 
@@ -270,6 +307,7 @@ export function renderCompactMotionPatternList(patterns) {
         });
 
         const text = createPatternText(pattern);
+        const curve = createPatternCurve(pattern);
 
         const actions = D.createElement('div');
         actions.className = 'motion-pattern-row-actions';
@@ -279,7 +317,9 @@ export function renderCompactMotionPatternList(patterns) {
         actions.append(createPatternTagsButton(pattern));
         actions.append(createPatternExportButton(pattern));
         actions.append(createPatternDeleteButton(pattern));
-        main.append(checkbox, text);
+        main.append(checkbox);
+        if (curve) main.append(curve);
+        main.append(text);
         row.append(main, actions);
         el.motionPatternList.appendChild(row);
     });

@@ -30,7 +30,12 @@ from .diagnostics import (
 from .server_tls import ServerTlsError, resolve_server_tls
 from .background_modes import AutoModeThread, auto_mode_logic, milking_mode_logic, edging_mode_logic, freestyle_mode_logic
 from .mode_contracts import FreestyleCandidate, ModeCallbacks, ModeLogic, ModeServices
-from .motion import IntentMatcher, MotionController, MotionTarget
+from .motion import (
+    LEGACY_BUILTIN_PATTERN_ALIASES,
+    IntentMatcher,
+    MotionController,
+    MotionTarget,
+)
 from .motion_patterns import PATTERNS, PatternFrame
 from .motion_preferences import (
     THUMBS_DOWN_DISABLE_THRESHOLD,
@@ -1342,6 +1347,13 @@ def _fixed_pattern_id_from_target(target):
             or slug_label.startswith(f"{pattern_id}-")
         ):
             return pattern_id
+    for legacy_id, canonical_id in sorted(
+        LEGACY_BUILTIN_PATTERN_ALIASES.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        if legacy_id in parts or slug_label == legacy_id or slug_label.startswith(f"{legacy_id}-"):
+            return canonical_id
     return ""
 
 def _remember_motion_pattern_from_target(target):
@@ -1413,23 +1425,23 @@ LLM_FIXED_PATTERN_CUE_KEYS = {
     "sp",
 }
 LLM_FIXED_PATTERN_ALIAS_IDS = (
-    ("milk", re.compile(r"\bmilk(?:ing)?\b", re.IGNORECASE)),
-    ("flutter", re.compile(r"\b(?:flutter|stutter|quick\s+little\s+pulses?)\b", re.IGNORECASE)),
-    ("flick", re.compile(r"\b(?:flicks?|snap)\b", re.IGNORECASE)),
+    ("edge", re.compile(r"\b(?:edge|edging)\b", re.IGNORECASE)),
+    ("pulse", re.compile(r"\bmilk(?:ing)?\b", re.IGNORECASE)),
+    ("pulse", re.compile(r"\b(?:flutter|stutter|quick\s+little\s+pulses?)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:flicks?|snap)\b", re.IGNORECASE)),
     ("pulse", re.compile(r"\b(?:puls(?:e|ing)|pump(?:ing)?)\b", re.IGNORECASE)),
-    ("hold", re.compile(r"\b(?:hold|press|grind)\b", re.IGNORECASE)),
-    ("wave", re.compile(r"\b(?:wave|rolling|oscillat(?:e|ing))\b", re.IGNORECASE)),
-    ("ramp", re.compile(r"\b(?:ramp|climb|build)\b", re.IGNORECASE)),
-    ("ladder", re.compile(r"\b(?:ladder|step(?:ped|s)?)\b", re.IGNORECASE)),
-    ("surge", re.compile(r"\b(?:surge|swell)\b", re.IGNORECASE)),
-    ("glide", re.compile(r"\b(?:glide|gliding|long\s+slow)\b", re.IGNORECASE)),
-    ("feather", re.compile(r"\b(?:feather(?:light|ing)?|barely\s+touch(?:ing)?)\b", re.IGNORECASE)),
-    ("plunge", re.compile(r"\b(?:plunge|plunging|bottom(?:ing)?\s+out)\b", re.IGNORECASE)),
-    ("crest", re.compile(r"\b(?:crest(?:ing)?|crescendo)\b", re.IGNORECASE)),
-    ("sway", re.compile(r"\b(?:sway|alternat(?:e|ing)|smooth\s+alternation)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:hold|press|grind)\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:wave|rolling|oscillat(?:e|ing))\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:ramp|climb|build)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:ladder|step(?:ped|s)?)\b", re.IGNORECASE)),
+    ("pulse", re.compile(r"\b(?:surge|swell)\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:glide|gliding|long\s+slow)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:feather(?:light|ing)?|barely\s+touch(?:ing)?)\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:plunge|plunging|bottom(?:ing)?\s+out)\b", re.IGNORECASE)),
+    ("tease", re.compile(r"\b(?:crest(?:ing)?|crescendo)\b", re.IGNORECASE)),
+    ("stroke", re.compile(r"\b(?:sway|alternat(?:e|ing)|smooth\s+alternation)\b", re.IGNORECASE)),
     ("tease", re.compile(r"\btease\b", re.IGNORECASE)),
     ("stroke", re.compile(r"\b(?:stroke|stroking)\b", re.IGNORECASE)),
-    ("edge", re.compile(r"\b(?:edge|edging)\b", re.IGNORECASE)),
 )
 
 def _llm_fixed_pattern_alias_hidden(value):
@@ -1527,7 +1539,7 @@ CHAT_MOTION_CLAIM_PATTERNS = (
 FIXED_PATTERN_NOISE_SPEED_DELTA = 0
 FIXED_PATTERN_NOISE_DEPTH_DELTA = 8
 FIXED_PATTERN_NOISE_RANGE_DELTA = 8
-LLM_TIGHT_FOCUS_PATTERN_IDS = {"flick", "flutter", "hold", "pulse", "tease"}
+LLM_TIGHT_FOCUS_PATTERN_IDS = {"pulse", "tease"}
 LLM_SPECIFIC_FOCUS_REQUEST_RE = re.compile(
     r"\b(?:tip|head|shaft|middle|mid|base|deep|deeper|shallow|upper|lower|"
     r"focus|spot|area|lick|suck|flick|flutter|pulse|tease|hold|edge|short|"

@@ -65,7 +65,7 @@ CONTINUOUS_HSP_TRANSITION_DWELL_MAX_SECONDS = 12.0
 CONTINUOUS_HSP_COMMAND_LATENCY_SAMPLE_LIMIT = 5
 CONTINUOUS_HSP_DUPLICATE_KEEPALIVE_SECONDS = 0.14
 CONTINUOUS_HSP_DUPLICATE_POSITION_EPSILON = 0.2
-CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS = {"area_focus", "milk"}
+CONTINUOUS_HSP_DUPLICATE_COALESCE_PLANS = {"area_focus", "pulse"}
 CONTINUOUS_HSP_INITIAL_SYNC_SECONDS = 2.5
 CONTINUOUS_HSP_SYNC_INTERVAL_SECONDS = 10.0
 CONTINUOUS_HSP_SYNC_FILTER = 0.35
@@ -219,6 +219,52 @@ SPEED_DEFAULTS = {
     "fast": 64.0,
     "max": 86.0,
 }
+
+# Retired built-in IDs remain accepted as semantic cues so saved custom prompts
+# and familiar commands keep their speed/range behavior. Playback always uses
+# one of the three canonical MagicHandy loops.
+LEGACY_BUILTIN_PATTERN_ALIASES = {
+    "glide": "stroke",
+    "wave": "stroke",
+    "sway": "stroke",
+    "plunge": "stroke",
+    "milk": "pulse",
+    "surge": "pulse",
+    "flutter": "pulse",
+    "feather": "tease",
+    "flick": "tease",
+    "hold": "tease",
+    "ramp": "tease",
+    "ladder": "tease",
+    "crest": "tease",
+    "milking-pressure-build": "pulse",
+    "milking-wide-pressure": "pulse",
+    "milking-deep-pulse": "pulse",
+    "milking-fast-middle": "pulse",
+    "milking-deep-finish": "pulse",
+    "milking-recover": "pulse",
+    "milking-steady-press": "pulse",
+    "milking-short-burst": "pulse",
+    "milking-full-drive": "pulse",
+    "milking-deep-squeeze": "pulse",
+    "milking-final-wave": "pulse",
+    "edge-build-low": "tease",
+    "edge-build-mid": "tease",
+    "edge-hold": "tease",
+    "edge-tip-tease": "tease",
+    "edge-recover": "tease",
+    "edge-slow-wide": "tease",
+    "edge-shallow-snap": "tease",
+    "edge-middle-hold": "tease",
+    "edge-deeper-risk": "tease",
+    "edge-pull-back": "tease",
+    "edge-restart": "tease",
+}
+
+
+def canonical_motion_pattern_id(value: Any) -> str:
+    pattern_id = _slugify_motion_pattern_id(value)
+    return LEGACY_BUILTIN_PATTERN_ALIASES.get(pattern_id, pattern_id)
 
 def _compile_patterns(*patterns: str) -> tuple[re.Pattern[str], ...]:
     return tuple(re.compile(pattern) for pattern in patterns)
@@ -557,7 +603,16 @@ def _target_from_cues(
         if stroke_range is not None:
             motion_program["explicit_range"] = True
 
-    labels = cues.labels()
+    labels = [
+        part
+        for part in (
+            cues.zone,
+            cues.length,
+            canonical_motion_pattern_id(cues.pattern) if cues.pattern else None,
+            cues.speed_hint,
+        )
+        if part
+    ]
     if label_prefix:
         labels.insert(0, label_prefix)
     return MotionTarget(
@@ -806,7 +861,9 @@ class MotionSanitizer:
             return None
         from .motion_patterns import PATTERNS
 
-        return pattern_id if pattern_id in PATTERNS else None
+        if pattern_id in PATTERNS or pattern_id in LEGACY_BUILTIN_PATTERN_ALIASES:
+            return pattern_id
+        return None
 
 
 class MotionController:
@@ -4895,11 +4952,22 @@ def _pattern_from_label_cached(label: str) -> Optional[str]:
     slug_label = _slugify_motion_pattern_id(label)
     for pattern in _patterns_sorted_by_length():
         if (
-            pattern in clean_label
+            re.search(rf"(?<![a-z0-9]){re.escape(pattern)}(?![a-z0-9])", clean_label)
             or slug_label == pattern
             or slug_label.startswith(f"{pattern}-")
         ):
             return pattern
+    for legacy_id, canonical_id in sorted(
+        LEGACY_BUILTIN_PATTERN_ALIASES.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        if (
+            re.search(rf"(?<![a-z0-9_-]){re.escape(legacy_id)}(?![a-z0-9_-])", clean_label)
+            or slug_label == legacy_id
+            or slug_label.startswith(f"{legacy_id}-")
+        ):
+            return canonical_id
     return None
 
 

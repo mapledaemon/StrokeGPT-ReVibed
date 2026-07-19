@@ -4,7 +4,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .motion_tags import safe_motion_tags
-from .motion_patterns import MotionPattern, PATTERNS, PatternAction, normalize_actions
+from .motion_patterns import (
+    MotionPattern,
+    PATTERNS,
+    PatternAction,
+    motion_pattern_preview_samples,
+    normalize_actions,
+)
 
 
 SCHEMA_VERSION = 1
@@ -13,6 +19,7 @@ MAX_PATTERN_ACTIONS = 2000
 MAX_PATTERN_DURATION_MS = 300_000
 ALLOWED_IMPORT_EXTENSIONS = {".json", ".funscript"}
 ALLOWED_INTERPOLATIONS = {"linear", "cosine", "cubic"}
+ALLOWED_TEMPO_PROFILES = {"intent", "magic_handy"}
 ALLOWED_SOURCES = {"fixed", "generated", "imported", "trained", "user"}
 
 
@@ -104,6 +111,7 @@ class PatternRecord:
     enabled: bool
     readonly: bool
     actions: tuple[PatternAction, ...]
+    tempo_profile: str = "intent"
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
@@ -130,6 +138,9 @@ class PatternRecord:
         return MotionPattern(
             self.name,
             self.actions,
+            description=self.description,
+            tags=self.tags,
+            tempo_profile=self.tempo_profile,
             window_scale=self.window_scale,
             speed_scale=self.speed_scale,
             tempo_scale=self.tempo_scale,
@@ -155,6 +166,7 @@ class PatternRecord:
             "style": {
                 "window_scale": self.window_scale,
                 "speed_scale": self.speed_scale,
+                "tempo_profile": self.tempo_profile,
                 "tempo_scale": self.tempo_scale,
                 "duration_scale": self.duration_scale,
                 "depth_jitter": self.depth_jitter,
@@ -183,6 +195,10 @@ class PatternRecord:
             "tags": list(self.tags),
             "style": self.to_export_dict()["style"],
             "feedback": self.feedback or _safe_feedback({}),
+            "preview_samples": [
+                {"at": sample.at, "pos": round(sample.pos, 4)}
+                for sample in motion_pattern_preview_samples(self.to_motion_pattern())
+            ],
         }
         if include_actions:
             payload["actions"] = [{"at": action.at, "pos": action.pos} for action in self.actions]
@@ -207,7 +223,15 @@ def _style_from_payload(payload):
     ).lower()
     if interpolation not in ALLOWED_INTERPOLATIONS:
         interpolation = "cosine"
+    tempo_profile = _safe_text(
+        style.get("tempo_profile", payload.get("tempo_profile", "intent")),
+        default="intent",
+        max_length=24,
+    ).lower()
+    if tempo_profile not in ALLOWED_TEMPO_PROFILES:
+        tempo_profile = "intent"
     return {
+        "tempo_profile": tempo_profile,
         "window_scale": _clamp_float(style.get("window_scale", payload.get("window_scale")), 0.05, 1.0, 0.3),
         "speed_scale": _clamp_float(style.get("speed_scale", payload.get("speed_scale")), 0.1, 2.0, 1.0),
         "tempo_scale": _clamp_float(style.get("tempo_scale", payload.get("tempo_scale")), 0.25, 4.0, 1.0),
@@ -231,11 +255,12 @@ def record_from_motion_pattern(pattern_id, pattern):
     return PatternRecord(
         pattern_id=slugify_pattern_id(pattern_id),
         name=pattern.name,
-        description="Built-in motion pattern.",
+        description=pattern.description or "Built-in motion pattern.",
         source="fixed",
         enabled=True,
         readonly=True,
         actions=tuple(pattern.actions),
+        tempo_profile=pattern.tempo_profile,
         window_scale=pattern.window_scale,
         speed_scale=pattern.speed_scale,
         tempo_scale=pattern.tempo_scale,
@@ -247,7 +272,7 @@ def record_from_motion_pattern(pattern_id, pattern):
         interpolation_ms=pattern.interpolation_ms,
         interpolation=pattern.interpolation,
         max_step_delta=pattern.max_step_delta,
-        tags=("built-in",),
+        tags=tuple(dict.fromkeys(("built-in", *pattern.tags))),
         feedback=_safe_feedback({}),
     )
 

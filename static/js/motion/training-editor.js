@@ -26,6 +26,8 @@ const DRAW_DETAIL_PRESETS = {
     3: {label: 'High', epsilon: 1.15, maxPointsPerSecond: 8, minPoints: 18, absoluteMaxPoints: 160, minSpacingMs: 40},
 };
 const MIN_CROP_DURATION_MS = 100;
+let previewResizeObserver = null;
+let previewWindowResizeBound = false;
 
 export function patternTempoScale(pattern) {
     return clampNumber(pattern?.style?.tempo_scale, 0.25, 4, 1);
@@ -119,6 +121,47 @@ function rdpSimplifyPoints(points, epsilon) {
     ];
 }
 
+function reversalAnchorIndexes(points) {
+    const anchors = [0];
+    let previousDirection = 0;
+    for (let index = 1; index < points.length; index++) {
+        const delta = points[index].action.pos - points[index - 1].action.pos;
+        const direction = delta > 0 ? 1 : (delta < 0 ? -1 : 0);
+        if (!direction) continue;
+        if (previousDirection && direction !== previousDirection) anchors.push(index - 1);
+        previousDirection = direction;
+    }
+    const last = points.length - 1;
+    if (anchors[anchors.length - 1] !== last) anchors.push(last);
+    return [...new Set(anchors)];
+}
+
+function simplifyPreservingReversals(points, epsilon) {
+    const anchors = reversalAnchorIndexes(points);
+    const result = [];
+    for (let index = 1; index < anchors.length; index++) {
+        const segment = rdpSimplifyPoints(points.slice(anchors[index - 1], anchors[index] + 1), epsilon);
+        if (result.length) segment.shift();
+        result.push(...segment);
+    }
+    return result;
+}
+
+function filterClosePreservingReversals(actions, minSpacingMs) {
+    const points = actions.map(action => ({action}));
+    const anchors = reversalAnchorIndexes(points);
+    const result = [];
+    for (let index = 1; index < anchors.length; index++) {
+        const segment = filterCloseSimplifiedActions(
+            actions.slice(anchors[index - 1], anchors[index] + 1),
+            minSpacingMs,
+        );
+        if (result.length) segment.shift();
+        result.push(...segment);
+    }
+    return result;
+}
+
 function filterCloseSimplifiedActions(actions, minSpacingMs) {
     if (actions.length <= 2 || minSpacingMs <= 1) return actions;
     const filtered = [actions[0]];
@@ -152,15 +195,23 @@ export function simplifyDrawnActions(actions, preset = DRAW_DETAIL_PRESETS[2]) {
     const duration = Math.max(1, cleanActions[cleanActions.length - 1].at - startAt);
     const points = cleanActions.map(action => actionToSimplifyPoint(action, startAt, duration));
     const maxPoints = maxSimplifiedPoints(preset, duration);
-    let epsilon = Math.max(0.1, Number(preset?.epsilon) || DRAW_DETAIL_PRESETS[2].epsilon);
-    let simplified = rdpSimplifyPoints(points, epsilon).map(point => point.action);
-
-    for (let attempt = 0; simplified.length > maxPoints && attempt < 12; attempt++) {
-        epsilon *= 1.35;
-        simplified = rdpSimplifyPoints(points, epsilon).map(point => point.action);
+    const essentialReversals = reversalAnchorIndexes(points).length;
+    if (essentialReversals > maxPoints) {
+        throw new RangeError(
+            `This curve has ${essentialReversals} essential reversal points; the selected detail limit is ${maxPoints}. Choose a higher detail level or redraw with fewer turns.`,
+        );
     }
-    simplified = filterCloseSimplifiedActions(normalizedActions(simplified), Math.max(0, Number(preset?.minSpacingMs) || 0));
-    if (simplified.length > maxPoints) simplified = downsampleActions(simplified, maxPoints);
+    let epsilon = Math.max(0.1, Number(preset?.epsilon) || DRAW_DETAIL_PRESETS[2].epsilon);
+    let simplified = simplifyPreservingReversals(points, epsilon).map(point => point.action);
+
+    for (let attempt = 0; simplified.length > maxPoints && attempt < 24; attempt++) {
+        epsilon *= 1.35;
+        simplified = simplifyPreservingReversals(points, epsilon).map(point => point.action);
+    }
+    simplified = filterClosePreservingReversals(
+        normalizedActions(simplified),
+        Math.max(0, Number(preset?.minSpacingMs) || 0),
+    );
     return normalizedActions(simplified);
 }
 
@@ -525,6 +576,7 @@ function setEditedPatternActions(actions, message, {stylePatch = null} = {}) {
         : state.motionTrainingEditedPattern.style;
     state.motionTrainingEditedPattern = updatePatternStats({
         ...state.motionTrainingEditedPattern,
+        preview_samples: null,
         style: nextStyle,
         actions: nextActions,
     });
@@ -563,7 +615,13 @@ export function smoothEditedPattern() {
 export function simplifyEditedPattern() {
     const actions = normalizedActions(state.motionTrainingEditedPattern?.actions);
     if (actions.length < 3) return;
-    const simplified = simplifyDrawnActions(actions, drawDetailPreset());
+    let simplified;
+    try {
+        simplified = simplifyDrawnActions(actions, drawDetailPreset());
+    } catch (error) {
+        setMotionEditStatus(error?.message || 'Could not simplify this curve without removing reversals.', 'var(--yellow)');
+        return;
+    }
     setEditedPatternActions(simplified, `Simplified ${actions.length} points to ${simplified.length} controls.`);
 }
 
@@ -772,13 +830,17 @@ function drawWithinPlotBounds(ctx, pad, width, height, draw) {
 export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor = '#7fb7a3', pointColor = '#d8b66a', options = {}) {
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
-    const width = Math.max(320, Math.round(bounds.width || canvas.width || 640));
-    const height = Math.max(180, Math.round(bounds.height || canvas.height || 260));
-    if (canvas.width !== width || canvas.height !== height) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
+    const width = Math.max(320, Math.round(bounds.width || canvas.clientWidth || 640));
+    const height = Math.max(180, Math.round(bounds.height || canvas.clientHeight || 260));
+    const pixelRatio = clampNumber(globalThis.window?.devicePixelRatio, 1, 3, 1);
+    const backingWidth = Math.round(width * pixelRatio);
+    const backingHeight = Math.round(height * pixelRatio);
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
     const previewCtx = canvas.getContext?.('2d');
     if (!previewCtx) return;
+    previewCtx.setTransform?.(pixelRatio, 0, 0, pixelRatio, 0, 0);
     const pad = 34;
     previewCtx.clearRect(0, 0, width, height);
     previewCtx.fillStyle = '#101217';
@@ -849,7 +911,14 @@ export function drawPatternPreviewCanvas(canvas, pattern, emptyText, lineColor =
         // dense across the plot width, so the preview matches what the
         // device actually plays instead of an overshooting Catmull-Rom.
         const innerWidth = width - pad * 2;
-        const denseSamples = sampleMonotoneDense(actions, Math.max(32, Math.round(innerWidth / 2)));
+        const backendSamples = normalizedActions(pattern?.preview_samples);
+        const backendStart = backendSamples[0]?.at || 0;
+        const backendDuration = backendSamples.length > 1
+            ? Math.max(1, backendSamples[backendSamples.length - 1].at - backendStart)
+            : 1;
+        const denseSamples = backendSamples.length > 1
+            ? backendSamples.map(sample => ({phase: (sample.at - backendStart) / backendDuration, pos: sample.pos}))
+            : sampleMonotoneDense(actions, Math.max(32, Math.round(innerWidth / 2)));
         previewCtx.strokeStyle = lineColor;
         previewCtx.lineWidth = 2.5;
         previewCtx.beginPath();
@@ -1125,16 +1194,18 @@ function updateStudioTimelineHandles() {
 function drawStudioCropTimeline() {
     const canvas = el.motionStudioCropCanvas;
     if (!canvas) return;
+    const bounds = canvas.getBoundingClientRect();
+    const width = Math.max(360, Math.round(bounds.width || canvas.clientWidth || 720));
+    const height = Math.max(86, Math.round(bounds.height || canvas.clientHeight || 96));
+    const pixelRatio = clampNumber(globalThis.window?.devicePixelRatio, 1, 3, 1);
+    const backingWidth = Math.round(width * pixelRatio);
+    const backingHeight = Math.round(height * pixelRatio);
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+
     const ctx = canvas.getContext?.('2d');
     if (!ctx) return;
-
-    const bounds = canvas.getBoundingClientRect();
-    const width = Math.max(360, Math.round(bounds.width || canvas.width || 720));
-    const height = Math.max(86, Math.round(bounds.height || canvas.height || 96));
-    if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-    }
+    ctx.setTransform?.(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#101217';
@@ -1576,7 +1647,20 @@ function finishStudioDrawing() {
     }
     const capturedCount = Math.max(buffer.length, Number(state.motionStudioDrawCapturedCount) || buffer.length);
     state.motionStudioDrawCapturedCount = 0;
-    const controls = simplifyDrawnActions(actions, drawDetailPreset());
+    let controls;
+    try {
+        controls = simplifyDrawnActions(actions, drawDetailPreset());
+    } catch (error) {
+        const message = error?.message || 'Could not simplify this drawing without removing reversals.';
+        setEditedPatternActions(
+            actions,
+            message,
+            {stylePatch: drawnPatternStyle(state.motionTrainingEditedPattern.style)},
+        );
+        setStudioStatus(message, 'var(--yellow)');
+        setStudioTool('edit');
+        return;
+    }
     setEditedPatternActions(
         controls,
         `Drew ${controls.length} control points from ${capturedCount} captured samples.`,
@@ -1862,6 +1946,19 @@ export function bindMotionPatternStudioControls() {
     syncCropControlsFromState();
     syncDrawDetailReadout();
     updateMotionTrainingEditButtons();
+    const previewCanvases = [
+        el.motionTrainingOriginalPreviewCanvas,
+        el.motionTrainingPreviewCanvas,
+        el.motionStudioCropCanvas,
+    ].filter(Boolean);
+    const ResizeObserverClass = globalThis.ResizeObserver || globalThis.window?.ResizeObserver;
+    if (!previewResizeObserver && ResizeObserverClass && previewCanvases.length) {
+        previewResizeObserver = new ResizeObserverClass(drawOpenMotionTrainingPreview);
+        previewCanvases.forEach(canvas => previewResizeObserver.observe(canvas));
+    } else if (!previewWindowResizeBound) {
+        globalThis.window?.addEventListener?.('resize', drawOpenMotionTrainingPreview);
+        previewWindowResizeBound = true;
+    }
 }
 
 export function drawOpenMotionTrainingPreview() {

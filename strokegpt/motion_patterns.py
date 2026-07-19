@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from .motion_anchors import AnchorProgram, coerce_anchor_program
-from .motion import MotionTarget
+from .motion import MotionTarget, canonical_motion_pattern_id
 
 
 def _clamp(value, low=0.0, high=100.0):
@@ -29,6 +29,9 @@ class PatternAction:
 class MotionPattern:
     name: str
     actions: tuple[PatternAction, ...]
+    description: str = ""
+    tags: tuple[str, ...] = ()
+    tempo_profile: str = "intent"
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
@@ -59,6 +62,7 @@ class PatternFrame:
 @dataclass(frozen=True)
 class FrameStyle:
     name: str
+    tempo_profile: str = "intent"
     window_scale: float = 0.3
     speed_scale: float = 1.0
     tempo_scale: float = 1.0
@@ -453,10 +457,16 @@ def _load_builtin_patterns() -> dict[str, MotionPattern]:
             PatternAction(int(action["at"]), float(action["pos"]))
             for action in payload["actions"]
         )
-        fields: dict[str, Any] = {"name": payload.get("name", pattern_id), "actions": actions}
+        fields: dict[str, Any] = {
+            "name": payload.get("name", pattern_id),
+            "actions": actions,
+            "description": str(payload.get("description") or "").strip(),
+            "tags": tuple(str(tag).strip() for tag in payload.get("tags", ()) if str(tag).strip()),
+        }
         for field in (
             "window_scale",
             "speed_scale",
+            "tempo_profile",
             "tempo_scale",
             "duration_scale",
             "depth_jitter",
@@ -563,16 +573,14 @@ def _wrap_segment_ms(actions: tuple[PatternAction, ...]) -> int:
     """How long the implicit wrap segment from ``actions[-1]`` back to
     ``actions[0]`` should take.
 
-    Scales linearly with the position delta so open patterns (e.g.,
-    ``ramp`` going 20 -> 100) get a wrap segment long enough that the
+    Scales linearly with the position delta so open user patterns get a
+    wrap segment long enough that the
     live controller glides through the gap instead of slewing. Patterns
     that already end where they start do not need a flat wrap segment;
     adding one creates a perceptible pause at the turn apex.
 
-    Audit of the built-in catalog: 30 of 34 patterns have
-    ``actions[-1].pos != actions[0].pos``, which is why this wrap
-    segment matters at all -- without it the previous cosine sampler
-    snapped from the last position back to the first on every cycle.
+    The three built-in loops are explicitly closed, but imported and trained
+    patterns can still need this segment to avoid snapping at each cycle seam.
     """
     if len(actions) < 2:
         return 0
@@ -907,7 +915,7 @@ def continuous_plan_depth_range(
 
 
 def continuous_motion_plan(pattern_name: str) -> Optional[ContinuousMotionPlan]:
-    pattern = PATTERNS.get((pattern_name or "").lower())
+    pattern = PATTERNS.get(canonical_motion_pattern_id(pattern_name))
     if not pattern:
         return None
     return continuous_motion_plan_from_pattern(pattern)
@@ -919,6 +927,7 @@ def continuous_motion_plan_from_pattern(pattern: MotionPattern) -> Optional[Cont
         return None
     style = FrameStyle(
         name=pattern.name,
+        tempo_profile=pattern.tempo_profile,
         window_scale=pattern.window_scale,
         speed_scale=pattern.speed_scale,
         tempo_scale=pattern.tempo_scale,
@@ -932,6 +941,26 @@ def continuous_motion_plan_from_pattern(pattern: MotionPattern) -> Optional[Cont
         style=style,
         duration_seconds=_continuous_duration_seconds(actions, style),
         normalized_range=_continuous_normalized_range(actions),
+    )
+
+
+@lru_cache(maxsize=256)
+def motion_pattern_preview_samples(
+    pattern: MotionPattern,
+    sample_count: int = 65,
+) -> tuple[PatternAction, ...]:
+    """Sample a pattern with the same monotone curve used for playback."""
+    plan = continuous_motion_plan_from_pattern(pattern)
+    if plan is None:
+        return ()
+    count = max(2, min(1000, int(sample_count or 65)))
+    duration_ms = max(1, int(round(plan.duration_seconds * 1000.0)))
+    return tuple(
+        PatternAction(
+            int(round(duration_ms * index / (count - 1))),
+            _sample_action_position(plan.actions, index / (count - 1)),
+        )
+        for index in range(count)
     )
 
 
@@ -975,16 +1004,18 @@ SAMPLE_DERIVATIVE_DT_SECONDS = 0.04
 POSITION_RATE_SPEED_FULL_SCALE_PPS = 160.0
 
 
-def _continuous_intent_tempo_scale(speed: float) -> float:
+def _continuous_intent_tempo_scale(speed: float, tempo_profile: str = "intent") -> float:
     """Map semantic speed to live-plan phase rate.
 
-    A speed of 50 preserves the authored plan cadence. Lower speeds stretch
-    the cycle; higher speeds compress it. This keeps user speed changes visible
-    in the actual position timeline instead of expressing them only as an HDSP
-    velocity cap.
+    The default profile preserves the historical StrokeGPT curve where speed
+    50 is authored cadence and higher speeds compress it. MagicHandy's routine
+    profile maps 0..100 to roughly 2x..1x authored duration and never compresses
+    its hardware-budgeted 6.6-second baseline loops below source timing.
     """
 
     speed_pct = _clamp(float(speed or 0.0))
+    if str(tempo_profile or "").strip().lower() == "magic_handy":
+        return 1.0 / (2.0 - speed_pct / 100.0)
     if speed_pct <= 50.0:
         return _clamp(0.5 + speed_pct / 100.0, 0.5, 1.0)
 
@@ -1105,7 +1136,7 @@ def sample_continuous_motion(
     elapsed = max(0.0, float(elapsed_seconds or 0.0))
     target = target.clamped()
     duration_seconds = max(0.1, float(plan.duration_seconds or 0.1))
-    tempo_scale = _continuous_intent_tempo_scale(target.speed)
+    tempo_scale = _continuous_intent_tempo_scale(target.speed, plan.style.tempo_profile)
     turn_ease_scale = _clamp(
         float(getattr(plan.style, "turn_ease_cycle_scale", 1.0) or 1.0),
         0.25,
@@ -1402,7 +1433,7 @@ def expand_pattern(
     preserve_timing: bool = False,
     base_step_seconds: float = 0.25,
 ) -> list[PatternFrame]:
-    pattern = PATTERNS.get((pattern_name or "").lower())
+    pattern = PATTERNS.get(canonical_motion_pattern_id(pattern_name))
     if not pattern:
         return []
 
@@ -1444,6 +1475,7 @@ def expand_motion_pattern(
         target,
         FrameStyle(
             name=pattern.name,
+            tempo_profile=pattern.tempo_profile,
             window_scale=pattern.window_scale,
             speed_scale=pattern.speed_scale,
             tempo_scale=pattern.tempo_scale,

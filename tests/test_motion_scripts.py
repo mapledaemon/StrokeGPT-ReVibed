@@ -72,18 +72,15 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(step.mood, "Dominant")
         self.assertEqual(step.message, "Backing off for a moment.")
         self.assertLessEqual(step.target.speed, 10)
-        self.assertIn("Edge Pull Back", step.target.label)
-        pullback_steps = [item for item in steps if item.target.label.startswith("Edge Pull Back")]
+        self.assertIn("Tease", step.target.label)
+        pullback_steps = [item for item in steps if "Tease" in item.target.label]
         self.assertTrue(any(item.target.depth >= 84 for item in pullback_steps))
         self.assertTrue(any(item.target.stroke_range <= 20 for item in pullback_steps))
 
-    def test_mode_specific_patterns_are_cataloged(self):
-        names = pattern_names()
-
-        self.assertIn("milking-pressure-build", names)
-        self.assertIn("milking-final-wave", names)
-        self.assertIn("edge-build-low", names)
-        self.assertIn("edge-pull-back", names)
+    def test_mode_scripts_use_only_canonical_catalog_patterns(self):
+        self.assertEqual(set(pattern_names()), {"stroke", "pulse", "tease"})
+        self.assertEqual({step[0] for arc in MILKING_ARCS for step in arc}, {"pulse"})
+        self.assertEqual({step[0] for arc in EDGING_ARCS for step in arc}, {"tease"})
 
     def test_milking_plan_uses_catalog_pattern_labels(self):
         planner = MotionScriptPlanner("milking", rng=random.Random(2))
@@ -91,7 +88,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         steps = [planner.next_step(current) for _ in range(8)]
         labels = [step.target.label for step in steps]
 
-        self.assertTrue(any(label.startswith("Milking ") for label in labels))
+        self.assertTrue(any(label.startswith("Pulse") for label in labels))
         self.assertFalse(any(label == "current" for label in labels))
         self.assertFalse(any(label.startswith("pressure build") for label in labels))
 
@@ -113,7 +110,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
 
         self.assertEqual(CONTINUOUS_MODE_PATTERN_REPEAT_STEPS, 3)
         self.assertEqual(len(steps), 3)
-        self.assertTrue(all(step.target.label == PATTERNS["milking-full-drive"].name for step in steps))
+        self.assertTrue(all(step.target.label == PATTERNS["pulse"].name for step in steps))
         self.assertTrue(all(step.delay_factor > 0 for step in steps))
         self.assertTrue(all(step.hold_seconds_floor > 0 for step in steps))
         self.assertNotEqual(steps[0].target.rounded(), steps[1].target.rounded())
@@ -165,31 +162,26 @@ class MotionScriptPlannerTests(unittest.TestCase):
     def test_continuous_motion_plan_duration_includes_wrap_segment(self):
         # Patterns are authored at real timescale and close their loop, so
         # the plan duration is the authored span (no synthetic wrap pause).
-        ramp = continuous_motion_plan("ramp")
-        self.assertIsNotNone(ramp)
-        self.assertAlmostEqual(ramp.duration_seconds, 9.0)
+        legacy_ramp = continuous_motion_plan("ramp")
+        self.assertIsNotNone(legacy_ramp)
+        self.assertEqual(legacy_ramp.name, "Tease")
+        self.assertAlmostEqual(legacy_ramp.duration_seconds, 6.6)
 
-        # The routine min-cycle floor stretches short patterns up to 6.6s;
-        # stroke was authored at 4.5s and now plays at the floor.
+        # All three MagicHandy source loops are authored at 6.6 seconds.
         stroke = continuous_motion_plan("stroke")
         self.assertIsNotNone(stroke)
         self.assertAlmostEqual(stroke.duration_seconds, 6.6)
 
     def test_builtin_patterns_use_real_timescale_authoring(self):
-        # The regenerated catalog authors at real timescale (no 5x
-        # duration_scale, no baked cosine). Routine patterns are then
-        # floored to the 6.6s min-cycle for on-device smoothness; stroke
-        # was authored at 4.5s and plays at the floor, while the burst
-        # flick keeps its short authored cycle.
-        self.assertEqual(PATTERNS["stroke"].actions[-1].at, 6600)
-        self.assertEqual(PATTERNS["flick"].actions[-1].at, 5600)
-        self.assertEqual(PATTERNS["stroke"].duration_scale, 1.0)
-        self.assertEqual(PATTERNS["flick"].duration_scale, 1.0)
-        self.assertEqual(PATTERNS["stroke"].interpolation_ms, 0)
+        for pattern_id in ("stroke", "pulse", "tease"):
+            with self.subTest(pattern_id=pattern_id):
+                self.assertEqual(PATTERNS[pattern_id].actions[-1].at, 6600)
+                self.assertEqual(PATTERNS[pattern_id].duration_scale, 1.0)
+                self.assertEqual(PATTERNS[pattern_id].interpolation_ms, 0)
 
     def test_continuous_plan_caches_projectable_normalized_range(self):
-        plan = continuous_motion_plan("ramp")
-        target = MotionTarget(60, 50, 80, "ramp")
+        plan = continuous_motion_plan("tease")
+        target = MotionTarget(60, 50, 80, "tease")
 
         self.assertIsNotNone(plan)
         self.assertLessEqual(plan.normalized_range[0], 20.0)
@@ -567,8 +559,8 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertEqual(round(fast.intent_speed), 80)
 
     def test_sample_continuous_motion_can_reverse_phase(self):
-        plan = continuous_motion_plan("ramp")
-        target = MotionTarget(50, 50, 80, "ramp")
+        plan = continuous_motion_plan("tease")
+        target = MotionTarget(50, 50, 80, "tease")
         elapsed = plan.duration_seconds * 0.22
         duration = sample_continuous_motion(plan, target, 0.0).effective_duration_seconds
 
@@ -595,9 +587,9 @@ class MotionScriptPlannerTests(unittest.TestCase):
             with self.subTest(index=index):
                 self.assertGreaterEqual(round(sampled.speed), round(base))
 
-    def test_hold_continuous_pattern_uses_more_target_range(self):
-        plan = continuous_motion_plan("hold")
-        target = MotionTarget(55, 50, 80, "hold")
+    def test_tease_continuous_pattern_uses_authored_target_range(self):
+        plan = continuous_motion_plan("tease")
+        target = MotionTarget(55, 50, 80, "tease")
         samples = [
             sample_continuous_motion(plan, target, plan.duration_seconds * index / 80.0).target
             for index in range(80)
@@ -606,11 +598,10 @@ class MotionScriptPlannerTests(unittest.TestCase):
         range_span = max(sample.stroke_range for sample in samples)
         program_range = continuous_plan_depth_range(plan, target)
 
-        # Hold is a relative multi-roll waveform: it sweeps the full
-        # projected window (deep character comes from cue/arc targets).
+        # Tease uses the MagicHandy 20..100 source envelope.
         self.assertGreaterEqual(depth_span, 30.0)
         self.assertGreaterEqual(range_span, 15.0)
-        self.assertLessEqual(program_range["min"], 15)
+        self.assertLessEqual(program_range["min"], 27)
         self.assertGreaterEqual(program_range["max"], 85)
 
     def test_mode_arcs_start_base_mid_before_tip(self):
@@ -628,51 +619,23 @@ class MotionScriptPlannerTests(unittest.TestCase):
             early_depths = [depth for _pattern_id, _mood, _speed, depth, _stroke_range in arc[:2]]
             self.assertTrue(all(depth >= 50 for depth in early_depths))
 
-    def test_edge_reaction_ramps_down_then_recovers_to_hold(self):
+    def test_edge_reaction_keeps_tease_pattern_through_numeric_stages(self):
         planner = MotionScriptPlanner("edging", rng=random.Random(5))
         current = MotionTarget(50, 80, 40)
 
         steps = [planner.next_step(current, edge_count=3)]
         steps.extend(planner.next_step(current) for _ in range(48))
-        reaction_labels = [step.target.label for step in steps]
+        self.assertTrue(all("Tease" in step.target.label for step in steps))
+        self.assertTrue(any(step.target.depth >= 84 and step.target.stroke_range <= 20 for step in steps))
+        self.assertTrue(any(step.target.depth <= 72 and step.target.stroke_range >= 40 for step in steps))
 
-        pullback_index = next(
-            index for index, label in enumerate(reaction_labels)
-            if label.startswith("Edge Pull Back")
-        )
-        recover_index = next(
-            index for index, label in enumerate(reaction_labels)
-            if label.startswith("Edge Recover")
-        )
-        hold_index = next(
-            index for index, label in enumerate(reaction_labels)
-            if label.startswith("Edge Hold")
-        )
-
-        self.assertLess(pullback_index, recover_index)
-        self.assertLess(recover_index, hold_index)
-
-    def test_edge_patterns_use_expected_relative_shapes(self):
-        # Patterns are relative waveforms (bands come from arc targets):
-        # pin the SHAPES instead. Pull-back starts at its relative deepest,
-        # retreats fully, and returns deep for the loop seam; hold and
-        # recover are gentle multi-roll cycles.
-        pullback_positions = [action.pos for action in PATTERNS["edge-pull-back"].actions]
-        self.assertEqual(pullback_positions[0], 100.0)
-        self.assertEqual(min(pullback_positions), 0.0)
-        self.assertEqual(pullback_positions[-1], 100.0)
-
-        for pattern_id in ("edge-hold", "edge-recover"):
-            positions = [action.pos for action in PATTERNS[pattern_id].actions]
-            interior_peaks = [
-                positions[i]
-                for i in range(1, len(positions) - 1)
-                if positions[i] > positions[i - 1] and positions[i] > positions[i + 1]
-            ]
-            self.assertGreaterEqual(len(interior_peaks), 1, pattern_id)
+    def test_edge_legacy_ids_resolve_to_tease_without_catalog_entries(self):
+        self.assertNotIn("edge-pull-back", PATTERNS)
+        self.assertEqual(continuous_motion_plan("edge-pull-back").name, "Tease")
+        self.assertEqual(continuous_motion_plan("edge-hold").name, "Tease")
 
     def test_pattern_palette_uses_funscript_style_actions(self):
-        self.assertIn("flick", pattern_names())
+        self.assertNotIn("flick", pattern_names())
 
         frames = expand_pattern(
             "flick",
@@ -731,25 +694,15 @@ class MotionScriptPlannerTests(unittest.TestCase):
         pattern_depths = [round(frame.target.depth) for frame in frames if frame.phase == "pattern"]
         self.assertEqual(pattern_depths[:3], [32, 69, 31])
 
-    def test_flick_pattern_mixes_calm_base_with_quick_accents(self):
-        # The redesigned flick embeds quick eased accents inside a calm
-        # shallow base instead of raw sub-100ms oscillations: at least two
-        # accent peaks rise clearly above the base lobes, and everything
-        # stays in the shallow half.
-        actions = PATTERNS["flick"].actions
-        positions = [action.pos for action in actions]
+    def test_flick_legacy_id_resolves_to_tease(self):
+        self.assertNotIn("flick", PATTERNS)
+        self.assertEqual(continuous_motion_plan("flick").name, "Tease")
 
-        self.assertEqual(max(positions), 100.0)
-        accent_peaks = [pos for pos in positions if pos >= 90]
-        base_peaks = [pos for pos in positions if 45 <= pos <= 70]
-        self.assertGreaterEqual(len(accent_peaks), 2)
-        self.assertGreaterEqual(len(base_peaks), 2)
-        self.assertEqual(actions[-1].at, 5600)
+    def test_milk_legacy_id_resolves_to_pulse(self):
+        self.assertNotIn("milk", pattern_names())
+        self.assertEqual(continuous_motion_plan("milk").name, "Pulse")
 
-    def test_milk_pattern_is_available_and_full_range(self):
-        self.assertIn("milk", pattern_names())
-
-        pattern = PATTERNS["milk"]
+        pattern = PATTERNS["pulse"]
         actions = prepare_pattern_actions(pattern)
         positions = [action.pos for action in actions]
 
@@ -970,7 +923,7 @@ class MotionScriptPlannerTests(unittest.TestCase):
         # legacy safety. Data-driven step limiting injected linear points
         # that straightened the authored curve, so the catalog declares
         # none; prepared actions stay the authored waypoints.
-        for name in ("flutter", "ladder", "surge", "stroke", "crest"):
+        for name in ("stroke", "pulse", "tease"):
             with self.subTest(name=name):
                 pattern = PATTERNS[name]
                 self.assertEqual(pattern.max_step_delta, 0.0)
@@ -1007,8 +960,8 @@ class MotionScriptPlannerTests(unittest.TestCase):
         self.assertGreater(len({round(frame.target.depth) for frame in frames}), 2)
         self.assertTrue(all(frame.target.speed > 0 for frame in frames))
 
-    def test_new_smooth_patterns_expand_to_multi_frame_sequences(self):
-        for name in ("flutter", "ladder", "surge", "sway"):
+    def test_canonical_patterns_expand_to_multi_frame_sequences(self):
+        for name in ("stroke", "pulse", "tease"):
             with self.subTest(name=name):
                 self.assertIn(name, pattern_names())
                 frames = expand_pattern(
@@ -1062,11 +1015,22 @@ class MotionScriptPlannerTests(unittest.TestCase):
         feedback = MotionTarget(58, 12, 18, "tip+flick")
 
         steps = [planner.next_step(current, feedback_target=feedback)]
+        self.assertGreater(len(planner.steps), 4)
         steps.extend(planner.next_step(current) for _ in range(4))
 
         self.assertEqual(steps[0].message, "Adjusting.")
         self.assertGreater(len({round(step.target.depth) for step in steps[1:]}), 2)
-        self.assertTrue(all("flick" in step.target.label for step in steps[1:]))
+        self.assertTrue(any("Tease" in step.target.label for step in steps[1:]))
+
+    def test_continuous_feedback_alias_uses_canonical_pattern_hold_floor(self):
+        planner = MotionScriptPlanner("auto", rng=random.Random(8), continuous_patterns=True)
+        step = planner.next_step(
+            MotionTarget(30, 40, 50),
+            feedback_target=MotionTarget(58, 12, 18, "tip+flick"),
+        )
+
+        self.assertEqual(step.target.label, "tip+flick")
+        self.assertGreater(step.hold_seconds_floor, 0.0)
 
     def test_feedback_anchor_program_expands_to_smooth_sequence(self):
         planner = MotionScriptPlanner("auto", rng=random.Random(14))

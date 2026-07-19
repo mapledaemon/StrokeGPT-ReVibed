@@ -16,6 +16,7 @@ import {
     clonePattern,
     configureMotionPatternList,
     createPatternDeleteButton,
+    createPatternCurve,
     createPatternExportButton,
     createPatternFeedbackResetButton,
     createPatternTagsButton,
@@ -26,6 +27,7 @@ import {
     patternById,
     patternDisplayName,
     patternHasFeedbackState,
+    patternMatchesQuery,
     renderCompactMotionPatternList,
     setMotionPatternTags,
     setPatternStatus,
@@ -809,9 +811,10 @@ function renderMotionTrainingPatternList(patterns) {
     if (!el.motionTrainingPatternList) return;
     el.motionTrainingPatternList.replaceChildren();
 
-    if (!patterns.length) return;
+    const visiblePatterns = patterns.filter(pattern => patternMatchesQuery(pattern, el.motionTrainingPatternSearchInput?.value));
+    if (!visiblePatterns.length) return;
 
-    patterns.forEach(pattern => {
+    visiblePatterns.forEach(pattern => {
         const row = D.createElement('div');
         row.className = 'motion-pattern-row motion-training-pattern-row';
         if (pattern.id === state.motionTrainingSelectedPatternId) row.classList.add('selected');
@@ -828,6 +831,8 @@ function renderMotionTrainingPatternList(patterns) {
 
         const main = D.createElement('div');
         main.className = 'motion-pattern-main';
+        const curve = createPatternCurve(pattern);
+        if (curve) main.appendChild(curve);
         main.appendChild(createPatternText(pattern, {
             includeDescription: false,
             compactMetadata: true,
@@ -1886,6 +1891,8 @@ export function initMotionControls({sendUserMessage}) {
         await saveChatIntensityGuide(nextChatIntensityGuide(state.chatIntensityGuide));
     });
     el.refreshMotionPatternsBtn.addEventListener('click', refreshMotionPatterns);
+    el.motionPatternSearchInput?.addEventListener('input', () => renderCompactMotionPatternList(state.motionPatterns));
+    el.motionTrainingPatternSearchInput?.addEventListener('input', () => renderMotionTrainingPatternList(state.motionPatterns));
     el.exportMotionLibraryBtn?.addEventListener('click', () => {
         window.location.href = '/motion_library/export';
     });
@@ -1913,7 +1920,6 @@ export function initMotionControls({sendUserMessage}) {
         updateActiveModeTimer,
         closeMotionTrainingWorkspace,
     });
-    window.addEventListener('resize', drawOpenMotionTrainingPreview);
     D.addEventListener?.('visibilitychange', () => {
         if (!D.hidden) pollMotionStatus();
     });
